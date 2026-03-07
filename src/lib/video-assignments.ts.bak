@@ -1,0 +1,599 @@
+import { db } from "@/db";
+import {
+  videoAssignments,
+  videoSessions,
+  courses,
+  modules,
+  lessons,
+  users,
+  tags,
+  courseAccess,
+  studentTags,
+} from "@/db/schema";
+import { eq, and, or, isNull, inArray, desc, sql } from "drizzle-orm";
+import { extractVideoId } from "@/lib/youtube";
+
+// ============================================================
+// Constants
+// ============================================================
+
+const VALID_TARGET_TYPES = ["course", "module", "lesson", "student", "tag"];
+
+/** Completion threshold: >= 80% watch = completed */
+export const COMPLETION_THRESHOLD = 80;
+
+const TARGET_TYPE_PRIORITY: Record<string, number> = {
+  lesson: 5,
+  module: 4,
+  course: 3,
+  tag: 2,
+  student: 1,
+};
+
+// ============================================================
+// Types
+// ============================================================
+
+export interface ResolvedVideoAssignment {
+  assignmentId: string;
+  youtubeUrl: string;
+  youtubeVideoId: string;
+  title: string | null;         // Coach-provided title
+  notes: string | null;
+  dueDate: Date | null;
+  assignedAt: Date;
+  completionPercent: number | null;  // null = not started
+  lastPositionMs: number | null;
+  sessionTitle: string | null;       // Video title from YouTube
+  lastWatched: Date | null;
+}
+
+export interface StudentVideoProgress {
+  studentId: string;
+  studentName: string | null;
+  studentEmail: string;
+  completionPercent: number;    // 0 if no session
+  lastWatched: Date | null;
+  totalWatchedMs: number;
+}
+
+export interface VideoAssignmentProgressResult {
+  assignment: {
+    id: string;
+    youtubeUrl: string;
+    youtubeVideoId: string;
+    title: string | null;
+    dueDate: Date | null;
+  };
+  students: StudentVideoProgress[];
+}
+
+// ============================================================
+// CRUD Functions
+// ============================================================
+
+/**
+ * Create a video assignment linking a YouTube video to a target.
+ * Validates YouTube URL, target type, and target entity existence.
+ * Catches unique constraint violations (code 23505) gracefully.
+ */
+export async function createVideoAssignment(data: {
+  youtubeUrl: string;
+  title?: string | null;
+  notes?: string | null;
+  targetType: string;
+  targetId: string;
+  assignedBy: string;
+  dueDate?: Date | null;
+}) {
+  // Extract and validate YouTube video ID
+  const youtubeVideoId = extractVideoId(data.youtubeUrl);
+  if (!youtubeVideoId) {
+    throw new Error("Invalid YouTube URL");
+  }
+
+  // Validate targetType
+  if (!VALID_TARGET_TYPES.includes(data.targetType)) {
+    throw new Error(
+      `Invalid targetType: ${data.targetType}. Must be one of: ${VALID_TARGET_TYPES.join(", ")}`
+    );
+  }
+
+  // Validate target entity exists
+  await validateTargetExists(data.targetType, data.targetId);
+
+  // Insert assignment, catching unique constraint violation
+  try {
+    const [assignment] = await db
+      .insert(videoAssignments)
+      .values({
+        youtubeUrl: data.youtubeUrl,
+        youtubeVideoId,
+        title: data.title ?? undefined,
+        notes: data.notes ?? undefined,
+        targetType: data.targetType as
+          | "course"
+          | "module"
+          | "lesson"
+          | "student"
+          | "tag",
+        targetId: data.targetId,
+        assignedBy: data.assignedBy,
+        dueDate: data.dueDate ?? undefined,
+      })
+      .returning();
+
+    return assignment;
+  } catch (error: unknown) {
+    // Catch unique constraint violation (Postgres error code 23505)
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code: string }).code === "23505"
+    ) {
+      throw new Error("This video is already assigned to this target");
+    }
+    throw error;
+  }
+}
+
+/**
+ * Hard delete a video assignment.
+ * Returns the deleted row or null if not found.
+ */
+export async function deleteVideoAssignment(id: string) {
+  const [deleted] = await db
+    .delete(videoAssignments)
+    .where(eq(videoAssignments.id, id))
+    .returning();
+
+  return deleted ?? null;
+}
+
+/**
+ * List all video assignments created by a specific coach.
+ * Ordered by createdAt desc (newest first).
+ */
+export async function listCoachVideoAssignments(coachId: string) {
+  return db
+    .select()
+    .from(videoAssignments)
+    .where(eq(videoAssignments.assignedBy, coachId))
+    .orderBy(desc(videoAssignments.createdAt));
+}
+
+// ============================================================
+// Student Resolution Query
+// ============================================================
+
+/**
+ * Resolve ALL assigned videos for a student through 5 target paths:
+ * 1. Direct student assignment
+ * 2. Tag-based assignment (via studentTags)
+ * 3. Course enrollment (via courseAccess)
+ * 4. Module assignment (modules within enrolled courses)
+ * 5. Lesson assignment (lessons within enrolled course modules)
+ *
+ * LEFT JOINs videoSessions for watch progress.
+ * Deduplicates by youtubeVideoId, keeping most specific target.
+ */
+export async function getStudentVideoAssignments(
+  userId: string
+): Promise<ResolvedVideoAssignment[]> {
+  // Step 1: Collect all valid target entries for this student
+  type TargetEntry = { type: string; id: string };
+  const targetEntries: TargetEntry[] = [];
+
+  // Direct student assignment
+  targetEntries.push({ type: "student", id: userId });
+
+  // Tags and enrollments are independent -- fetch in parallel
+  const [userTags, enrollments] = await Promise.all([
+    db
+      .select({ tagId: studentTags.tagId })
+      .from(studentTags)
+      .where(eq(studentTags.userId, userId)),
+    db
+      .select({ courseId: courseAccess.courseId })
+      .from(courseAccess)
+      .where(
+        and(
+          eq(courseAccess.userId, userId),
+          or(
+            isNull(courseAccess.expiresAt),
+            sql`${courseAccess.expiresAt} > now()`
+          )
+        )
+      ),
+  ]);
+
+  for (const t of userTags) {
+    targetEntries.push({ type: "tag", id: t.tagId });
+  }
+
+  const enrolledCourseIds = enrollments.map((e) => e.courseId);
+  for (const courseId of enrolledCourseIds) {
+    targetEntries.push({ type: "course", id: courseId });
+  }
+
+  // Modules: for enrolled courses, get active modules
+  let enrolledModuleIds: string[] = [];
+  if (enrolledCourseIds.length > 0) {
+    const courseModules = await db
+      .select({ id: modules.id })
+      .from(modules)
+      .where(
+        and(
+          inArray(modules.courseId, enrolledCourseIds),
+          isNull(modules.deletedAt)
+        )
+      );
+
+    enrolledModuleIds = courseModules.map((m) => m.id);
+    for (const moduleId of enrolledModuleIds) {
+      targetEntries.push({ type: "module", id: moduleId });
+    }
+  }
+
+  // Lessons: for enrolled modules, get active lessons
+  if (enrolledModuleIds.length > 0) {
+    const moduleLessons = await db
+      .select({ id: lessons.id })
+      .from(lessons)
+      .where(
+        and(
+          inArray(lessons.moduleId, enrolledModuleIds),
+          isNull(lessons.deletedAt)
+        )
+      );
+
+    for (const lesson of moduleLessons) {
+      targetEntries.push({ type: "lesson", id: lesson.id });
+    }
+  }
+
+  // Step 2: Build OR conditions for videoAssignments query
+  const grouped: Record<string, string[]> = {};
+  for (const entry of targetEntries) {
+    if (!grouped[entry.type]) {
+      grouped[entry.type] = [];
+    }
+    grouped[entry.type].push(entry.id);
+  }
+
+  const orConditions = Object.entries(grouped).map(([type, ids]) =>
+    and(
+      eq(
+        videoAssignments.targetType,
+        type as "course" | "module" | "lesson" | "student" | "tag"
+      ),
+      inArray(videoAssignments.targetId, ids)
+    )
+  );
+
+  if (orConditions.length === 0) {
+    return [];
+  }
+
+  // Step 3: Query assignments LEFT JOIN videoSessions for progress
+  const assignmentRows = await db
+    .select({
+      assignmentId: videoAssignments.id,
+      youtubeUrl: videoAssignments.youtubeUrl,
+      youtubeVideoId: videoAssignments.youtubeVideoId,
+      title: videoAssignments.title,
+      notes: videoAssignments.notes,
+      dueDate: videoAssignments.dueDate,
+      assignedAt: videoAssignments.createdAt,
+      targetType: videoAssignments.targetType,
+      completionPercent: videoSessions.completionPercent,
+      lastPositionMs: videoSessions.lastPositionMs,
+      sessionTitle: videoSessions.title,
+      lastWatched: videoSessions.updatedAt,
+    })
+    .from(videoAssignments)
+    .leftJoin(
+      videoSessions,
+      and(
+        eq(videoSessions.youtubeVideoId, videoAssignments.youtubeVideoId),
+        eq(videoSessions.userId, userId)
+      )
+    )
+    .where(or(...orConditions));
+
+  if (assignmentRows.length === 0) {
+    return [];
+  }
+
+  // Step 4: Deduplicate by youtubeVideoId (most specific target wins)
+  const deduped = new Map<string, ResolvedVideoAssignment>();
+  const targetTypePriorityMap = new Map<string, number>();
+
+  for (const row of assignmentRows) {
+    const resolved: ResolvedVideoAssignment = {
+      assignmentId: row.assignmentId,
+      youtubeUrl: row.youtubeUrl,
+      youtubeVideoId: row.youtubeVideoId,
+      title: row.title,
+      notes: row.notes,
+      dueDate: row.dueDate,
+      assignedAt: row.assignedAt,
+      completionPercent: row.completionPercent ?? null,
+      lastPositionMs: row.lastPositionMs ?? null,
+      sessionTitle: row.sessionTitle ?? null,
+      lastWatched: row.lastWatched ?? null,
+    };
+
+    const existing = deduped.get(row.youtubeVideoId);
+    if (!existing) {
+      deduped.set(row.youtubeVideoId, resolved);
+      targetTypePriorityMap.set(row.youtubeVideoId, TARGET_TYPE_PRIORITY[row.targetType] ?? 0);
+    } else {
+      // Keep the more specific target (higher priority number wins)
+      // We need to track targetType for comparison -- stored row doesn't have it,
+      // so compare current row's priority against what we already stored.
+      // Since we only need to pick the most-specific, store with a side map.
+      const currentPriority = TARGET_TYPE_PRIORITY[row.targetType] ?? 0;
+      if (currentPriority > (targetTypePriorityMap.get(row.youtubeVideoId) ?? 0)) {
+        deduped.set(row.youtubeVideoId, resolved);
+        targetTypePriorityMap.set(row.youtubeVideoId, currentPriority);
+      }
+    }
+  }
+
+  return Array.from(deduped.values());
+}
+
+// ============================================================
+// Coach Progress Query
+// ============================================================
+
+/**
+ * Get per-student progress for a specific video assignment.
+ * Resolves target students based on targetType, LEFT JOINs videoSessions.
+ */
+export async function getVideoAssignmentProgress(
+  assignmentId: string
+): Promise<VideoAssignmentProgressResult | null> {
+  // Step 1: Get the assignment details
+  const [assignment] = await db
+    .select({
+      id: videoAssignments.id,
+      youtubeUrl: videoAssignments.youtubeUrl,
+      youtubeVideoId: videoAssignments.youtubeVideoId,
+      title: videoAssignments.title,
+      dueDate: videoAssignments.dueDate,
+      targetType: videoAssignments.targetType,
+      targetId: videoAssignments.targetId,
+    })
+    .from(videoAssignments)
+    .where(eq(videoAssignments.id, assignmentId));
+
+  if (!assignment) {
+    return null;
+  }
+
+  // Step 2: Resolve all target students
+  const targetStudents = await resolveTargetStudents(
+    assignment.targetType,
+    assignment.targetId
+  );
+
+  if (targetStudents.length === 0) {
+    return {
+      assignment: {
+        id: assignment.id,
+        youtubeUrl: assignment.youtubeUrl,
+        youtubeVideoId: assignment.youtubeVideoId,
+        title: assignment.title,
+        dueDate: assignment.dueDate,
+      },
+      students: [],
+    };
+  }
+
+  // Step 3: Get video session data for all target students
+  const studentIds = targetStudents.map((s) => s.id);
+  const sessions = await db
+    .select({
+      userId: videoSessions.userId,
+      completionPercent: videoSessions.completionPercent,
+      totalWatchedMs: videoSessions.totalWatchedMs,
+      updatedAt: videoSessions.updatedAt,
+    })
+    .from(videoSessions)
+    .where(
+      and(
+        eq(videoSessions.youtubeVideoId, assignment.youtubeVideoId),
+        inArray(videoSessions.userId, studentIds)
+      )
+    );
+
+  const sessionMap = new Map(
+    sessions.map((s) => [s.userId, s])
+  );
+
+  // Step 4: Build per-student progress
+  const students: StudentVideoProgress[] = targetStudents.map((student) => {
+    const session = sessionMap.get(student.id);
+    return {
+      studentId: student.id,
+      studentName: student.name,
+      studentEmail: student.email,
+      completionPercent: session?.completionPercent ?? 0,
+      lastWatched: session?.updatedAt ?? null,
+      totalWatchedMs: session?.totalWatchedMs ?? 0,
+    };
+  });
+
+  return {
+    assignment: {
+      id: assignment.id,
+      youtubeUrl: assignment.youtubeUrl,
+      youtubeVideoId: assignment.youtubeVideoId,
+      title: assignment.title,
+      dueDate: assignment.dueDate,
+    },
+    students,
+  };
+}
+
+/**
+ * Resolve all students who are targets of an assignment.
+ * Handles all 5 target types: student, tag, course, module, lesson.
+ */
+async function resolveTargetStudents(
+  targetType: string,
+  targetId: string
+): Promise<{ id: string; name: string | null; email: string }[]> {
+  switch (targetType) {
+    case "student": {
+      const [user] = await db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .where(eq(users.id, targetId));
+      return user ? [user] : [];
+    }
+
+    case "tag": {
+      return db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .innerJoin(studentTags, eq(studentTags.userId, users.id))
+        .where(eq(studentTags.tagId, targetId));
+    }
+
+    case "course": {
+      return db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .innerJoin(courseAccess, eq(courseAccess.userId, users.id))
+        .where(
+          and(
+            eq(courseAccess.courseId, targetId),
+            or(
+              isNull(courseAccess.expiresAt),
+              sql`${courseAccess.expiresAt} > now()`
+            )
+          )
+        );
+    }
+
+    case "module": {
+      // Find parent course, then query enrolled students
+      const [mod] = await db
+        .select({ courseId: modules.courseId })
+        .from(modules)
+        .where(and(eq(modules.id, targetId), isNull(modules.deletedAt)));
+      if (!mod) return [];
+
+      return db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .innerJoin(courseAccess, eq(courseAccess.userId, users.id))
+        .where(
+          and(
+            eq(courseAccess.courseId, mod.courseId),
+            or(
+              isNull(courseAccess.expiresAt),
+              sql`${courseAccess.expiresAt} > now()`
+            )
+          )
+        );
+    }
+
+    case "lesson": {
+      // Find parent module, then parent course, then enrolled students
+      const [les] = await db
+        .select({ moduleId: lessons.moduleId })
+        .from(lessons)
+        .where(and(eq(lessons.id, targetId), isNull(lessons.deletedAt)));
+      if (!les) return [];
+
+      const [mod] = await db
+        .select({ courseId: modules.courseId })
+        .from(modules)
+        .where(and(eq(modules.id, les.moduleId), isNull(modules.deletedAt)));
+      if (!mod) return [];
+
+      return db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .innerJoin(courseAccess, eq(courseAccess.userId, users.id))
+        .where(
+          and(
+            eq(courseAccess.courseId, mod.courseId),
+            or(
+              isNull(courseAccess.expiresAt),
+              sql`${courseAccess.expiresAt} > now()`
+            )
+          )
+        );
+    }
+
+    default:
+      return [];
+  }
+}
+
+// ============================================================
+// Internal Helpers
+// ============================================================
+
+/**
+ * Validate that a target entity exists based on targetType.
+ * Throws an error if the target is not found.
+ */
+async function validateTargetExists(
+  targetType: string,
+  targetId: string
+): Promise<void> {
+  let exists = false;
+
+  switch (targetType) {
+    case "course": {
+      const [row] = await db
+        .select({ id: courses.id })
+        .from(courses)
+        .where(and(eq(courses.id, targetId), isNull(courses.deletedAt)));
+      exists = !!row;
+      break;
+    }
+    case "module": {
+      const [row] = await db
+        .select({ id: modules.id })
+        .from(modules)
+        .where(and(eq(modules.id, targetId), isNull(modules.deletedAt)));
+      exists = !!row;
+      break;
+    }
+    case "lesson": {
+      const [row] = await db
+        .select({ id: lessons.id })
+        .from(lessons)
+        .where(and(eq(lessons.id, targetId), isNull(lessons.deletedAt)));
+      exists = !!row;
+      break;
+    }
+    case "student": {
+      const [row] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, targetId));
+      exists = !!row;
+      break;
+    }
+    case "tag": {
+      const [row] = await db
+        .select({ id: tags.id })
+        .from(tags)
+        .where(eq(tags.id, targetId));
+      exists = !!row;
+      break;
+    }
+  }
+
+  if (!exists) {
+    throw new Error(`Target ${targetType} with id ${targetId} not found`);
+  }
+}

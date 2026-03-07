@@ -1,0 +1,16 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "devCommand": "npm run dev",
+  "crons": [
+    {
+      "path": "/api/cron/ghl-webhooks",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/ghl-inactive",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
