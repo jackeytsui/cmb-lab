@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { convertScript } from "@/lib/chinese-convert";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
@@ -50,79 +50,77 @@ export async function exportCoachingNotes(
   const allNotes = [...mandarinNotes, ...cantoneseNotes];
   const traditionalTexts = allNotes.map((n) => n.textOverride || n.text);
 
-  // Convert each text to simplified
   const simplifiedTexts = await Promise.all(
     traditionalTexts.map((t) => convertScript(t, "traditional", "simplified")),
   );
 
-  // Build simplified lookup
   const simplifiedMap = new Map<string, string>();
   traditionalTexts.forEach((trad, i) => {
     simplifiedMap.set(trad, simplifiedTexts[i]);
   });
 
-  // Build Mandarin tab data
-  const mandarinRows: string[][] = [
-    ["Traditional Chinese", "Simplified Chinese", "Pinyin", "English Meaning"],
+  // Create workbook
+  const wb = new ExcelJS.Workbook();
+
+  // Mandarin tab
+  const mandarinSheet = wb.addWorksheet("Mandarin");
+  mandarinSheet.columns = [
+    { header: "Traditional Chinese", key: "traditional", width: 30 },
+    { header: "Simplified Chinese", key: "simplified", width: 30 },
+    { header: "Pinyin", key: "romanization", width: 40 },
+    { header: "English Meaning", key: "translation", width: 40 },
   ];
+  // Bold header row
+  mandarinSheet.getRow(1).font = { bold: true };
+
   for (const note of mandarinNotes) {
     const traditional = note.textOverride || note.text;
     const simplified = simplifiedMap.get(traditional) ?? traditional;
     const romanization =
       note.romanizationOverride || pinyin(traditional, { toneType: "symbol" });
     const translation = note.translationOverride || "";
-    mandarinRows.push([traditional, simplified, romanization, translation]);
+    mandarinSheet.addRow({ traditional, simplified, romanization, translation });
   }
 
-  // Build Cantonese tab data
-  const cantoneseRows: string[][] = [
-    [
-      "Traditional Chinese",
-      "Simplified Chinese",
-      "Jyutping",
-      "English Meaning",
-    ],
+  // Cantonese tab
+  const cantoneseSheet = wb.addWorksheet("Cantonese");
+  cantoneseSheet.columns = [
+    { header: "Traditional Chinese", key: "traditional", width: 30 },
+    { header: "Simplified Chinese", key: "simplified", width: 30 },
+    { header: "Jyutping", key: "romanization", width: 40 },
+    { header: "English Meaning", key: "translation", width: 40 },
   ];
+  cantoneseSheet.getRow(1).font = { bold: true };
+
   for (const note of cantoneseNotes) {
     const traditional = note.textOverride || note.text;
     const simplified = simplifiedMap.get(traditional) ?? traditional;
     const romanization =
       note.romanizationOverride || toJyutpingString(traditional);
     const translation = note.translationOverride || "";
-    cantoneseRows.push([traditional, simplified, romanization, translation]);
+    cantoneseSheet.addRow({ traditional, simplified, romanization, translation });
   }
-
-  // Create workbook
-  const wb = XLSX.utils.book_new();
-
-  const mandarinSheet = XLSX.utils.aoa_to_sheet(mandarinRows);
-  XLSX.utils.book_append_sheet(wb, mandarinSheet, "Mandarin");
-
-  const cantoneseSheet = XLSX.utils.aoa_to_sheet(cantoneseRows);
-  XLSX.utils.book_append_sheet(wb, cantoneseSheet, "Cantonese");
-
-  // Set column widths for readability
-  const colWidths = [
-    { wch: 30 },
-    { wch: 30 },
-    { wch: 40 },
-    { wch: 40 },
-  ];
-  mandarinSheet["!cols"] = colWidths;
-  cantoneseSheet["!cols"] = colWidths;
 
   // Generate filename
   const fileName =
     options?.fileName ??
     `coaching-notes${options?.sessionTitle ? `-${options.sessionTitle}` : ""}.xlsx`;
 
-  // Download
-  XLSX.writeFile(wb, fileName);
+  // Download via blob
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /**
  * Convert traditional Chinese text to Jyutping using ToJyutping.
- * Returns the romanized string or the original text if conversion fails.
  */
 function toJyutpingString(text: string): string {
   try {
