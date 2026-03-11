@@ -8,10 +8,11 @@ import { convertScript } from "@/lib/chinese-convert";
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { Pencil, Trash2, Star } from "lucide-react";
+import { Pencil, Trash2, Star, Download } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
+import { exportCoachingNotes } from "@/lib/coaching-export";
 
 async function fetchJiebaSegments(
   sentences: string[],
@@ -567,6 +568,9 @@ function CoachingPanel({
   const [lockedStudentEmail, setLockedStudentEmail] = useState<string | null>(null);
   const [isLinkingStudent, setIsLinkingStudent] = useState(false);
   const [openStudentError, setOpenStudentError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const isOneOnOneSignedOut = sessionType === "one-on-one" && canWrite && !studentEmailFilter.trim();
   const canAddSession =
     canWrite && (sessionType !== "one-on-one" || Boolean(lockedStudentEmail));
@@ -913,6 +917,78 @@ function CoachingPanel({
     cantonesePane.handleStopAll();
   }, [mandarinPane.handleStopAll, cantonesePane.handleStopAll]);
 
+  // Close export menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    }
+    if (showExportMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showExportMenu]);
+
+  const handleExport = useCallback(
+    async (mode: "current" | "all") => {
+      if (!canWrite) return;
+      setIsExporting(true);
+      setShowExportMenu(false);
+      try {
+        const typeParam = sessionType === "one-on-one" ? "one_on_one" : "inner_circle";
+        const params = new URLSearchParams({ type: typeParam });
+        if (mode === "current" && activeSessionId) {
+          params.set("sessionId", activeSessionId);
+        }
+        if (sessionType === "one-on-one" && studentEmailFilter.trim()) {
+          params.set("studentEmail", studentEmailFilter.trim());
+        }
+
+        const res = await fetchWithTimeout(`/api/coaching/export?${params.toString()}`);
+        if (!res.ok) {
+          console.error("Export fetch failed:", res.status);
+          return;
+        }
+        const data = await res.json();
+        const exportSessions = (data.sessions ?? []).map(
+          (s: { title: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string }> }) => ({
+            title: s.title,
+            notes: s.notes.map((n) => ({
+              text: n.text,
+              pane: n.pane as "mandarin" | "cantonese",
+              textOverride: n.textOverride,
+              romanizationOverride: n.romanizationOverride,
+              translationOverride: n.translationOverride,
+            })),
+          }),
+        );
+
+        if (exportSessions.length === 0) {
+          console.warn("No sessions to export");
+          return;
+        }
+
+        const sessionTitle =
+          mode === "current" && activeSession
+            ? activeSession.title
+            : undefined;
+
+        await exportCoachingNotes(exportSessions, {
+          sessionTitle,
+          fileName: mode === "current" && activeSession
+            ? `coaching-notes-${activeSession.title.replace(/[^a-zA-Z0-9_-]/g, "_")}.xlsx`
+            : `coaching-notes-${typeParam}${studentEmailFilter.trim() ? `-${studentEmailFilter.trim()}` : ""}.xlsx`,
+        });
+      } catch (err) {
+        console.error("Export error:", err);
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    [canWrite, sessionType, activeSessionId, activeSession, studentEmailFilter, fetchWithTimeout],
+  );
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-4">
@@ -932,14 +1008,49 @@ function CoachingPanel({
               Most recent sessions appear at the top.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleAddSession}
-            disabled={!canAddSession}
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Add New Session
-          </button>
+          <div className="flex items-center gap-2">
+            {canWrite && (
+              <div className="relative" ref={exportMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu((prev) => !prev)}
+                  disabled={isExporting || sessions.length === 0}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export notes to Excel"
+                >
+                  <Download className="size-3.5" />
+                  {isExporting ? "Exporting..." : "Export"}
+                </button>
+                {showExportMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border border-border bg-popover p-1 shadow-md">
+                    <button
+                      type="button"
+                      onClick={() => handleExport("current")}
+                      disabled={!activeSessionId}
+                      className="w-full rounded-sm px-2 py-1.5 text-left text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Export current session
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExport("all")}
+                      className="w-full rounded-sm px-2 py-1.5 text-left text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                    >
+                      Export all sessions
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleAddSession}
+              disabled={!canAddSession}
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Add New Session
+            </button>
+          </div>
         </div>
         {sessionType === "one-on-one" && canWrite && (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">

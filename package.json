@@ -80,6 +80,7 @@
     "tailwind-merge": "^3.4.0",
     "to-jyutping": "^3.1.1",
     "use-debounce": "^10.1.0",
+    "xlsx": "^0.18.5",
     "xstate": "^5.25.1",
     "youtube-caption-extractor": "^1.9.1",
     "youtube-transcript": "^1.2.1",

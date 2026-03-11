@@ -11,6 +11,8 @@ import {
   courseAccess,
   modules,
   lessons,
+  users,
+  platformRoleFeatures,
 } from "@/db/schema";
 
 // ---------------------------------------------------------------------------
@@ -68,6 +70,13 @@ export interface PermissionSet {
 async function _resolvePermissions(userId: string): Promise<PermissionSet> {
   const now = new Date();
 
+  // Step 0: Look up the user's platform role so we can merge platform-level features
+  const userRecord = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { role: true },
+  });
+  const platformRole = userRecord?.role ?? "student";
+
   // Step 1: Load active role assignments (non-expired, non-deleted roles)
   const activeAssignments = await db
     .select({
@@ -87,8 +96,8 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
   const roleIds = activeAssignments.map((a) => a.roleId);
   const hasWildcardAccess = activeAssignments.some((a) => a.allCourses);
 
-  // Step 2: Three parallel queries
-  const [roleCourseRows, roleFeatureRows, directGrants] = await Promise.all([
+  // Step 2: Parallel queries (including platform role features)
+  const [roleCourseRows, roleFeatureRows, directGrants, platformFeatureRows] = await Promise.all([
     // Role-based course grants (skip if no roles or wildcard covers all)
     roleIds.length > 0 && !hasWildcardAccess
       ? db
@@ -123,6 +132,14 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
           or(isNull(courseAccess.expiresAt), gt(courseAccess.expiresAt, now))
         )
       ),
+
+    // Platform role features (admin gets all features regardless)
+    platformRole === "admin"
+      ? Promise.resolve(FEATURE_KEYS.map((k) => ({ featureKey: k })))
+      : db
+          .select({ featureKey: platformRoleFeatures.featureKey })
+          .from(platformRoleFeatures)
+          .where(eq(platformRoleFeatures.role, platformRole)),
   ]);
 
   // Step 3: Build PermissionSet (additive union)
@@ -158,8 +175,13 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
     }
   }
 
-  // Union role-based feature grants
+  // Union role-based feature grants (from student tier roles)
   for (const row of roleFeatureRows) {
+    featureSet.add(row.featureKey);
+  }
+
+  // Union platform role feature grants
+  for (const row of platformFeatureRows) {
     featureSet.add(row.featureKey);
   }
 
