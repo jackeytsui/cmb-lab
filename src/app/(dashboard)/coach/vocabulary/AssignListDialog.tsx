@@ -70,20 +70,20 @@ export function AssignListDialog({ listId, onClose, onSuccess }: AssignListDialo
 
   return (
     <Dialog open={!!listId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px] bg-zinc-900 border-zinc-800 text-zinc-100">
+      <DialogContent className="sm:max-w-[500px] bg-card border-border text-foreground">
         <DialogHeader>
           <DialogTitle>Assign List to Students</DialogTitle>
         </DialogHeader>
 
         {isLoading ? (
           <div className="flex justify-center p-8">
-            <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <div className="space-y-4 mt-4">
             <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
               {students.length === 0 ? (
-                <p className="text-zinc-500 text-sm text-center py-4">No students found.</p>
+                <p className="text-muted-foreground text-sm text-center py-4">No students found.</p>
               ) : (
                 students.map((student) => {
                     const isSelected = selectedStudentIds.has(student.id);
@@ -94,17 +94,17 @@ export function AssignListDialog({ listId, onClose, onSuccess }: AssignListDialo
                         className={`flex items-center p-3 rounded-lg border cursor-pointer transition-colors ${
                         isSelected
                             ? "bg-cyan-500/10 border-cyan-500/50"
-                            : "bg-zinc-950 border-zinc-800 hover:border-zinc-700"
+                            : "bg-background border-border hover:border-border"
                         }`}
                     >
                         <div className={`w-4 h-4 rounded border mr-3 flex items-center justify-center ${
-                        isSelected ? "bg-cyan-500 border-cyan-500" : "border-zinc-600"
+                        isSelected ? "bg-cyan-500 border-cyan-500" : "border-border"
                         }`}>
                         {isSelected && <div className="w-2 h-2 bg-white rounded-sm" />}
                         </div>
                         <div>
-                        <p className="text-sm font-medium text-zinc-200">{student.name}</p>
-                        <p className="text-xs text-zinc-500">{student.email}</p>
+                        <p className="text-sm font-medium text-foreground">{student.name}</p>
+                        <p className="text-xs text-muted-foreground">{student.email}</p>
                         </div>
                     </div>
                     );

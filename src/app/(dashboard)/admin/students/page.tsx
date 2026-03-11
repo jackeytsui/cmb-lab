@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import { StudentInvitePanel } from "@/components/admin/StudentInvitePanel";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, isNull, or, inArray } from "drizzle-orm";
+import { AssignCoachDropdown } from "@/components/admin/AssignCoachDropdown";
 
 /**
  * Admin Students page - displays student data table with server-side
@@ -64,10 +65,13 @@ export default async function AdminStudentsPage({
           role: "student" | "coach" | "admin";
           createdAt: Date;
           portalAccessStatus: "active" | "paused" | "expired";
+          assignedCoachId: string | null;
+          assignedCoachName: string | null;
         }>;
         total: number;
       }
     | null = null;
+  let coaches: Array<{ id: string; name: string | null; email: string }> = [];
   let dataError: string | null = null;
 
   try {
@@ -96,7 +100,7 @@ export default async function AdminStudentsPage({
           : undefined
       );
       const offset = (page - 1) * pageSize;
-      const [items, totalRows] = await Promise.all([
+      const [items, totalRows, coachRows] = await Promise.all([
         db
           .select({
             id: users.id,
@@ -105,6 +109,7 @@ export default async function AdminStudentsPage({
             email: users.email,
             role: users.role,
             createdAt: users.createdAt,
+            assignedCoachId: users.assignedCoachId,
           })
           .from(users)
           .where(whereClause)
@@ -112,7 +117,33 @@ export default async function AdminStudentsPage({
           .limit(pageSize)
           .offset(offset),
         db.select({ total: count() }).from(users).where(whereClause),
+        db
+          .select({ id: users.id, name: users.name, email: users.email })
+          .from(users)
+          .where(
+            and(
+              isNull(users.deletedAt),
+              or(eq(users.role, "coach"), eq(users.role, "admin")),
+            ),
+          )
+          .orderBy(users.name),
       ]);
+      coaches = coachRows;
+
+      // Resolve assigned coach names
+      const coachIds = items
+        .map((item) => item.assignedCoachId)
+        .filter((id): id is string => id !== null);
+      const coachMap = new Map<string, string | null>();
+      if (coachIds.length > 0) {
+        const coachUsers = await db
+          .select({ id: users.id, name: users.name, email: users.email })
+          .from(users)
+          .where(inArray(users.id, coachIds));
+        for (const c of coachUsers) {
+          coachMap.set(c.id, c.name || c.email);
+        }
+      }
       usersResult = {
         items: await (async () => {
           const clerk = await clerkClient();
@@ -147,6 +178,10 @@ export default async function AdminStudentsPage({
                 role: item.role,
                 createdAt: item.createdAt,
                 portalAccessStatus,
+                assignedCoachId: item.assignedCoachId ?? null,
+                assignedCoachName: item.assignedCoachId
+                  ? coachMap.get(item.assignedCoachId) ?? null
+                  : null,
               };
             })
           );
@@ -281,6 +316,9 @@ export default async function AdminStudentsPage({
                       Role
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Assigned Coach
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Portal Access
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -292,7 +330,7 @@ export default async function AdminStudentsPage({
                   {usersResult.items.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="px-4 py-8 text-center text-sm text-muted-foreground"
                       >
                         No users found.
@@ -317,6 +355,14 @@ export default async function AdminStudentsPage({
                         </td>
                         <td className="px-4 py-3 text-sm text-foreground capitalize">
                           {user.role}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <AssignCoachDropdown
+                            studentId={user.id}
+                            currentCoachId={user.assignedCoachId}
+                            currentCoachName={user.assignedCoachName}
+                            coaches={coaches}
+                          />
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <span

@@ -227,7 +227,7 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
       <div className="container mx-auto px-4 py-8">
         <Link
           href="/coach"
-          className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
+          className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back to Coach Dashboard
@@ -255,7 +255,7 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
       {/* Back link */}
       <Link
         href="/coach"
-          className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
+          className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back to Coach Dashboard
@@ -277,51 +277,51 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
           {/* Left column - Submission Details (2/3 width) */}
           <div className="lg:col-span-2 space-y-6">
             {/* Student info card */}
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+            <div className="bg-card border border-border rounded-lg p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-cyan-600/20 rounded-full flex items-center justify-center">
                   <User className="w-5 h-5 text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-white">{displayName}</h3>
-                  <p className="text-sm text-zinc-400">{student.email}</p>
+                  <h3 className="font-semibold text-foreground">{displayName}</h3>
+                  <p className="text-sm text-muted-foreground">{student.email}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-sm text-zinc-400">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="w-4 h-4" />
                 Submitted {formatDate(submission.createdAt)}
               </div>
             </div>
 
             {/* Lesson and interaction context */}
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+            <div className="bg-card border border-border rounded-lg p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Book className="w-5 h-5 text-cyan-400" />
-                <h3 className="font-semibold text-white">Lesson Context</h3>
+                <h3 className="font-semibold text-foreground">Lesson Context</h3>
               </div>
               <div className="space-y-3">
                 <div>
-                  <span className="text-xs text-zinc-500 uppercase tracking-wide">Lesson</span>
-                  <p className="text-zinc-200 font-medium">{lesson.title}</p>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Lesson</span>
+                  <p className="text-foreground font-medium">{lesson.title}</p>
                 </div>
                 <div>
-                  <span className="text-xs text-zinc-500 uppercase tracking-wide">Interaction Prompt</span>
-                  <p className="text-zinc-200">{interaction.prompt}</p>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Interaction Prompt</span>
+                  <p className="text-foreground">{interaction.prompt}</p>
                 </div>
                 {interaction.expectedAnswer && (
                   <div>
-                    <span className="text-xs text-zinc-500 uppercase tracking-wide">Expected Answer</span>
-                    <p className="text-zinc-400 text-sm italic">{interaction.expectedAnswer}</p>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wide">Expected Answer</span>
+                    <p className="text-muted-foreground text-sm italic">{interaction.expectedAnswer}</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Submission content */}
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+            <div className="bg-card border border-border rounded-lg p-6">
               <div className="flex items-center gap-2 mb-4">
                 <TypeIcon className="w-5 h-5 text-cyan-400" />
-                <h3 className="font-semibold text-white">
+                <h3 className="font-semibold text-foreground">
                   Student {submission.type === "audio" ? "Recording" : submission.type === "video" ? "Video" : "Response"}
                 </h3>
                 <span
@@ -340,7 +340,7 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
               {/* Media player or text content */}
               {submission.type === "video" && submission.videoUrl ? (
                 <div className="space-y-4">
-                  <div className="aspect-video bg-black rounded-lg overflow-hidden border border-zinc-800">
+                  <div className="aspect-video bg-black rounded-lg overflow-hidden border border-border">
                     <video
                       controls
                       className="w-full h-full"
@@ -360,30 +360,30 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
                     Your browser does not support the audio element.
                   </audio>
                   {submission.transcription && (
-                    <div className="mt-4 p-4 bg-zinc-800/50 rounded-lg">
-                      <span className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">
+                    <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                      <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
                         Transcription
                       </span>
-                      <p className="text-zinc-300 italic">{submission.transcription}</p>
+                      <p className="text-foreground italic">{submission.transcription}</p>
                     </div>
                   )}
                 </div>
               ) : (submission.type === "audio" || submission.type === "video") && !submission.audioData && !submission.videoUrl ? (
-                <div className="p-4 bg-zinc-800/50 rounded-lg text-center">
-                  <p className="text-zinc-400">Media recording is unavailable</p>
+                <div className="p-4 bg-muted/50 rounded-lg text-center">
+                  <p className="text-muted-foreground">Media recording is unavailable</p>
                 </div>
               ) : (
-                <div className="p-4 bg-zinc-800/50 rounded-lg">
-                  <p className="text-zinc-200 whitespace-pre-wrap">{submission.response}</p>
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <p className="text-foreground whitespace-pre-wrap">{submission.response}</p>
                 </div>
               )}
             </div>
 
             {/* AI grading section */}
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+            <div className="bg-card border border-border rounded-lg p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Bot className="w-5 h-5 text-cyan-400" />
-                <h3 className="font-semibold text-white">AI Grading</h3>
+                <h3 className="font-semibold text-foreground">AI Grading</h3>
               </div>
 
               {/* Score display */}
@@ -391,13 +391,13 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
                 <div
                   className={`px-4 py-2 rounded-lg border ${getScoreBgColor(submission.score)}`}
                 >
-                  <span className="text-xs text-zinc-500 uppercase tracking-wide block">Score</span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide block">Score</span>
                   <span className={`text-3xl font-bold ${getScoreColor(submission.score)}`}>
                     {submission.score}
                   </span>
                 </div>
                 <div className="flex-1">
-                  <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="h-3 bg-muted rounded-full overflow-hidden">
                     <div
                       className={`h-full transition-all duration-500 ${
                         submission.score < 70
@@ -414,10 +414,10 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
 
               {/* AI feedback */}
               <div>
-                <span className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">
+                <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
                   AI Feedback
                 </span>
-                <p className="text-zinc-300">{submission.aiFeedback}</p>
+                <p className="text-foreground">{submission.aiFeedback}</p>
               </div>
             </div>
           </div>

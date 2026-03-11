@@ -33,7 +33,7 @@ export default async function CoachVideoAssignmentProgressPage(props: {
       {/* Back link */}
       <Link
         href="/coach/video-assignments"
-        className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Video Assignments
@@ -42,7 +42,7 @@ export default async function CoachVideoAssignmentProgressPage(props: {
       {/* Header */}
       <div className="flex gap-6 mb-8">
         {/* Thumbnail */}
-        <div className="relative w-48 aspect-video shrink-0 rounded-lg overflow-hidden bg-zinc-800">
+        <div className="relative w-48 aspect-video shrink-0 rounded-lg overflow-hidden bg-muted">
           <Image
             src={`https://img.youtube.com/vi/${data.assignment.youtubeVideoId}/mqdefault.jpg`}
             alt={displayTitle}
@@ -54,9 +54,9 @@ export default async function CoachVideoAssignmentProgressPage(props: {
 
         {/* Info */}
         <div>
-          <h1 className="text-2xl font-bold text-white">{displayTitle}</h1>
-          <div className="mt-2 flex items-center gap-4 text-sm text-zinc-400">
-            <span className="font-mono text-xs bg-zinc-800 px-2 py-0.5 rounded">
+          <h1 className="text-2xl font-bold text-foreground">{displayTitle}</h1>
+          <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+            <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">
               {data.assignment.youtubeVideoId}
             </span>
             <a

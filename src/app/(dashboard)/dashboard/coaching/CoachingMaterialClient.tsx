@@ -571,6 +571,68 @@ function CoachingPanel({
   const [isExporting, setIsExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  // Session rating state (only for students/admins)
+  const canRate = role === "student" || role === "admin";
+  const [sessionRating, setSessionRating] = useState<number>(0);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingHover, setRatingHover] = useState(0);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+
+  // Fetch existing rating when active session changes
+  useEffect(() => {
+    if (!canRate || !activeSessionId) {
+      setSessionRating(0);
+      setRatingComment("");
+      setRatingSubmitted(false);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/coaching/sessions/${activeSessionId}/rating`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        if (data.rating) {
+          setSessionRating(data.rating.rating);
+          setRatingComment(data.rating.comment || "");
+          setRatingSubmitted(true);
+        } else {
+          setSessionRating(0);
+          setRatingComment("");
+          setRatingSubmitted(false);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canRate, activeSessionId]);
+
+  const handleSubmitRating = useCallback(async () => {
+    if (!activeSessionId || sessionRating < 1) return;
+    setIsSubmittingRating(true);
+    try {
+      const res = await fetch(
+        `/api/coaching/sessions/${activeSessionId}/rating`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            rating: sessionRating,
+            comment: ratingComment.trim() || undefined,
+          }),
+        },
+      );
+      if (res.ok) {
+        setRatingSubmitted(true);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  }, [activeSessionId, sessionRating, ratingComment]);
+
   const isOneOnOneSignedOut = sessionType === "one-on-one" && canWrite && !studentEmailFilter.trim();
   const canAddSession =
     canWrite && (sessionType !== "one-on-one" || Boolean(lockedStudentEmail));
@@ -1646,6 +1708,74 @@ function CoachingPanel({
           )}
         </div>
       </div>
+
+      {/* Session Rating Section - only visible for students and admins */}
+      {canRate && activeSession && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold text-foreground mb-2">
+            Rate this session
+          </h3>
+          <div className="flex items-center gap-1 mb-2">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                type="button"
+                onClick={() => {
+                  setSessionRating(star);
+                  setRatingSubmitted(false);
+                }}
+                onMouseEnter={() => setRatingHover(star)}
+                onMouseLeave={() => setRatingHover(0)}
+                className="p-0.5 transition-colors"
+                aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+              >
+                <Star
+                  className={cn(
+                    "h-5 w-5 transition-colors",
+                    (ratingHover || sessionRating) >= star
+                      ? "fill-amber-400 text-amber-400"
+                      : "fill-none text-muted-foreground",
+                  )}
+                />
+              </button>
+            ))}
+            {sessionRating > 0 && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                {sessionRating}/5
+              </span>
+            )}
+          </div>
+          <textarea
+            value={ratingComment}
+            onChange={(e) => {
+              setRatingComment(e.target.value);
+              setRatingSubmitted(false);
+            }}
+            placeholder="Optional: share your feedback..."
+            rows={2}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSubmitRating}
+              disabled={sessionRating < 1 || isSubmittingRating}
+              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmittingRating
+                ? "Submitting..."
+                : ratingSubmitted
+                  ? "Update Rating"
+                  : "Submit Rating"}
+            </button>
+            {ratingSubmitted && !isSubmittingRating && (
+              <span className="text-xs text-emerald-600">
+                Rating saved
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

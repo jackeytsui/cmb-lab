@@ -193,7 +193,7 @@ export default async function CoachPronunciationPage() {
         {/* Back link */}
         <Link
           href="/coach"
-          className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
+          className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back to Coach Dashboard
@@ -201,7 +201,7 @@ export default async function CoachPronunciationPage() {
 
         {/* Page subtitle */}
         <div className="mb-8">
-          <p className="text-zinc-400">
+          <p className="text-muted-foreground">
             Review student pronunciation scores and per-character accuracy
           </p>
         </div>
@@ -219,13 +219,13 @@ export default async function CoachPronunciationPage() {
         {/* Empty state */}
         {!queryError && pronunciationAttempts.length === 0 && (
           <div className="text-center py-16 max-w-md mx-auto">
-            <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Mic className="w-8 h-8 text-zinc-600" />
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+              <Mic className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h2 className="text-xl font-semibold text-zinc-300">
+            <h2 className="text-xl font-semibold text-foreground">
               No pronunciation attempts yet
             </h2>
-            <p className="text-zinc-500 mt-2">
+            <p className="text-muted-foreground mt-2">
               Students haven&apos;t completed any pronunciation exercises in the
               last 30 days.
             </p>
@@ -238,15 +238,15 @@ export default async function CoachPronunciationPage() {
             {pronunciationAttempts.map((attempt, index) => (
               <Card
                 key={`${attempt.attemptId}-${attempt.exerciseId}-${index}`}
-                className="bg-zinc-900/50 border-zinc-800"
+                className="bg-card border-border"
               >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <CardTitle className="text-base font-semibold text-white">
+                      <CardTitle className="text-base font-semibold text-foreground">
                         {attempt.studentName || attempt.studentEmail}
                       </CardTitle>
-                      <p className="text-sm text-zinc-400 mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         {attempt.setTitle}
                       </p>
                     </div>
@@ -256,7 +256,7 @@ export default async function CoachPronunciationPage() {
                       >
                         {attempt.overallScore}
                       </span>
-                      <p className="text-xs text-zinc-500">Overall</p>
+                      <p className="text-xs text-muted-foreground">Overall</p>
                     </div>
                   </div>
                 </CardHeader>
@@ -264,7 +264,7 @@ export default async function CoachPronunciationPage() {
                 <CardContent className="space-y-4">
                   {/* Target phrase */}
                   <div>
-                    <p className="text-xs text-zinc-500 mb-1">Target Phrase</p>
+                    <p className="text-xs text-muted-foreground mb-1">Target Phrase</p>
                     <p className="text-cyan-400 font-mono text-lg">
                       {attempt.targetPhrase}
                     </p>
@@ -273,7 +273,7 @@ export default async function CoachPronunciationPage() {
                   {/* Per-character accuracy */}
                   {attempt.words.length > 0 && (
                     <div>
-                      <p className="text-xs text-zinc-500 mb-2">
+                      <p className="text-xs text-muted-foreground mb-2">
                         Per-Character Accuracy
                       </p>
                       <div className="flex flex-wrap gap-1">
@@ -315,12 +315,12 @@ export default async function CoachPronunciationPage() {
                   {/* Recognized text and date */}
                   <div className="flex items-center justify-between text-sm">
                     {attempt.recognizedText && (
-                      <p className="text-zinc-500">
+                      <p className="text-muted-foreground">
                         Recognized: &ldquo;{attempt.recognizedText}&rdquo;
                       </p>
                     )}
                     {attempt.completedAt && (
-                      <p className="text-zinc-600 text-xs">
+                      <p className="text-muted-foreground text-xs">
                         {formatDistanceToNow(new Date(attempt.completedAt), {
                           addSuffix: true,
                         })}

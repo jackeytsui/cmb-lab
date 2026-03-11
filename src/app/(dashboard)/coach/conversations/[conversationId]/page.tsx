@@ -84,7 +84,7 @@ export default async function ConversationDetailPage({ params }: PageProps) {
       <div className="container mx-auto px-4 py-8">
         <Link
           href="/coach/conversations"
-          className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
+          className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back to Conversations
@@ -135,7 +135,7 @@ export default async function ConversationDetailPage({ params }: PageProps) {
       {/* Back link */}
       <Link
         href="/coach/conversations"
-          className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
+          className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back to Conversations
@@ -144,7 +144,7 @@ export default async function ConversationDetailPage({ params }: PageProps) {
         {/* Page header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Conversation Review</h1>
-          <p className="text-zinc-400 mt-2">
+          <p className="text-muted-foreground mt-2">
             Voice practice session transcript
           </p>
         </div>
@@ -154,22 +154,22 @@ export default async function ConversationDetailPage({ params }: PageProps) {
           {/* Left column - Info cards */}
           <div className="lg:col-span-1 space-y-6">
             {/* Student info */}
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader className="border-b border-zinc-800">
+            <Card className="bg-card border-border">
+              <CardHeader className="border-b border-border">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <User className="w-4 h-4 text-cyan-400" />
                   Student
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <p className="font-semibold text-white">{displayName}</p>
-                <p className="text-sm text-zinc-400">{conversation.studentEmail}</p>
+                <p className="font-semibold text-foreground">{displayName}</p>
+                <p className="text-sm text-muted-foreground">{conversation.studentEmail}</p>
               </CardContent>
             </Card>
 
             {/* Lesson info */}
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader className="border-b border-zinc-800">
+            <Card className="bg-card border-border">
+              <CardHeader className="border-b border-border">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Book className="w-4 h-4 text-cyan-400" />
                   Lesson Context
@@ -177,43 +177,43 @@ export default async function ConversationDetailPage({ params }: PageProps) {
               </CardHeader>
               <CardContent className="pt-4 space-y-3">
                 <div>
-                  <span className="text-xs text-zinc-500 uppercase tracking-wide block">Course</span>
-                  <p className="text-zinc-200">{conversation.courseTitle}</p>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide block">Course</span>
+                  <p className="text-foreground">{conversation.courseTitle}</p>
                 </div>
                 <div>
-                  <span className="text-xs text-zinc-500 uppercase tracking-wide block">Module</span>
-                  <p className="text-zinc-200">{conversation.moduleTitle}</p>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide block">Module</span>
+                  <p className="text-foreground">{conversation.moduleTitle}</p>
                 </div>
                 <div>
-                  <span className="text-xs text-zinc-500 uppercase tracking-wide block">Lesson</span>
-                  <p className="text-zinc-200 font-medium">{conversation.lessonTitle}</p>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide block">Lesson</span>
+                  <p className="text-foreground font-medium">{conversation.lessonTitle}</p>
                 </div>
               </CardContent>
             </Card>
 
             {/* Conversation metadata */}
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader className="border-b border-zinc-800">
+            <Card className="bg-card border-border">
+              <CardHeader className="border-b border-border">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Clock className="w-4 h-4 text-cyan-400" />
                   Session Info
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4 space-y-3">
-                <div className="flex items-center gap-2 text-zinc-400">
+                <div className="flex items-center gap-2 text-muted-foreground">
                   <Calendar className="w-4 h-4" />
                   <span>
                     {format(new Date(conversation.startedAt), "PPpp")}
                   </span>
                 </div>
                 <div>
-                  <span className="text-xs text-zinc-500 uppercase tracking-wide block">Duration</span>
-                  <p className="text-zinc-200 font-medium">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide block">Duration</span>
+                  <p className="text-foreground font-medium">
                     {formatDuration(conversation.durationSeconds)}
                   </p>
                 </div>
                 <div>
-                  <span className="text-xs text-zinc-500 uppercase tracking-wide block">Status</span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide block">Status</span>
                   <p className={`font-medium ${conversation.endedAt ? "text-green-400" : "text-yellow-400"}`}>
                     {conversation.endedAt ? "Completed" : "In Progress"}
                   </p>
@@ -224,8 +224,8 @@ export default async function ConversationDetailPage({ params }: PageProps) {
 
           {/* Right column - Transcript */}
           <div className="lg:col-span-2">
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader className="border-b border-zinc-800">
+            <Card className="bg-card border-border">
+              <CardHeader className="border-b border-border">
                 <CardTitle className="flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-cyan-400" />
                   Transcript
@@ -236,9 +236,9 @@ export default async function ConversationDetailPage({ params }: PageProps) {
                   <ErrorAlert message="Unable to load conversation transcript." className="mb-4" />
                 ) : turns.length === 0 ? (
                   <div className="text-center py-12">
-                    <MessageSquare className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-                    <p className="text-zinc-400">No transcript available</p>
-                    <p className="text-sm text-zinc-500 mt-1">
+                    <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">No transcript available</p>
+                    <p className="text-sm text-muted-foreground mt-1">
                       This conversation may have ended without any exchanges.
                     </p>
                   </div>

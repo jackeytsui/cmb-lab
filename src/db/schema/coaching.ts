@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, pgEnum, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, pgEnum, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { users } from "./users";
 
@@ -99,7 +99,51 @@ export const coachingNoteStarsRelations = relations(coachingNoteStars, ({ one })
   }),
 }));
 
+export const coachingSessionRatings = pgTable(
+  "coaching_session_ratings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => coachingSessions.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    rating: integer("rating").notNull(),
+    comment: text("comment"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("coaching_session_ratings_session_user_idx").on(
+      table.sessionId,
+      table.userId,
+    ),
+    index("coaching_session_ratings_session_idx").on(table.sessionId),
+    index("coaching_session_ratings_user_idx").on(table.userId),
+  ],
+);
+
+export const coachingSessionRatingsRelations = relations(
+  coachingSessionRatings,
+  ({ one }) => ({
+    session: one(coachingSessions, {
+      fields: [coachingSessionRatings.sessionId],
+      references: [coachingSessions.id],
+    }),
+    user: one(users, {
+      fields: [coachingSessionRatings.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
 export type CoachingSession = typeof coachingSessions.$inferSelect;
 export type NewCoachingSession = typeof coachingSessions.$inferInsert;
 export type CoachingNote = typeof coachingNotes.$inferSelect;
 export type NewCoachingNote = typeof coachingNotes.$inferInsert;
+export type CoachingSessionRating = typeof coachingSessionRatings.$inferSelect;
+export type NewCoachingSessionRating = typeof coachingSessionRatings.$inferInsert;

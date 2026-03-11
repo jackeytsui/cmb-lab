@@ -37,7 +37,7 @@ export default async function CoachDashboardPage() {
     <div className="container mx-auto px-4 py-8">
         {/* Page header with personalized greeting */}
         <div className="mb-8">
-          <p className="text-zinc-400 mt-2">
+          <p className="text-muted-foreground mt-2">
             Welcome back, {displayName}. Review student submissions and provide feedback.
           </p>
         </div>
@@ -46,18 +46,18 @@ export default async function CoachDashboardPage() {
         <section aria-label="Coach Tools" className="mb-10">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
             <Link href="/coach/pronunciation">
-              <Card className="bg-zinc-900/50 border-zinc-800 hover:border-cyan-500/50 transition-colors cursor-pointer group">
+              <Card className="bg-card border-border hover:border-cyan-500/50 transition-colors cursor-pointer group">
                 <CardHeader className="flex flex-row items-center gap-3 pb-2">
                   <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center">
                     <Mic className="w-5 h-5 text-cyan-400" />
                   </div>
-                  <CardTitle className="text-base font-semibold text-white flex-1">
+                  <CardTitle className="text-base font-semibold text-foreground flex-1">
                     Pronunciation Review
                   </CardTitle>
-                  <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-cyan-400 transition-colors" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-cyan-400 transition-colors" />
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted-foreground">
                     Review student pronunciation scores and per-character accuracy
                   </p>
                 </CardContent>
@@ -65,18 +65,18 @@ export default async function CoachDashboardPage() {
             </Link>
 
             <Link href="/coach/conversations">
-              <Card className="bg-zinc-900/50 border-zinc-800 hover:border-violet-500/50 transition-colors cursor-pointer group">
+              <Card className="bg-card border-border hover:border-violet-500/50 transition-colors cursor-pointer group">
                 <CardHeader className="flex flex-row items-center gap-3 pb-2">
                   <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center">
                     <MessageSquare className="w-5 h-5 text-violet-400" />
                   </div>
-                  <CardTitle className="text-base font-semibold text-white flex-1">
+                  <CardTitle className="text-base font-semibold text-foreground flex-1">
                     Conversations
                   </CardTitle>
-                  <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-violet-400 transition-colors" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-violet-400 transition-colors" />
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted-foreground">
                     Review student voice practice sessions and transcripts
                   </p>
                 </CardContent>
@@ -84,18 +84,18 @@ export default async function CoachDashboardPage() {
             </Link>
 
             <Link href="/coach/students">
-              <Card className="bg-zinc-900/50 border-zinc-800 hover:border-amber-500/50 transition-colors cursor-pointer group">
+              <Card className="bg-card border-border hover:border-amber-500/50 transition-colors cursor-pointer group">
                 <CardHeader className="flex flex-row items-center gap-3 pb-2">
                   <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
                     <Users className="w-5 h-5 text-amber-400" />
                   </div>
-                  <CardTitle className="text-base font-semibold text-white flex-1">
+                  <CardTitle className="text-base font-semibold text-foreground flex-1">
                     Students
                   </CardTitle>
-                  <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 transition-colors" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-amber-400 transition-colors" />
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted-foreground">
                     View student profiles, progress, and management
                   </p>
                 </CardContent>
@@ -103,18 +103,18 @@ export default async function CoachDashboardPage() {
             </Link>
 
             <Link href="/coach/video-assignments">
-              <Card className="bg-zinc-900/50 border-zinc-800 hover:border-rose-500/50 transition-colors cursor-pointer group">
+              <Card className="bg-card border-border hover:border-rose-500/50 transition-colors cursor-pointer group">
                 <CardHeader className="flex flex-row items-center gap-3 pb-2">
                   <div className="w-10 h-10 rounded-lg bg-rose-500/10 flex items-center justify-center">
                     <Video className="w-5 h-5 text-rose-400" />
                   </div>
-                  <CardTitle className="text-base font-semibold text-white flex-1">
+                  <CardTitle className="text-base font-semibold text-foreground flex-1">
                     Video Assignments
                   </CardTitle>
-                  <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-rose-400 transition-colors" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-rose-400 transition-colors" />
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted-foreground">
                     Assign YouTube videos to students as homework
                   </p>
                 </CardContent>
@@ -122,18 +122,18 @@ export default async function CoachDashboardPage() {
             </Link>
 
             <Link href="/coach/video-prompts">
-              <Card className="bg-zinc-900/50 border-zinc-800 hover:border-pink-500/50 transition-colors cursor-pointer group">
+              <Card className="bg-card border-border hover:border-pink-500/50 transition-colors cursor-pointer group">
                 <CardHeader className="flex flex-row items-center gap-3 pb-2">
                   <div className="w-10 h-10 rounded-lg bg-pink-500/10 flex items-center justify-center">
                     <Video className="w-5 h-5 text-pink-400" />
                   </div>
-                  <CardTitle className="text-base font-semibold text-white flex-1">
+                  <CardTitle className="text-base font-semibold text-foreground flex-1">
                     Video Prompts Library
                   </CardTitle>
-                  <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-pink-400 transition-colors" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-pink-400 transition-colors" />
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted-foreground">
                     Record and manage VideoAsk-style questions for lessons
                   </p>
                 </CardContent>
@@ -141,18 +141,18 @@ export default async function CoachDashboardPage() {
             </Link>
 
             <Link href="/coach/thread-reviews">
-              <Card className="bg-zinc-900/50 border-zinc-800 hover:border-teal-500/50 transition-colors cursor-pointer group">
+              <Card className="bg-card border-border hover:border-teal-500/50 transition-colors cursor-pointer group">
                 <CardHeader className="flex flex-row items-center gap-3 pb-2">
                   <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center">
                     <PlaySquare className="w-5 h-5 text-teal-400" />
                   </div>
-                  <CardTitle className="text-base font-semibold text-white flex-1">
+                  <CardTitle className="text-base font-semibold text-foreground flex-1">
                     Thread Reviews
                   </CardTitle>
-                  <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-teal-400 transition-colors" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-teal-400 transition-colors" />
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted-foreground">
                     Review student video thread submissions and responses
                   </p>
                 </CardContent>
@@ -160,18 +160,18 @@ export default async function CoachDashboardPage() {
             </Link>
 
             <Link href="/coach/thread-assignments">
-              <Card className="bg-zinc-900/50 border-zinc-800 hover:border-indigo-500/50 transition-colors cursor-pointer group">
+              <Card className="bg-card border-border hover:border-indigo-500/50 transition-colors cursor-pointer group">
                 <CardHeader className="flex flex-row items-center gap-3 pb-2">
                   <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center">
                     <GitBranch className="w-5 h-5 text-indigo-400" />
                   </div>
-                  <CardTitle className="text-base font-semibold text-white flex-1">
+                  <CardTitle className="text-base font-semibold text-foreground flex-1">
                     Thread Assignments
                   </CardTitle>
-                  <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-indigo-400 transition-colors" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-indigo-400 transition-colors" />
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted-foreground">
                     Assign video threads to students as homework
                   </p>
                 </CardContent>

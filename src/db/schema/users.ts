@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, timestamp, pgEnum, integer, boolean } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 
 // Role enum: student < coach < admin (hierarchical)
 export const roleEnum = pgEnum("role", ["student", "coach", "admin"]);
@@ -24,6 +25,7 @@ export const users = pgTable("users", {
   timezone: text("timezone").notNull().default("UTC"),
   longestStreak: integer("longest_streak").notNull().default(0),
   showCohortRankings: boolean("show_cohort_rankings").notNull().default(false),
+  assignedCoachId: uuid("assigned_coach_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
     .notNull()
@@ -31,6 +33,14 @@ export const users = pgTable("users", {
     .$onUpdate(() => new Date()),
   deletedAt: timestamp("deleted_at"),
 });
+
+export const usersRelations = relations(users, ({ one }) => ({
+  assignedCoach: one(users, {
+    fields: [users.assignedCoachId],
+    references: [users.id],
+    relationName: "assignedCoach",
+  }),
+}));
 
 // Type inference
 export type User = typeof users.$inferSelect;

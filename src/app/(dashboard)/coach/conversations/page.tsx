@@ -100,7 +100,7 @@ export default async function CoachConversationsPage({
       <div className="container mx-auto px-4 py-8">
         <Link
           href="/coach"
-          className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
+          className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back to Coach Dashboard
@@ -118,7 +118,7 @@ export default async function CoachConversationsPage({
         {/* Back link */}
         <Link
           href="/coach"
-          className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
+          className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back to Coach Dashboard
@@ -127,7 +127,7 @@ export default async function CoachConversationsPage({
         {/* Page subtitle */}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <p className="text-zinc-400">
+            <p className="text-muted-foreground">
               Review voice practice sessions from your students
             </p>
           </div>
@@ -136,7 +136,7 @@ export default async function CoachConversationsPage({
         {/* Student filter */}
         {studentsResult.length > 0 && (
           <div className="mb-6">
-            <label htmlFor="student-filter" className="block text-sm font-medium text-zinc-400 mb-2">
+            <label htmlFor="student-filter" className="block text-sm font-medium text-muted-foreground mb-2">
               Filter by Student
             </label>
             <form>
@@ -148,7 +148,7 @@ export default async function CoachConversationsPage({
                   const form = e.target.closest('form');
                   if (form) form.submit();
                 }}
-                className="w-full max-w-xs bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                className="w-full max-w-xs bg-muted border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-cyan-500"
               >
                 <option value="">All Students</option>
                 {studentsResult.map((student) => (
@@ -167,14 +167,14 @@ export default async function CoachConversationsPage({
         ) : (
           <div className="space-y-4 max-w-4xl">
             {conversationList.map((conversation) => (
-              <Card key={conversation.id} className="bg-zinc-900/50 border-zinc-800">
+              <Card key={conversation.id} className="bg-card border-border">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <CardTitle className="text-base font-semibold text-white">
+                      <CardTitle className="text-base font-semibold text-foreground">
                         {conversation.lessonTitle}
                       </CardTitle>
-                      <p className="text-sm text-zinc-400 mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         {conversation.courseTitle} / {conversation.moduleTitle}
                       </p>
                     </div>
@@ -190,18 +190,18 @@ export default async function CoachConversationsPage({
 
                 <CardContent>
                   <div className="flex flex-wrap items-center gap-4 text-sm">
-                    <div className="flex items-center gap-2 text-zinc-400">
+                    <div className="flex items-center gap-2 text-muted-foreground">
                       <User className="w-4 h-4" />
-                      <span className="font-medium text-zinc-300">
+                      <span className="font-medium text-foreground">
                         {conversation.studentName || conversation.studentEmail}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 text-zinc-500">
+                    <div className="flex items-center gap-1 text-muted-foreground">
                       <Clock className="w-4 h-4" />
                       {formatDistanceToNow(new Date(conversation.startedAt), { addSuffix: true })}
                     </div>
                     {conversation.durationSeconds && (
-                      <span className="text-zinc-500">
+                      <span className="text-muted-foreground">
                         Duration: {formatDuration(conversation.durationSeconds)}
                       </span>
                     )}
@@ -224,13 +224,13 @@ export default async function CoachConversationsPage({
 function EmptyState({ hasFilter }: { hasFilter: boolean }) {
   return (
     <div className="text-center py-16 max-w-md mx-auto">
-      <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
-        <MessageSquare className="w-8 h-8 text-zinc-600" />
+      <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+        <MessageSquare className="w-8 h-8 text-muted-foreground" />
       </div>
-      <h2 className="text-xl font-semibold text-zinc-300">
+      <h2 className="text-xl font-semibold text-foreground">
         {hasFilter ? "No conversations from this student" : "No conversations yet"}
       </h2>
-      <p className="text-zinc-500 mt-2">
+      <p className="text-muted-foreground mt-2">
         {hasFilter
           ? "This student hasn't had any voice practice sessions yet."
           : "Students haven't had any voice practice sessions yet."}

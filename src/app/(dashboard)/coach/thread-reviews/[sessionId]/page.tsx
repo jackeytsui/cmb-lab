@@ -174,7 +174,7 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
       {/* Back navigation */}
       <Link
         href="/coach/thread-reviews"
-        className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
+        className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
         <ChevronLeft className="w-4 h-4 mr-1" />
         Back to Thread Reviews
@@ -182,9 +182,9 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
 
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">{threadTitle}</h1>
+        <h1 className="text-3xl font-bold text-foreground">{threadTitle}</h1>
         <div className="flex items-center gap-3 mt-2">
-          <span className="text-zinc-400">{studentName}</span>
+          <span className="text-muted-foreground">{studentName}</span>
           <span
             className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${badge.classes}`}
           >
@@ -195,21 +195,21 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
 
       {/* Response Timeline */}
       <div className="mb-8">
-        <h2 className="text-lg font-semibold text-white mb-4">
+        <h2 className="text-lg font-semibold text-foreground mb-4">
           Response Timeline
         </h2>
 
         {session.responses.length === 0 ? (
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-8 text-center">
-            <MessageSquare className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
-            <p className="text-zinc-400">
+          <div className="bg-card border border-border rounded-lg p-8 text-center">
+            <MessageSquare className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <p className="text-muted-foreground">
               No responses recorded for this session yet.
             </p>
           </div>
         ) : (
           <div className="relative">
             {/* Vertical timeline line */}
-            <div className="absolute left-5 top-2 bottom-2 w-px bg-zinc-800" />
+            <div className="absolute left-5 top-2 bottom-2 w-px bg-border" />
 
             <div className="space-y-6">
               {session.responses.map((response, index) => {
@@ -224,13 +224,13 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
                 return (
                   <div key={response.id} className="relative pl-12">
                     {/* Timeline dot */}
-                    <div className="absolute left-3 top-3 w-4 h-4 rounded-full bg-zinc-800 border-2 border-zinc-600 z-10" />
+                    <div className="absolute left-3 top-3 w-4 h-4 rounded-full bg-muted border-2 border-border z-10" />
 
-                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-5">
+                    <div className="bg-card border border-border rounded-lg p-5">
                       {/* Step header */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-zinc-300">
+                          <span className="text-sm font-medium text-foreground">
                             {response.step?.promptText || `Step ${index + 1}`}
                           </span>
                           <span
@@ -240,7 +240,7 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
                             {typeBadge.label}
                           </span>
                         </div>
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-xs text-muted-foreground">
                           {formatDate(response.createdAt)}
                         </span>
                       </div>
@@ -248,8 +248,8 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
                       {/* Response content */}
                       {(response.responseType === "text" ||
                         response.responseType === "button") && (
-                        <div className="bg-zinc-800/50 rounded-lg p-4">
-                          <p className="text-zinc-200 whitespace-pre-wrap">
+                        <div className="bg-muted/50 rounded-lg p-4">
+                          <p className="text-foreground whitespace-pre-wrap">
                             {response.content || "(No content)"}
                           </p>
                         </div>
@@ -260,9 +260,9 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
                           {playbackId ? (
                             <VideoPlayer playbackId={playbackId} />
                           ) : (
-                            <div className="bg-zinc-800/50 rounded-lg p-4 text-center">
-                              <Mic className="w-6 h-6 text-zinc-600 mx-auto mb-2" />
-                              <p className="text-zinc-500 text-sm">
+                            <div className="bg-muted/50 rounded-lg p-4 text-center">
+                              <Mic className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+                              <p className="text-muted-foreground text-sm">
                                 Audio recording unavailable
                               </p>
                             </div>
@@ -275,10 +275,10 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
                           {playbackId ? (
                             <VideoPlayer playbackId={playbackId} />
                           ) : (
-                            <div className="bg-zinc-800/50 rounded-lg p-4 text-center h-full flex items-center justify-center">
+                            <div className="bg-muted/50 rounded-lg p-4 text-center h-full flex items-center justify-center">
                               <div>
-                                <Video className="w-6 h-6 text-zinc-600 mx-auto mb-2" />
-                                <p className="text-zinc-500 text-sm">
+                                <Video className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+                                <p className="text-muted-foreground text-sm">
                                   Video recording unavailable
                                 </p>
                               </div>
@@ -296,33 +296,33 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
       </div>
 
       {/* Session Summary Card */}
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+      <div className="bg-card border border-border rounded-lg p-6">
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 className="w-5 h-5 text-teal-400" />
-          <h3 className="font-semibold text-white">Session Summary</h3>
+          <h3 className="font-semibold text-foreground">Session Summary</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <span className="text-xs text-zinc-500 uppercase tracking-wide block mb-1">
+            <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1">
               Total Responses
             </span>
-            <p className="text-xl font-bold text-white">
+            <p className="text-xl font-bold text-foreground">
               {session.responses.length}
             </p>
           </div>
           <div>
-            <span className="text-xs text-zinc-500 uppercase tracking-wide block mb-1">
+            <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1">
               Duration
             </span>
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-zinc-500" />
-              <p className="text-xl font-bold text-white">
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              <p className="text-xl font-bold text-foreground">
                 {formatDuration(session.startedAt, session.completedAt)}
               </p>
             </div>
           </div>
           <div>
-            <span className="text-xs text-zinc-500 uppercase tracking-wide block mb-1">
+            <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-1">
               Status
             </span>
             <div className="flex items-center gap-2">
@@ -331,7 +331,7 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
               ) : (
                 <Clock className="w-4 h-4 text-yellow-400" />
               )}
-              <p className="text-xl font-bold text-white">
+              <p className="text-xl font-bold text-foreground">
                 {session.status === "completed"
                   ? "Completed"
                   : session.status === "in_progress"

@@ -71,7 +71,7 @@ export default async function ThreadReviewsPage() {
       {/* Back navigation */}
       <Link
         href="/coach"
-        className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
+        className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
         <ChevronLeft className="w-4 h-4 mr-1" />
         Back to Coach Dashboard
@@ -79,18 +79,18 @@ export default async function ThreadReviewsPage() {
 
       {/* Page header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Thread Reviews</h1>
-        <p className="text-zinc-400 mt-2">
+        <h1 className="text-3xl font-bold text-foreground">Thread Reviews</h1>
+        <p className="text-muted-foreground mt-2">
           Review student video thread submissions and their responses.
         </p>
       </div>
 
       {/* Sessions list */}
       {sessions.length === 0 ? (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-12 text-center">
-          <PlayCircle className="w-12 h-12 text-zinc-600 mx-auto mb-4" />
-          <p className="text-zinc-400 text-lg">No thread submissions yet.</p>
-          <p className="text-zinc-500 text-sm mt-1">
+        <div className="bg-card border border-border rounded-lg p-12 text-center">
+          <PlayCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground text-lg">No thread submissions yet.</p>
+          <p className="text-muted-foreground text-sm mt-1">
             Student submissions will appear here once they start video threads.
           </p>
         </div>
@@ -110,7 +110,7 @@ export default async function ThreadReviewsPage() {
                 href={`/coach/thread-reviews/${session.id}`}
                 className="block"
               >
-                <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 hover:border-teal-500/50 transition-colors group cursor-pointer">
+                <div className="bg-card border border-border rounded-lg p-4 hover:border-teal-500/50 transition-colors group cursor-pointer">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 min-w-0 flex-1">
                       {/* Icon */}
@@ -121,7 +121,7 @@ export default async function ThreadReviewsPage() {
                       {/* Info */}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-3 mb-1">
-                          <span className="font-semibold text-white truncate">
+                          <span className="font-semibold text-foreground truncate">
                             {studentName}
                           </span>
                           <span
@@ -130,13 +130,13 @@ export default async function ThreadReviewsPage() {
                             {badge.label}
                           </span>
                         </div>
-                        <p className="text-sm text-zinc-400 truncate">
+                        <p className="text-sm text-muted-foreground truncate">
                           {threadTitle}
                         </p>
                       </div>
 
                       {/* Dates */}
-                      <div className="hidden sm:flex flex-col items-end text-xs text-zinc-500 flex-shrink-0">
+                      <div className="hidden sm:flex flex-col items-end text-xs text-muted-foreground flex-shrink-0">
                         <span>Started: {formatDate(session.startedAt)}</span>
                         <span>
                           Completed: {formatDate(session.completedAt)}
@@ -145,7 +145,7 @@ export default async function ThreadReviewsPage() {
                     </div>
 
                     {/* Chevron */}
-                    <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-teal-400 transition-colors ml-4 flex-shrink-0" />
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-teal-400 transition-colors ml-4 flex-shrink-0" />
                   </div>
                 </div>
               </Link>

@@ -46,8 +46,8 @@ export function VideoPromptsClient() {
     <div className="container mx-auto px-4 py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Video Prompts Library</h1>
-          <p className="text-sm text-zinc-400 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Video Prompts Library</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Record and manage video questions for your lessons.
           </p>
         </div>
@@ -56,7 +56,7 @@ export function VideoPromptsClient() {
 
       {isLoading ? (
         <div className="flex justify-center p-12">
-          <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : (
         <VideoPromptList 

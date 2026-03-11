@@ -50,28 +50,28 @@ export function CreateListDialog({ onSuccess }: CreateListDialogProps) {
       <DialogTrigger asChild>
         <Button>Create New List</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] bg-zinc-900 border-zinc-800 text-zinc-100">
+      <DialogContent className="sm:max-w-[425px] bg-card border-border text-foreground">
         <DialogHeader>
           <DialogTitle>Create Vocabulary List</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-400">List Name</label>
+            <label className="text-sm font-medium text-muted-foreground">List Name</label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Chapter 1 Vocabulary"
-              className="bg-zinc-950 border-zinc-700"
+              className="bg-background border-border"
               required
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-400">Description (Optional)</label>
+            <label className="text-sm font-medium text-muted-foreground">Description (Optional)</label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Brief description..."
-              className="bg-zinc-950 border-zinc-700 min-h-[80px]"
+              className="bg-background border-border min-h-[80px]"
             />
           </div>
           <div className="flex justify-end pt-2">

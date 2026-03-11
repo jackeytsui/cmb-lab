@@ -185,7 +185,7 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
           </div>
         )}
         {!loading && selectedTagIds.length > 0 && (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-foreground">
             Showing {displayStudents.length} of {students.length} students
           </p>
         )}
@@ -209,23 +209,23 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
           return (
             <div
               key={student.id}
-              className="bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden"
+              className="bg-card border border-border rounded-lg overflow-hidden"
             >
               {/* Student row header */}
-              <div className="flex items-center justify-between p-4 hover:bg-zinc-800/50 transition-colors">
+              <div className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
                 <button
                   onClick={() => toggleExpand(student.id)}
                   className="flex items-center gap-3 flex-1 min-w-0 text-left"
                 >
                   {/* Avatar placeholder */}
-                  <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
-                    <User className="w-5 h-5 text-zinc-400" />
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+                    <User className="w-5 h-5 text-muted-foreground" />
                   </div>
 
                   {/* Student info */}
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-white">{displayName}</div>
-                    <div className="text-sm text-zinc-400">{student.email}</div>
+                    <div className="font-medium text-foreground">{displayName}</div>
+                    <div className="text-sm text-muted-foreground">{student.email}</div>
                   </div>
                 </button>
 
@@ -249,7 +249,7 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
                   </div>
 
                   {/* Access count badge */}
-                  <div className="flex items-center gap-2 text-sm text-zinc-400">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <BookOpen className="w-4 h-4" />
                     <span>
                       {student.accessCount} course
@@ -260,7 +260,7 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
                   {/* Expand/collapse indicator */}
                   <button
                     onClick={() => toggleExpand(student.id)}
-                    className="text-zinc-500"
+                    className="text-muted-foreground"
                   >
                     {isExpanded ? (
                       <ChevronDown className="w-5 h-5" />
@@ -280,7 +280,7 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <div className="px-4 pb-4 border-t border-zinc-800">
+                    <div className="px-4 pb-4 border-t border-border">
                       <div className="pt-4">
                         <StudentAccessManager
                           studentId={student.id}
@@ -297,7 +297,7 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
         })}
 
         {displayStudents.length === 0 && selectedTagIds.length > 0 && (
-          <div className="text-center py-8 text-zinc-500">
+          <div className="text-center py-8 text-muted-foreground">
             No students match the selected tag filters.
           </div>
         )}

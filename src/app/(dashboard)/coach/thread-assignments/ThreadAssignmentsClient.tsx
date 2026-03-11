@@ -78,8 +78,8 @@ export function ThreadAssignmentsClient({
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Thread Assignments</h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <h1 className="text-2xl font-bold text-foreground">Thread Assignments</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Assign video threads to students as homework
           </p>
         </div>
@@ -95,11 +95,11 @@ export function ThreadAssignmentsClient({
       {/* Assignment list */}
       {initialAssignments.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <GitBranch className="mb-4 h-12 w-12 text-zinc-600" />
-          <h3 className="text-lg font-medium text-zinc-300">
+          <GitBranch className="mb-4 h-12 w-12 text-muted-foreground" />
+          <h3 className="text-lg font-medium text-foreground">
             No thread assignments yet
           </h3>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Click &quot;Assign Thread&quot; to assign a video thread to your students.
           </p>
         </div>
@@ -108,15 +108,15 @@ export function ThreadAssignmentsClient({
           {initialAssignments.map((assignment) => (
             <Card
               key={assignment.id}
-              className="border-zinc-800 bg-zinc-900/50 hover:border-indigo-500/50 transition-colors"
+              className="border-border bg-card hover:border-indigo-500/50 transition-colors"
             >
               <CardContent className="flex items-center gap-4 p-4">
                 {/* Thread icon placeholder */}
                 <Link
                   href={`/coach/thread-assignments/${assignment.id}`}
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted hover:bg-muted transition-colors"
                 >
-                  <GitBranch className="h-6 w-6 text-zinc-500" />
+                  <GitBranch className="h-6 w-6 text-muted-foreground" />
                 </Link>
 
                 {/* Assignment details -- clickable to progress page */}
@@ -125,12 +125,12 @@ export function ThreadAssignmentsClient({
                   className="min-w-0 flex-1"
                 >
                   <div className="flex items-center gap-2">
-                    <h3 className="truncate text-sm font-medium text-white">
+                    <h3 className="truncate text-sm font-medium text-foreground">
                       {assignment.threadTitle || "Untitled Thread"}
                     </h3>
                   </div>
-                  <div className="mt-0.5 flex items-center gap-3 text-xs text-zinc-500">
-                    <span className="rounded bg-zinc-800 px-1.5 py-0.5">
+                  <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="rounded bg-muted px-1.5 py-0.5">
                       {TARGET_TYPE_LABELS[assignment.targetType] ?? assignment.targetType}
                     </span>
                     {assignment.dueDate && (
@@ -143,7 +143,7 @@ export function ThreadAssignmentsClient({
                     </span>
                   </div>
                   {assignment.notes && (
-                    <p className="mt-1 truncate text-xs text-zinc-400">
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
                       {assignment.notes}
                     </p>
                   )}
@@ -153,7 +153,7 @@ export function ThreadAssignmentsClient({
                 <div className="flex items-center gap-1 shrink-0">
                   <Link
                     href={`/coach/thread-assignments/${assignment.id}`}
-                    className="p-1.5 text-zinc-500 hover:text-indigo-400 transition-colors"
+                    className="p-1.5 text-muted-foreground hover:text-indigo-400 transition-colors"
                   >
                     <BarChart3 className="h-4 w-4" />
                   </Link>
@@ -162,7 +162,7 @@ export function ThreadAssignmentsClient({
                     size="sm"
                     onClick={() => handleDelete(assignment.id)}
                     disabled={deletingId === assignment.id}
-                    className="shrink-0 text-zinc-500 hover:text-red-400"
+                    className="shrink-0 text-muted-foreground hover:text-red-400"
                   >
                     {deletingId === assignment.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />

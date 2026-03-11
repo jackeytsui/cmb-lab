@@ -117,17 +117,17 @@ export function FeaturePermissions({
         return (
           <div
             key={feature.key}
-            className="flex items-center justify-between rounded-lg border border-zinc-700/50 bg-zinc-800/30 px-4 py-3"
+            className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3"
           >
             <div className="min-w-0 flex-1 pr-3">
-              <p className="text-sm font-medium text-zinc-200">
+              <p className="text-sm font-medium text-foreground">
                 {feature.label}
               </p>
-              <p className="text-xs text-zinc-500">{feature.description}</p>
+              <p className="text-xs text-muted-foreground">{feature.description}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {isSaving && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
               )}
               <Switch
                 checked={isEnabled}

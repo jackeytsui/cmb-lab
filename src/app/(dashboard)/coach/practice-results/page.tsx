@@ -10,8 +10,8 @@ export default async function CoachPracticeResultsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-white mb-2">Practice Results</h1>
-      <p className="text-zinc-400 mb-8">
+      <h1 className="text-2xl font-bold text-foreground mb-2">Practice Results</h1>
+      <p className="text-muted-foreground mb-8">
         Review student practice attempts and identify areas for improvement
       </p>
       <PracticeResultsPanel />

@@ -38,29 +38,29 @@ export function StudentList({ students }: StudentListProps) {
         return (
           <div
             key={student.id}
-            className="bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden"
+            className="bg-card border border-border rounded-lg overflow-hidden"
           >
             {/* Student row header */}
             <button
               onClick={() => toggleExpand(student.id)}
-              className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/50 transition-colors"
+              className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
             >
               <div className="flex items-center gap-3">
                 {/* Avatar placeholder */}
-                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
-                  <User className="w-5 h-5 text-zinc-400" />
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  <User className="w-5 h-5 text-muted-foreground" />
                 </div>
 
                 {/* Student info */}
                 <div className="text-left">
-                  <div className="font-medium text-white">{displayName}</div>
-                  <div className="text-sm text-zinc-400">{student.email}</div>
+                  <div className="font-medium text-foreground">{displayName}</div>
+                  <div className="text-sm text-muted-foreground">{student.email}</div>
                 </div>
               </div>
 
               <div className="flex items-center gap-4">
                 {/* Access count badge */}
-                <div className="flex items-center gap-2 text-sm text-zinc-400">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <BookOpen className="w-4 h-4" />
                   <span>
                     {student.accessCount} course
@@ -69,7 +69,7 @@ export function StudentList({ students }: StudentListProps) {
                 </div>
 
                 {/* Expand/collapse indicator */}
-                <div className="text-zinc-500">
+                <div className="text-muted-foreground">
                   {isExpanded ? (
                     <ChevronDown className="w-5 h-5" />
                   ) : (
@@ -88,7 +88,7 @@ export function StudentList({ students }: StudentListProps) {
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <div className="px-4 pb-4 border-t border-zinc-800">
+                  <div className="px-4 pb-4 border-t border-border">
                     <div className="pt-4">
                       <StudentAccessManager
                         studentId={student.id}

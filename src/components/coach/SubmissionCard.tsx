@@ -67,10 +67,10 @@ export function SubmissionCard({ submission }: SubmissionCardProps) {
         transition={{ duration: 0.2 }}
         className="group"
       >
-        <div data-testid="submission-card" className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 hover:shadow-lg hover:shadow-cyan-500/10 transition-all duration-300 h-full flex flex-col">
+        <div data-testid="submission-card" className="bg-card border border-border rounded-lg p-4 hover:shadow-lg hover:shadow-cyan-500/10 transition-all duration-300 h-full flex flex-col">
           {/* Top row: Student name + Type badge */}
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-white truncate">
+            <span className="text-sm font-medium text-foreground truncate">
               {displayName}
             </span>
             <span
@@ -88,20 +88,20 @@ export function SubmissionCard({ submission }: SubmissionCardProps) {
           </div>
 
           {/* Lesson title */}
-          <h3 className="text-base font-semibold text-zinc-200 group-hover:text-cyan-400 transition-colors line-clamp-1 mb-1">
+          <h3 className="text-base font-semibold text-foreground group-hover:text-cyan-400 transition-colors line-clamp-1 mb-1">
             {submission.lessonTitle}
           </h3>
 
           {/* Interaction prompt preview */}
-          <p className="text-sm text-zinc-400 line-clamp-2 flex-grow">
+          <p className="text-sm text-muted-foreground line-clamp-2 flex-grow">
             {submission.interactionPrompt}
           </p>
 
           {/* Bottom row: Score + Status + Time */}
-          <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
             {/* AI Score */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500">AI Score:</span>
+              <span className="text-xs text-muted-foreground">AI Score:</span>
               <span className={`text-sm font-semibold ${getScoreColor(submission.score)}`}>
                 {submission.score}
               </span>
@@ -115,7 +115,7 @@ export function SubmissionCard({ submission }: SubmissionCardProps) {
                   Reviewed
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <Clock className="w-3 h-3" />
                 {formatRelativeTime(submission.createdAt)}
               </span>

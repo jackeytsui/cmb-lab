@@ -100,7 +100,7 @@ export function SubmissionQueue() {
       className={`px-4 py-2 font-medium text-sm rounded-lg transition-colors ${
         statusFilter === status
           ? "bg-cyan-600 text-white"
-          : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+          : "bg-muted text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
     >
       {label}
@@ -134,7 +134,7 @@ export function SubmissionQueue() {
       {!loading && !error && submissions.length === 0 && (
         <div className="text-center py-16">
           <svg
-            className="w-16 h-16 text-zinc-600 mx-auto mb-4"
+            className="w-16 h-16 text-muted-foreground mx-auto mb-4"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -146,10 +146,10 @@ export function SubmissionQueue() {
               d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
             />
           </svg>
-          <h2 className="text-xl font-semibold text-zinc-300">
+          <h2 className="text-xl font-semibold text-foreground">
             No submissions to review
           </h2>
-          <p className="text-zinc-500 mt-2">
+          <p className="text-muted-foreground mt-2">
             {statusFilter === "pending_review"
               ? "All caught up! No pending submissions at the moment."
               : statusFilter === "reviewed"
@@ -176,16 +176,16 @@ export function SubmissionQueue() {
  */
 function SubmissionCardSkeleton() {
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 space-y-3">
+    <div className="bg-card border border-border rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <Skeleton className="h-4 w-24 bg-zinc-700" />
-        <Skeleton className="h-5 w-12 bg-zinc-700 rounded-full" />
+        <Skeleton className="h-4 w-24 bg-muted" />
+        <Skeleton className="h-5 w-12 bg-muted rounded-full" />
       </div>
-      <Skeleton className="h-5 w-3/4 bg-zinc-700" />
-      <Skeleton className="h-4 w-full bg-zinc-700" />
+      <Skeleton className="h-5 w-3/4 bg-muted" />
+      <Skeleton className="h-4 w-full bg-muted" />
       <div className="flex items-center justify-between pt-2">
-        <Skeleton className="h-4 w-16 bg-zinc-700" />
-        <Skeleton className="h-4 w-20 bg-zinc-700" />
+        <Skeleton className="h-4 w-16 bg-muted" />
+        <Skeleton className="h-4 w-20 bg-muted" />
       </div>
     </div>
   );
