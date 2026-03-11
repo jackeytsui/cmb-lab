@@ -5,7 +5,7 @@ import { SettingsForm } from "@/components/settings/SettingsForm";
 import { OnboardingWalkthroughCard } from "@/components/settings/OnboardingWalkthroughCard";
 
 export const metadata = {
-  title: "Settings - CantoMando",
+  title: "Settings - Canto to Mando",
 };
 
 export default async function SettingsPage() {

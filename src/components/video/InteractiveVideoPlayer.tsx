@@ -410,7 +410,7 @@ export const InteractiveVideoPlayer = forwardRef<
         defaultHiddenCaptions={true}
         metadata={{
           video_title: title || "Untitled",
-          player_name: "CantoMando Blueprint",
+          player_name: "Canto to Mando Blueprint",
         }}
         onPlay={handlePlay}
         onPause={handlePause}

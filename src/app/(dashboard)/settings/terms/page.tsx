@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Terms and Conditions - CantoMando",
+  title: "Terms and Conditions - Canto to Mando",
 };
 
 export default function TermsAndConditionsPage() {
@@ -13,8 +13,8 @@ export default function TermsAndConditionsPage() {
 
       <div className="space-y-4 text-sm leading-6 text-foreground">
         <p>
-          These Terms and Conditions ("Terms") govern access to and use of the Canto Mando Lab
-          platform (the "Platform"), operated by Cantomando Media LTD. ("Company", "we", "us",
+          These Terms and Conditions ("Terms") govern access to and use of the Canto to Mando Lab
+          platform (the "Platform"), operated by Canto to Mando Media LTD. ("Company", "we", "us",
           or "our"). By using the Platform, you agree to these Terms.
         </p>
 
@@ -74,7 +74,7 @@ export default function TermsAndConditionsPage() {
         <section className="space-y-2">
           <h2 className="text-base font-semibold">6. Limitation of Liability</h2>
           <p>
-            To the maximum extent permitted by law, Cantomando Media LTD. is not liable for
+            To the maximum extent permitted by law, Canto to Mando Media LTD. is not liable for
             indirect, incidental, special, consequential, or punitive damages arising from use of
             or inability to use the Platform.
           </p>
@@ -83,11 +83,11 @@ export default function TermsAndConditionsPage() {
         <section className="space-y-2">
           <h2 className="text-base font-semibold">7. Updates and Interpretation</h2>
           <p>
-            Cantomando Media LTD. may update these Terms from time to time. Continued use of the
+            Canto to Mando Media LTD. may update these Terms from time to time. Continued use of the
             Platform after updates constitutes acceptance of the revised Terms.
           </p>
           <p>
-            Cantomando Media LTD. has the final right to interpret these Terms and Conditions.
+            Canto to Mando Media LTD. has the final right to interpret these Terms and Conditions.
           </p>
         </section>
 

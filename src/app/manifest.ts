@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Cantomando Blueprint LMS",
-    short_name: "Cantomando",
+    name: "Canto to Mando Blueprint LMS",
+    short_name: "Canto to Mando",
     description: "Interactive Mandarin & Cantonese learning platform",
     start_url: "/dashboard",
     display: "standalone",

@@ -7,7 +7,7 @@ import { VocabularyClient } from "./VocabularyClient";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 
 export const metadata = {
-  title: "My Vocabulary | CantoMando",
+  title: "My Vocabulary | Canto to Mando",
 };
 
 /**

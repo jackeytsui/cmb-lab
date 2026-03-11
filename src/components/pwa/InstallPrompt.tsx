@@ -73,7 +73,7 @@ export function InstallPrompt() {
               </div>
               <div>
                 <h3 className="font-semibold text-white text-sm">
-                  Install Cantomando
+                  Install Canto to Mando
                 </h3>
                 <p className="text-gray-400 text-xs mt-1 leading-relaxed">
                   Tap the{" "}
@@ -109,7 +109,7 @@ export function InstallPrompt() {
             </div>
             <div>
               <h3 className="font-semibold text-white text-sm">
-                Install Cantomando
+                Install Canto to Mando
               </h3>
               <p className="text-gray-400 text-xs mt-1">
                 Get quick access from your home screen

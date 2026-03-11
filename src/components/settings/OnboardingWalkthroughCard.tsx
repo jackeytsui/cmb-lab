@@ -21,7 +21,7 @@ export function OnboardingWalkthroughCard() {
         Onboarding Walkthrough
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Run the full guided tour to understand how Canto Mando Lab works!
+        Run the full guided tour to understand how Canto to Mando Lab works!
       </p>
       <button
         type="button"

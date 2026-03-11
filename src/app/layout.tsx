@@ -24,12 +24,12 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Cantomando Blueprint LMS",
+  title: "Canto to Mando Blueprint LMS",
   description: "Interactive language learning platform",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Cantomando",
+    title: "Canto to Mando",
   },
 };
 

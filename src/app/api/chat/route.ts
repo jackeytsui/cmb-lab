@@ -24,7 +24,7 @@ import { eq } from "drizzle-orm";
 export const maxDuration = 30;
 
 const DEFAULT_SYSTEM_PROMPT =
-  "You are a helpful learning assistant for CantoMando Blueprint, an LMS teaching Mandarin and Cantonese simultaneously. Always search the knowledge base before answering factual questions about the platform, courses, or Chinese language. Be encouraging and supportive.";
+  "You are a helpful learning assistant for Canto to Mando Blueprint, an LMS teaching Mandarin and Cantonese simultaneously. Always search the knowledge base before answering factual questions about the platform, courses, or Chinese language. Be encouraging and supportive.";
 
 /**
  * Build lesson-specific context for the chatbot system prompt.

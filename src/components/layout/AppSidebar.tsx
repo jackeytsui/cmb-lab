@@ -145,7 +145,7 @@ export function AppSidebar({
           <div className="-translate-y-1 h-12 w-12 shrink-0 overflow-hidden rounded-lg self-center">
             <Image
               src="/canto-to-mando-logo.png"
-              alt="Canto Mando Blueprint Lab"
+              alt="Canto to Mando Blueprint Lab"
               width={96}
               height={96}
               className="h-full w-full origin-top scale-[1.45] object-cover object-top"
@@ -154,7 +154,7 @@ export function AppSidebar({
           </div>
           <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <div className="whitespace-nowrap text-[13px] font-semibold leading-none tracking-[0.01em] text-sidebar-foreground">
-              Canto Mando Lab
+              Canto to Mando Lab
             </div>
           </div>
         </Link>

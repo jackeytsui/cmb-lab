@@ -60,7 +60,7 @@ export default async function VerifyPage({ params }: VerifyPageProps) {
 
   const verifyPageUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://cantomando.com"}/verify/${cert.verificationId}`;
 
-  const linkedInUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(cert.courseTitle)}&organizationName=${encodeURIComponent("CantoMando Blueprint")}&certUrl=${encodeURIComponent(verifyPageUrl)}&certId=${encodeURIComponent(cert.verificationId)}`;
+  const linkedInUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(cert.courseTitle)}&organizationName=${encodeURIComponent("Canto to Mando Blueprint")}&certUrl=${encodeURIComponent(verifyPageUrl)}&certId=${encodeURIComponent(cert.verificationId)}`;
 
   return (
     <div className="min-h-screen bg-zinc-900 text-white flex items-center justify-center p-4">
@@ -122,7 +122,7 @@ export default async function VerifyPage({ params }: VerifyPageProps) {
 
         {/* Footer */}
         <p className="text-center text-zinc-500 text-xs mt-6">
-          This certificate was issued by CantoMando Blueprint
+          This certificate was issued by Canto to Mando Blueprint
         </p>
       </div>
     </div>

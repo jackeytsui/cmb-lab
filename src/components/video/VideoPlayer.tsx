@@ -67,7 +67,7 @@ export function VideoPlayer({
         // Mux Data analytics metadata
         metadata={{
           video_title: title || "Untitled",
-          player_name: "CantoMando Blueprint",
+          player_name: "Canto to Mando Blueprint",
         }}
         // Event callbacks
         onEnded={onEnded}

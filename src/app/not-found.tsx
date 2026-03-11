@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Home } from "lucide-react";
 
 export const metadata = {
-  title: "Page Not Found - CantoMando",
+  title: "Page Not Found - Canto to Mando",
 };
 
 export default function NotFound() {

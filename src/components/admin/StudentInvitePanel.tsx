@@ -22,10 +22,10 @@ const STORAGE_KEYS = {
   body: "cmb.invitation.body.v2",
 };
 
-const DEFAULT_SUBJECT = "Welcome to Canto Mando Lab - Your Access Is Ready";
+const DEFAULT_SUBJECT = "Welcome to Canto to Mando Lab - Your Access Is Ready";
 const DEFAULT_BODY = `Hi {{first_name}},
 
-Welcome to Canto Mando Lab, a new learning experience the CMB team has been creating internally to give you a smoother, smarter Chinese learning experience.
+Welcome to Canto to Mando Lab, a new learning experience the CMB team has been creating internally to give you a smoother, smarter Chinese learning experience.
 
 This is a beta test version, and we are inviting you to try it out for fun.
 
@@ -178,7 +178,7 @@ function buildTemplateHtml(subject: string, body: string) {
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
             <tr>
               <td style="padding:24px 24px 8px 24px;">
-                <img src="/canto-to-mando-logo.png" alt="Canto Mando Blueprint" width="180" style="display:block;height:auto;" />
+                <img src="/canto-to-mando-logo.png" alt="Canto to Mando Blueprint" width="180" style="display:block;height:auto;" />
               </td>
             </tr>
             <tr>

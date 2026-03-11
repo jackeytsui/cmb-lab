@@ -10,7 +10,7 @@ import { resolvePermissions } from "@/lib/permissions";
 import { hasMinimumRole } from "@/lib/auth";
 
 export const metadata = {
-  title: "My Courses | CantoMando",
+  title: "My Courses | Canto to Mando",
 };
 
 /**
