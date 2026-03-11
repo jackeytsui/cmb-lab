@@ -204,6 +204,13 @@
       "when": 1773226203557,
       "tag": "0028_common_stardust",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1773270723805,
+      "tag": "0029_tearful_leopardon",
+      "breakpoints": true
     }
   ]
 }

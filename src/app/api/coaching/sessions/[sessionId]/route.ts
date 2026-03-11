@@ -29,11 +29,19 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { title } = body as { title?: string };
+  const { title, recordingUrl } = body as { title?: string; recordingUrl?: string | null };
+
+  const updates: Record<string, unknown> = {};
+  if (title !== undefined) updates.title = title?.trim() || "Session";
+  if (recordingUrl !== undefined) updates.recordingUrl = recordingUrl?.trim() || null;
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No updates provided" }, { status: 400 });
+  }
 
   const [updated] = await db
     .update(coachingSessions)
-    .set({ title: title?.trim() || "Session" })
+    .set(updates)
     .where(eq(coachingSessions.id, sessionId))
     .returning();
 

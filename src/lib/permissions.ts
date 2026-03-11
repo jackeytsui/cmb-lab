@@ -139,7 +139,8 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
       : db
           .select({ featureKey: platformRoleFeatures.featureKey })
           .from(platformRoleFeatures)
-          .where(eq(platformRoleFeatures.role, platformRole)),
+          .where(eq(platformRoleFeatures.role, platformRole))
+          .catch(() => [] as { featureKey: string }[]),
   ]);
 
   // Step 3: Build PermissionSet (additive union)

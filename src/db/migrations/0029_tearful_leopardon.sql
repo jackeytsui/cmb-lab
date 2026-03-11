@@ -1,0 +1,1 @@
+ALTER TABLE "coaching_sessions" ADD COLUMN "recording_url" text;

@@ -8,7 +8,7 @@ import { convertScript } from "@/lib/chinese-convert";
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { Pencil, Trash2, Star, Download } from "lucide-react";
+import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
@@ -102,6 +102,7 @@ type CoachingSession = {
   title: string;
   type: "one_on_one" | "inner_circle";
   studentEmail?: string | null;
+  recordingUrl?: string | null;
   createdAt: string | number;
   updatedAt: string | number;
   notes?: SessionNote[];
@@ -578,6 +579,43 @@ function CoachingPanel({
   const [ratingHover, setRatingHover] = useState(0);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
+
+  // Recording link state
+  const [recordingUrlDraft, setRecordingUrlDraft] = useState("");
+  const [isEditingRecordingUrl, setIsEditingRecordingUrl] = useState(false);
+  const [isSavingRecordingUrl, setIsSavingRecordingUrl] = useState(false);
+
+  // Sync recording URL draft when active session changes
+  useEffect(() => {
+    setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
+    setIsEditingRecordingUrl(false);
+  }, [activeSessionId]);
+
+  const handleSaveRecordingUrl = useCallback(async () => {
+    if (!activeSessionId) return;
+    setIsSavingRecordingUrl(true);
+    try {
+      const res = await fetch(`/api/coaching/sessions/${activeSessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordingUrl: recordingUrlDraft.trim() || null }),
+      });
+      if (res.ok) {
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === activeSessionId
+              ? { ...s, recordingUrl: recordingUrlDraft.trim() || null }
+              : s,
+          ),
+        );
+        setIsEditingRecordingUrl(false);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsSavingRecordingUrl(false);
+    }
+  }, [activeSessionId, recordingUrlDraft]);
 
   // Fetch existing rating when active session changes
   useEffect(() => {
@@ -1290,6 +1328,78 @@ function CoachingPanel({
           </div>
         )}
       </div>
+
+      {/* Recording Link Section */}
+      {activeSession && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <LinkIcon className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold text-foreground">Recording Link</h3>
+            </div>
+            {canWrite && !isEditingRecordingUrl && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRecordingUrlDraft(activeSession.recordingUrl ?? "");
+                  setIsEditingRecordingUrl(true);
+                }}
+                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+              >
+                <Pencil className="size-3 mr-1" />
+                {activeSession.recordingUrl ? "Edit" : "Add Link"}
+              </button>
+            )}
+          </div>
+          {isEditingRecordingUrl ? (
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                value={recordingUrlDraft}
+                onChange={(e) => setRecordingUrlDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSaveRecordingUrl();
+                  }
+                }}
+                placeholder="https://..."
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveRecordingUrl}
+                  disabled={isSavingRecordingUrl}
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
+                >
+                  {isSavingRecordingUrl ? "Saving..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingRecordingUrl(false)}
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : activeSession.recordingUrl ? (
+            <a
+              href={activeSession.recordingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
+            >
+              <ExternalLink className="size-3.5 shrink-0" />
+              {activeSession.recordingUrl}
+            </a>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              No recording link added yet.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-border bg-card p-4">
