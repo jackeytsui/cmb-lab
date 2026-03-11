@@ -4,8 +4,10 @@ import Link from "next/link";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarHeader,
   SidebarRail,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { NavMain, type NavSection } from "./NavMain";
 import { NavUser } from "./NavUser";
@@ -162,6 +164,9 @@ export function AppSidebar({
       <SidebarContent>
         <NavMain sections={filteredSections} />
       </SidebarContent>
+      <SidebarFooter className="border-t border-border p-2">
+        <SidebarTrigger className="w-full justify-start text-muted-foreground hover:text-foreground" />
+      </SidebarFooter>
       <NavUser />
       <SidebarRail />
     </Sidebar>
