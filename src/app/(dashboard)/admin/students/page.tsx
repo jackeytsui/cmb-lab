@@ -109,6 +109,7 @@ export default async function AdminStudentsPage({
             email: users.email,
             role: users.role,
             createdAt: users.createdAt,
+            assignedCoachId: users.assignedCoachId,
           })
           .from(users)
           .where(whereClause)
@@ -122,15 +123,16 @@ export default async function AdminStudentsPage({
           .where(
             and(
               isNull(users.deletedAt),
-              or(eq(users.role, "coach"), eq(users.role, "admin")),
+              eq(users.role, "coach"),
             ),
           )
           .orderBy(users.name),
       ]);
       coaches = coachRows;
 
-      // NOTE: Coach assignment requires migration 0028 (assignedCoachId column).
-      // Once migration is run, uncomment the assignedCoachId query above and resolve coach names here.
+      // Build a map of coach IDs to names for resolving assigned coach display
+      const coachMap = new Map(coachRows.map((c) => [c.id, c.name || c.email]));
+
       usersResult = {
         items: await (async () => {
           const clerk = await clerkClient();
@@ -165,8 +167,10 @@ export default async function AdminStudentsPage({
                 role: item.role,
                 createdAt: item.createdAt,
                 portalAccessStatus,
-                assignedCoachId: null,
-                assignedCoachName: null,
+                assignedCoachId: item.assignedCoachId ?? null,
+                assignedCoachName: item.assignedCoachId
+                  ? coachMap.get(item.assignedCoachId) ?? null
+                  : null,
               };
             })
           );

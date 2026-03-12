@@ -25,8 +25,7 @@ export const users = pgTable("users", {
   timezone: text("timezone").notNull().default("UTC"),
   longestStreak: integer("longest_streak").notNull().default(0),
   showCohortRankings: boolean("show_cohort_rankings").notNull().default(false),
-  // NOTE: assignedCoachId requires migration 0028. Uncomment after running migrations.
-  // assignedCoachId: uuid("assigned_coach_id"),
+  assignedCoachId: uuid("assigned_coach_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
     .notNull()
@@ -35,14 +34,13 @@ export const users = pgTable("users", {
   deletedAt: timestamp("deleted_at"),
 });
 
-// NOTE: usersRelations requires assignedCoachId (migration 0028). Uncomment after running migrations.
-// export const usersRelations = relations(users, ({ one }) => ({
-//   assignedCoach: one(users, {
-//     fields: [users.assignedCoachId],
-//     references: [users.id],
-//     relationName: "assignedCoach",
-//   }),
-// }));
+export const usersRelations = relations(users, ({ one }) => ({
+  assignedCoach: one(users, {
+    fields: [users.assignedCoachId],
+    references: [users.id],
+    relationName: "assignedCoach",
+  }),
+}));
 
 // Type inference
 export type User = typeof users.$inferSelect;

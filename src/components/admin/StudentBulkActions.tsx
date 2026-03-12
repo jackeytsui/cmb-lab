@@ -8,13 +8,14 @@ import {
   TagsIcon,
   ShieldPlus,
   ShieldMinus,
+  UserCheck,
   X,
   Loader2,
   Search,
 } from "lucide-react";
 import { BulkResultsDialog } from "./BulkResultsDialog";
 
-type BulkOperation = "assign_course" | "remove_course" | "add_tag" | "remove_tag" | "assign_role" | "remove_role";
+type BulkOperation = "assign_course" | "remove_course" | "add_tag" | "remove_tag" | "assign_role" | "remove_role" | "assign_coach";
 
 interface StudentBulkActionsProps {
   selectedIds: string[];
@@ -69,6 +70,13 @@ const ACTION_BUTTONS: {
     icon: TagsIcon,
     pickerTitle: "Select tag to remove",
     fetchEndpoint: "/api/admin/tags",
+  },
+  {
+    operation: "assign_coach",
+    label: "Assign Coach",
+    icon: UserCheck,
+    pickerTitle: "Select coach to assign",
+    fetchEndpoint: "/api/admin/coaches",
   },
   {
     operation: "assign_role",
@@ -130,7 +138,15 @@ export function StudentBulkActions({
         if (cancelled) return;
 
         // Normalize response shape
-        if (data.courses) {
+        if (data.coaches) {
+          setPickerItems(
+            data.coaches.map((c: { id: string; name: string | null; email: string }) => ({
+              id: c.id,
+              label: c.name || c.email,
+              subtitle: c.email,
+            }))
+          );
+        } else if (data.courses) {
           setPickerItems(
             data.courses.map((c: { id: string; title: string; description?: string }) => ({
               id: c.id,
@@ -176,6 +192,41 @@ export function StudentBulkActions({
 
     setExecuting(true);
     try {
+      // Assign coach uses per-student PATCH endpoint
+      if (activeOperation === "assign_coach") {
+        const results: BulkApiResponse["results"] = [];
+        for (const studentId of selectedIds) {
+          try {
+            const res = await fetch(`/api/admin/students/${studentId}/coach`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ coachId: selectedTargetId }),
+            });
+            if (res.ok) {
+              results.push({ studentId, success: true });
+            } else {
+              const data = await res.json().catch(() => ({}));
+              results.push({ studentId, success: false, error: data.error || "Failed" });
+            }
+          } catch {
+            results.push({ studentId, success: false, error: "Network error" });
+          }
+        }
+        const succeeded = results.filter((r) => r.success).length;
+        const failed = results.filter((r) => !r.success).length;
+        setActiveOperation(null);
+        setResultsData({
+          operationId: "assign_coach_bulk",
+          operationType: activeOperation,
+          results,
+          summary: { total: selectedIds.length, succeeded, failed },
+          expiresAt: 0,
+        });
+        setExecuting(false);
+        onOperationComplete();
+        return;
+      }
+
       const res = await fetch("/api/admin/students/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -212,7 +263,7 @@ export function StudentBulkActions({
     } finally {
       setExecuting(false);
     }
-  }, [activeOperation, selectedTargetId, selectedIds, roleExpiresAt]);
+  }, [activeOperation, selectedTargetId, selectedIds, roleExpiresAt, onOperationComplete]);
 
   const closePicker = () => {
     setActiveOperation(null);
@@ -231,6 +282,7 @@ export function StudentBulkActions({
     onOperationComplete();
   };
 
+  const isCoachOperation = activeOperation === "assign_coach";
   const isTagOperation =
     activeOperation === "add_tag" || activeOperation === "remove_tag";
   const isRoleOperation =
@@ -296,7 +348,7 @@ export function StudentBulkActions({
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder={`Search ${isRoleOperation ? "roles" : isTagOperation ? "tags" : "courses"}...`}
+                  placeholder={`Search ${isCoachOperation ? "coaches" : isRoleOperation ? "roles" : isTagOperation ? "tags" : "courses"}...`}
                   value={pickerSearch}
                   onChange={(e) => setPickerSearch(e.target.value)}
                   className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-4 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
@@ -316,7 +368,7 @@ export function StudentBulkActions({
                 <div className="py-8 text-center text-sm text-muted-foreground">
                   {pickerSearch
                     ? "No matching items found"
-                    : `No ${isRoleOperation ? "roles" : isTagOperation ? "tags" : "courses"} available`}
+                    : `No ${isCoachOperation ? "coaches" : isRoleOperation ? "roles" : isTagOperation ? "tags" : "courses"} available`}
                 </div>
               ) : (
                 <div className="space-y-1">

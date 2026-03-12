@@ -8,6 +8,7 @@ import { StudentTagsSection } from "./StudentTagsSection";
 import { StudentAccessAttribution } from "@/components/admin/StudentAccessAttribution";
 import { StudentPortalAccessControls } from "@/components/admin/StudentPortalAccessControls";
 import { StudentProfileEditor } from "@/components/admin/StudentProfileEditor";
+import { AssignCoachDropdown } from "@/components/admin/AssignCoachDropdown";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import {
   ChevronRight,
@@ -21,6 +22,7 @@ import {
   MessageSquare,
   ClipboardList,
   Key,
+  UserCheck,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 
@@ -212,11 +214,19 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
   const { eq, sql, max } = await import("drizzle-orm");
 
   // Level 1: Fetch student (critical - show error page if fails)
-  let student;
+  let student: Awaited<ReturnType<typeof db.query.users.findFirst>> & { assignedCoachId?: string | null } | undefined;
+  let coaches: Array<{ id: string; name: string | null; email: string }> = [];
   try {
     student = await db.query.users.findFirst({
       where: eq(users.id, studentId),
     });
+    // Fetch coaches for the assign coach dropdown
+    const { and: andFn, isNull: isNullFn } = await import("drizzle-orm");
+    coaches = await db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(andFn(isNullFn(users.deletedAt), eq(users.role, "coach")))
+      .orderBy(users.name);
   } catch {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -589,6 +599,31 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
             initialName={student.name}
             initialEmail={student.email}
             initialRole={student.role}
+          />
+        </div>
+      </section>
+
+      {/* Assigned Coach */}
+      <section className="mb-8">
+        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <UserCheck className="w-5 h-5 text-cyan-400" />
+          Assigned Coach
+        </h2>
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+          <p className="text-sm text-zinc-400 mb-3">
+            Assign a coach to this student for 1:1 coaching sessions.
+          </p>
+          <AssignCoachDropdown
+            studentId={studentId}
+            currentCoachId={student.assignedCoachId ?? null}
+            currentCoachName={
+              student.assignedCoachId
+                ? coaches.find((c) => c.id === student.assignedCoachId)?.name ??
+                  coaches.find((c) => c.id === student.assignedCoachId)?.email ??
+                  null
+                : null
+            }
+            coaches={coaches}
           />
         </div>
       </section>

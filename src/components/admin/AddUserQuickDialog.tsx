@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -18,11 +18,13 @@ import {
 
 type RoleType = "student" | "coach" | "admin";
 type AccessStatus = "active" | "paused" | "expired";
+type CoachOption = { id: string; name: string | null; email: string };
 
 export function AddUserQuickDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [coaches, setCoaches] = useState<CoachOption[]>([]);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -30,7 +32,17 @@ export function AddUserQuickDialog() {
     role: "student" as RoleType,
     courseEndDate: "",
     accessStatus: "active" as AccessStatus,
+    assignedCoachId: "" as string,
   });
+
+  // Fetch coaches when dialog opens
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/admin/coaches")
+      .then((res) => res.json())
+      .then((data) => setCoaches(data.coaches ?? []))
+      .catch(() => {});
+  }, [open]);
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -75,6 +87,19 @@ export function AddUserQuickDialog() {
         return;
       }
 
+      // If coach was selected, assign after user creation
+      if (form.assignedCoachId && firstResult?.userId) {
+        try {
+          await fetch(`/api/admin/students/${firstResult.userId}/coach`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ coachId: form.assignedCoachId }),
+          });
+        } catch {
+          // Non-critical - coach assignment can be done later
+        }
+      }
+
       toast.success("User added successfully.");
       setOpen(false);
       setForm({
@@ -84,6 +109,7 @@ export function AddUserQuickDialog() {
         role: "student",
         courseEndDate: "",
         accessStatus: "active",
+        assignedCoachId: "",
       });
       router.refresh();
     } catch {
@@ -173,14 +199,32 @@ export function AddUserQuickDialog() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="quick-course-end-date">Course End Date (Optional)</Label>
-            <Input
-              id="quick-course-end-date"
-              type="date"
-              value={form.courseEndDate}
-              onChange={(e) => setForm((prev) => ({ ...prev, courseEndDate: e.target.value }))}
-            />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="quick-course-end-date">Course End Date (Optional)</Label>
+              <Input
+                id="quick-course-end-date"
+                type="date"
+                value={form.courseEndDate}
+                onChange={(e) => setForm((prev) => ({ ...prev, courseEndDate: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="quick-coach">Assigned Coach (Optional)</Label>
+              <select
+                id="quick-coach"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.assignedCoachId}
+                onChange={(e) => setForm((prev) => ({ ...prev, assignedCoachId: e.target.value }))}
+              >
+                <option value="">No coach assigned</option>
+                {coaches.map((coach) => (
+                  <option key={coach.id} value={coach.id}>
+                    {coach.name || coach.email}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
