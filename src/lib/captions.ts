@@ -311,6 +311,59 @@ async function extractViaCaptionExtractor(
 }
 
 // ============================================================
+// Supadata API Integration
+// ============================================================
+
+interface SupadataCaption {
+  text: string;
+  offset: number;
+  duration: number;
+  lang: string;
+}
+
+/**
+ * Fetch captions via Supadata API (paid service, highly reliable).
+ * Tries Chinese language codes in priority order.
+ * Returns null if API key is not configured or no captions found.
+ */
+async function fetchViaSupadata(
+  videoId: string,
+  langCodes: string[]
+): Promise<{ captions: NormalizedCaption[]; lang: string } | null> {
+  const apiKey = process.env.SUPADATA_API_KEY;
+  if (!apiKey) return null;
+
+  for (const lang of langCodes) {
+    try {
+      const url = `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&lang=${lang}`;
+      const res = await fetch(url, {
+        headers: { "x-api-key": apiKey },
+      });
+
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      const content = data.content as SupadataCaption[] | undefined;
+      if (!content || content.length === 0) continue;
+
+      const captions: NormalizedCaption[] = content.map((item, idx) => ({
+        text: item.text.trim(),
+        startMs: Math.round(item.offset),
+        endMs: Math.round(item.offset + item.duration),
+        sequence: idx + 1,
+      })).filter((c) => c.text.length > 0);
+
+      if (captions.length > 0) {
+        return { captions, lang };
+      }
+    } catch {
+      // Try next language code
+    }
+  }
+  return null;
+}
+
+// ============================================================
 // Public Functions
 // ============================================================
 
@@ -318,9 +371,10 @@ async function extractViaCaptionExtractor(
  * Extract Chinese captions from a YouTube video.
  *
  * Strategy (in order):
- *  1. Scrape YouTube page → discover tracks → fetch timedtext XML
- *  2. Translate from available source track to Chinese (if translation available)
- *  3. youtube-caption-extractor fallback
+ *  1. Supadata API (paid, most reliable — bypasses YouTube blocks)
+ *  2. Scrape YouTube page → discover tracks → fetch timedtext XML
+ *  3. Translate from available source track to Chinese (if translation available)
+ *  4. youtube-caption-extractor fallback
  *
  * @param videoId - YouTube video ID (11 characters)
  * @returns Normalized captions with the language code used, or null if none available
@@ -328,7 +382,13 @@ async function extractViaCaptionExtractor(
 export async function extractChineseCaptions(
   videoId: string
 ): Promise<{ captions: NormalizedCaption[]; lang: string } | null> {
-  // Step 1: Discover caption tracks via page scraping (most reliable)
+  // Step 1: Try Supadata API first (bypasses YouTube PO Token blocks)
+  const supadataResult = await fetchViaSupadata(videoId, CHINESE_LANG_CODES);
+  if (supadataResult) {
+    return supadataResult;
+  }
+
+  // Step 2: Discover caption tracks via page scraping (fallback)
   let tracks: CaptionTrack[] = [];
   let translationLanguages: TranslationLanguage[] = [];
   try {
@@ -340,7 +400,7 @@ export async function extractChineseCaptions(
     translationLanguages = [];
   }
 
-  // Step 2: Try fetching Chinese track content
+  // Step 3: Try fetching Chinese track content
   if (tracks.length > 0) {
     const zhTrack = findTrack(tracks, CHINESE_LANG_CODES);
     if (zhTrack) {
@@ -350,7 +410,7 @@ export async function extractChineseCaptions(
       }
     }
 
-    // Step 3: Try translating an available subtitle track into Chinese
+    // Step 4: Try translating an available subtitle track into Chinese
     if (canTranslateToChinese(translationLanguages)) {
       const sourceTrack =
         findTrack(tracks, ENGLISH_LANG_CODES) ||
@@ -369,7 +429,7 @@ export async function extractChineseCaptions(
     }
   }
 
-  // Step 4: youtube-caption-extractor fallback
+  // Step 5: youtube-caption-extractor fallback
   const extractorFallback = await extractViaCaptionExtractor(
     videoId,
     CHINESE_LANG_CODES
@@ -389,6 +449,12 @@ export async function extractEnglishCaptions(
   videoId: string
 ): Promise<NormalizedCaption[] | null> {
   try {
+    // Try Supadata first
+    const supadataResult = await fetchViaSupadata(videoId, ENGLISH_LANG_CODES);
+    if (supadataResult) {
+      return supadataResult.captions;
+    }
+
     let tracks: CaptionTrack[] = [];
     try {
       const trackData = await fetchCaptionTrackDataViaPageScrape(videoId);

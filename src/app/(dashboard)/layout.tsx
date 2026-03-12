@@ -17,6 +17,7 @@ import { FEATURE_KEYS, resolvePermissions } from "@/lib/permissions";
 import { DEFAULT_STUDENT_FEATURES, ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { resolveRoleFromEmail } from "@/lib/access-control";
 import { applyFeatureTagOverrides, getUserFeatureTagOverrides } from "@/lib/tag-feature-access";
+import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +145,24 @@ export default async function DashboardLayout({
     role = (dbUser?.role || "student") as Roles;
   }
 
+  // "View As" impersonation: admin can view the app as another user
+  const cookieStore = await cookies();
+  const viewAsUserId = cookieStore.get("view_as_user_id")?.value;
+  let viewAsUser: { id: string; email: string; name: string | null; role: "student" | "coach" | "admin" } | null = null;
+
+  if (viewAsUserId && role === "admin") {
+    const target = await db.query.users.findFirst({
+      where: eq(users.id, viewAsUserId),
+      columns: { id: true, email: true, name: true, role: true },
+    });
+    if (target) {
+      viewAsUser = target;
+      // Override role and dbUser for the impersonated user
+      role = target.role as Roles;
+      dbUser = { id: target.id, role: target.role };
+    }
+  }
+
   if (role === "student") {
     if (dbUser) {
       const permissions = await resolvePermissions(dbUser.id);
@@ -163,13 +182,20 @@ export default async function DashboardLayout({
     enabledFeatures = Array.from(applyFeatureTagOverrides(enabledFeatures, overrides));
   }
 
-  const cookieStore = await cookies();
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
   return (
-    <SidebarProvider defaultOpen={defaultOpen}>
-      <AppSidebar role={role} enabledFeatures={enabledFeatures} />
-      <SidebarInset>
+    <>
+      {viewAsUser && (
+        <ViewAsBanner
+          userName={viewAsUser.name}
+          userEmail={viewAsUser.email}
+          userRole={viewAsUser.role}
+        />
+      )}
+      <SidebarProvider defaultOpen={defaultOpen}>
+        <AppSidebar role={role} enabledFeatures={enabledFeatures} />
+        <SidebarInset>
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
           <div className="flex-1" />
           <div className="flex items-center gap-3">
@@ -180,7 +206,8 @@ export default async function DashboardLayout({
         <main className="flex-1 overflow-auto">
           <RouteThemeScope>{children}</RouteThemeScope>
         </main>
-      </SidebarInset>
-    </SidebarProvider>
+        </SidebarInset>
+      </SidebarProvider>
+    </>
   );
 }
