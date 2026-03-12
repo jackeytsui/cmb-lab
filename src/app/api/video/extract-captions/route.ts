@@ -89,7 +89,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Extract captions from YouTube
+    console.log(`[extract-captions] Starting extraction for videoId=${videoId}, hasSupadataKey=${!!process.env.SUPADATA_API_KEY}`);
     const result = await extractChineseCaptions(videoId);
+    console.log(`[extract-captions] Result: ${result ? `${result.captions.length} captions (lang=${result.lang})` : "null"}`);
 
     if (!result) {
       const youtubeBlocked = await isYouTubeCaptionAccessBlocked(videoId);
@@ -108,6 +110,8 @@ export async function POST(request: NextRequest) {
           target: [videoSessions.userId, videoSessions.youtubeVideoId],
           set: {
             youtubeUrl: url,
+            captionCount: 0,
+            captionLang: null,
           },
         })
         .returning();
@@ -117,6 +121,10 @@ export async function POST(request: NextRequest) {
         captions: null,
         englishCaptions: null,
         error: youtubeBlocked ? "youtube_access_blocked" : "no_chinese_captions",
+        debug: {
+          hasSupadataKey: !!process.env.SUPADATA_API_KEY,
+          youtubeBlocked,
+        },
       });
     }
 
