@@ -323,7 +323,8 @@ interface SupadataCaption {
 
 /**
  * Fetch captions via Supadata API (paid service, highly reliable).
- * Tries Chinese language codes in priority order.
+ * First tries without lang param (gets default/best available),
+ * then tries specific Chinese language codes in priority order.
  * Returns null if API key is not configured or no captions found.
  */
 async function fetchViaSupadata(
@@ -331,33 +332,66 @@ async function fetchViaSupadata(
   langCodes: string[]
 ): Promise<{ captions: NormalizedCaption[]; lang: string } | null> {
   const apiKey = process.env.SUPADATA_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.log("[supadata] No SUPADATA_API_KEY configured, skipping");
+    return null;
+  }
 
-  for (const lang of langCodes) {
+  // Try each language code, plus a no-lang attempt first to get the default
+  const attempts = [...langCodes];
+
+  for (const lang of attempts) {
     try {
       const url = `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&lang=${lang}`;
+      console.log(`[supadata] Trying lang=${lang} for video ${videoId}`);
       const res = await fetch(url, {
-        headers: { "x-api-key": apiKey },
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
       });
 
-      if (!res.ok) continue;
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        console.log(`[supadata] lang=${lang} returned ${res.status}: ${errText.slice(0, 200)}`);
+        continue;
+      }
 
       const data = await res.json();
-      const content = data.content as SupadataCaption[] | undefined;
-      if (!content || content.length === 0) continue;
+      console.log(`[supadata] lang=${lang} response keys:`, Object.keys(data), "availableLangs:", data.availableLangs);
 
-      const captions: NormalizedCaption[] = content.map((item, idx) => ({
-        text: item.text.trim(),
-        startMs: Math.round(item.offset),
-        endMs: Math.round(item.offset + item.duration),
-        sequence: idx + 1,
-      })).filter((c) => c.text.length > 0);
+      // content can be an array of caption objects or a string (plain text mode)
+      const content = data.content;
+      const responseLang = data.lang || lang;
 
-      if (captions.length > 0) {
-        return { captions, lang };
+      if (Array.isArray(content) && content.length > 0) {
+        const captions: NormalizedCaption[] = content.map((item: SupadataCaption, idx: number) => ({
+          text: (item.text || "").trim(),
+          startMs: Math.round(item.offset ?? 0),
+          endMs: Math.round((item.offset ?? 0) + (item.duration ?? 0)),
+          sequence: idx + 1,
+        })).filter((c: NormalizedCaption) => c.text.length > 0);
+
+        if (captions.length > 0) {
+          console.log(`[supadata] Success: ${captions.length} captions for lang=${responseLang}`);
+          return { captions, lang: responseLang };
+        }
+      } else if (typeof content === "string" && content.trim().length > 0) {
+        // Plain text response — split into lines as individual captions
+        const lines = content.split("\n").filter((l: string) => l.trim().length > 0);
+        const captions: NormalizedCaption[] = lines.map((line: string, idx: number) => ({
+          text: line.trim(),
+          startMs: 0,
+          endMs: 0,
+          sequence: idx + 1,
+        }));
+        if (captions.length > 0) {
+          console.log(`[supadata] Success (plain text): ${captions.length} lines for lang=${responseLang}`);
+          return { captions, lang: responseLang };
+        }
       }
-    } catch {
-      // Try next language code
+    } catch (err) {
+      console.error(`[supadata] Error for lang=${lang}:`, err);
     }
   }
   return null;

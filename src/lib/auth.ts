@@ -101,22 +101,6 @@ export async function getCurrentUser() {
 
   const user = await db.query.users.findFirst({
     where: eq(users.clerkId, userId),
-    columns: {
-      id: true,
-      clerkId: true,
-      email: true,
-      name: true,
-      imageUrl: true,
-      role: true,
-      languagePreference: true,
-      dailyGoalXp: true,
-      timezone: true,
-      longestStreak: true,
-      showCohortRankings: true,
-      createdAt: true,
-      updatedAt: true,
-      deletedAt: true,
-    },
   });
 
   return user;

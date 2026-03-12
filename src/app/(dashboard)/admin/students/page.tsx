@@ -65,8 +65,8 @@ export default async function AdminStudentsPage({
           role: "student" | "coach" | "admin";
           createdAt: Date;
           portalAccessStatus: "active" | "paused" | "expired";
-          assignedCoachId: string | null;
-          assignedCoachName: string | null;
+          assignedCoachId?: string | null;
+          assignedCoachName?: string | null;
         }>;
         total: number;
       }
@@ -109,7 +109,6 @@ export default async function AdminStudentsPage({
             email: users.email,
             role: users.role,
             createdAt: users.createdAt,
-            assignedCoachId: users.assignedCoachId,
           })
           .from(users)
           .where(whereClause)
@@ -130,20 +129,8 @@ export default async function AdminStudentsPage({
       ]);
       coaches = coachRows;
 
-      // Resolve assigned coach names
-      const coachIds = items
-        .map((item) => item.assignedCoachId)
-        .filter((id): id is string => id !== null);
-      const coachMap = new Map<string, string | null>();
-      if (coachIds.length > 0) {
-        const coachUsers = await db
-          .select({ id: users.id, name: users.name, email: users.email })
-          .from(users)
-          .where(inArray(users.id, coachIds));
-        for (const c of coachUsers) {
-          coachMap.set(c.id, c.name || c.email);
-        }
-      }
+      // NOTE: Coach assignment requires migration 0028 (assignedCoachId column).
+      // Once migration is run, uncomment the assignedCoachId query above and resolve coach names here.
       usersResult = {
         items: await (async () => {
           const clerk = await clerkClient();
@@ -178,10 +165,8 @@ export default async function AdminStudentsPage({
                 role: item.role,
                 createdAt: item.createdAt,
                 portalAccessStatus,
-                assignedCoachId: item.assignedCoachId ?? null,
-                assignedCoachName: item.assignedCoachId
-                  ? coachMap.get(item.assignedCoachId) ?? null
-                  : null,
+                assignedCoachId: null,
+                assignedCoachName: null,
               };
             })
           );
@@ -359,8 +344,8 @@ export default async function AdminStudentsPage({
                         <td className="px-4 py-3 text-sm">
                           <AssignCoachDropdown
                             studentId={user.id}
-                            currentCoachId={user.assignedCoachId}
-                            currentCoachName={user.assignedCoachName}
+                            currentCoachId={user.assignedCoachId ?? null}
+                            currentCoachName={user.assignedCoachName ?? null}
                             coaches={coaches}
                           />
                         </td>

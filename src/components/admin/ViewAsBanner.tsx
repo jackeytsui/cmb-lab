@@ -23,7 +23,7 @@ export function ViewAsBanner({
   };
 
   return (
-    <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-amber-500 px-4 py-2 text-sm font-medium text-black">
+    <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
       <Eye className="size-4" />
       <span>
         Viewing as{" "}
@@ -34,7 +34,7 @@ export function ViewAsBanner({
         type="button"
         onClick={handleExit}
         disabled={isExiting}
-        className="ml-2 inline-flex items-center gap-1 rounded-md bg-black/20 px-2.5 py-1 text-xs font-semibold text-black hover:bg-black/30 transition-colors disabled:opacity-50"
+        className="ml-2 inline-flex items-center gap-1 rounded-md bg-primary-foreground/20 px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary-foreground/30 transition-colors disabled:opacity-50"
       >
         <X className="size-3" />
         {isExiting ? "Exiting..." : "Exit View As"}
