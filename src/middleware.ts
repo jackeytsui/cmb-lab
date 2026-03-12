@@ -8,6 +8,7 @@ const isStudentAllowedRoute = createRouteMatcher([
   "/dashboard/reader(.*)",
   "/dashboard/listening(.*)",
   "/dashboard/coaching(.*)",
+  "/dashboard/audio-courses(.*)",
   "/settings(.*)",
 ]);
 const isProtectedRoute = createRouteMatcher([

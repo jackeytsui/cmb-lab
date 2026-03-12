@@ -23,6 +23,7 @@ export const FEATURE_KEYS = [
   "ai_conversation",
   "practice_sets",
   "dictionary_reader",
+  "audio_courses",
   "listening_lab",
   "coaching_material",
   "video_threads",

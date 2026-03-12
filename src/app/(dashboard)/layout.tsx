@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import {
   SidebarProvider,
   SidebarInset,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { SearchBar } from "@/components/search/SearchBar";
@@ -196,9 +197,11 @@ export default async function DashboardLayout({
       <SidebarProvider defaultOpen={defaultOpen}>
         <AppSidebar role={role} enabledFeatures={enabledFeatures} />
         <SidebarInset>
-        <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
+        <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-3 sm:px-4">
+          {/* Mobile hamburger - only visible on small screens where sidebar is a drawer */}
+          <SidebarTrigger className="size-9 shrink-0 rounded-md text-muted-foreground hover:text-foreground md:hidden" />
           <div className="flex-1" />
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <SearchBar />
             <NotificationBellClient />
           </div>

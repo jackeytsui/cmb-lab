@@ -18,6 +18,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   ai_conversation: "AI Conversation Bot",
   practice_sets: "Practice Sets",
   dictionary_reader: "Dictionary & Reader",
+  audio_courses: "Audio Courses",
   listening_lab: "YouTube Listening Lab",
   coaching_material: "My Coaching Material",
   video_threads: "Video Threads",

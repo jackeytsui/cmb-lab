@@ -21,6 +21,7 @@ import {
   FileText,
   Headphones,
   LayoutDashboard,
+  AudioLines,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
 
@@ -29,6 +30,7 @@ type FeatureKey =
   | "ai_conversation"
   | "practice_sets"
   | "dictionary_reader"
+  | "audio_courses"
   | "listening_lab"
   | "coaching_material"
   | "video_threads"
@@ -43,6 +45,18 @@ type NavSectionWithRoleAndFeature = Omit<NavSectionWithRole, "items"> & {
 };
 
 const navSections: NavSectionWithRoleAndFeature[] = [
+  {
+    label: "Courses",
+    minRole: "student",
+    items: [
+      {
+        title: "Audio Course",
+        url: "/dashboard/audio-courses",
+        icon: AudioLines,
+        featureKey: "audio_courses",
+      },
+    ],
+  },
   {
     label: "Learning Tools",
     minRole: "student",

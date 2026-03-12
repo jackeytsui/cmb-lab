@@ -7,6 +7,7 @@ import { eq, and, isNull } from "drizzle-orm";
 const DEFAULT_STUDENT_ROLE_NAME = "Student";
 export const DEFAULT_STUDENT_FEATURES = [
   "dictionary_reader",
+  "audio_courses",
   "listening_lab",
   "coaching_material",
 ];
