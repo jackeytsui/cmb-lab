@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarRail,
   SidebarTrigger,
@@ -140,33 +139,33 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" className="border-r border-border">
       <SidebarHeader className="p-4">
-        <Link
-          href="/dashboard"
-          className="group flex items-center gap-2 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-sidebar-accent/30 group-data-[collapsible=icon]:justify-center"
-        >
-          <div className="-translate-y-1 h-12 w-12 shrink-0 overflow-hidden rounded-lg self-center">
-            <Image
-              src="/canto-to-mando-logo.png"
-              alt="Canto to Mando Blueprint Lab"
-              width={96}
-              height={96}
-              className="h-full w-full origin-top scale-[1.45] object-cover object-top"
-              priority
-            />
-          </div>
-          <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <div className="whitespace-nowrap text-[13px] font-semibold leading-none tracking-[0.01em] text-sidebar-foreground">
-              Canto to Mando Lab
+        <div className="flex items-center justify-between">
+          <Link
+            href="/dashboard"
+            className="group flex items-center gap-2 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-sidebar-accent/30 group-data-[collapsible=icon]:justify-center"
+          >
+            <div className="-translate-y-1 h-12 w-12 shrink-0 overflow-hidden rounded-lg self-center">
+              <Image
+                src="/canto-to-mando-logo.png"
+                alt="Canto to Mando Blueprint Lab"
+                width={96}
+                height={96}
+                className="h-full w-full origin-top scale-[1.45] object-cover object-top"
+                priority
+              />
             </div>
-          </div>
-        </Link>
+            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+              <div className="whitespace-nowrap text-[13px] font-semibold leading-none tracking-[0.01em] text-sidebar-foreground">
+                Canto to Mando Lab
+              </div>
+            </div>
+          </Link>
+          <SidebarTrigger className="size-8 shrink-0 rounded-md border border-border bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden" />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <NavMain sections={filteredSections} />
       </SidebarContent>
-      <SidebarFooter className="border-t border-border p-2">
-        <SidebarTrigger className="w-full justify-start text-muted-foreground hover:text-foreground" />
-      </SidebarFooter>
       <NavUser />
       <SidebarRail />
     </Sidebar>
