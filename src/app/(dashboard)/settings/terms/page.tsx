@@ -64,7 +64,20 @@ export default function TermsAndConditionsPage() {
         </section>
 
         <section className="space-y-2">
-          <h2 className="text-base font-semibold">5. Service Availability</h2>
+          <h2 className="text-base font-semibold">5. Feature Usage Limits</h2>
+          <p>
+            Certain features on the Platform, including but not limited to the YouTube Listening Lab
+            and all AI-powered product features, may have set usage limits in place to protect the
+            fairness of resource distribution to all users.
+          </p>
+          <p>
+            The Company reserves the right to make final decisions regarding usage limits and to
+            adjust them from time to time without needing to announce such changes in advance.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-base font-semibold">6. Service Availability</h2>
           <p>
             The Platform may be in beta, experimental, or evolving form. Features, workflows, and
             availability may change without guarantee of uninterrupted operation.
@@ -72,7 +85,7 @@ export default function TermsAndConditionsPage() {
         </section>
 
         <section className="space-y-2">
-          <h2 className="text-base font-semibold">6. Limitation of Liability</h2>
+          <h2 className="text-base font-semibold">7. Limitation of Liability</h2>
           <p>
             To the maximum extent permitted by law, Canto to Mando Media LTD. is not liable for
             indirect, incidental, special, consequential, or punitive damages arising from use of
@@ -81,7 +94,7 @@ export default function TermsAndConditionsPage() {
         </section>
 
         <section className="space-y-2">
-          <h2 className="text-base font-semibold">7. Updates and Interpretation</h2>
+          <h2 className="text-base font-semibold">8. Updates and Interpretation</h2>
           <p>
             Canto to Mando Media LTD. may update these Terms from time to time. Continued use of the
             Platform after updates constitutes acceptance of the revised Terms.
@@ -92,7 +105,7 @@ export default function TermsAndConditionsPage() {
         </section>
 
         <section className="space-y-2">
-          <h2 className="text-base font-semibold">8. Contact</h2>
+          <h2 className="text-base font-semibold">9. Contact</h2>
           <p>
             For questions about these Terms and Conditions, contact us at{" "}
             <a className="underline underline-offset-2" href="mailto:contact@thecmblueprint.com">

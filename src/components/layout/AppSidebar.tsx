@@ -142,7 +142,7 @@ export function AppSidebar({
         <div className="flex items-center justify-between">
           <Link
             href="/dashboard"
-            className="group flex items-center gap-2 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-sidebar-accent/30 group-data-[collapsible=icon]:justify-center"
+            className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-sidebar-accent/30 group-data-[collapsible=icon]:hidden"
           >
             <div className="-translate-y-1 h-12 w-12 shrink-0 overflow-hidden rounded-lg self-center">
               <Image
@@ -154,13 +154,14 @@ export function AppSidebar({
                 priority
               />
             </div>
-            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+            <div className="min-w-0 flex-1">
               <div className="whitespace-nowrap text-[13px] font-semibold leading-none tracking-[0.01em] text-sidebar-foreground">
                 Canto to Mando Lab
               </div>
             </div>
           </Link>
-          <SidebarTrigger className="size-8 shrink-0 rounded-md border border-border bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden" />
+          {/* When collapsed: show expand trigger instead of half-cropped logo */}
+          <SidebarTrigger className="size-8 shrink-0 rounded-md border border-border bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent" />
         </div>
       </SidebarHeader>
       <SidebarContent>

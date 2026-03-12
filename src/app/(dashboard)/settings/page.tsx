@@ -63,7 +63,7 @@ export default async function SettingsPage() {
               Terms and Conditions
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Read the platform terms that apply to all user types.
+              Read the platform terms that apply to all users.
             </p>
             <Link
               href="/settings/terms"

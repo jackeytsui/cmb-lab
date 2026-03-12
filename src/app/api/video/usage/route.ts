@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { db } from "@/db";
 import { users, videoSessions } from "@/db/schema";
 import { eq, and, gte, count } from "drizzle-orm";
@@ -10,6 +11,7 @@ import { getTranscriptLimitSettings, getPeriodStart } from "@/lib/usage-limits";
  *
  * Returns the user's current transcript usage and limit info.
  * Coaches and admins have unlimited access.
+ * Respects "View As" impersonation cookie for admin testing.
  */
 export async function GET() {
   try {
@@ -18,10 +20,32 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await db.query.users.findFirst({
-      where: eq(users.clerkId, clerkUserId),
-      columns: { id: true, role: true },
-    });
+    // Check for View As impersonation
+    const cookieStore = await cookies();
+    const viewAsUserId = cookieStore.get("view_as_user_id")?.value;
+
+    let user: { id: string; role: string } | undefined;
+
+    if (viewAsUserId) {
+      // Admin is viewing as another user — check that the real user is admin
+      const realUser = await db.query.users.findFirst({
+        where: eq(users.clerkId, clerkUserId),
+        columns: { role: true },
+      });
+      if (realUser?.role === "admin") {
+        user = await db.query.users.findFirst({
+          where: eq(users.id, viewAsUserId),
+          columns: { id: true, role: true },
+        });
+      }
+    }
+
+    if (!user) {
+      user = await db.query.users.findFirst({
+        where: eq(users.clerkId, clerkUserId),
+        columns: { id: true, role: true },
+      });
+    }
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 401 });

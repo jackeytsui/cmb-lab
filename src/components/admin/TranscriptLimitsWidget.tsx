@@ -66,9 +66,9 @@ export function TranscriptLimitsWidget() {
         Control how many YouTube videos students can transcribe per period. Coaches and admins are unlimited.
       </p>
 
-      <div className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">
+          <label className="block text-xs font-medium text-muted-foreground">
             Max transcriptions
           </label>
           <input
@@ -77,18 +77,18 @@ export function TranscriptLimitsWidget() {
             max={999}
             value={limitCount}
             onChange={(e) => setLimitCount(Math.max(1, parseInt(e.target.value) || 1))}
-            className="h-9 w-24 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+            className="block h-9 w-24 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">
-            Per period
+          <label className="block text-xs font-medium text-muted-foreground">
+            Per
           </label>
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+            className="block h-9 w-28 rounded-md border border-border bg-background px-2 pr-8 text-sm text-foreground outline-none focus:border-primary"
           >
             {PERIOD_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
