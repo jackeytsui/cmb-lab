@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSignIn } from "@clerk/nextjs";
+import { useSignIn, useAuth } from "@clerk/nextjs";
 
 type Mode = "otp" | "password";
 
@@ -23,6 +23,14 @@ function extractErrorMessage(error: unknown) {
 export function OtpFirstSignIn() {
   const router = useRouter();
   const { isLoaded, signIn, setActive } = useSignIn();
+  const { isSignedIn } = useAuth();
+
+  // If already signed in, hard-redirect to dashboard
+  useEffect(() => {
+    if (isSignedIn) {
+      window.location.href = "/dashboard";
+    }
+  }, [isSignedIn]);
 
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -34,6 +42,14 @@ export function OtpFirstSignIn() {
   const [resetCodeSent, setResetCodeSent] = useState(false);
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [clerkTimedOut, setClerkTimedOut] = useState(false);
+
+  // If Clerk takes too long to load, show a helpful message
+  useEffect(() => {
+    if (isLoaded) return;
+    const timer = setTimeout(() => setClerkTimedOut(true), 6000);
+    return () => clearTimeout(timer);
+  }, [isLoaded]);
 
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
   async function activateSession(createdSessionId: string | null) {
@@ -163,6 +179,31 @@ export function OtpFirstSignIn() {
 
   return (
     <div className="space-y-3">
+      {isSignedIn && (
+        <div className="space-y-3 rounded-md border border-emerald-700 bg-emerald-900/40 p-4 text-center">
+          <p className="text-sm text-emerald-200">
+            You&apos;re already signed in.
+          </p>
+          <a
+            href="/dashboard"
+            className="inline-block w-full rounded-md bg-blue-600 px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+          >
+            Click here to redirect to signed in page
+          </a>
+        </div>
+      )}
+
+      {!isLoaded && !isSignedIn && (
+        <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/70 p-3">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+          <p className="text-xs text-slate-300">
+            {clerkTimedOut
+              ? "Taking longer than expected. Try refreshing the page or clearing your browser cache."
+              : "Loading sign-in…"}
+          </p>
+        </div>
+      )}
+
       <div className="space-y-2">
         <label className="text-xs font-medium text-slate-200">Email address</label>
         <input
@@ -170,6 +211,12 @@ export function OtpFirstSignIn() {
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            setMode("otp");
+            void handleSendOtp();
+          }}
           className="h-10 w-full rounded-md border border-slate-600 bg-slate-800/90 px-3 text-sm text-white outline-none ring-0 placeholder:text-slate-400 focus:border-blue-500"
           placeholder="you@email.com"
         />
@@ -185,7 +232,7 @@ export function OtpFirstSignIn() {
           }}
           className="h-10 rounded-md bg-blue-600 px-3 text-sm font-medium text-white disabled:opacity-60"
         >
-          Continue with Email Code (OTP)
+          {!isLoaded ? "Loading…" : "Continue with Email Code (OTP)"}
         </button>
       </div>
 
@@ -247,6 +294,11 @@ export function OtpFirstSignIn() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                void handlePasswordSignIn();
+              }}
               className="h-10 w-full rounded-md border border-slate-600 bg-slate-800/90 px-3 text-sm text-white outline-none placeholder:text-slate-400 focus:border-blue-500"
               placeholder="Enter password"
             />

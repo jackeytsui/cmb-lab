@@ -67,12 +67,17 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.redirect(new URL("/sign-in", req.url));
   }
 
+  const { sessionClaims, userId } = await auth();
+
+  // If already signed in and visiting sign-in page, redirect to dashboard
+  if (userId && createRouteMatcher(["/sign-in(.*)"])(req)) {
+    return NextResponse.redirect(new URL("/dashboard", req.url));
+  }
+
   // Allow public routes
   if (isPublicRoute(req)) {
     return NextResponse.next();
   }
-
-  const { sessionClaims, userId } = await auth();
 
   // Require auth for protected routes
   if (!userId && isProtectedRoute(req)) {
