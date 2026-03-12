@@ -25,6 +25,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks(.*)",
   "/verify(.*)",
   "/api/certificates/(.*)/download",
+  "/api/podcast/(.*)/feed",
 ]);
 
 function normalizeEmail(value: unknown) {

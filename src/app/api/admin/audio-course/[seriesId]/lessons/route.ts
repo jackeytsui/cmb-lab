@@ -39,6 +39,13 @@ async function ensureSeriesModule(seriesId: string) {
   return created;
 }
 
+type LessonInput = {
+  title?: string;
+  description?: string;
+  audioUrl?: string;
+  durationMinutes?: number | null;
+};
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ seriesId: string }> },
@@ -57,43 +64,51 @@ export async function POST(
     return NextResponse.json({ error: "Audio series not found" }, { status: 404 });
   }
 
-  const body = (await request.json()) as {
-    title?: string;
-    description?: string;
-    audioUrl?: string;
-    durationMinutes?: number | null;
-  };
-  const title = body.title?.trim() ?? "";
-  const audioUrl = body.audioUrl?.trim() ?? "";
-  if (!title) {
-    return NextResponse.json({ error: "Lesson title is required" }, { status: 400 });
-  }
-  if (!audioUrl) {
-    return NextResponse.json({ error: "Lesson audio URL is required" }, { status: 400 });
-  }
+  const raw = await request.json();
+
+  // Support bulk: { lessons: [...] } or single: { title, audioUrl, ... }
+  const inputs: LessonInput[] = Array.isArray(raw.lessons) ? raw.lessons : [raw];
 
   const seriesModule = await ensureSeriesModule(seriesId);
-  const lessonRows = await db
+  const existingLessons = await db
     .select({ sortOrder: lessons.sortOrder })
     .from(lessons)
     .where(and(eq(lessons.moduleId, seriesModule.id), isNull(lessons.deletedAt)))
     .orderBy(asc(lessons.sortOrder));
-  const nextOrder = (lessonRows[lessonRows.length - 1]?.sortOrder ?? -1) + 1;
+  let nextOrder = (existingLessons[existingLessons.length - 1]?.sortOrder ?? -1) + 1;
 
-  const [created] = await db
-    .insert(lessons)
-    .values({
-      moduleId: seriesModule.id,
-      title,
-      description: body.description?.trim() ?? null,
-      content: stringifyLessonContent(audioUrl),
-      durationSeconds:
-        typeof body.durationMinutes === "number" && body.durationMinutes > 0
-          ? Math.round(body.durationMinutes * 60)
-          : null,
-      sortOrder: nextOrder,
-    })
-    .returning();
+  const created = [];
+  for (const input of inputs) {
+    const title = input.title?.trim() ?? "";
+    const audioUrl = input.audioUrl?.trim() ?? "";
+    if (!title || !audioUrl) continue;
 
-  return NextResponse.json({ lesson: created }, { status: 201 });
+    const [lesson] = await db
+      .insert(lessons)
+      .values({
+        moduleId: seriesModule.id,
+        title,
+        description: input.description?.trim() ?? null,
+        content: stringifyLessonContent(audioUrl),
+        durationSeconds:
+          typeof input.durationMinutes === "number" && input.durationMinutes > 0
+            ? Math.round(input.durationMinutes * 60)
+            : null,
+        sortOrder: nextOrder++,
+      })
+      .returning();
+    created.push(lesson);
+  }
+
+  if (created.length === 0) {
+    return NextResponse.json(
+      { error: "No valid lessons provided. Each lesson needs a title and audio URL." },
+      { status: 400 },
+    );
+  }
+
+  return NextResponse.json(
+    { lessons: created, count: created.length },
+    { status: 201 },
+  );
 }

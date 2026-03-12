@@ -152,13 +152,14 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon" className="border-r border-border">
-      <SidebarHeader className="p-4">
-        <div className="flex items-center justify-between">
+      <SidebarHeader className="px-3 py-4">
+        {/* Expanded: logo + text + collapse button */}
+        <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-sidebar-accent/30 group-data-[collapsible=icon]:hidden"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1 transition-colors hover:bg-sidebar-accent/30"
           >
-            <div className="-translate-y-1 h-12 w-12 shrink-0 overflow-hidden rounded-lg self-center">
+            <div className="-translate-y-1 h-10 w-10 shrink-0 overflow-hidden rounded-lg">
               <Image
                 src="/canto-to-mando-logo.png"
                 alt="Canto to Mando Blueprint Lab"
@@ -174,8 +175,11 @@ export function AppSidebar({
               </div>
             </div>
           </Link>
-          {/* When collapsed: show expand trigger instead of half-cropped logo */}
-          <SidebarTrigger className="size-8 shrink-0 rounded-md border border-border bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent" />
+          <SidebarTrigger className="size-7 shrink-0 rounded-md border border-border bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent" />
+        </div>
+        {/* Collapsed: centered expand button only */}
+        <div className="hidden items-center justify-center group-data-[collapsible=icon]:flex">
+          <SidebarTrigger className="size-8 rounded-md border border-border bg-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent" />
         </div>
       </SidebarHeader>
       <SidebarContent>
