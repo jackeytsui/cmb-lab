@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { hasMinimumRole } from "@/lib/auth";
 import { ViewAsPanel } from "@/components/admin/ViewAsPanel";
+import { TranscriptLimitsWidget } from "@/components/admin/TranscriptLimitsWidget";
 
 type PortalItem = {
   title: string;
@@ -73,6 +74,7 @@ export default async function AdminManagePortalPage() {
 
       <div className="space-y-4">
         <ViewAsPanel />
+        <TranscriptLimitsWidget />
         <Section title="Access & Security" items={ACCESS_ITEMS} />
         <Section title="Content & Learning Stack" items={CONTENT_ITEMS} />
         <Section title="Operations & Diagnostics" items={OPS_ITEMS} />

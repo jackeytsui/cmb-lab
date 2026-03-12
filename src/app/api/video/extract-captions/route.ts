@@ -6,12 +6,13 @@ import {
   videoSessions,
   videoCaptions,
 } from "@/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, gte, count } from "drizzle-orm";
 import {
   extractChineseCaptions,
   extractEnglishCaptions,
   isYouTubeCaptionAccessBlocked,
 } from "@/lib/captions";
+import { getTranscriptLimitSettings, getPeriodStart } from "@/lib/usage-limits";
 
 /**
  * POST /api/video/extract-captions
@@ -86,6 +87,38 @@ export async function POST(request: NextRequest) {
         englishCaptions: null,
         cached: true,
       });
+    }
+
+    // 4b. Usage limit check for students (cached results above are free)
+    if (user.role === "student") {
+      try {
+        const { limitCount, period } = await getTranscriptLimitSettings();
+        const periodStart = getPeriodStart(period);
+        const [usageResult] = await db
+          .select({ total: count() })
+          .from(videoSessions)
+          .where(
+            and(
+              eq(videoSessions.userId, user.id),
+              gte(videoSessions.createdAt, periodStart)
+            )
+          );
+        const used = Number(usageResult?.total ?? 0);
+        if (used >= limitCount) {
+          return NextResponse.json(
+            {
+              error: "usage_limit_reached",
+              used,
+              limit: limitCount,
+              period,
+            },
+            { status: 429 }
+          );
+        }
+      } catch (err) {
+        // If settings table doesn't exist yet, skip limit check
+        console.warn("[extract-captions] Usage limit check failed, skipping:", err);
+      }
     }
 
     // 5. Extract captions from YouTube

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import { Clock, Trash2, Play, Pin, GripVertical } from "lucide-react";
+import { Clock, Trash2, Play, Pin, GripVertical, Info } from "lucide-react";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
 import type { YouTubePlayer as YTPlayer } from "react-youtube";
 import { UrlInput } from "@/components/video/UrlInput";
@@ -130,6 +130,30 @@ export function ListeningClient() {
   const [canManageRecommendations, setCanManageRecommendations] = useState(false);
   const [draggingRecommendationId, setDraggingRecommendationId] = useState<string | null>(null);
   const autoTranscribeAttemptedKeyRef = useRef<string | null>(null);
+
+  // Usage limit state
+  const [usageInfo, setUsageInfo] = useState<{
+    used: number;
+    limit: number;
+    period: string;
+    remaining: number;
+  } | null>(null);
+
+  const fetchUsage = useCallback(async () => {
+    try {
+      const res = await fetch("/api/video/usage");
+      if (res.ok) {
+        const data = await res.json();
+        setUsageInfo(data);
+      }
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUsage();
+  }, [fetchUsage]);
 
   // Fetch recent sessions on mount
   useEffect(() => {
@@ -267,8 +291,20 @@ export function ListeningClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ videoId: session.youtubeVideoId, url }),
       })
-        .then((res) => res.json())
+        .then(async (res) => {
+          const data = await res.json();
+          if (res.status === 429 && data.error === "usage_limit_reached") {
+            setCaptionStatus("error");
+            setTranscribeError(
+              `You've reached your ${data.period} limit of ${data.limit} transcriptions. The Canto to Mando Blueprint team will review and adjust the usage limit cap from time to time.`
+            );
+            fetchUsage();
+            return;
+          }
+          return data;
+        })
         .then((data) => {
+          if (!data) return;
           if (data.error === "youtube_access_blocked") {
             setCaptionStatus("provider_blocked");
             setTranscribeError(
@@ -307,7 +343,7 @@ export function ListeningClient() {
           setIsLoadingVideo(false);
         });
     },
-    [isMandarinOrCantonese, trackAction]
+    [isMandarinOrCantonese, trackAction, fetchUsage]
   );
 
   // Vocabulary encounter tracking -- batched client-side, flushed periodically
@@ -830,12 +866,21 @@ export function ListeningClient() {
           body: JSON.stringify({ videoId: extractedVideoId, url }),
         });
 
+        const data = await res.json();
+
+        if (res.status === 429 && data.error === "usage_limit_reached") {
+          setCaptionStatus("error");
+          setTranscribeError(
+            `You've reached your ${data.period} limit of ${data.limit} transcriptions. The Canto to Mando Blueprint team will review and adjust the usage limit cap from time to time.`
+          );
+          await fetchUsage();
+          return;
+        }
+
         if (!res.ok) {
           setCaptionStatus("error");
           return;
         }
-
-        const data = await res.json();
 
         if (data.error === "youtube_access_blocked") {
           if (applyOnboardingFallbackCaptions()) return;
@@ -879,9 +924,10 @@ export function ListeningClient() {
         setCaptionStatus("error");
       } finally {
         setIsLoadingVideo(false);
+        fetchUsage();
       }
     },
-    [applyOnboardingFallbackCaptions, isMandarinOrCantonese, trackAction]
+    [applyOnboardingFallbackCaptions, isMandarinOrCantonese, trackAction, fetchUsage]
   );
 
   const handleUploadComplete = useCallback(
@@ -1054,6 +1100,27 @@ export function ListeningClient() {
           submitButtonTourId="listening-load-video-button"
         />
       </div>
+
+      {/* Usage limit notice for students */}
+      {usageInfo && usageInfo.limit > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="text-xs text-muted-foreground">
+            <p>
+              <span className="font-medium text-foreground">
+                {usageInfo.remaining} of {usageInfo.limit}
+              </span>{" "}
+              transcriptions remaining this {usageInfo.period === "daily" ? "day" : usageInfo.period === "weekly" ? "week" : "month"}.
+              {usageInfo.remaining === 0 && (
+                <span className="ml-1 text-destructive font-medium">Limit reached.</span>
+              )}
+            </p>
+            <p className="mt-1 text-muted-foreground/80">
+              The Canto to Mando Blueprint team will review and adjust the usage limit cap from time to time.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Recent Videos -- shown when no video is loaded */}
       {!videoId && recentSessions.length > 0 && (

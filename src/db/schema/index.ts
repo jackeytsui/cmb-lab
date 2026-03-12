@@ -37,3 +37,4 @@ export * from "./listening-recommendations";
 export * from "./admin-api-keys";
 export * from "./engagement";
 export * from "./platform-role-features";
+export * from "./app-settings";
