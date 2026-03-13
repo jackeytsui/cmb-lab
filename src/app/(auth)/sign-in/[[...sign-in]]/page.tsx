@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { OtpFirstSignIn } from "@/components/auth/OtpFirstSignIn";
@@ -30,20 +31,25 @@ export default function SignInPage() {
               Your all-in-one home for the Canto to Mando Blueprint learning journey.
             </h1>
             <p className="mt-4 max-w-md text-sm text-slate-300">
-              Use AI Passage Reader to generate guided Chinese reading practice, then train your listening with YouTube transcript support.
+              Practice reading with AI Passage Reader, train your listening with YouTube support, and access your coaching materials — all in one place.
             </p>
           </div>
           <div className="mt-10 rounded-lg border border-blue-400/30 bg-blue-500/10 p-3 text-xs text-slate-200">
-            Access is invite-only. Sign in with the registered email with Canto to Mando Blueprint.
+            This platform is for Canto to Mando Blueprint members only. Sign in with the email you registered with.
           </div>
         </section>
 
         <section className="flex items-center justify-center rounded-xl border border-white/10 bg-slate-900/75 p-4 md:p-6">
-          <div className="w-full rounded-xl border border-slate-700/70 bg-slate-950/80 p-4 shadow-xl [&_.cl-card]:border-0 [&_.cl-card]:bg-transparent [&_.cl-card]:shadow-none [&_.cl-formFieldLabel]:text-slate-200 [&_.cl-formFieldInput]:border-slate-600 [&_.cl-formFieldInput]:bg-slate-800/90 [&_.cl-formFieldInput]:text-white [&_.cl-formButtonPrimary]:bg-blue-600 [&_.cl-formButtonPrimary]:text-white hover:[&_.cl-formButtonPrimary]:bg-blue-700 [&_.cl-socialButtonsBlockButton]:border [&_.cl-socialButtonsBlockButton]:border-slate-600 [&_.cl-socialButtonsBlockButton]:bg-slate-800/90 [&_.cl-socialButtonsBlockButton]:text-white [&_.cl-socialButtonsBlockButton]:shadow-none hover:[&_.cl-socialButtonsBlockButton]:bg-slate-700/90">
-            <h2 className="mb-3 text-center text-xl font-semibold text-white">
-              Login to your Canto to Mando Lab!
+          <div className="w-full max-w-sm rounded-xl border border-slate-700/70 bg-slate-950/80 p-5 shadow-xl">
+            <h2 className="mb-4 text-center text-xl font-semibold text-white">
+              Welcome back
             </h2>
-            <OtpFirstSignIn />
+            <p className="mb-5 text-center text-xs text-slate-400">
+              Enter your email and we&apos;ll send you a sign-in code — no password needed.
+            </p>
+            <Suspense fallback={<div className="h-32 animate-pulse rounded-lg bg-slate-800/50" />}>
+              <OtpFirstSignIn />
+            </Suspense>
           </div>
         </section>
       </div>
