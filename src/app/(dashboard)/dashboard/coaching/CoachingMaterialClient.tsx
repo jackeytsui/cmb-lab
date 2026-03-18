@@ -9,7 +9,7 @@ import { convertScript } from "@/lib/chinese-convert";
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown } from "lucide-react";
+import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, GripVertical } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
@@ -774,6 +774,12 @@ function CoachingPanel({
   const studentDropdownRef = useRef<HTMLDivElement>(null);
   // Font size for session notes
   const [noteFontSize, setNoteFontSize] = useState(18);
+  // Panel collapse/resize state
+  const [mandoCollapsed, setMandoCollapsed] = useState(false);
+  const [cantoCollapsed, setCantoCollapsed] = useState(false);
+  const [splitPercent, setSplitPercent] = useState(50);
+  const splitDragging = useRef(false);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
   // Session rating state (only students can submit)
   const isStudent = role === "student";
   const [sessionRating, setSessionRating] = useState<number>(0);
@@ -1420,6 +1426,25 @@ function CoachingPanel({
     [canWrite, sessionType, activeSessionId, activeSession, studentEmailFilter, fetchWithTimeout],
   );
 
+  // Panel resize drag handlers
+  const handleSplitMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    splitDragging.current = true;
+    const onMove = (ev: MouseEvent) => {
+      if (!splitDragging.current || !splitContainerRef.current) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+      setSplitPercent(Math.max(20, Math.min(80, pct)));
+    };
+    const onUp = () => {
+      splitDragging.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-4">
@@ -1816,16 +1841,46 @@ function CoachingPanel({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-4">
+      <div ref={splitContainerRef} className="flex gap-0 lg:flex-row flex-col">
+        {/* Mandarin Panel */}
+        <div
+          className={cn(
+            "rounded-lg border border-border bg-card transition-all overflow-hidden",
+            cantoCollapsed ? "flex-1" : mandoCollapsed ? "w-10 min-w-10 lg:flex-none" : "lg:flex-none",
+            !mandoCollapsed && "p-4",
+          )}
+          style={!mandoCollapsed && !cantoCollapsed ? { width: `calc(${splitPercent}% - 8px)` } : mandoCollapsed ? {} : {}}
+        >
+          {mandoCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setMandoCollapsed(false)}
+              className="flex flex-col items-center justify-center w-full h-full min-h-[200px] gap-2 text-muted-foreground hover:text-foreground transition-colors"
+              title="Expand Mandarin panel"
+            >
+              <PanelRightOpen className="size-4" />
+              <span className="text-[10px] font-medium [writing-mode:vertical-lr]">Mandarin</span>
+            </button>
+          ) : (
+          <>
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold text-foreground">
-                Mandarin Output
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Simplified/Traditional display with Pinyin and Mandarin → English translation.
-              </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMandoCollapsed(true)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Collapse Mandarin panel"
+              >
+                <PanelLeftClose className="size-4" />
+              </button>
+              <div>
+                <h3 className="text-base font-semibold text-foreground">
+                  Mandarin Output
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Simplified/Traditional display with Pinyin and Mandarin → English translation.
+                </p>
+              </div>
             </div>
             <div className="inline-flex items-center rounded-md bg-muted p-0.5 text-xs">
               <button
@@ -2048,17 +2103,59 @@ function CoachingPanel({
               Paste or import Chinese text to begin reading
             </div>
           )}
+          </>
+          )}
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-4">
+        {/* Resize divider (visible on lg screens when both panels open) */}
+        {!mandoCollapsed && !cantoCollapsed && (
+          <div
+            className="hidden lg:flex items-center justify-center w-4 flex-shrink-0 cursor-col-resize group select-none"
+            onMouseDown={handleSplitMouseDown}
+          >
+            <div className="w-1 h-16 rounded-full bg-border group-hover:bg-primary/50 transition-colors" />
+          </div>
+        )}
+
+        {/* Cantonese Panel */}
+        <div
+          className={cn(
+            "rounded-lg border border-border bg-card transition-all overflow-hidden flex-1",
+            mandoCollapsed ? "flex-1" : cantoCollapsed ? "w-10 min-w-10 lg:flex-none" : "",
+            !cantoCollapsed && "p-4",
+          )}
+          style={!mandoCollapsed && !cantoCollapsed ? { width: `calc(${100 - splitPercent}% - 8px)` } : cantoCollapsed ? {} : {}}
+        >
+          {cantoCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setCantoCollapsed(false)}
+              className="flex flex-col items-center justify-center w-full h-full min-h-[200px] gap-2 text-muted-foreground hover:text-foreground transition-colors"
+              title="Expand Cantonese panel"
+            >
+              <PanelLeftOpen className="size-4" />
+              <span className="text-[10px] font-medium [writing-mode:vertical-lr]">Cantonese</span>
+            </button>
+          ) : (
+          <>
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold text-foreground">
-                Cantonese Output
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Simplified/Traditional display with Jyutping and Cantonese → English translation.
-              </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCantoCollapsed(true)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Collapse Cantonese panel"
+              >
+                <PanelRightClose className="size-4" />
+              </button>
+              <div>
+                <h3 className="text-base font-semibold text-foreground">
+                  Cantonese Output
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Simplified/Traditional display with Jyutping and Cantonese → English translation.
+                </p>
+              </div>
             </div>
             <div className="inline-flex items-center rounded-md bg-muted p-0.5 text-xs">
               <button
@@ -2256,6 +2353,8 @@ function CoachingPanel({
             <div className="mt-3 text-sm text-muted-foreground">
               Paste or import Chinese text to begin reading
             </div>
+          )}
+          </>
           )}
         </div>
       </div>

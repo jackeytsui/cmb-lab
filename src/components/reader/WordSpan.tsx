@@ -104,8 +104,8 @@ export const WordSpan = React.memo(function WordSpan({
     : (showJyutpingProp ?? false);
   const showEnglish = isLegacy ? false : ((showEnglishProp ?? false) && !!englishGloss);
 
-  // Proportional annotation sizing
-  const annotationSize = Math.max(12, Math.round(fontSize * 0.72));
+  // Annotation sizing: pinyin/jyutping are 1.2x the base character size
+  const annotationSize = Math.round(fontSize * 1.2);
   const englishSize = Math.max(11, Math.round(fontSize * 0.65));
 
   // All hooks called unconditionally
@@ -152,7 +152,7 @@ export const WordSpan = React.memo(function WordSpan({
         data-index={index}
         className={`${WORD_CLASS} inline-flex flex-col items-center`}
       >
-        {/* Row 1: Pinyin (one per character, laid out horizontally) */}
+        {/* Row 1: Pinyin above characters (one per character) */}
         {showPinyin && (
           <span className="flex justify-center gap-0 select-none">
             {chars.map((_, i) => (
@@ -162,6 +162,21 @@ export const WordSpan = React.memo(function WordSpan({
                 style={{ fontSize: `${annotationSize}px`, minWidth: "1em" }}
               >
                 {pinyinArr[i] ?? "\u00A0"}
+              </span>
+            ))}
+          </span>
+        )}
+
+        {/* Row 1b: Jyutping above characters (same position as Pinyin) */}
+        {showJyutping && (
+          <span className="flex justify-center gap-0 select-none">
+            {chars.map((_, i) => (
+              <span
+                key={i}
+                className="text-center text-orange-400 leading-tight"
+                style={{ fontSize: `${annotationSize}px`, minWidth: "1em" }}
+              >
+                {jyutpingArr[i] ?? "\u00A0"}
               </span>
             ))}
           </span>
@@ -179,21 +194,6 @@ export const WordSpan = React.memo(function WordSpan({
             </span>
           ))}
         </span>
-
-        {/* Row 3: Jyutping (one per character, laid out horizontally) */}
-        {showJyutping && (
-          <span className="flex justify-center gap-0 select-none">
-            {chars.map((_, i) => (
-              <span
-                key={i}
-                className="text-center text-orange-400 leading-tight"
-                style={{ fontSize: `${annotationSize}px`, minWidth: "1em" }}
-              >
-                {jyutpingArr[i] ?? "\u00A0"}
-              </span>
-            ))}
-          </span>
-        )}
 
         {/* Row 4: English gloss (spans full word width, direct mode only) */}
         {showEnglish && (
