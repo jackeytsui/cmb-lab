@@ -305,6 +305,7 @@ const TONE_MAP: Record<string, string[]> = {
   o: ["ō", "ó", "ǒ", "ò"],
   u: ["ū", "ú", "ǔ", "ù"],
   ü: ["ǖ", "ǘ", "ǚ", "ǜ"],
+  v: ["ǖ", "ǘ", "ǚ", "ǜ"], // v as alias for ü
   A: ["Ā", "Á", "Ǎ", "À"],
   E: ["Ē", "É", "Ě", "È"],
   I: ["Ī", "Í", "Ǐ", "Ì"],
@@ -312,11 +313,50 @@ const TONE_MAP: Record<string, string[]> = {
   U: ["Ū", "Ú", "Ǔ", "Ù"],
 };
 
-/** Convert inline tone numbers to diacritics: a1→ā, o4→ò, ü3→ǚ etc. */
+const VOWELS = new Set("aeiouüvAEIOUÜ");
+
+/**
+ * Apply tone number to a pinyin syllable following standard placement rules:
+ * 1. If there's an a or e, the tone goes on it
+ * 2. If there's "ou", the tone goes on the o
+ * 3. Otherwise the tone goes on the last vowel
+ */
+function applyToneToSyllable(syllable: string, tone: number): string {
+  const chars = [...syllable];
+  // Rule 1: a or e gets the tone
+  for (let i = 0; i < chars.length; i++) {
+    const lower = chars[i].toLowerCase();
+    if (lower === "a" || lower === "e") {
+      const toned = TONE_MAP[chars[i]];
+      if (toned) chars[i] = toned[tone - 1];
+      return chars.join("");
+    }
+  }
+  // Rule 2: ou → tone on o
+  for (let i = 0; i < chars.length - 1; i++) {
+    if (chars[i].toLowerCase() === "o" && chars[i + 1].toLowerCase() === "u") {
+      const toned = TONE_MAP[chars[i]];
+      if (toned) chars[i] = toned[tone - 1];
+      return chars.join("");
+    }
+  }
+  // Rule 3: last vowel
+  for (let i = chars.length - 1; i >= 0; i--) {
+    if (VOWELS.has(chars[i])) {
+      const toned = TONE_MAP[chars[i]];
+      if (toned) chars[i] = toned[tone - 1];
+      return chars.join("");
+    }
+  }
+  return syllable;
+}
+
+/** Convert full pinyin syllables with trailing tone number: chang4→chàng, nü3→nǚ */
 function applyInlineTones(text: string): string {
-  return text.replace(/([aeiouüAEIOUÜ])([1-4])/g, (_, vowel: string, tone: string) => {
-    const tones = TONE_MAP[vowel];
-    return tones ? tones[parseInt(tone, 10) - 1] : vowel + tone;
+  return text.replace(/([a-züA-ZÜ]+)([1-4])/g, (match, syllable: string, tone: string) => {
+    // Only convert if the syllable contains at least one vowel
+    if (![...syllable].some((c) => VOWELS.has(c))) return match;
+    return applyToneToSyllable(syllable, parseInt(tone, 10));
   });
 }
 
@@ -449,7 +489,7 @@ function NoteCard({
     }
   }, [processed, baseText, language]);
 
-  const annotationSize = Math.max(12, Math.round(fontSize * 0.72));
+  const annotationSize = Math.round(fontSize * 1.2);
   const englishSize = Math.max(11, Math.round(fontSize * 0.65));
 
   return (
@@ -514,7 +554,7 @@ function NoteCard({
                 value={draftRomanization}
                 onChange={handleRomanizationChange}
                 className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                placeholder={language === "zh-HK" ? "Jyutping" : "Pinyin (type a1 for ā, o4 for ò)"}
+                placeholder={language === "zh-HK" ? "Jyutping" : "Pinyin (type chang4 → chàng, nü3 → nǚ)"}
               />
               <textarea
                 value={draftTranslation}
@@ -1468,11 +1508,11 @@ function CoachingPanel({
 
           {/* Right: Goals widget */}
           {activeSession && sessionType === "one-on-one" && (
-            <div className="lg:max-w-[55%] w-full rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="lg:max-w-[55%] w-full rounded-lg border border-teal-500/25 bg-gradient-to-br from-teal-500/10 to-cyan-500/10 dark:from-teal-500/[0.07] dark:to-cyan-500/[0.07] p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <Star className="size-3.5 text-primary" />
-                  <h3 className="text-xs font-semibold text-primary">
+                  <Star className="size-3.5 text-teal-500 dark:text-teal-400" />
+                  <h3 className="text-xs font-semibold text-teal-700 dark:text-teal-300">
                     Your goals this week
                   </h3>
                 </div>
@@ -1483,7 +1523,7 @@ function CoachingPanel({
                       setGoalsDraft(activeSession.goals ?? "");
                       setIsEditingGoals(true);
                     }}
-                    className="inline-flex items-center justify-center rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors"
+                    className="inline-flex items-center justify-center rounded-md border border-teal-500/25 bg-teal-500/10 px-2 py-0.5 text-[10px] font-medium text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 transition-colors"
                   >
                     <Pencil className="size-2.5 mr-1" />
                     {activeSession.goals ? "Edit" : "Add"}
@@ -1492,7 +1532,7 @@ function CoachingPanel({
               </div>
               {isEditingGoals ? (
                 <div className="mt-2 flex flex-col gap-2">
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[11px] text-teal-600/80 dark:text-teal-400/70">
                     Before our next 1:1 session, please complete:
                   </p>
                   <textarea
@@ -1500,14 +1540,14 @@ function CoachingPanel({
                     onChange={(e) => setGoalsDraft(e.target.value)}
                     placeholder="e.g. Practice tones 1-4 with the flashcard deck, complete Lesson 3 exercises..."
                     rows={2}
-                    className="w-full rounded-md border border-primary/20 bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                    className="w-full rounded-md border border-teal-500/25 bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-teal-500/30 resize-y"
                   />
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={handleSaveGoals}
                       disabled={isSavingGoals}
-                      className="inline-flex items-center justify-center rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                      className="inline-flex items-center justify-center rounded-md bg-teal-500 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-teal-600 transition-colors disabled:opacity-50"
                     >
                       {isSavingGoals ? "Saving..." : "Save"}
                     </button>
@@ -1522,7 +1562,7 @@ function CoachingPanel({
                 </div>
               ) : activeSession.goals ? (
                 <div className="mt-1.5">
-                  <p className="text-[11px] text-muted-foreground mb-1">
+                  <p className="text-[11px] text-teal-600/80 dark:text-teal-400/70 mb-1">
                     Before our next session, please complete:
                   </p>
                   <p className="text-xs text-foreground whitespace-pre-wrap leading-relaxed">
@@ -1530,7 +1570,7 @@ function CoachingPanel({
                   </p>
                 </div>
               ) : (
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-[11px] text-teal-600/70 dark:text-teal-400/60">
                   {canWrite
                     ? "No goals set yet — click \"Add\" to set prep work."
                     : "No goals set for this session yet."}
