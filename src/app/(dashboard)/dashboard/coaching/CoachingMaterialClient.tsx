@@ -104,6 +104,7 @@ type CoachingSession = {
   type: "one_on_one" | "inner_circle";
   studentEmail?: string | null;
   recordingUrl?: string | null;
+  goals?: string | null;
   createdAt: string | number;
   updatedAt: string | number;
   notes?: SessionNote[];
@@ -794,10 +795,17 @@ function CoachingPanel({
   const [isEditingRecordingUrl, setIsEditingRecordingUrl] = useState(false);
   const [isSavingRecordingUrl, setIsSavingRecordingUrl] = useState(false);
 
-  // Sync recording URL draft when active session changes
+  // Goals state
+  const [goalsDraft, setGoalsDraft] = useState("");
+  const [isEditingGoals, setIsEditingGoals] = useState(false);
+  const [isSavingGoals, setIsSavingGoals] = useState(false);
+
+  // Sync recording URL and goals draft when active session changes
   useEffect(() => {
     setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
     setIsEditingRecordingUrl(false);
+    setGoalsDraft(activeSession?.goals ?? "");
+    setIsEditingGoals(false);
   }, [activeSessionId]);
 
   const handleSaveRecordingUrl = useCallback(async () => {
@@ -825,6 +833,32 @@ function CoachingPanel({
       setIsSavingRecordingUrl(false);
     }
   }, [activeSessionId, recordingUrlDraft]);
+
+  const handleSaveGoals = useCallback(async () => {
+    if (!activeSessionId) return;
+    setIsSavingGoals(true);
+    try {
+      const res = await fetch(`/api/coaching/sessions/${activeSessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goals: goalsDraft.trim() || null }),
+      });
+      if (res.ok) {
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === activeSessionId
+              ? { ...s, goals: goalsDraft.trim() || null }
+              : s,
+          ),
+        );
+        setIsEditingGoals(false);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsSavingGoals(false);
+    }
+  }, [activeSessionId, goalsDraft]);
 
   // Fetch existing rating when active session changes
   useEffect(() => {
@@ -1836,6 +1870,79 @@ function CoachingPanel({
           ) : (
             <p className="mt-2 text-xs text-muted-foreground">
               No recording link added yet.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Goals Section — coach editable, student view-only */}
+      {activeSession && sessionType === "one-on-one" && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Star className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold text-foreground">
+                Your goals this week
+              </h3>
+            </div>
+            {canWrite && !isEditingGoals && (
+              <button
+                type="button"
+                onClick={() => {
+                  setGoalsDraft(activeSession.goals ?? "");
+                  setIsEditingGoals(true);
+                }}
+                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+              >
+                <Pencil className="size-3 mr-1" />
+                {activeSession.goals ? "Edit" : "Add Goals"}
+              </button>
+            )}
+          </div>
+          {isEditingGoals ? (
+            <div className="mt-2 flex flex-col gap-2">
+              <p className="text-xs text-muted-foreground">
+                Before our next 1:1 session, please complete:
+              </p>
+              <textarea
+                value={goalsDraft}
+                onChange={(e) => setGoalsDraft(e.target.value)}
+                placeholder="e.g. Practice tones 1-4 with the flashcard deck, complete Lesson 3 exercises..."
+                rows={4}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveGoals}
+                  disabled={isSavingGoals}
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
+                >
+                  {isSavingGoals ? "Saving..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingGoals(false)}
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : activeSession.goals ? (
+            <div className="mt-2">
+              <p className="text-xs text-muted-foreground mb-1.5">
+                Before our next 1:1 session, please complete:
+              </p>
+              <p className="text-sm text-foreground whitespace-pre-wrap">
+                {activeSession.goals}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {canWrite
+                ? "No goals set yet. Click \"Add Goals\" to set homework for this session."
+                : "No goals set for this session yet."}
             </p>
           )}
         </div>
