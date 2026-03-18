@@ -92,16 +92,32 @@ export async function hasMinimumRole(minimumRole: Roles): Promise<boolean> {
 }
 
 /**
- * Get the current user from the database
- * Returns null if not authenticated or user not found
+ * Get the current user from the database.
+ * When an admin is impersonating via "View As", returns the impersonated user instead.
+ * Returns null if not authenticated or user not found.
  */
 export async function getCurrentUser() {
   const { userId } = await auth();
   if (!userId) return null;
 
-  const user = await db.query.users.findFirst({
+  const realUser = await db.query.users.findFirst({
     where: eq(users.clerkId, userId),
   });
 
-  return user;
+  if (!realUser) return null;
+
+  // If admin is impersonating another user via "View As", return that user
+  if (realUser.role === "admin") {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    const viewAsUserId = cookieStore.get("view_as_user_id")?.value;
+    if (viewAsUserId) {
+      const impersonatedUser = await db.query.users.findFirst({
+        where: eq(users.id, viewAsUserId),
+      });
+      if (impersonatedUser) return impersonatedUser;
+    }
+  }
+
+  return realUser;
 }
