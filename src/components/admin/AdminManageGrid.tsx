@@ -241,17 +241,6 @@ function DraggableSection({
 
   return (
     <div
-      draggable
-      onDragStart={(e) => {
-        // Only allow section drag from the handle area
-        const target = e.target as HTMLElement;
-        if (!target.closest("[data-section-handle]")) {
-          e.preventDefault();
-          return;
-        }
-        onDragStart(e, section.id);
-      }}
-      onDragEnd={onDragEnd}
       onDragOver={(e) => onDragOver(e, section.id)}
       onDrop={(e) => onDrop(e, section.id)}
       className={cn(
@@ -262,14 +251,17 @@ function DraggableSection({
         isDragging && "opacity-40",
       )}
     >
-      <div className="mb-3 flex items-center justify-between">
+      {/* Entire header row is the section drag handle */}
+      <div
+        draggable
+        onDragStart={(e) => onDragStart(e, section.id)}
+        onDragEnd={onDragEnd}
+        className="mb-3 flex items-center justify-between cursor-grab active:cursor-grabbing select-none"
+      >
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           {section.title}
         </h2>
-        <div
-          data-section-handle
-          className="cursor-grab text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing"
-        >
+        <div className="text-muted-foreground/40 hover:text-muted-foreground">
           <GripVertical className="size-4" />
         </div>
       </div>
@@ -284,18 +276,19 @@ function DraggableSection({
             onDrop={(e) => handleItemDrop(e, item.id)}
             onDragLeave={() => setDragOverItemId(null)}
             className={cn(
-              "relative rounded-lg border bg-background/50 transition-all",
+              "relative rounded-lg border bg-background/50 transition-all cursor-grab active:cursor-grabbing",
               dragOverItemId === item.id
                 ? "border-primary ring-2 ring-primary/20 scale-[1.02]"
                 : "border-border/70 hover:border-primary/40 hover:bg-background",
               draggingItemId === item.id && "opacity-40",
             )}
           >
-            <div className="absolute right-1.5 top-1.5 cursor-grab text-muted-foreground/30 hover:text-muted-foreground active:cursor-grabbing">
+            <div className="absolute right-1.5 top-1.5 text-muted-foreground/30 pointer-events-none">
               <GripVertical className="size-3.5" />
             </div>
             <Link
               href={item.href}
+              draggable={false}
               className="block p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-lg"
             >
               <p className="text-sm font-semibold text-foreground">{item.title}</p>

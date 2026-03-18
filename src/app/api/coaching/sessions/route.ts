@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { coachingSessions, coachingNotes, coachingNoteStars, users } from "@/db/schema";
 import { eq, and, desc, inArray, ilike } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
 
 function getNextSessionTitle(existingTitles: string[]) {
   let maxSessionNumber = 0;
@@ -18,18 +17,8 @@ function getNextSessionTitle(existingTitles: string[]) {
   return `Session ${maxSessionNumber + 1}`;
 }
 
-async function getCurrentDbUser() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, role: true, email: true },
-  });
-  return dbUser ?? null;
-}
-
 export async function GET(request: Request) {
-  const dbUser = await getCurrentDbUser();
+  const dbUser = await getCurrentUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -42,7 +31,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid type" }, { status: 400 });
   }
 
-  const isCoachOrAdmin = await hasMinimumRole("coach");
+  // Use the effective user's role (respects View As impersonation)
+  const isCoachOrAdmin = dbUser.role === "coach" || dbUser.role === "admin";
   const isStudent = !isCoachOrAdmin;
   const studentEmail = (dbUser.email ?? "").trim();
   const normalizedStudentEmailParam = studentEmailParam?.trim() || "";
@@ -117,14 +107,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const dbUser = await getCurrentDbUser();
-  if (!dbUser) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const realHasAccess = await hasMinimumRole("coach");
+  if (!realHasAccess) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const isCoachOrAdmin = await hasMinimumRole("coach");
-  if (!isCoachOrAdmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const dbUser = await getCurrentUser();
+  if (!dbUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();

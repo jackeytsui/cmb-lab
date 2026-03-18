@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import type { Roles } from "@/types/globals";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -108,7 +109,6 @@ export async function getCurrentUser() {
 
   // If admin is impersonating another user via "View As", return that user
   if (realUser.role === "admin") {
-    const { cookies } = await import("next/headers");
     const cookieStore = await cookies();
     const viewAsUserId = cookieStore.get("view_as_user_id")?.value;
     if (viewAsUserId) {
