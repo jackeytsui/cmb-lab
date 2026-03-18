@@ -1508,11 +1508,11 @@ function CoachingPanel({
 
           {/* Right: Goals widget */}
           {activeSession && sessionType === "one-on-one" && (
-            <div className="lg:max-w-[55%] w-full rounded-lg border border-teal-500/25 bg-gradient-to-br from-teal-500/10 to-cyan-500/10 dark:from-teal-500/[0.07] dark:to-cyan-500/[0.07] p-3">
+            <div className="lg:max-w-[55%] w-full rounded-lg border border-teal-500/25 bg-gradient-to-br from-teal-500/10 to-cyan-500/10 dark:from-teal-500/[0.07] dark:to-cyan-500/[0.07] p-3.5">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Star className="size-3.5 text-teal-500 dark:text-teal-400" />
-                  <h3 className="text-xs font-semibold text-teal-700 dark:text-teal-300">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">⭐</span>
+                  <h3 className="text-sm font-semibold text-teal-700 dark:text-teal-300">
                     Your goals this week
                   </h3>
                 </div>
@@ -1523,16 +1523,16 @@ function CoachingPanel({
                       setGoalsDraft(activeSession.goals ?? "");
                       setIsEditingGoals(true);
                     }}
-                    className="inline-flex items-center justify-center rounded-md border border-teal-500/25 bg-teal-500/10 px-2 py-0.5 text-[10px] font-medium text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 transition-colors"
+                    className="inline-flex items-center justify-center rounded-md border border-teal-500/25 bg-teal-500/10 px-2.5 py-1 text-xs font-medium text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 transition-colors"
                   >
-                    <Pencil className="size-2.5 mr-1" />
+                    <Pencil className="size-3 mr-1" />
                     {activeSession.goals ? "Edit" : "Add"}
                   </button>
                 )}
               </div>
               {isEditingGoals ? (
-                <div className="mt-2 flex flex-col gap-2">
-                  <p className="text-[11px] text-teal-600/80 dark:text-teal-400/70">
+                <div className="mt-2.5 flex flex-col gap-2">
+                  <p className="text-xs text-teal-600/80 dark:text-teal-400/70">
                     Before our next 1:1 session, please complete:
                   </p>
                   <textarea
@@ -1540,37 +1540,37 @@ function CoachingPanel({
                     onChange={(e) => setGoalsDraft(e.target.value)}
                     placeholder="e.g. Practice tones 1-4 with the flashcard deck, complete Lesson 3 exercises..."
                     rows={2}
-                    className="w-full rounded-md border border-teal-500/25 bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-teal-500/30 resize-y"
+                    className="w-full rounded-md border border-teal-500/25 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-teal-500/30 resize-y"
                   />
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={handleSaveGoals}
                       disabled={isSavingGoals}
-                      className="inline-flex items-center justify-center rounded-md bg-teal-500 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-teal-600 transition-colors disabled:opacity-50"
+                      className="inline-flex items-center justify-center rounded-md bg-teal-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-600 transition-colors disabled:opacity-50"
                     >
                       {isSavingGoals ? "Saving..." : "Save"}
                     </button>
                     <button
                       type="button"
                       onClick={() => setIsEditingGoals(false)}
-                      className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : activeSession.goals ? (
-                <div className="mt-1.5">
-                  <p className="text-[11px] text-teal-600/80 dark:text-teal-400/70 mb-1">
+                <div className="mt-2">
+                  <p className="text-xs text-teal-600/80 dark:text-teal-400/70 mb-1">
                     Before our next session, please complete:
                   </p>
-                  <p className="text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                     {activeSession.goals}
                   </p>
                 </div>
               ) : (
-                <p className="mt-1 text-[11px] text-teal-600/70 dark:text-teal-400/60">
+                <p className="mt-1.5 text-xs text-teal-600/70 dark:text-teal-400/60">
                   {canWrite
                     ? "No goals set yet — click \"Add\" to set prep work."
                     : "No goals set for this session yet."}
