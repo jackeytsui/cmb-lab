@@ -27,11 +27,6 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Only students and admins can view ratings (not coaches)
-  if (dbUser.role === "coach") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const { sessionId } = await params;
 
   const rating = await db.query.coachingSessionRatings.findFirst({
@@ -46,7 +41,7 @@ export async function GET(
 
 /**
  * POST /api/coaching/sessions/[sessionId]/rating
- * Create or update the current user's rating for this session.
+ * Create the current user's rating for this session (one-time only).
  * Body: { rating: number (1-5), comment?: string }
  */
 export async function POST(
@@ -58,9 +53,9 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Only students and admins can rate sessions (not coaches)
-  if (dbUser.role === "coach") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Only students can rate sessions
+  if (dbUser.role !== "student") {
+    return NextResponse.json({ error: "Only students can submit feedback" }, { status: 403 });
   }
 
   const { sessionId } = await params;
@@ -75,7 +70,7 @@ export async function POST(
     );
   }
 
-  // Upsert: check if rating already exists
+  // Check if rating already exists — one submission per session per student
   const existing = await db.query.coachingSessionRatings.findFirst({
     where: and(
       eq(coachingSessionRatings.sessionId, sessionId),
@@ -83,27 +78,22 @@ export async function POST(
     ),
   });
 
-  let result;
   if (existing) {
-    [result] = await db
-      .update(coachingSessionRatings)
-      .set({
-        rating,
-        comment: comment ?? null,
-      })
-      .where(eq(coachingSessionRatings.id, existing.id))
-      .returning();
-  } else {
-    [result] = await db
-      .insert(coachingSessionRatings)
-      .values({
-        sessionId,
-        userId: dbUser.id,
-        rating,
-        comment: comment ?? null,
-      })
-      .returning();
+    return NextResponse.json(
+      { error: "You have already submitted feedback for this session" },
+      { status: 409 },
+    );
   }
+
+  const [result] = await db
+    .insert(coachingSessionRatings)
+    .values({
+      sessionId,
+      userId: dbUser.id,
+      rating,
+      comment: comment ?? null,
+    })
+    .returning();
 
   return NextResponse.json({ rating: result });
 }

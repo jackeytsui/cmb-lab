@@ -6,13 +6,15 @@ import {
   coachingSessions,
   users,
 } from "@/db/schema";
-import { eq, avg, count, desc, sql } from "drizzle-orm";
+import { eq, avg, count, desc, sql, isNull } from "drizzle-orm";
 import { hasMinimumRole } from "@/lib/auth";
+import { alias } from "drizzle-orm/pg-core";
 
 /**
  * GET /api/admin/analytics/coaching-ratings
- * Returns average rating per coach and per session type, with trends.
- * Requires admin role.
+ * Returns average rating per coach, per session type, trends,
+ * and individual recent feedback entries.
+ * Requires admin or coach role.
  */
 export async function GET() {
   const { userId } = await auth();
@@ -20,8 +22,8 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const isAdmin = await hasMinimumRole("admin");
-  if (!isAdmin) {
+  const isAllowed = await hasMinimumRole("coach");
+  if (!isAllowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -75,6 +77,31 @@ export async function GET() {
       sql`to_char(${coachingSessionRatings.createdAt}, 'YYYY-MM')`,
     );
 
+  // Recent individual feedback (last 50 entries)
+  const studentUsers = alias(users, "studentUsers");
+  const recentFeedback = await db
+    .select({
+      id: coachingSessionRatings.id,
+      rating: coachingSessionRatings.rating,
+      comment: coachingSessionRatings.comment,
+      createdAt: coachingSessionRatings.createdAt,
+      sessionTitle: coachingSessions.title,
+      sessionType: coachingSessions.type,
+      studentName: studentUsers.name,
+      studentEmail: studentUsers.email,
+      coachName: users.name,
+    })
+    .from(coachingSessionRatings)
+    .innerJoin(
+      coachingSessions,
+      eq(coachingSessionRatings.sessionId, coachingSessions.id),
+    )
+    .innerJoin(studentUsers, eq(coachingSessionRatings.userId, studentUsers.id))
+    .innerJoin(users, eq(coachingSessions.createdBy, users.id))
+    .where(isNull(studentUsers.deletedAt))
+    .orderBy(desc(coachingSessionRatings.createdAt))
+    .limit(50);
+
   return NextResponse.json({
     perCoach: perCoach.map((row) => ({
       ...row,
@@ -87,6 +114,17 @@ export async function GET() {
     trends: trends.map((row) => ({
       ...row,
       avgRating: row.avgRating ? parseFloat(String(row.avgRating)) : null,
+    })),
+    recentFeedback: recentFeedback.map((row) => ({
+      id: row.id,
+      rating: row.rating,
+      comment: row.comment,
+      createdAt: row.createdAt,
+      sessionTitle: row.sessionTitle,
+      sessionType: row.sessionType,
+      studentName: row.studentName,
+      studentEmail: row.studentEmail,
+      coachName: row.coachName,
     })),
   });
 }

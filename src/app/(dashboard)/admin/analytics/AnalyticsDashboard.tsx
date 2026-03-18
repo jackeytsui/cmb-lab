@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, Star } from "lucide-react";
 import { DateRangeFilter } from "./components/DateRangeFilter";
 import { OverviewCards } from "./components/OverviewCards";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { cn } from "@/lib/utils";
 
 interface DateRange {
   from: string;
@@ -43,6 +44,38 @@ interface StudentRow {
   totalMinutes: number;
   topFeatureLabel: string | null;
   lastActivityAt: string | null;
+}
+
+interface CoachRating {
+  coachId: string;
+  coachName: string | null;
+  coachEmail: string;
+  avgRating: number | null;
+  totalRatings: number;
+}
+
+interface SessionTypeRating {
+  sessionType: string;
+  avgRating: number | null;
+  totalRatings: number;
+}
+
+interface RatingTrend {
+  month: string;
+  avgRating: number | null;
+  totalRatings: number;
+}
+
+interface FeedbackEntry {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  sessionTitle: string;
+  sessionType: string;
+  studentName: string | null;
+  studentEmail: string;
+  coachName: string | null;
 }
 
 function buildParams(range: DateRange): string {
@@ -101,15 +134,22 @@ export function AnalyticsDashboard() {
   const [engagementStudents, setEngagementStudents] = useState<StudentRow[]>([]);
   const [selectedFeatureKey, setSelectedFeatureKey] = useState<string>("all");
 
+  // Coaching feedback state
+  const [coachRatings, setCoachRatings] = useState<CoachRating[]>([]);
+  const [sessionTypeRatings, setSessionTypeRatings] = useState<SessionTypeRating[]>([]);
+  const [ratingTrends, setRatingTrends] = useState<RatingTrend[]>([]);
+  const [recentFeedback, setRecentFeedback] = useState<FeedbackEntry[]>([]);
+
   const fetchData = useCallback(async (range: DateRange) => {
     setLoading(true);
     setError(null);
     const qs = buildParams(range);
 
     try {
-      const [overviewRes, engagementRes] = await Promise.all([
+      const [overviewRes, engagementRes, ratingsRes] = await Promise.all([
         fetch(`/api/admin/analytics/overview${qs}`),
         fetch(`/api/admin/analytics/engagement${qs}`),
+        fetch(`/api/admin/analytics/coaching-ratings`),
       ]);
 
       if (!overviewRes.ok && !engagementRes.ok) {
@@ -131,6 +171,19 @@ export function AnalyticsDashboard() {
         setEngagementOverview(EMPTY_ENGAGEMENT);
         setEngagementFeatures([]);
         setEngagementStudents([]);
+      }
+
+      if (ratingsRes.ok) {
+        const data = await ratingsRes.json();
+        setCoachRatings(data.perCoach ?? []);
+        setSessionTypeRatings(data.perSessionType ?? []);
+        setRatingTrends(data.trends ?? []);
+        setRecentFeedback(data.recentFeedback ?? []);
+      } else {
+        setCoachRatings([]);
+        setSessionTypeRatings([]);
+        setRatingTrends([]);
+        setRecentFeedback([]);
       }
     } catch (err) {
       console.error("Error fetching analytics:", err);
@@ -317,6 +370,207 @@ export function AnalyticsDashboard() {
                 <tr>
                   <td className="px-3 py-6 text-center text-muted-foreground" colSpan={6}>
                     No feature engagement data for the selected filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Coaching Session Feedback */}
+      <section>
+        <h2 className="mb-4 text-lg font-semibold text-foreground">Coaching Session Feedback</h2>
+
+        {/* Summary cards: per session type + overall */}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3 mb-4">
+          {sessionTypeRatings.map((st) => (
+            <div key={st.sessionType} className="rounded-lg border border-border bg-card p-3">
+              <p className="text-xs text-muted-foreground">
+                {st.sessionType === "one_on_one" ? "1:1 Coaching" : "Inner Circle"}
+              </p>
+              <div className="mt-1 flex items-center gap-2">
+                <p className="text-xl font-semibold text-foreground">
+                  {st.avgRating !== null ? st.avgRating.toFixed(1) : "N/A"}
+                </p>
+                <div className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star
+                      key={s}
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        st.avgRating !== null && s <= Math.round(st.avgRating)
+                          ? "fill-amber-400 text-amber-400"
+                          : "fill-none text-muted-foreground/40",
+                      )}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs text-muted-foreground">({st.totalRatings} reviews)</span>
+              </div>
+            </div>
+          ))}
+          {sessionTypeRatings.length === 0 && (
+            <div className="rounded-lg border border-border bg-card p-3 col-span-3">
+              <p className="text-sm text-muted-foreground text-center py-2">No feedback data yet.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Per-coach breakdown */}
+        {coachRatings.length > 0 && (
+          <div className="mb-4 overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left">Coach</th>
+                  <th className="px-3 py-2 text-left">Avg Rating</th>
+                  <th className="px-3 py-2 text-left">Total Reviews</th>
+                </tr>
+              </thead>
+              <tbody>
+                {coachRatings.map((row) => (
+                  <tr key={row.coachId} className="border-t border-border">
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-foreground">{row.coachName || "Coach"}</div>
+                      <div className="text-xs text-muted-foreground">{row.coachEmail}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-foreground">
+                          {row.avgRating !== null ? row.avgRating.toFixed(1) : "N/A"}
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={cn(
+                                "h-3 w-3",
+                                row.avgRating !== null && s <= Math.round(row.avgRating)
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "fill-none text-muted-foreground/40",
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-foreground">{row.totalRatings}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Monthly trends */}
+        {ratingTrends.length > 0 && (
+          <div className="mb-4 overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left">Month</th>
+                  <th className="px-3 py-2 text-left">Avg Rating</th>
+                  <th className="px-3 py-2 text-left">Total Reviews</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ratingTrends.map((row) => (
+                  <tr key={row.month} className="border-t border-border">
+                    <td className="px-3 py-2 text-foreground">{row.month}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-foreground">
+                          {row.avgRating !== null ? row.avgRating.toFixed(1) : "N/A"}
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={cn(
+                                "h-3 w-3",
+                                row.avgRating !== null && s <= Math.round(row.avgRating)
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "fill-none text-muted-foreground/40",
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-foreground">{row.totalRatings}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Recent individual feedback */}
+        <h3 className="mb-2 text-sm font-semibold text-foreground">Recent Student Feedback</h3>
+        <div className="overflow-hidden rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left">Student</th>
+                <th className="px-3 py-2 text-left">Session</th>
+                <th className="px-3 py-2 text-left">Type</th>
+                <th className="px-3 py-2 text-left">Rating</th>
+                <th className="px-3 py-2 text-left">Comment</th>
+                <th className="px-3 py-2 text-left">Coach</th>
+                <th className="px-3 py-2 text-left">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentFeedback.map((fb) => (
+                <tr key={fb.id} className="border-t border-border">
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-foreground">{fb.studentName || "Student"}</div>
+                    <div className="text-xs text-muted-foreground">{fb.studentEmail}</div>
+                  </td>
+                  <td className="px-3 py-2 text-foreground max-w-[150px] truncate">{fb.sessionTitle}</td>
+                  <td className="px-3 py-2">
+                    <span className={cn(
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      fb.sessionType === "one_on_one"
+                        ? "bg-blue-500/10 text-blue-400"
+                        : "bg-violet-500/10 text-violet-400",
+                    )}>
+                      {fb.sessionType === "one_on_one" ? "1:1" : "Inner Circle"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          className={cn(
+                            "h-3 w-3",
+                            s <= fb.rating
+                              ? "fill-amber-400 text-amber-400"
+                              : "fill-none text-muted-foreground/40",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground max-w-[200px]">
+                    {fb.comment ? (
+                      <span className="italic text-foreground/80 line-clamp-2">&ldquo;{fb.comment}&rdquo;</span>
+                    ) : (
+                      <span className="text-muted-foreground/50">No comment</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-foreground">{fb.coachName || "Coach"}</td>
+                  <td className="px-3 py-2 text-foreground text-xs">
+                    {new Date(fb.createdAt).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+              {recentFeedback.length === 0 && (
+                <tr>
+                  <td className="px-3 py-6 text-center text-muted-foreground" colSpan={7}>
+                    No student feedback submitted yet.
                   </td>
                 </tr>
               )}

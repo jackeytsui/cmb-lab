@@ -589,13 +589,14 @@ function CoachingPanel({
   const [isExporting, setIsExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
-  // Session rating state (only for students/admins)
-  const canRate = role === "student" || role === "admin";
+  // Session rating state (only students can submit)
+  const isStudent = role === "student";
   const [sessionRating, setSessionRating] = useState<number>(0);
   const [ratingComment, setRatingComment] = useState("");
   const [ratingHover, setRatingHover] = useState(0);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [showRatingConfirm, setShowRatingConfirm] = useState(false);
 
   // Recording link state
   const [recordingUrlDraft, setRecordingUrlDraft] = useState("");
@@ -636,7 +637,7 @@ function CoachingPanel({
 
   // Fetch existing rating when active session changes
   useEffect(() => {
-    if (!canRate || !activeSessionId) {
+    if (!isStudent || !activeSessionId) {
       setSessionRating(0);
       setRatingComment("");
       setRatingSubmitted(false);
@@ -661,11 +662,12 @@ function CoachingPanel({
     return () => {
       cancelled = true;
     };
-  }, [canRate, activeSessionId]);
+  }, [isStudent, activeSessionId]);
 
   const handleSubmitRating = useCallback(async () => {
     if (!activeSessionId || sessionRating < 1) return;
     setIsSubmittingRating(true);
+    setShowRatingConfirm(false);
     try {
       const res = await fetch(
         `/api/coaching/sessions/${activeSessionId}/rating`,
@@ -1836,24 +1838,40 @@ function CoachingPanel({
         </div>
       </div>
 
-      {/* Session Rating Section - only visible for students and admins */}
-      {canRate && activeSession && (
-        <div className="rounded-lg border border-border bg-card p-4">
+      {/* Session Feedback Section */}
+      {activeSession && (
+        <div className={cn(
+          "rounded-lg border border-border bg-card p-4",
+          !isStudent && "opacity-50",
+        )}>
           <h3 className="text-sm font-semibold text-foreground mb-2">
-            Rate this session
+            {ratingSubmitted ? "Your feedback" : "Rate this session"}
           </h3>
+
+          {!isStudent && (
+            <p className="text-xs text-muted-foreground mb-2">
+              Only students can submit session feedback.
+            </p>
+          )}
+
           <div className="flex items-center gap-1 mb-2">
             {[1, 2, 3, 4, 5].map((star) => (
               <button
                 key={star}
                 type="button"
                 onClick={() => {
+                  if (!isStudent || ratingSubmitted) return;
                   setSessionRating(star);
-                  setRatingSubmitted(false);
                 }}
-                onMouseEnter={() => setRatingHover(star)}
+                onMouseEnter={() => {
+                  if (isStudent && !ratingSubmitted) setRatingHover(star);
+                }}
                 onMouseLeave={() => setRatingHover(0)}
-                className="p-0.5 transition-colors"
+                disabled={!isStudent || ratingSubmitted}
+                className={cn(
+                  "p-0.5 transition-colors",
+                  (!isStudent || ratingSubmitted) && "cursor-default",
+                )}
                 aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
               >
                 <Star
@@ -1872,34 +1890,74 @@ function CoachingPanel({
               </span>
             )}
           </div>
-          <textarea
-            value={ratingComment}
-            onChange={(e) => {
-              setRatingComment(e.target.value);
-              setRatingSubmitted(false);
-            }}
-            placeholder="Optional: share your feedback..."
-            rows={2}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-          />
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSubmitRating}
-              disabled={sessionRating < 1 || isSubmittingRating}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmittingRating
-                ? "Submitting..."
-                : ratingSubmitted
-                  ? "Update Rating"
-                  : "Submit Rating"}
-            </button>
-            {ratingSubmitted && !isSubmittingRating && (
-              <span className="text-xs text-emerald-600">
-                Rating saved
+
+          {ratingSubmitted ? (
+            <div className="space-y-2">
+              {ratingComment && (
+                <p className="text-sm text-muted-foreground italic">
+                  &ldquo;{ratingComment}&rdquo;
+                </p>
+              )}
+              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600">
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6 9 17l-5-5" /></svg>
+                Feedback submitted
               </span>
-            )}
+            </div>
+          ) : isStudent ? (
+            <>
+              <textarea
+                value={ratingComment}
+                onChange={(e) => setRatingComment(e.target.value)}
+                placeholder="Optional: share your feedback..."
+                rows={2}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+              />
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRatingConfirm(true)}
+                  disabled={sessionRating < 1 || isSubmittingRating}
+                  className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingRating ? "Submitting..." : "Submit Feedback"}
+                </button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {/* Confirmation dialog before submitting feedback */}
+      {showRatingConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowRatingConfirm(false)}
+          />
+          <div className="relative mx-4 w-full max-w-sm rounded-xl border border-border bg-popover p-6 shadow-2xl">
+            <h3 className="text-base font-semibold text-foreground">
+              Submit feedback?
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Once submitted, your rating and feedback cannot be changed. Are you sure you want to continue?
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRatingConfirm(false)}
+                className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitRating}
+                disabled={isSubmittingRating}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {isSubmittingRating ? "Submitting..." : "Yes, Submit"}
+              </button>
+            </div>
           </div>
         </div>
       )}
