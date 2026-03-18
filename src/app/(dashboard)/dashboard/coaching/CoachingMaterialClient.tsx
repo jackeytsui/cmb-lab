@@ -773,8 +773,15 @@ function CoachingPanel({
     duplicateCount: number;
   } | null>(null);
   const studentDropdownRef = useRef<HTMLDivElement>(null);
-  // Font size for session notes
-  const [noteFontSize, setNoteFontSize] = useState(18);
+  // Font size for session notes — persist per coach via localStorage
+  const [noteFontSize, setNoteFontSize] = useState(() => {
+    if (typeof window === "undefined") return 18;
+    const saved = localStorage.getItem("coaching-note-font-size");
+    return saved ? Number(saved) : 18;
+  });
+  useEffect(() => {
+    localStorage.setItem("coaching-note-font-size", String(noteFontSize));
+  }, [noteFontSize]);
   // Panel collapse/resize state
   const [mandoCollapsed, setMandoCollapsed] = useState(false);
   const [cantoCollapsed, setCantoCollapsed] = useState(false);
