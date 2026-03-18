@@ -152,50 +152,31 @@ export const WordSpan = React.memo(function WordSpan({
         data-index={index}
         className={`${WORD_CLASS} inline-flex flex-col items-center`}
       >
-        {/* Row 1: Pinyin above characters (one per character) */}
-        {showPinyin && (
-          <span className="flex justify-center gap-0 select-none">
-            {chars.map((_, i) => (
-              <span
-                key={i}
-                className="text-center text-blue-400 leading-tight"
-                style={{ fontSize: `${annotationSize}px`, minWidth: "1em" }}
-              >
-                {pinyinArr[i] ?? "\u00A0"}
-              </span>
-            ))}
-          </span>
-        )}
-
-        {/* Row 1b: Jyutping above characters (same position as Pinyin) */}
-        {showJyutping && (
-          <span className="flex justify-center gap-0 select-none">
-            {chars.map((_, i) => (
-              <span
-                key={i}
-                className="text-center text-orange-400 leading-tight"
-                style={{ fontSize: `${annotationSize}px`, minWidth: "1em" }}
-              >
-                {jyutpingArr[i] ?? "\u00A0"}
-              </span>
-            ))}
-          </span>
-        )}
-
-        {/* Row 2: Chinese characters */}
-        <span className="flex justify-center gap-0">
+        {/* Per-character columns with annotations stacked above */}
+        <span className="inline-flex items-end">
           {chars.map((char, i) => (
-            <span
-              key={i}
-              className="text-center"
-              style={{ minWidth: "1em" }}
-            >
-              {char}
+            <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.1em" }}>
+              {showPinyin && (
+                <span
+                  className="text-center text-blue-400 leading-tight select-none whitespace-nowrap"
+                  style={{ fontSize: `${annotationSize}px` }}
+                >
+                  {pinyinArr[i] ?? "\u00A0"}
+                </span>
+              )}
+              {showJyutping && (
+                <span
+                  className="text-center text-orange-400 leading-tight select-none whitespace-nowrap"
+                  style={{ fontSize: `${annotationSize}px` }}
+                >
+                  {jyutpingArr[i] ?? "\u00A0"}
+                </span>
+              )}
+              <span className="text-center">{char}</span>
             </span>
           ))}
         </span>
-
-        {/* Row 4: English gloss (spans full word width, direct mode only) */}
+        {/* English gloss (spans full word width) */}
         {showEnglish && (
           <span
             className="text-center text-emerald-400/80 leading-tight select-none whitespace-nowrap"
