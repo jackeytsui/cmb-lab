@@ -8,7 +8,7 @@ import { convertScript } from "@/lib/chinese-convert";
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2 } from "lucide-react";
+import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2, Languages, Minus, Plus } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
@@ -295,6 +295,52 @@ function useProcessedText({
   };
 }
 
+/** Pinyin tone marks lookup — vowel letter → array of tone 1-4 variants */
+const TONE_MAP: Record<string, string[]> = {
+  a: ["ā", "á", "ǎ", "à"],
+  e: ["ē", "é", "ě", "è"],
+  i: ["ī", "í", "ǐ", "ì"],
+  o: ["ō", "ó", "ǒ", "ò"],
+  u: ["ū", "ú", "ǔ", "ù"],
+  ü: ["ǖ", "ǘ", "ǚ", "ǜ"],
+};
+const ALL_TONE_CHARS = Object.values(TONE_MAP).flat();
+
+function PinyinToneBar({
+  onInsert,
+}: {
+  onInsert: (char: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <button
+        type="button"
+        onClick={() => setExpanded((p) => !p)}
+        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+      >
+        {expanded ? "Hide tones" : "Tone marks"}
+      </button>
+      {expanded &&
+        Object.entries(TONE_MAP).map(([vowel, tones]) => (
+          <span key={vowel} className="inline-flex gap-0.5">
+            {tones.map((ch, i) => (
+              <button
+                key={ch}
+                type="button"
+                onClick={() => onInsert(ch)}
+                className="inline-flex items-center justify-center size-6 rounded text-xs font-medium border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                title={`Tone ${i + 1}`}
+              >
+                {ch}
+              </button>
+            ))}
+          </span>
+        ))}
+    </div>
+  );
+}
+
 function NoteCard({
   note,
   index,
@@ -304,6 +350,7 @@ function NoteCard({
   showJyutping,
   canEdit,
   canStar,
+  fontSize,
   onToggleStar,
   onSave,
   onDelete,
@@ -316,6 +363,7 @@ function NoteCard({
   showJyutping: boolean;
   canEdit: boolean;
   canStar: boolean;
+  fontSize: number;
   onToggleStar: () => void;
   onSave: (updates: {
     textOverride?: string;
@@ -334,6 +382,10 @@ function NoteCard({
   const [draftText, setDraftText] = useState(baseText);
   const [draftRomanization, setDraftRomanization] = useState("");
   const [draftTranslation, setDraftTranslation] = useState("");
+  const romanInputRef = useRef<HTMLInputElement>(null);
+  const [ttsRate, setTtsRate] = useState<"slow" | "medium" | "fast">("medium");
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [translationLoading, setTranslationLoading] = useState(false);
 
   const defaultRomanization = useMemo(() => {
     if (!baseText.trim()) return "";
@@ -373,53 +425,104 @@ function NoteCard({
     setIsEditing(false);
   }, [draftText, draftRomanization, draftTranslation, onSave]);
 
+  const handleInsertTone = useCallback((char: string) => {
+    const el = romanInputRef.current;
+    if (!el) {
+      setDraftRomanization((prev) => prev + char);
+      return;
+    }
+    const start = el.selectionStart ?? draftRomanization.length;
+    const end = el.selectionEnd ?? start;
+    const next = draftRomanization.slice(0, start) + char + draftRomanization.slice(end);
+    setDraftRomanization(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + char.length, start + char.length);
+    });
+  }, [draftRomanization]);
+
+  const handleFetchTranslation = useCallback(async () => {
+    const text = processed.displayText || baseText;
+    if (!text.trim()) return;
+    const cached = processed.translationCache.get(text);
+    if (cached) {
+      setShowTranslation((p) => !p);
+      return;
+    }
+    setTranslationLoading(true);
+    try {
+      const res = await fetch("/api/reader/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, language }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        processed.setTranslationCache((prev) => {
+          const next = new Map(prev);
+          next.set(text, data.translation);
+          return next;
+        });
+        setShowTranslation(true);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setTranslationLoading(false);
+    }
+  }, [processed, baseText, language]);
+
+  const annotationSize = Math.max(12, Math.round(fontSize * 0.72));
+  const englishSize = Math.max(11, Math.round(fontSize * 0.65));
+
   return (
-    <div className="relative rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
-      {(canEdit || canStar) && (
-        <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
-          {canStar && (
-            <button
-              type="button"
-              onClick={onToggleStar}
-              className={cn(
-                "inline-flex size-5 items-center justify-center rounded text-[11px] transition-colors",
-                note.starred ? "text-amber-500" : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-label="Star note"
-              title="Star note"
-            >
-              <Star className="size-3" />
-            </button>
-          )}
-          {canEdit && (
-            <>
-              <button
-                type="button"
-                onClick={() => setIsEditing((prev) => !prev)}
-                className="inline-flex size-5 items-center justify-center rounded text-[11px] text-muted-foreground hover:text-foreground"
-                aria-label="Edit note"
-                title="Edit note"
-              >
-                <Pencil className="size-3" />
-              </button>
-              <button
-                type="button"
-                onClick={onDelete}
-                className="inline-flex size-5 items-center justify-center rounded text-[11px] text-muted-foreground hover:text-red-500"
-                aria-label="Delete note"
-                title="Delete note"
-              >
-                <Trash2 className="size-3" />
-              </button>
-            </>
-          )}
-        </div>
-      )}
+    <div className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
       <div className="flex items-start gap-2">
         <span className="self-center inline-flex min-w-5 justify-center text-[10px] text-muted-foreground">
           {index + 1}.
         </span>
-        <div className="flex-1 space-y-2 pr-8">
+        <div className="flex-1 space-y-2 min-w-0">
+          {/* Action buttons — inline row, not absolute */}
+          {(canEdit || canStar) && !isEditing && (
+            <div className="flex items-center justify-end gap-1 -mt-0.5 -mb-1">
+              {canStar && (
+                <button
+                  type="button"
+                  onClick={onToggleStar}
+                  className={cn(
+                    "inline-flex size-5 items-center justify-center rounded text-[11px] transition-colors",
+                    note.starred ? "text-amber-500" : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-label="Star note"
+                  title="Star note"
+                >
+                  <Star className="size-3" />
+                </button>
+              )}
+              {canEdit && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="inline-flex size-5 items-center justify-center rounded text-[11px] text-muted-foreground hover:text-foreground"
+                    aria-label="Edit note"
+                    title="Edit note"
+                  >
+                    <Pencil className="size-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDelete}
+                    className="inline-flex size-5 items-center justify-center rounded text-[11px] text-muted-foreground hover:text-red-500"
+                    aria-label="Delete note"
+                    title="Delete note"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {isEditing ? (
             <div className="space-y-2">
               <textarea
@@ -429,12 +532,18 @@ function NoteCard({
                 className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                 placeholder="Chinese text"
               />
-              <input
-                value={draftRomanization}
-                onChange={(e) => setDraftRomanization(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                placeholder={language === "zh-HK" ? "Jyutping" : "Pinyin"}
-              />
+              <div className="space-y-1">
+                <input
+                  ref={romanInputRef}
+                  value={draftRomanization}
+                  onChange={(e) => setDraftRomanization(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  placeholder={language === "zh-HK" ? "Jyutping" : "Pinyin"}
+                />
+                {language === "zh-CN" && (
+                  <PinyinToneBar onInsert={handleInsertTone} />
+                )}
+              </div>
               <textarea
                 value={draftTranslation}
                 onChange={(e) => setDraftTranslation(e.target.value)}
@@ -464,22 +573,26 @@ function NoteCard({
               {(showPinyin || showJyutping) && (note.romanizationOverride || defaultRomanization) ? (
                 <div
                   className={cn(
-                    "text-sm",
+                    "select-none",
                     showJyutping ? "text-orange-400" : "text-blue-400",
                   )}
+                  style={{ fontSize: `${annotationSize}px` }}
                 >
                   {note.romanizationOverride ?? defaultRomanization}
                 </div>
               ) : null}
-              <div className="text-base text-foreground flex items-center gap-1.5">
-                <span>{processed.displayText || baseText}</span>
+              <div style={{ fontSize: `${fontSize}px` }} className="text-foreground">
+                {processed.displayText || baseText}
+              </div>
+              {/* Inline controls: play, speed, translate */}
+              <span className="inline-flex items-center gap-1 mt-1">
                 <button
                   type="button"
                   onClick={() => processed.handleSpeakSentence(
                     processed.displayText || baseText,
-                    "medium",
+                    ttsRate,
                   )}
-                  className="inline-flex items-center justify-center size-6 shrink-0 rounded hover:bg-muted text-muted-foreground hover:text-cyan-500 transition-colors"
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-muted text-muted-foreground hover:text-cyan-500 transition-colors"
                   aria-label="Read aloud"
                 >
                   {processed.ttsLoading ? (
@@ -490,9 +603,41 @@ function NoteCard({
                     <Play className="size-3.5" />
                   )}
                 </button>
-              </div>
+                <select
+                  value={ttsRate}
+                  onChange={(e) => setTtsRate(e.target.value as "slow" | "medium" | "fast")}
+                  aria-label="Speaking speed"
+                  className="h-6 text-[10px] bg-background border border-input rounded text-muted-foreground px-1 appearance-none cursor-pointer hover:border-primary/40 focus:outline-none focus:border-primary"
+                >
+                  <option value="slow">Slow</option>
+                  <option value="medium">Normal</option>
+                  <option value="fast">Fast</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handleFetchTranslation}
+                  disabled={translationLoading}
+                  className="inline-flex items-center justify-center size-6 rounded hover:bg-muted text-muted-foreground hover:text-amber-500 transition-colors disabled:opacity-50"
+                  aria-label="Translate to English"
+                >
+                  {translationLoading ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Languages className="size-3.5" />
+                  )}
+                </button>
+              </span>
+              {/* On-demand translation */}
+              {showTranslation && processed.translationCache.get(processed.displayText || baseText) && (
+                <div className="italic mt-0.5 opacity-0 animate-[fadeIn_200ms_ease-out_forwards]" style={{ fontSize: `${englishSize}px` }}>
+                  <span className="text-muted-foreground">
+                    {processed.translationCache.get(processed.displayText || baseText)}
+                  </span>
+                </div>
+              )}
+              {/* Stored translation override */}
               {(note.translationOverride || defaultTranslation) && (
-                <div className="text-base text-emerald-500/80 italic">
+                <div className="italic text-emerald-500/80" style={{ fontSize: `${englishSize}px` }}>
                   {note.translationOverride ?? defaultTranslation}
                 </div>
               )}
@@ -504,7 +649,7 @@ function NoteCard({
               showJyutping={showJyutping}
               showEnglish={true}
               translationMode="proper"
-              fontSize={18}
+              fontSize={fontSize}
               language={language}
               onSpeakSentence={processed.handleSpeakSentence}
               isSpeaking={processed.isPlaying || processed.ttsLoading}
@@ -589,6 +734,8 @@ function CoachingPanel({
   const [isExporting, setIsExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  // Font size for session notes
+  const [noteFontSize, setNoteFontSize] = useState(18);
   // Session rating state (only students can submit)
   const isStudent = role === "student";
   const [sessionRating, setSessionRating] = useState<number>(0);
@@ -1420,6 +1567,30 @@ function CoachingPanel({
         </div>
       )}
 
+      {/* Font size control */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs text-muted-foreground">Font size</span>
+        <button
+          type="button"
+          onClick={() => setNoteFontSize((s) => Math.max(12, s - 2))}
+          disabled={noteFontSize <= 12}
+          className="inline-flex items-center justify-center size-6 rounded border border-input bg-background text-foreground hover:bg-accent transition-colors disabled:opacity-40"
+          aria-label="Decrease font size"
+        >
+          <Minus className="size-3" />
+        </button>
+        <span className="text-xs tabular-nums text-foreground w-8 text-center">{noteFontSize}</span>
+        <button
+          type="button"
+          onClick={() => setNoteFontSize((s) => Math.min(32, s + 2))}
+          disabled={noteFontSize >= 32}
+          className="inline-flex items-center justify-center size-6 rounded border border-input bg-background text-foreground hover:bg-accent transition-colors disabled:opacity-40"
+          aria-label="Increase font size"
+        >
+          <Plus className="size-3" />
+        </button>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-3">
@@ -1571,6 +1742,7 @@ function CoachingPanel({
                       showJyutping={false}
                       canEdit={canEditNotes}
                       canStar={canStarNotes}
+                      fontSize={noteFontSize}
                       onToggleStar={() => {
                         if (!activeSession) return;
                         if (!canStarNotes) return;
@@ -1604,7 +1776,7 @@ function CoachingPanel({
                 showJyutping={false}
                 showEnglish={true}
                 translationMode="proper"
-                fontSize={18}
+                fontSize={noteFontSize}
                 language="zh-CN"
                 onSpeakSentence={mandarinPane.handleSpeakSentence}
                 isSpeaking={mandarinPane.isPlaying || mandarinPane.ttsLoading}
@@ -1779,6 +1951,7 @@ function CoachingPanel({
                       showJyutping={true}
                       canEdit={canEditNotes}
                       canStar={canStarNotes}
+                      fontSize={noteFontSize}
                       onToggleStar={() => {
                         if (!activeSession) return;
                         if (!canStarNotes) return;
@@ -1812,7 +1985,7 @@ function CoachingPanel({
                 showJyutping={true}
                 showEnglish={true}
                 translationMode="proper"
-                fontSize={18}
+                fontSize={noteFontSize}
                 language="zh-HK"
                 onSpeakSentence={cantonesePane.handleSpeakSentence}
                 isSpeaking={cantonesePane.isPlaying || cantonesePane.ttsLoading}
