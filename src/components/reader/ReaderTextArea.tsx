@@ -67,6 +67,7 @@ export interface ReaderTextAreaProps {
   onSentencePlay?: (index: number) => void;
   firstSentencePlayTourId?: string;
   disableSentencePlayback?: boolean;
+  className?: string;
 }
 
 function findWordElement(target: EventTarget): HTMLElement | null {
@@ -99,6 +100,7 @@ export function ReaderTextArea({
   onSentencePlay,
   firstSentencePlayTourId,
   disableSentencePlayback = false,
+  className: outerClassName,
 }: ReaderTextAreaProps) {
   const lastHoveredIndexRef = useRef<number | null>(null);
   const fallbackRef = useRef<HTMLDivElement>(null);
@@ -168,7 +170,7 @@ export function ReaderTextArea({
       onMouseOver={handleMouseOver}
       onClick={handleClick}
       onMouseLeave={handleMouseLeave}
-      className="max-h-[calc(100vh-200px)] overflow-y-auto text-foreground"
+      className={cn("max-h-[calc(100vh-200px)] overflow-y-auto text-foreground", outerClassName)}
       style={{ fontSize: `${fontSize}px` }}
     >
       {sentenceGroups.map((sentence, sentenceIdx) => {

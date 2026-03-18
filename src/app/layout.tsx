@@ -50,7 +50,7 @@ export default function RootLayout({
         lang="en"
         style={{
           "--font-hp-src": "sans-serif",
-          "--font-cv-src": "sans-serif",
+          "--font-cv-src": "'VF Cantonese', 'VF-Canto', sans-serif",
         } as React.CSSProperties}
       >
         <body
