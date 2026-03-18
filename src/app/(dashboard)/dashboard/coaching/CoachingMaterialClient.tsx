@@ -9,7 +9,7 @@ import { convertScript } from "@/lib/chinese-convert";
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2, Languages, Minus, Plus } from "lucide-react";
+import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
@@ -761,6 +761,15 @@ function CoachingPanel({
   const [isExporting, setIsExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  // Assigned students dropdown (for coaches on 1:1 page)
+  const [assignedStudents, setAssignedStudents] = useState<{ id: string; name: string | null; email: string }[]>([]);
+  const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
+  const [studentDropdownSearch, setStudentDropdownSearch] = useState("");
+  const [showDuplicateConfirm, setShowDuplicateConfirm] = useState<{
+    student: { id: string; name: string | null; email: string };
+    duplicateCount: number;
+  } | null>(null);
+  const studentDropdownRef = useRef<HTMLDivElement>(null);
   // Font size for session notes
   const [noteFontSize, setNoteFontSize] = useState(18);
   // Session rating state (only students can submit)
@@ -917,6 +926,116 @@ function CoachingPanel({
       setStudentEmailInput(userEmail);
     }
   }, [sessionType, canWrite, userEmail]);
+
+  // Fetch assigned students for the dropdown (coaches/admins on 1:1 page)
+  useEffect(() => {
+    if (sessionType !== "one-on-one" || !canWrite) return;
+    fetch("/api/coach/my-students")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.students) setAssignedStudents(data.students);
+      })
+      .catch(() => {});
+  }, [sessionType, canWrite]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (studentDropdownRef.current && !studentDropdownRef.current.contains(e.target as Node)) {
+        setStudentDropdownOpen(false);
+      }
+    }
+    if (studentDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [studentDropdownOpen]);
+
+  // Filter assigned students by search term
+  const filteredAssignedStudents = useMemo(() => {
+    if (!studentDropdownSearch.trim()) return assignedStudents;
+    const q = studentDropdownSearch.toLowerCase();
+    return assignedStudents.filter(
+      (s) =>
+        (s.name?.toLowerCase().includes(q)) ||
+        s.email.toLowerCase().includes(q),
+    );
+  }, [assignedStudents, studentDropdownSearch]);
+
+  // Handle selecting a student from the dropdown
+  const handleSelectAssignedStudent = useCallback(
+    (student: { id: string; name: string | null; email: string }) => {
+      // Check for duplicate names
+      if (student.name) {
+        const sameName = assignedStudents.filter(
+          (s) => s.name?.toLowerCase() === student.name?.toLowerCase() && s.id !== student.id,
+        );
+        if (sameName.length > 0) {
+          setShowDuplicateConfirm({
+            student,
+            duplicateCount: sameName.length + 1,
+          });
+          setStudentDropdownOpen(false);
+          return;
+        }
+      }
+      // No duplicates — open directly
+      confirmSelectStudent(student.email);
+    },
+    [assignedStudents],
+  );
+
+  const confirmSelectStudent = useCallback(
+    (email: string) => {
+      setShowDuplicateConfirm(null);
+      setStudentDropdownOpen(false);
+      setStudentDropdownSearch("");
+      setStudentEmailInput(email);
+      setStudentEmailFilter(email);
+      // Trigger the same flow as clicking "Open"
+      setIsLinkingStudent(true);
+      setOpenStudentError(null);
+      const typeParam = "one_on_one";
+      const params = new URLSearchParams({ type: typeParam, studentEmail: email });
+      fetchWithTimeout(`/api/coaching/sessions?${params.toString()}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            setOpenStudentError("Could not load sessions for that student.");
+            return;
+          }
+          let data = await res.json();
+          let normalized = normalizeSessions(data.sessions ?? []);
+          if (normalized.length === 0 && canWrite) {
+            const createRes = await fetchWithTimeout("/api/coaching/sessions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "one_on_one", studentEmail: email }),
+            });
+            if (!createRes.ok) {
+              setOpenStudentError("Could not create session for that student.");
+              return;
+            }
+            const refetch = await fetchWithTimeout(`/api/coaching/sessions?${params.toString()}`);
+            if (!refetch.ok) return;
+            data = await refetch.json();
+            normalized = normalizeSessions(data.sessions ?? []);
+          }
+          setSessions(normalized);
+          setActiveSessionId(normalized[0]?.id ?? null);
+          setIsLoaded(true);
+          setLockedStudentEmail(email);
+          setOpenStudentError(null);
+          trackAction("open_student_context", { studentEmail: email });
+        })
+        .catch(() => {
+          setOpenStudentError("Could not open this student's sessions.");
+        })
+        .finally(() => {
+          setIsLinkingStudent(false);
+        });
+    },
+    [canWrite, fetchWithTimeout, normalizeSessions, trackAction],
+  );
 
   const fetchSessions = useCallback(async () => {
     const typeParam = sessionType === "one-on-one" ? "one_on_one" : "inner_circle";
@@ -1346,32 +1465,116 @@ function CoachingPanel({
           </div>
         </div>
         {sessionType === "one-on-one" && canWrite && (
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <label className="text-xs font-medium text-muted-foreground">
-              Student Email
-            </label>
-            <input
-              value={studentEmailInput}
-              onChange={(e) => setStudentEmailInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (lockedStudentEmail) return;
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleLinkStudentEmail();
-                }
-              }}
-              disabled={Boolean(lockedStudentEmail)}
-              className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-sm disabled:opacity-60 disabled:cursor-not-allowed"
-              placeholder="student@email.com"
-            />
-            <button
-              type="button"
-              onClick={handleLinkStudentEmail}
-              disabled={(!studentEmailInput.trim() && !lockedStudentEmail) || isLinkingStudent}
-              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLinkingStudent ? "Opening..." : lockedStudentEmail ? "Sign out" : "Open"}
-            </button>
+          <div className="mt-3 space-y-2">
+            {/* Row 1: Assigned students quick-select dropdown */}
+            {assignedStudents.length > 0 && !lockedStudentEmail && (
+              <div className="relative" ref={studentDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setStudentDropdownOpen((p) => !p)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors"
+                >
+                  <Users className="size-3.5" />
+                  My Students ({assignedStudents.length})
+                  <ChevronDown className={cn("size-3 transition-transform", studentDropdownOpen && "rotate-180")} />
+                </button>
+                {studentDropdownOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-md border border-border bg-popover shadow-lg">
+                    <div className="p-2 border-b border-border">
+                      <input
+                        type="text"
+                        value={studentDropdownSearch}
+                        onChange={(e) => setStudentDropdownSearch(e.target.value)}
+                        placeholder="Search by name or email..."
+                        className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-48 overflow-y-auto py-1">
+                      {filteredAssignedStudents.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          No students found.
+                        </div>
+                      ) : (
+                        filteredAssignedStudents.map((student) => (
+                          <button
+                            key={student.id}
+                            type="button"
+                            onClick={() => handleSelectAssignedStudent(student)}
+                            className="w-full px-3 py-2 text-left hover:bg-accent transition-colors"
+                          >
+                            <div className="text-xs font-medium text-foreground">
+                              {student.name || student.email.split("@")[0]}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {student.email}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Duplicate name confirmation dialog */}
+            {showDuplicateConfirm && (
+              <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
+                <p className="text-xs text-foreground">
+                  You have <strong>{showDuplicateConfirm.duplicateCount}</strong> students named{" "}
+                  <strong>{showDuplicateConfirm.student.name}</strong> on your list.
+                  The one you are selecting now&apos;s email address is{" "}
+                  <strong>{showDuplicateConfirm.student.email}</strong>.
+                  Are you sure this is the right one?
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => confirmSelectStudent(showDuplicateConfirm.student.email)}
+                    className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    Yes, open
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDuplicateConfirm(null)}
+                    className="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Row 2: Email input (works for any student) */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label className="text-xs font-medium text-muted-foreground">
+                Student Email
+              </label>
+              <input
+                value={studentEmailInput}
+                onChange={(e) => setStudentEmailInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (lockedStudentEmail) return;
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleLinkStudentEmail();
+                  }
+                }}
+                disabled={Boolean(lockedStudentEmail)}
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                placeholder="student@email.com"
+              />
+              <button
+                type="button"
+                onClick={handleLinkStudentEmail}
+                disabled={(!studentEmailInput.trim() && !lockedStudentEmail) || isLinkingStudent}
+                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLinkingStudent ? "Opening..." : lockedStudentEmail ? "Sign out" : "Open"}
+              </button>
+            </div>
           </div>
         )}
         <div className={cn("mt-3", showAllSessions && "max-h-[200px] overflow-y-auto pr-1")}>
