@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasMinimumRole, checkRole } from "@/lib/auth";
 import { AdminManageGrid, type PortalSection } from "@/components/admin/AdminManageGrid";
 
-const sections: PortalSection[] = [
+const allSections: PortalSection[] = [
   {
     id: "view-as",
     title: "View As User",
@@ -49,18 +49,40 @@ const sections: PortalSection[] = [
   },
 ];
 
+/** Sections and items visible to coaches */
+const COACH_SECTION_IDS = new Set(["view-as", "access", "ops"]);
+const COACH_ITEM_IDS = new Set(["user-access", "users", "analytics"]);
+
+function filterForCoach(sections: PortalSection[]): PortalSection[] {
+  return sections
+    .filter((s) => COACH_SECTION_IDS.has(s.id))
+    .map((s) => {
+      if (s.widget) return s; // widgets pass through
+      return {
+        ...s,
+        items: s.items?.filter((item) => COACH_ITEM_IDS.has(item.id)),
+      };
+    })
+    .filter((s) => s.widget || (s.items && s.items.length > 0));
+}
+
 export default async function AdminManagePortalPage() {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
     redirect("/dashboard");
   }
+
+  const isAdmin = await checkRole("admin");
+  const sections = isAdmin ? allSections : filterForCoach(allSections);
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">Admin Manage Portal</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Central command center for admin operations, security, and content governance.
+          {isAdmin
+            ? "Central command center for admin operations, security, and content governance."
+            : "Coach portal — view students, analytics, and impersonate users."}
         </p>
       </div>
 

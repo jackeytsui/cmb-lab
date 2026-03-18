@@ -60,7 +60,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       ? allowlistRole
       : effectiveRole;
 
-  if (elevatedRole !== "admin") {
+  if (elevatedRole !== "admin" && elevatedRole !== "coach") {
     redirect("/dashboard");
   }
 

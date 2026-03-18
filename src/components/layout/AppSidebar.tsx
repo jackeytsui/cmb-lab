@@ -13,11 +13,7 @@ import { NavUser } from "./NavUser";
 import Image from "next/image";
 import {
   BookOpenText,
-  ClipboardList,
-  MessageSquare,
   Users,
-  Mic,
-  Video,
   FileText,
   Headphones,
   LayoutDashboard,
@@ -97,29 +93,12 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     label: "Coach Tools",
     minRole: "coach",
     items: [
-      { title: "Coach Dashboard", url: "/coach", icon: Users },
-      { title: "Pronunciation", url: "/coach/pronunciation", icon: Mic },
-      {
-        title: "Conversations",
-        url: "/coach/conversations",
-        icon: MessageSquare,
-      },
       { title: "Students", url: "/coach/students", icon: Users },
-      {
-        title: "Practice Results",
-        url: "/coach/practice-results",
-        icon: ClipboardList,
-      },
-      {
-        title: "Video Threads",
-        url: "/admin/video-threads",
-        icon: Video,
-      },
     ],
   },
   {
     label: "Admin",
-    minRole: "admin",
+    minRole: "coach",
     items: [
       { title: "Admin Portal", url: "/admin/manage", icon: LayoutDashboard },
     ],
