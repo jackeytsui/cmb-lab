@@ -4,12 +4,18 @@ import { FeatureGate } from "@/components/auth/FeatureGate";
 import { CoachingMaterialClient } from "../CoachingMaterialClient";
 import { getCurrentUser } from "@/lib/auth";
 
-export default async function OneOnOneCoachingPage() {
+export default async function OneOnOneCoachingPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[]>>;
+}) {
   const { userId } = await auth();
   if (!userId) {
     redirect("/sign-in");
   }
   const currentUser = await getCurrentUser();
+  const params = await searchParams;
+  const initialStudentEmail = (params.student as string) || undefined;
 
   return (
     <FeatureGate feature="coaching_material">
@@ -18,6 +24,7 @@ export default async function OneOnOneCoachingPage() {
         subtitle="Personalized materials for 1:1 coaching sessions."
         sessionType="one-on-one"
         currentRole={currentUser?.role}
+        initialStudentEmail={initialStudentEmail}
       />
     </FeatureGate>
   );

@@ -6,11 +6,13 @@ import {
   Search,
   Users,
   Star,
-  ExternalLink,
+  FileText,
   Loader2,
   ChevronDown,
+  ChevronUp,
   UserCheck,
   X,
+  ArrowUpDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +42,9 @@ interface Props {
   coaches: Coach[];
 }
 
+type SortKey = "rating1on1" | "ratingInnerCircle" | null;
+type SortDir = "asc" | "desc";
+
 function StarRating({ value, count }: { value: number | null; count: number }) {
   if (value === null || count === 0) {
     return <span className="text-xs text-muted-foreground">—</span>;
@@ -55,6 +60,38 @@ function StarRating({ value, count }: { value: number | null; count: number }) {
   );
 }
 
+function SortButton({
+  active,
+  direction,
+  onClick,
+}: {
+  active: boolean;
+  direction: SortDir;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center justify-center size-5 rounded hover:bg-muted transition-colors ml-1",
+        active ? "text-primary" : "text-muted-foreground",
+      )}
+      aria-label="Sort"
+    >
+      {active ? (
+        direction === "asc" ? (
+          <ChevronUp className="size-3.5" />
+        ) : (
+          <ChevronDown className="size-3.5" />
+        )
+      ) : (
+        <ArrowUpDown className="size-3" />
+      )}
+    </button>
+  );
+}
+
 export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +104,8 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
   const [bulkCoachId, setBulkCoachId] = useState<string>("");
   const [bulkAssigning, setBulkAssigning] = useState(false);
   const [showBulkPanel, setShowBulkPanel] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(null);
 
   const fetchStudents = useCallback(
@@ -157,11 +196,38 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
     }
   }, [selectedIds, bulkCoachId, fetchStudents, search, coachFilter]);
 
+  const handleToggleSort = useCallback((key: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+        return key;
+      }
+      setSortDir("desc");
+      return key;
+    });
+  }, []);
+
+  // Sort students client-side based on rating columns
+  const sortedStudents = useMemo(() => {
+    if (!sortKey) return students;
+    return [...students].sort((a, b) => {
+      const aVal =
+        sortKey === "rating1on1" ? a.avgRating1on1 : a.avgRatingInnerCircle;
+      const bVal =
+        sortKey === "rating1on1" ? b.avgRating1on1 : b.avgRatingInnerCircle;
+      // Nulls always go to the bottom
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return 1;
+      if (bVal === null) return -1;
+      return sortDir === "desc" ? bVal - aVal : aVal - bVal;
+    });
+  }, [students, sortKey, sortDir]);
+
   // Group students by coach for admin view
   const groupedByCoach = useMemo(() => {
     if (!isAdmin || coachFilter !== "all") return null;
     const map = new Map<string, { coach: Coach | null; students: StudentRow[] }>();
-    for (const s of students) {
+    for (const s of sortedStudents) {
       const key = s.assignedCoachId || "__unassigned__";
       if (!map.has(key)) {
         map.set(key, {
@@ -173,7 +239,6 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
       }
       map.get(key)!.students.push(s);
     }
-    // Sort: coaches with names first, unassigned last
     const entries = Array.from(map.entries());
     entries.sort(([, a], [, b]) => {
       if (!a.coach) return 1;
@@ -181,7 +246,7 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
       return (a.coach.name || a.coach.email).localeCompare(b.coach.name || b.coach.email);
     });
     return entries;
-  }, [students, isAdmin, coachFilter]);
+  }, [sortedStudents, isAdmin, coachFilter]);
 
   return (
     <div>
@@ -341,6 +406,9 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
                 showBulk={showBulkPanel}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggleSort={handleToggleSort}
               />
             </div>
           ))}
@@ -348,11 +416,14 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
       ) : (
         /* Flat list view */
         <StudentTable
-          students={students}
-          showCoach={isAdmin}
+          students={sortedStudents}
+          showCoach={true}
           showBulk={showBulkPanel && isAdmin}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onToggleSort={handleToggleSort}
         />
       )}
     </div>
@@ -365,12 +436,18 @@ function StudentTable({
   showBulk,
   selectedIds,
   onToggleSelect,
+  sortKey,
+  sortDir,
+  onToggleSort,
 }: {
   students: StudentRow[];
   showCoach: boolean;
   showBulk: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onToggleSort: (key: SortKey) => void;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -395,10 +472,24 @@ function StudentTable({
                 </th>
               )}
               <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                1:1 Rating
+                <span className="inline-flex items-center">
+                  1:1 Rating
+                  <SortButton
+                    active={sortKey === "rating1on1"}
+                    direction={sortDir}
+                    onClick={() => onToggleSort("rating1on1")}
+                  />
+                </span>
               </th>
               <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Inner Circle Rating
+                <span className="inline-flex items-center">
+                  Inner Circle Rating
+                  <SortButton
+                    active={sortKey === "ratingInnerCircle"}
+                    direction={sortDir}
+                    onClick={() => onToggleSort("ratingInnerCircle")}
+                  />
+                </span>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Coaching Notes
@@ -454,10 +545,10 @@ function StudentTable({
                 <td className="px-4 py-3 text-right">
                   <Link
                     href={`/dashboard/coaching/one-on-one?student=${encodeURIComponent(student.email)}`}
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:border-primary/40 hover:text-primary transition-colors"
                   >
-                    1:1 Notes
-                    <ExternalLink className="size-3" />
+                    <FileText className="size-3.5" />
+                    1:1 Coaching Notes
                   </Link>
                 </td>
               </tr>

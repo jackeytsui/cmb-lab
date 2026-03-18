@@ -705,11 +705,13 @@ function CoachingPanel({
   subtitle,
   sessionType,
   currentRole,
+  initialStudentEmail,
 }: {
   label: string;
   subtitle: string;
   sessionType: "one-on-one" | "inner-circle";
   currentRole?: "student" | "coach" | "admin";
+  initialStudentEmail?: string;
 }) {
   const fetchWithTimeout = useCallback(
     async (url: string, init?: RequestInit, timeoutMs = 12000) => {
@@ -1036,6 +1038,22 @@ function CoachingPanel({
     },
     [canWrite, fetchWithTimeout, normalizeSessions, trackAction],
   );
+
+  // Auto-open student from URL query param (?student=email)
+  const autoOpenTriggered = useRef(false);
+  useEffect(() => {
+    if (
+      initialStudentEmail &&
+      canWrite &&
+      sessionType === "one-on-one" &&
+      user &&
+      !autoOpenTriggered.current &&
+      !lockedStudentEmail
+    ) {
+      autoOpenTriggered.current = true;
+      confirmSelectStudent(initialStudentEmail);
+    }
+  }, [initialStudentEmail, canWrite, sessionType, user, lockedStudentEmail, confirmSelectStudent]);
 
   const fetchSessions = useCallback(async () => {
     const typeParam = sessionType === "one-on-one" ? "one_on_one" : "inner_circle";
@@ -2373,11 +2391,13 @@ export function CoachingMaterialClient({
   subtitle,
   sessionType,
   currentRole,
+  initialStudentEmail,
 }: {
   title: string;
   subtitle: string;
   sessionType: "one-on-one" | "inner-circle";
   currentRole?: "student" | "coach" | "admin";
+  initialStudentEmail?: string;
 }) {
   return (
     <div className="container mx-auto px-4 py-6 flex flex-col min-h-[calc(100vh-3.5rem)]">
@@ -2389,6 +2409,7 @@ export function CoachingMaterialClient({
           subtitle={subtitle}
           sessionType={sessionType}
           currentRole={currentRole}
+          initialStudentEmail={initialStudentEmail}
         />
       </div>
 
