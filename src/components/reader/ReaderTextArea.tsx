@@ -245,7 +245,7 @@ export function ReaderTextArea({
 
             {/* Proper mode: natural translation below sentence */}
             {showEnglish && translationMode === "proper" && properTranslation && (
-              <div className="text-base text-muted-foreground italic ml-1 mt-0.5 opacity-0 animate-[fadeIn_200ms_ease-out_forwards]">
+              <div className="text-muted-foreground italic ml-1 mt-0.5 opacity-0 animate-[fadeIn_200ms_ease-out_forwards]" style={{ fontSize: `${Math.max(11, Math.round(fontSize * 0.65))}px` }}>
                 {properTranslation}
               </div>
             )}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { ReaderTextArea } from "@/components/reader/ReaderTextArea";
+import { WordSpan } from "@/components/reader/WordSpan";
 import { segmentText, type WordSegment } from "@/lib/segmenter";
 import { detectSentences } from "@/lib/sentences";
 import { convertScript } from "@/lib/chinese-convert";
@@ -311,7 +312,7 @@ function PinyinToneBar({
 }: {
   onInsert: (char: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   return (
     <div className="flex flex-wrap items-center gap-1">
       <button
@@ -570,7 +571,8 @@ function NoteCard({
             </div>
           ) : note.romanizationOverride || note.translationOverride || note.textOverride ? (
             <>
-              {(showPinyin || showJyutping) && (note.romanizationOverride || defaultRomanization) ? (
+              {/* If romanization is overridden, show it as a single line above */}
+              {note.romanizationOverride && (showPinyin || showJyutping) ? (
                 <div
                   className={cn(
                     "select-none",
@@ -578,12 +580,37 @@ function NoteCard({
                   )}
                   style={{ fontSize: `${annotationSize}px` }}
                 >
-                  {note.romanizationOverride ?? defaultRomanization}
+                  {note.romanizationOverride}
                 </div>
               ) : null}
-              <div style={{ fontSize: `${fontSize}px` }} className="text-foreground">
-                {processed.displayText || baseText}
-              </div>
+              {/* Render with WordSpan for word highlighting support */}
+              {processed.segments.length > 0 ? (
+                <span
+                  className={cn(
+                    (showPinyin || showJyutping) && !note.romanizationOverride
+                      ? "inline-flex items-end flex-wrap gap-y-1"
+                      : "inline",
+                  )}
+                  style={{ fontSize: `${fontSize}px`, lineHeight: (showPinyin || showJyutping) && !note.romanizationOverride ? "1.2" : "2" }}
+                >
+                  {processed.segments.map((seg, i) => (
+                    <WordSpan
+                      key={i}
+                      text={seg.text}
+                      index={i}
+                      isWordLike={seg.isWordLike}
+                      showPinyin={!note.romanizationOverride && showPinyin}
+                      showJyutping={!note.romanizationOverride && showJyutping}
+                      showEnglish={false}
+                      fontSize={fontSize}
+                    />
+                  ))}
+                </span>
+              ) : (
+                <div style={{ fontSize: `${fontSize}px` }} className="text-foreground">
+                  {processed.displayText || baseText}
+                </div>
+              )}
               {/* Inline controls: play, speed, translate */}
               <span className="inline-flex items-center gap-1 mt-1">
                 <button
@@ -1567,30 +1594,6 @@ function CoachingPanel({
         </div>
       )}
 
-      {/* Font size control */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs text-muted-foreground">Font size</span>
-        <button
-          type="button"
-          onClick={() => setNoteFontSize((s) => Math.max(12, s - 2))}
-          disabled={noteFontSize <= 12}
-          className="inline-flex items-center justify-center size-6 rounded border border-input bg-background text-foreground hover:bg-accent transition-colors disabled:opacity-40"
-          aria-label="Decrease font size"
-        >
-          <Minus className="size-3" />
-        </button>
-        <span className="text-xs tabular-nums text-foreground w-8 text-center">{noteFontSize}</span>
-        <button
-          type="button"
-          onClick={() => setNoteFontSize((s) => Math.min(32, s + 2))}
-          disabled={noteFontSize >= 32}
-          className="inline-flex items-center justify-center size-6 rounded border border-input bg-background text-foreground hover:bg-accent transition-colors disabled:opacity-40"
-          aria-label="Increase font size"
-        >
-          <Plus className="size-3" />
-        </button>
-      </div>
-
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-3">
@@ -1644,6 +1647,30 @@ function CoachingPanel({
                 Traditional
               </button>
             </div>
+          </div>
+
+          {/* Font size control — Mandarin panel */}
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-xs text-muted-foreground">Font size</span>
+            <button
+              type="button"
+              onClick={() => setNoteFontSize((s) => Math.max(12, s - 2))}
+              disabled={noteFontSize <= 12}
+              className="inline-flex items-center justify-center size-6 rounded border border-input bg-background text-foreground hover:bg-accent transition-colors disabled:opacity-40"
+              aria-label="Decrease font size"
+            >
+              <Minus className="size-3" />
+            </button>
+            <span className="text-xs tabular-nums text-foreground w-8 text-center">{noteFontSize}</span>
+            <button
+              type="button"
+              onClick={() => setNoteFontSize((s) => Math.min(32, s + 2))}
+              disabled={noteFontSize >= 32}
+              className="inline-flex items-center justify-center size-6 rounded border border-input bg-background text-foreground hover:bg-accent transition-colors disabled:opacity-40"
+              aria-label="Increase font size"
+            >
+              <Plus className="size-3" />
+            </button>
           </div>
 
           <div className="mt-4 space-y-2">

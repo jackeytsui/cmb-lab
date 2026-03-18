@@ -159,7 +159,7 @@ export const WordSpan = React.memo(function WordSpan({
               <span
                 key={i}
                 className="text-center text-blue-400 leading-tight"
-                style={{ fontSize: `${annotationSize}px`, minWidth: `${fontSize}px` }}
+                style={{ fontSize: `${annotationSize}px`, minWidth: "1em" }}
               >
                 {pinyinArr[i] ?? "\u00A0"}
               </span>
@@ -173,7 +173,7 @@ export const WordSpan = React.memo(function WordSpan({
             <span
               key={i}
               className="text-center"
-              style={{ minWidth: `${fontSize}px` }}
+              style={{ minWidth: "1em" }}
             >
               {char}
             </span>
@@ -187,7 +187,7 @@ export const WordSpan = React.memo(function WordSpan({
               <span
                 key={i}
                 className="text-center text-orange-400 leading-tight"
-                style={{ fontSize: `${annotationSize}px`, minWidth: `${fontSize}px` }}
+                style={{ fontSize: `${annotationSize}px`, minWidth: "1em" }}
               >
                 {jyutpingArr[i] ?? "\u00A0"}
               </span>
