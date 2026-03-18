@@ -8,7 +8,7 @@ import { convertScript } from "@/lib/chinese-convert";
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon } from "lucide-react";
+import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2 } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
@@ -461,21 +461,38 @@ function NoteCard({
             </div>
           ) : note.romanizationOverride || note.translationOverride || note.textOverride ? (
             <>
-              {note.romanizationOverride || defaultRomanization ? (
+              {(showPinyin || showJyutping) && (note.romanizationOverride || defaultRomanization) ? (
                 <div
                   className={cn(
-                    "text-xs",
+                    "text-sm",
                     showJyutping ? "text-orange-400" : "text-blue-400",
                   )}
                 >
                   {note.romanizationOverride ?? defaultRomanization}
                 </div>
               ) : null}
-              <div className="text-base text-foreground">
-                {baseText}
+              <div className="text-base text-foreground flex items-center gap-1.5">
+                <span>{processed.displayText || baseText}</span>
+                <button
+                  type="button"
+                  onClick={() => processed.handleSpeakSentence(
+                    processed.displayText || baseText,
+                    "medium",
+                  )}
+                  className="inline-flex items-center justify-center size-6 shrink-0 rounded hover:bg-muted text-muted-foreground hover:text-cyan-500 transition-colors"
+                  aria-label="Read aloud"
+                >
+                  {processed.ttsLoading ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : processed.isPlaying ? (
+                    <Square className="size-3" />
+                  ) : (
+                    <Play className="size-3.5" />
+                  )}
+                </button>
               </div>
               {(note.translationOverride || defaultTranslation) && (
-                <div className="text-sm text-emerald-500/80 italic">
+                <div className="text-base text-emerald-500/80 italic">
                   {note.translationOverride ?? defaultTranslation}
                 </div>
               )}

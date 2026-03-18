@@ -42,7 +42,7 @@ function buildPinyinRuby(
       <ruby key={i}>
         <span>{char}</span>
         <rp>(</rp>
-        <rt className="text-center text-[0.6em] text-muted-foreground">
+        <rt className="text-center text-[0.75em] text-muted-foreground">
           {syllables[i] ?? ""}
         </rt>
         <rp>)</rp>
@@ -54,7 +54,7 @@ function buildPinyinRuby(
     <ruby key={i}>
       <span>{char}</span>
       <rp>(</rp>
-      <rt className="text-center text-[0.6em] text-muted-foreground">
+      <rt className="text-center text-[0.75em] text-muted-foreground">
         {syllables[i] ?? ""}
       </rt>
       <rp>)</rp>
@@ -70,7 +70,7 @@ function buildJyutpingRuby(text: string): React.ReactElement[] {
         <ruby key={i}>
           <span>{char}</span>
           <rp>(</rp>
-          <rt className="text-center text-[0.6em] text-muted-foreground">{jp}</rt>
+          <rt className="text-center text-[0.75em] text-muted-foreground">{jp}</rt>
           <rp>)</rp>
         </ruby>
       );
@@ -105,8 +105,8 @@ export const WordSpan = React.memo(function WordSpan({
   const showEnglish = isLegacy ? false : ((showEnglishProp ?? false) && !!englishGloss);
 
   // Proportional annotation sizing
-  const annotationSize = Math.max(10, Math.round(fontSize * 0.58));
-  const englishSize = Math.max(9, Math.round(fontSize * 0.5));
+  const annotationSize = Math.max(12, Math.round(fontSize * 0.72));
+  const englishSize = Math.max(11, Math.round(fontSize * 0.65));
 
   // All hooks called unconditionally
   const legacyContent = useMemo(() => {

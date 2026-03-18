@@ -133,7 +133,7 @@ export function TranscriptLine({
           ))}
         </span>
         {englishText && (
-          <span className="block text-xs text-muted-foreground mt-0.5 leading-snug">
+          <span className="block text-sm text-muted-foreground mt-0.5 leading-snug">
             {englishText}
           </span>
         )}
