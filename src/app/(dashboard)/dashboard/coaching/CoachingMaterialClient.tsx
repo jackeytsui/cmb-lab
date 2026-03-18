@@ -1493,7 +1493,7 @@ function CoachingPanel({
                   className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors"
                 >
                   <Users className="size-3.5" />
-                  My Students ({assignedStudents.length})
+                  {isAdmin ? "All Students" : "My Students"} ({assignedStudents.length})
                   <ChevronDown className={cn("size-3 transition-transform", studentDropdownOpen && "rotate-180")} />
                 </button>
                 {studentDropdownOpen && (

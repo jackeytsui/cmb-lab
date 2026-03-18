@@ -5,6 +5,7 @@ import { users, coachingSessions, coachingSessionRatings } from "@/db/schema";
 import { and, eq, avg, count, isNull, or, ilike, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
 
 /**
  * GET /api/coach/students/with-ratings
@@ -38,10 +39,11 @@ export async function GET(request: NextRequest) {
   const coachIdFilter = searchParams.get("coachId") || "";
   const myStudents = searchParams.get("myStudents") === "true";
 
-  // Build where clause for students
+  // Build where clause for students (exclude whitelisted)
   const conditions = [
     eq(users.role, "student"),
     isNull(users.deletedAt),
+    excludeWhitelistedUsersSql(users.id),
   ];
 
   if (search) {

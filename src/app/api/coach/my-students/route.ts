@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { users, studentTags, tags } from "@/db/schema";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
 
 /**
  * GET /api/coach/my-students
- * Returns students assigned to the current coach.
- * Only returns students where assignedCoachId matches the current user.
+ * Returns students assigned to the current coach (or all students for admins).
+ * Excludes whitelisted students.
  */
 export async function GET() {
   const isCoach = await hasMinimumRole("coach");
@@ -20,6 +21,19 @@ export async function GET() {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
+  const isAdmin = currentUser.role === "admin";
+
+  const conditions = [
+    eq(users.role, "student"),
+    isNull(users.deletedAt),
+    excludeWhitelistedUsersSql(users.id),
+  ];
+
+  // Coaches see only their assigned students; admins see all
+  if (!isAdmin) {
+    conditions.push(eq(users.assignedCoachId, currentUser.id));
+  }
+
   const studentRows = await db
     .select({
       id: users.id,
@@ -27,13 +41,7 @@ export async function GET() {
       email: users.email,
     })
     .from(users)
-    .where(
-      and(
-        eq(users.role, "student"),
-        eq(users.assignedCoachId, currentUser.id),
-        isNull(users.deletedAt),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(users.name);
 
   return NextResponse.json({ students: studentRows });

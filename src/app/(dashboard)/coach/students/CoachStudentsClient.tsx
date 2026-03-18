@@ -409,6 +409,7 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
                 sortKey={sortKey}
                 sortDir={sortDir}
                 onToggleSort={handleToggleSort}
+                isAdmin={isAdmin}
               />
             </div>
           ))}
@@ -424,6 +425,7 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
           sortKey={sortKey}
           sortDir={sortDir}
           onToggleSort={handleToggleSort}
+          isAdmin={isAdmin}
         />
       )}
     </div>
@@ -439,6 +441,7 @@ function StudentTable({
   sortKey,
   sortDir,
   onToggleSort,
+  isAdmin,
 }: {
   students: StudentRow[];
   showCoach: boolean;
@@ -448,6 +451,7 @@ function StudentTable({
   sortKey: SortKey;
   sortDir: SortDir;
   onToggleSort: (key: SortKey) => void;
+  isAdmin: boolean;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -513,12 +517,16 @@ function StudentTable({
                   </td>
                 )}
                 <td className="px-4 py-3 text-sm text-foreground font-medium">
-                  <Link
-                    href={`/admin/users/${student.id}`}
-                    className="hover:text-primary transition-colors"
-                  >
-                    {student.name || student.email.split("@")[0]}
-                  </Link>
+                  {isAdmin ? (
+                    <Link
+                      href={`/admin/students/${student.id}`}
+                      className="hover:text-primary transition-colors"
+                    >
+                      {student.name || student.email.split("@")[0]}
+                    </Link>
+                  ) : (
+                    <span>{student.name || student.email.split("@")[0]}</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">
                   {student.email}
