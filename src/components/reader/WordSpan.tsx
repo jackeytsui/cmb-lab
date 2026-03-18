@@ -106,7 +106,7 @@ export const WordSpan = React.memo(function WordSpan({
 
   // Annotation sizing: pinyin/jyutping are 1.2x the base character size
   const annotationSize = Math.round(fontSize * 1.2);
-  const englishSize = Math.max(11, Math.round(fontSize * 0.65));
+  const englishSize = Math.max(12, Math.round(fontSize * 0.85));
 
   // All hooks called unconditionally
   const legacyContent = useMemo(() => {
