@@ -492,7 +492,7 @@ function NoteCard({
   }, [processed, baseText, language]);
 
   const annotationSize = Math.round(fontSize * 1.2);
-  const englishSize = Math.max(12, Math.round(fontSize * 0.85));
+  const englishSize = Math.round(fontSize * 1.1);
 
   return (
     <div className={cn("rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground", visualFontClass)}>
