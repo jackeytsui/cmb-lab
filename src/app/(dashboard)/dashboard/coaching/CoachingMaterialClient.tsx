@@ -305,42 +305,19 @@ const TONE_MAP: Record<string, string[]> = {
   o: ["ō", "ó", "ǒ", "ò"],
   u: ["ū", "ú", "ǔ", "ù"],
   ü: ["ǖ", "ǘ", "ǚ", "ǜ"],
+  A: ["Ā", "Á", "Ǎ", "À"],
+  E: ["Ē", "É", "Ě", "È"],
+  I: ["Ī", "Í", "Ǐ", "Ì"],
+  O: ["Ō", "Ó", "Ǒ", "Ò"],
+  U: ["Ū", "Ú", "Ǔ", "Ù"],
 };
-const ALL_TONE_CHARS = Object.values(TONE_MAP).flat();
 
-function PinyinToneBar({
-  onInsert,
-}: {
-  onInsert: (char: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(true);
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      <button
-        type="button"
-        onClick={() => setExpanded((p) => !p)}
-        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
-      >
-        {expanded ? "Hide tones" : "Tone marks"}
-      </button>
-      {expanded &&
-        Object.entries(TONE_MAP).map(([vowel, tones]) => (
-          <span key={vowel} className="inline-flex gap-0.5">
-            {tones.map((ch, i) => (
-              <button
-                key={ch}
-                type="button"
-                onClick={() => onInsert(ch)}
-                className="inline-flex items-center justify-center size-6 rounded text-xs font-medium border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                title={`Tone ${i + 1}`}
-              >
-                {ch}
-              </button>
-            ))}
-          </span>
-        ))}
-    </div>
-  );
+/** Convert inline tone numbers to diacritics: a1→ā, o4→ò, ü3→ǚ etc. */
+function applyInlineTones(text: string): string {
+  return text.replace(/([aeiouüAEIOUÜ])([1-4])/g, (_, vowel: string, tone: string) => {
+    const tones = TONE_MAP[vowel];
+    return tones ? tones[parseInt(tone, 10) - 1] : vowel + tone;
+  });
 }
 
 function NoteCard({
@@ -427,21 +404,19 @@ function NoteCard({
     setIsEditing(false);
   }, [draftText, draftRomanization, draftTranslation, onSave]);
 
-  const handleInsertTone = useCallback((char: string) => {
-    const el = romanInputRef.current;
-    if (!el) {
-      setDraftRomanization((prev) => prev + char);
-      return;
+  const handleRomanizationChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const el = e.target;
+    const raw = el.value;
+    const converted = applyInlineTones(raw);
+    setDraftRomanization(converted);
+    // Adjust cursor if conversion shortened the string (e.g. "a1" → "ā")
+    if (converted.length !== raw.length) {
+      const cursor = (el.selectionStart ?? raw.length) - (raw.length - converted.length);
+      requestAnimationFrame(() => {
+        el.setSelectionRange(cursor, cursor);
+      });
     }
-    const start = el.selectionStart ?? draftRomanization.length;
-    const end = el.selectionEnd ?? start;
-    const next = draftRomanization.slice(0, start) + char + draftRomanization.slice(end);
-    setDraftRomanization(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(start + char.length, start + char.length);
-    });
-  }, [draftRomanization]);
+  }, []);
 
   const handleFetchTranslation = useCallback(async () => {
     const text = processed.displayText || baseText;
@@ -534,18 +509,13 @@ function NoteCard({
                 className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                 placeholder="Chinese text"
               />
-              <div className="space-y-1">
-                <input
-                  ref={romanInputRef}
-                  value={draftRomanization}
-                  onChange={(e) => setDraftRomanization(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  placeholder={language === "zh-HK" ? "Jyutping" : "Pinyin"}
-                />
-                {language === "zh-CN" && (
-                  <PinyinToneBar onInsert={handleInsertTone} />
-                )}
-              </div>
+              <input
+                ref={romanInputRef}
+                value={draftRomanization}
+                onChange={handleRomanizationChange}
+                className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                placeholder={language === "zh-HK" ? "Jyutping" : "Pinyin (type a1 for ā, o4 for ò)"}
+              />
               <textarea
                 value={draftTranslation}
                 onChange={(e) => setDraftTranslation(e.target.value)}
