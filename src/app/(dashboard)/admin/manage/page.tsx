@@ -1,10 +1,18 @@
 import { redirect } from "next/navigation";
 import { hasMinimumRole } from "@/lib/auth";
-import { ViewAsPanel } from "@/components/admin/ViewAsPanel";
-import { TranscriptLimitsWidget } from "@/components/admin/TranscriptLimitsWidget";
 import { AdminManageGrid, type PortalSection } from "@/components/admin/AdminManageGrid";
 
 const sections: PortalSection[] = [
+  {
+    id: "view-as",
+    title: "View As User",
+    widget: "view-as",
+  },
+  {
+    id: "transcript-limits",
+    title: "YouTube Transcript Usage Limits",
+    widget: "transcript-limits",
+  },
   {
     id: "access",
     title: "Access & Security",
@@ -57,8 +65,6 @@ export default async function AdminManagePortalPage() {
       </div>
 
       <div className="space-y-4">
-        <ViewAsPanel />
-        <TranscriptLimitsWidget />
         <AdminManageGrid sections={sections} />
       </div>
     </div>
