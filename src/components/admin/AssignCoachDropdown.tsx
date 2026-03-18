@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 interface AssignCoachDropdownProps {
@@ -19,6 +19,15 @@ export function AssignCoachDropdown({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.left });
+    }
+  }, [isOpen]);
 
   async function handleAssign(coachId: string | null) {
     setIsOpen(false);
@@ -43,6 +52,7 @@ export function AssignCoachDropdown({
   return (
     <div className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         disabled={isPending}
@@ -72,7 +82,10 @@ export function AssignCoachDropdown({
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute left-0 top-full z-50 mt-1 min-w-[200px] max-h-[240px] overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md">
+          <div
+            className="fixed z-50 min-w-[200px] max-h-[240px] overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md"
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
             <button
               type="button"
               onClick={() => handleAssign(null)}

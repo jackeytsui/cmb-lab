@@ -223,30 +223,7 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
     });
   }, [students, sortKey, sortDir]);
 
-  // Group students by coach for admin view
-  const groupedByCoach = useMemo(() => {
-    if (!isAdmin || coachFilter !== "all") return null;
-    const map = new Map<string, { coach: Coach | null; students: StudentRow[] }>();
-    for (const s of sortedStudents) {
-      const key = s.assignedCoachId || "__unassigned__";
-      if (!map.has(key)) {
-        map.set(key, {
-          coach: s.assignedCoachId
-            ? { id: s.assignedCoachId, name: s.coachName, email: s.coachEmail || "" }
-            : null,
-          students: [],
-        });
-      }
-      map.get(key)!.students.push(s);
-    }
-    const entries = Array.from(map.entries());
-    entries.sort(([, a], [, b]) => {
-      if (!a.coach) return 1;
-      if (!b.coach) return -1;
-      return (a.coach.name || a.coach.email).localeCompare(b.coach.name || b.coach.email);
-    });
-    return entries;
-  }, [sortedStudents, isAdmin, coachFilter]);
+  // Always use flat list view with coach column visible
 
   return (
     <div>
@@ -384,38 +361,7 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
           <Users className="size-12 mx-auto mb-3 opacity-50" />
           <p className="text-sm">No students found.</p>
         </div>
-      ) : groupedByCoach ? (
-        /* Admin grouped view */
-        <div className="space-y-6">
-          {groupedByCoach.map(([key, group]) => (
-            <div key={key}>
-              <div className="flex items-center gap-2 mb-2">
-                <UserCheck className="size-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold text-foreground">
-                  {group.coach
-                    ? group.coach.name || group.coach.email
-                    : "Unassigned"}
-                </h3>
-                <span className="text-xs text-muted-foreground">
-                  ({group.students.length})
-                </span>
-              </div>
-              <StudentTable
-                students={group.students}
-                showCoach={false}
-                showBulk={showBulkPanel}
-                selectedIds={selectedIds}
-                onToggleSelect={toggleSelect}
-                sortKey={sortKey}
-                sortDir={sortDir}
-                onToggleSort={handleToggleSort}
-                isAdmin={isAdmin}
-              />
-            </div>
-          ))}
-        </div>
       ) : (
-        /* Flat list view */
         <StudentTable
           students={sortedStudents}
           showCoach={true}
