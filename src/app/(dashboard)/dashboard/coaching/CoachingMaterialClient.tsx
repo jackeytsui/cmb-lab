@@ -1495,6 +1495,79 @@ function CoachingPanel({
             <p className="text-sm text-muted-foreground">{subtitle}</p>
           </div>
         </div>
+
+        {/* Goals — inline with header, eye-catching */}
+        {activeSession && sessionType === "one-on-one" && (
+          <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 dark:bg-amber-500/5 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Star className="size-4 text-amber-500" />
+                <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                  Your goals this week
+                </h3>
+              </div>
+              {canWrite && !isEditingGoals && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGoalsDraft(activeSession.goals ?? "");
+                    setIsEditingGoals(true);
+                  }}
+                  className="inline-flex items-center justify-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-500/20 transition-colors"
+                >
+                  <Pencil className="size-3 mr-1" />
+                  {activeSession.goals ? "Edit" : "Add Goals"}
+                </button>
+              )}
+            </div>
+            {isEditingGoals ? (
+              <div className="mt-2 flex flex-col gap-2">
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
+                  Before our next 1:1 session, please complete:
+                </p>
+                <textarea
+                  value={goalsDraft}
+                  onChange={(e) => setGoalsDraft(e.target.value)}
+                  placeholder="e.g. Practice tones 1-4 with the flashcard deck, complete Lesson 3 exercises..."
+                  rows={3}
+                  className="w-full rounded-md border border-amber-500/30 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/30 resize-y"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveGoals}
+                    disabled={isSavingGoals}
+                    className="inline-flex items-center justify-center rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 transition-colors disabled:opacity-50"
+                  >
+                    {isSavingGoals ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingGoals(false)}
+                    className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : activeSession.goals ? (
+              <div className="mt-1.5">
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mb-1">
+                  Before our next 1:1 session, please complete:
+                </p>
+                <p className="text-sm text-foreground whitespace-pre-wrap">
+                  {activeSession.goals}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-amber-600/70 dark:text-amber-400/60">
+                {canWrite
+                  ? "No goals set yet. Click \"Add Goals\" to set prep work for the next session."
+                  : "No goals set for this session yet."}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4">
@@ -1877,79 +1950,6 @@ function CoachingPanel({
           ) : (
             <p className="mt-2 text-xs text-muted-foreground">
               No recording link added yet.
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Goals Section — coach editable, student view-only */}
-      {activeSession && sessionType === "one-on-one" && (
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Star className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold text-foreground">
-                Your goals this week
-              </h3>
-            </div>
-            {canWrite && !isEditingGoals && (
-              <button
-                type="button"
-                onClick={() => {
-                  setGoalsDraft(activeSession.goals ?? "");
-                  setIsEditingGoals(true);
-                }}
-                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-              >
-                <Pencil className="size-3 mr-1" />
-                {activeSession.goals ? "Edit" : "Add Goals"}
-              </button>
-            )}
-          </div>
-          {isEditingGoals ? (
-            <div className="mt-2 flex flex-col gap-2">
-              <p className="text-xs text-muted-foreground">
-                Before our next 1:1 session, please complete:
-              </p>
-              <textarea
-                value={goalsDraft}
-                onChange={(e) => setGoalsDraft(e.target.value)}
-                placeholder="e.g. Practice tones 1-4 with the flashcard deck, complete Lesson 3 exercises..."
-                rows={4}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveGoals}
-                  disabled={isSavingGoals}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
-                >
-                  {isSavingGoals ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingGoals(false)}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : activeSession.goals ? (
-            <div className="mt-2">
-              <p className="text-xs text-muted-foreground mb-1.5">
-                Before our next 1:1 session, please complete:
-              </p>
-              <p className="text-sm text-foreground whitespace-pre-wrap">
-                {activeSession.goals}
-              </p>
-            </div>
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {canWrite
-                ? "No goals set yet. Click \"Add Goals\" to set homework for this session."
-                : "No goals set for this session yet."}
             </p>
           )}
         </div>
