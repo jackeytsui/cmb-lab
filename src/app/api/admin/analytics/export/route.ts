@@ -252,7 +252,7 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    return formatCsvResponse(headers, rows);
+    return formatCsvResponse(headers, rows, `analytics-${metric}.csv`);
   } catch (error) {
     console.error("Error exporting analytics:", error);
     return NextResponse.json(

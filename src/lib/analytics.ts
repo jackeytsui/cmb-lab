@@ -42,20 +42,26 @@ export function formatCsvRow(values: (string | number | null)[]): string {
 
 /**
  * Build a full CSV response with headers and rows.
+ * Includes UTF-8 BOM for proper display of Chinese characters in Excel.
  */
 export function formatCsvResponse(
   headers: string[],
-  rows: (string | number | null)[][]
+  rows: (string | number | null)[][],
+  fileName?: string,
 ): NextResponse {
-  let csv = formatCsvRow(headers);
+  // UTF-8 BOM ensures Excel correctly interprets Chinese characters
+  let csv = "\uFEFF";
+  csv += formatCsvRow(headers);
   for (const row of rows) {
     csv += formatCsvRow(row);
   }
 
+  const safeFileName = fileName ?? "analytics.csv";
+
   return new NextResponse(csv, {
     headers: {
-      "Content-Type": "text/csv",
-      "Content-Disposition": 'attachment; filename="analytics.csv"',
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${safeFileName}"`,
     },
   });
 }

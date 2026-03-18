@@ -13,6 +13,7 @@ type ExportNote = {
 
 type ExportSession = {
   title: string;
+  studentEmail?: string | null;
   notes: ExportNote[];
 };
 
@@ -24,20 +25,29 @@ type ExportOptions = {
 /**
  * Export coaching notes to an Excel file with two tabs: Mandarin and Cantonese.
  *
- * Tab 1 "Mandarin": Traditional Chinese | Simplified Chinese | Pinyin | English
- * Tab 2 "Cantonese": Traditional Chinese | Simplified Chinese | Jyutping | English
+ * Single session export:
+ *   Traditional Chinese | Simplified Chinese | Pinyin/Jyutping | English Meaning
+ *
+ * Multi-session export (adds context columns):
+ *   Session | Student Email | Traditional Chinese | Simplified Chinese | Pinyin/Jyutping | English Meaning
  */
 export async function exportCoachingNotes(
   sessions: ExportSession[],
   options?: ExportOptions,
 ) {
+  const isMultiSession = sessions.length > 1;
+
   // Collect all notes separated by pane
-  const mandarinNotes: Array<ExportNote & { sessionTitle: string }> = [];
-  const cantoneseNotes: Array<ExportNote & { sessionTitle: string }> = [];
+  const mandarinNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string }> = [];
+  const cantoneseNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string }> = [];
 
   for (const session of sessions) {
     for (const note of session.notes) {
-      const entry = { ...note, sessionTitle: session.title };
+      const entry = {
+        ...note,
+        sessionTitle: session.title,
+        studentEmail: session.studentEmail ?? "",
+      };
       if (note.pane === "mandarin") {
         mandarinNotes.push(entry);
       } else if (note.pane === "cantonese") {
@@ -62,15 +72,23 @@ export async function exportCoachingNotes(
   // Create workbook
   const wb = new ExcelJS.Workbook();
 
+  // Build column definitions based on single vs multi-session
+  const contextColumns: ExcelJS.Column[] = isMultiSession
+    ? [
+        { header: "Session", key: "session", width: 20 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+        { header: "Student Email", key: "studentEmail", width: 28 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+      ]
+    : [];
+
   // Mandarin tab
   const mandarinSheet = wb.addWorksheet("Mandarin");
   mandarinSheet.columns = [
-    { header: "Traditional Chinese", key: "traditional", width: 30 },
-    { header: "Simplified Chinese", key: "simplified", width: 30 },
-    { header: "Pinyin", key: "romanization", width: 40 },
-    { header: "English Meaning", key: "translation", width: 40 },
+    ...contextColumns,
+    { header: "Traditional Chinese", key: "traditional", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+    { header: "Simplified Chinese", key: "simplified", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+    { header: "Pinyin", key: "romanization", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+    { header: "English Meaning", key: "translation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
   ];
-  // Bold header row
   mandarinSheet.getRow(1).font = { bold: true };
 
   for (const note of mandarinNotes) {
@@ -79,16 +97,22 @@ export async function exportCoachingNotes(
     const romanization =
       note.romanizationOverride || pinyin(traditional, { toneType: "symbol" });
     const translation = note.translationOverride || "";
-    mandarinSheet.addRow({ traditional, simplified, romanization, translation });
+    const row: Record<string, string> = { traditional, simplified, romanization, translation };
+    if (isMultiSession) {
+      row.session = note.sessionTitle;
+      row.studentEmail = note.studentEmail;
+    }
+    mandarinSheet.addRow(row);
   }
 
   // Cantonese tab
   const cantoneseSheet = wb.addWorksheet("Cantonese");
   cantoneseSheet.columns = [
-    { header: "Traditional Chinese", key: "traditional", width: 30 },
-    { header: "Simplified Chinese", key: "simplified", width: 30 },
-    { header: "Jyutping", key: "romanization", width: 40 },
-    { header: "English Meaning", key: "translation", width: 40 },
+    ...contextColumns,
+    { header: "Traditional Chinese", key: "traditional", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+    { header: "Simplified Chinese", key: "simplified", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+    { header: "Jyutping", key: "romanization", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+    { header: "English Meaning", key: "translation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
   ];
   cantoneseSheet.getRow(1).font = { bold: true };
 
@@ -98,7 +122,12 @@ export async function exportCoachingNotes(
     const romanization =
       note.romanizationOverride || toJyutpingString(traditional);
     const translation = note.translationOverride || "";
-    cantoneseSheet.addRow({ traditional, simplified, romanization, translation });
+    const row: Record<string, string> = { traditional, simplified, romanization, translation };
+    if (isMultiSession) {
+      row.session = note.sessionTitle;
+      row.studentEmail = note.studentEmail;
+    }
+    cantoneseSheet.addRow(row);
   }
 
   // Generate filename

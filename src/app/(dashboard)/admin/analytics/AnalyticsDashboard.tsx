@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Star } from "lucide-react";
 import { DateRangeFilter } from "./components/DateRangeFilter";
 import { OverviewCards } from "./components/OverviewCards";
+import { CompletionTable } from "./components/CompletionTable";
+import { DropoffTable } from "./components/DropoffTable";
+import { DifficultyTable } from "./components/DifficultyTable";
+import { AtRiskTable } from "./components/AtRiskTable";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { cn } from "@/lib/utils";
 
@@ -78,6 +82,44 @@ interface FeedbackEntry {
   coachName: string | null;
 }
 
+interface CompletionRow {
+  courseId: string;
+  courseTitle: string;
+  totalLessons: number;
+  enrolledStudents: number;
+  completedStudents: number;
+  completionRate: number;
+}
+
+interface DropoffRow {
+  lessonId: string;
+  lessonTitle: string;
+  moduleTitle: string;
+  courseTitle: string;
+  startedCount: number;
+  completedCount: number;
+  dropoffCount: number;
+  dropoffRate: number;
+}
+
+interface DifficultyRow {
+  lessonId: string;
+  lessonTitle: string;
+  moduleTitle: string;
+  courseTitle: string;
+  interactionCount: number;
+  avgAttemptsToPass: number;
+}
+
+interface AtRiskRow {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  lastActivity: string | null;
+  daysSinceActivity: number | null;
+  totalLessonsCompleted: number;
+}
+
 function buildParams(range: DateRange): string {
   const params = new URLSearchParams();
   if (range.from) params.set("from", range.from);
@@ -92,6 +134,18 @@ function exportUrl(metric: string, range: DateRange): string {
   if (range.from) params.set("from", range.from);
   if (range.to) params.set("to", range.to);
   return `/api/admin/analytics/export?${params.toString()}`;
+}
+
+function ExportButton({ metric, range, label }: { metric: string; range: DateRange; label: string }) {
+  return (
+    <a
+      href={exportUrl(metric, range)}
+      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground hover:bg-accent transition-colors"
+    >
+      <Download className="h-3.5 w-3.5" />
+      {label}
+    </a>
+  );
 }
 
 const EMPTY_OVERVIEW = {
@@ -134,6 +188,12 @@ export function AnalyticsDashboard() {
   const [engagementStudents, setEngagementStudents] = useState<StudentRow[]>([]);
   const [selectedFeatureKey, setSelectedFeatureKey] = useState<string>("all");
 
+  // Course & lesson analytics
+  const [completion, setCompletion] = useState<CompletionRow[]>([]);
+  const [dropoff, setDropoff] = useState<DropoffRow[]>([]);
+  const [difficulty, setDifficulty] = useState<DifficultyRow[]>([]);
+  const [atRisk, setAtRisk] = useState<AtRiskRow[]>([]);
+
   // Coaching feedback state
   const [coachRatings, setCoachRatings] = useState<CoachRating[]>([]);
   const [sessionTypeRatings, setSessionTypeRatings] = useState<SessionTypeRating[]>([]);
@@ -146,11 +206,16 @@ export function AnalyticsDashboard() {
     const qs = buildParams(range);
 
     try {
-      const [overviewRes, engagementRes, ratingsRes] = await Promise.all([
-        fetch(`/api/admin/analytics/overview${qs}`),
-        fetch(`/api/admin/analytics/engagement${qs}`),
-        fetch(`/api/admin/analytics/coaching-ratings`),
-      ]);
+      const [overviewRes, engagementRes, ratingsRes, completionRes, dropoffRes, difficultyRes, studentsRes] =
+        await Promise.all([
+          fetch(`/api/admin/analytics/overview${qs}`),
+          fetch(`/api/admin/analytics/engagement${qs}`),
+          fetch(`/api/admin/analytics/coaching-ratings`),
+          fetch(`/api/admin/analytics/completion${qs}`),
+          fetch(`/api/admin/analytics/dropoff${qs}`),
+          fetch(`/api/admin/analytics/difficulty${qs}`),
+          fetch(`/api/admin/analytics/students${qs}`),
+        ]);
 
       if (!overviewRes.ok && !engagementRes.ok) {
         setError("Failed to load analytics. Please retry.");
@@ -179,12 +244,12 @@ export function AnalyticsDashboard() {
         setSessionTypeRatings(data.perSessionType ?? []);
         setRatingTrends(data.trends ?? []);
         setRecentFeedback(data.recentFeedback ?? []);
-      } else {
-        setCoachRatings([]);
-        setSessionTypeRatings([]);
-        setRatingTrends([]);
-        setRecentFeedback([]);
       }
+
+      setCompletion(completionRes.ok ? await completionRes.json() : []);
+      setDropoff(dropoffRes.ok ? await dropoffRes.json() : []);
+      setDifficulty(difficultyRes.ok ? await difficultyRes.json() : []);
+      setAtRisk(studentsRes.ok ? await studentsRes.json() : []);
     } catch (err) {
       console.error("Error fetching analytics:", err);
       setError("Failed to load analytics data. Please try again.");
@@ -229,26 +294,59 @@ export function AnalyticsDashboard() {
 
       {error && <ErrorAlert message={error} onRetry={() => fetchData(dateRange)} />}
 
+      {/* Overview */}
       <section>
-        <h2 className="mb-4 text-lg font-semibold text-foreground">Overview</h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">Overview</h2>
+          <ExportButton metric="overview" range={dateRange} label="Export CSV" />
+        </div>
         <OverviewCards {...overview} loading={loading} />
         <p className="mt-2 text-xs text-muted-foreground">
           Users tagged <code>analytics_whitelist</code> or <code>analytics-whitelist</code> are excluded.
         </p>
       </section>
 
+      {/* Course Completion */}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">Course Completion</h2>
+          <ExportButton metric="completion" range={dateRange} label="Export CSV" />
+        </div>
+        <CompletionTable data={completion} loading={loading} />
+      </section>
+
+      {/* Lesson Drop-off */}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">Lesson Drop-off</h2>
+          <ExportButton metric="dropoff" range={dateRange} label="Export CSV" />
+        </div>
+        <DropoffTable data={dropoff} loading={loading} />
+      </section>
+
+      {/* Lesson Difficulty */}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">Lesson Difficulty</h2>
+          <ExportButton metric="difficulty" range={dateRange} label="Export CSV" />
+        </div>
+        <DifficultyTable data={difficulty} loading={loading} />
+      </section>
+
+      {/* At-Risk Students */}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">At-Risk Students</h2>
+          <ExportButton metric="students" range={dateRange} label="Export CSV" />
+        </div>
+        <AtRiskTable data={atRisk} loading={loading} />
+      </section>
+
+      {/* Most Engaged Students */}
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">Most Engaged Students</h2>
-          <div className="flex items-center gap-2">
-            <a
-              href={exportUrl("engagement_students", dateRange)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-            >
-              <Download className="h-4 w-4" />
-              Students CSV
-            </a>
-          </div>
+          <ExportButton metric="engagement_students" range={dateRange} label="Export CSV" />
         </div>
         <div className="overflow-hidden rounded-lg border border-border">
           <table className="w-full text-sm">
@@ -292,6 +390,7 @@ export function AnalyticsDashboard() {
         </div>
       </section>
 
+      {/* Feature Engagement */}
       <section>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-foreground">Released Feature Engagement</h2>
@@ -312,13 +411,7 @@ export function AnalyticsDashboard() {
                 </option>
               ))}
             </select>
-            <a
-              href={exportUrl("engagement_features", dateRange)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-accent"
-            >
-              <Download className="h-4 w-4" />
-              Features CSV
-            </a>
+            <ExportButton metric="engagement_features" range={dateRange} label="Features CSV" />
           </div>
         </div>
 
@@ -382,7 +475,7 @@ export function AnalyticsDashboard() {
       <section>
         <h2 className="mb-4 text-lg font-semibold text-foreground">Coaching Session Feedback</h2>
 
-        {/* Summary cards: per session type + overall */}
+        {/* Summary cards: per session type */}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3 mb-4">
           {sessionTypeRatings.map((st) => (
             <div key={st.sessionType} className="rounded-lg border border-border bg-card p-3">

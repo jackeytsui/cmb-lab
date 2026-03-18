@@ -1382,8 +1382,9 @@ function CoachingPanel({
         }
         const data = await res.json();
         const exportSessions = (data.sessions ?? []).map(
-          (s: { title: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string }> }) => ({
+          (s: { title: string; studentEmail?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string }> }) => ({
             title: s.title,
+            studentEmail: s.studentEmail,
             notes: s.notes.map((n) => ({
               text: n.text,
               pane: n.pane as "mandarin" | "cantonese",
