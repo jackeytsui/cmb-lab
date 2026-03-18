@@ -603,7 +603,8 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         </div>
       </section>
 
-      {/* Assigned Coach */}
+      {/* Assigned Coach — only for students */}
+      {student.role === "student" && (
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
           <UserCheck className="w-5 h-5 text-cyan-400" />
@@ -627,6 +628,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
           />
         </div>
       </section>
+      )}
 
       {/* Tags section */}
       <section className="mb-8">

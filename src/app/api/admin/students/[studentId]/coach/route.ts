@@ -34,9 +34,9 @@ export async function PATCH(
       where: eq(users.id, coachId),
       columns: { id: true, role: true },
     });
-    if (!coach || coach.role !== "coach") {
+    if (!coach || (coach.role !== "coach" && coach.role !== "admin")) {
       return NextResponse.json(
-        { error: "Selected user is not a coach" },
+        { error: "Selected user is not a coach or admin" },
         { status: 400 },
       );
     }

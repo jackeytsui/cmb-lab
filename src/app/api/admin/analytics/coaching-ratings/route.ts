@@ -6,14 +6,17 @@ import {
   coachingSessions,
   users,
 } from "@/db/schema";
-import { eq, avg, count, desc, sql, isNull } from "drizzle-orm";
+import { and, eq, avg, count, desc, sql, isNull } from "drizzle-orm";
 import { hasMinimumRole } from "@/lib/auth";
 import { alias } from "drizzle-orm/pg-core";
+import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
 
 /**
  * GET /api/admin/analytics/coaching-ratings
  * Returns average rating per coach, per session type, trends,
  * and individual recent feedback entries.
+ * Only counts feedback from students (not admins/coaches).
+ * Excludes whitelisted users.
  * Requires admin or coach role.
  */
 export async function GET() {
@@ -27,7 +30,17 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Average rating per coach
+  // Alias for the student who submitted the rating
+  const ratingUser = alias(users, "ratingUser");
+
+  // Common filter: only students, not whitelisted
+  const studentOnlyFilter = and(
+    eq(ratingUser.role, "student"),
+    isNull(ratingUser.deletedAt),
+    excludeWhitelistedUsersSql(ratingUser.id),
+  );
+
+  // Average rating per coach (only from students)
   const perCoach = await db
     .select({
       coachId: coachingSessions.createdBy,
@@ -42,10 +55,12 @@ export async function GET() {
       eq(coachingSessionRatings.sessionId, coachingSessions.id),
     )
     .innerJoin(users, eq(coachingSessions.createdBy, users.id))
+    .innerJoin(ratingUser, eq(coachingSessionRatings.userId, ratingUser.id))
+    .where(studentOnlyFilter)
     .groupBy(coachingSessions.createdBy, users.name, users.email)
     .orderBy(desc(avg(coachingSessionRatings.rating)));
 
-  // Average rating per session type
+  // Average rating per session type (only from students)
   const perSessionType = await db
     .select({
       sessionType: coachingSessions.type,
@@ -57,9 +72,11 @@ export async function GET() {
       coachingSessions,
       eq(coachingSessionRatings.sessionId, coachingSessions.id),
     )
+    .innerJoin(ratingUser, eq(coachingSessionRatings.userId, ratingUser.id))
+    .where(studentOnlyFilter)
     .groupBy(coachingSessions.type);
 
-  // Monthly trends (last 6 months)
+  // Monthly trends (last 6 months, only from students)
   const trends = await db
     .select({
       month: sql<string>`to_char(${coachingSessionRatings.createdAt}, 'YYYY-MM')`,
@@ -67,8 +84,12 @@ export async function GET() {
       totalRatings: count(coachingSessionRatings.id),
     })
     .from(coachingSessionRatings)
+    .innerJoin(ratingUser, eq(coachingSessionRatings.userId, ratingUser.id))
     .where(
-      sql`${coachingSessionRatings.createdAt} >= now() - interval '6 months'`,
+      and(
+        studentOnlyFilter,
+        sql`${coachingSessionRatings.createdAt} >= now() - interval '6 months'`,
+      ),
     )
     .groupBy(
       sql`to_char(${coachingSessionRatings.createdAt}, 'YYYY-MM')`,
@@ -77,7 +98,7 @@ export async function GET() {
       sql`to_char(${coachingSessionRatings.createdAt}, 'YYYY-MM')`,
     );
 
-  // Recent individual feedback (last 50 entries)
+  // Recent individual feedback (last 50 entries, only from students)
   const studentUsers = alias(users, "studentUsers");
   const recentFeedback = await db
     .select({
@@ -98,7 +119,13 @@ export async function GET() {
     )
     .innerJoin(studentUsers, eq(coachingSessionRatings.userId, studentUsers.id))
     .innerJoin(users, eq(coachingSessions.createdBy, users.id))
-    .where(isNull(studentUsers.deletedAt))
+    .where(
+      and(
+        eq(studentUsers.role, "student"),
+        isNull(studentUsers.deletedAt),
+        excludeWhitelistedUsersSql(studentUsers.id),
+      ),
+    )
     .orderBy(desc(coachingSessionRatings.createdAt))
     .limit(50);
 

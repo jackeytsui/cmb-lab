@@ -118,12 +118,12 @@ export default async function AdminStudentsPage({
           .offset(offset),
         db.select({ total: count() }).from(users).where(whereClause),
         db
-          .select({ id: users.id, name: users.name, email: users.email })
+          .select({ id: users.id, name: users.name, email: users.email, role: users.role })
           .from(users)
           .where(
             and(
               isNull(users.deletedAt),
-              eq(users.role, "coach"),
+              or(eq(users.role, "coach"), eq(users.role, "admin")),
             ),
           )
           .orderBy(users.name),
@@ -304,9 +304,11 @@ export default async function AdminStudentsPage({
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Role
                     </th>
+                    {(usersRoleFilter === "all" || usersRoleFilter === "student") && (
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Assigned Coach
                     </th>
+                    )}
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Portal Access
                     </th>
@@ -319,7 +321,7 @@ export default async function AdminStudentsPage({
                   {usersResult.items.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={(usersRoleFilter === "all" || usersRoleFilter === "student") ? 6 : 5}
                         className="px-4 py-8 text-center text-sm text-muted-foreground"
                       >
                         No users found.
@@ -342,17 +344,26 @@ export default async function AdminStudentsPage({
                         <td className="px-4 py-3 text-sm text-muted-foreground">
                           {user.email}
                         </td>
-                        <td className="px-4 py-3 text-sm text-foreground capitalize">
-                          {user.role}
-                        </td>
                         <td className="px-4 py-3 text-sm">
-                          <AssignCoachDropdown
-                            studentId={user.id}
-                            currentCoachId={user.assignedCoachId ?? null}
-                            currentCoachName={user.assignedCoachName ?? null}
-                            coaches={coaches}
-                          />
+                          <span className="capitalize text-foreground">{user.role}</span>
+                          {user.role === "admin" && (
+                            <span className="ml-1.5 text-[10px] text-muted-foreground">(+coach)</span>
+                          )}
                         </td>
+                        {(usersRoleFilter === "all" || usersRoleFilter === "student") && (
+                        <td className="px-4 py-3 text-sm">
+                          {user.role === "student" ? (
+                            <AssignCoachDropdown
+                              studentId={user.id}
+                              currentCoachId={user.assignedCoachId ?? null}
+                              currentCoachName={user.assignedCoachName ?? null}
+                              coaches={coaches}
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        )}
                         <td className="px-4 py-3 text-sm">
                           <span
                             className={cn(
