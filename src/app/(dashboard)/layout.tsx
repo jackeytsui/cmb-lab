@@ -137,8 +137,14 @@ export default async function DashboardLayout({
     const metadataRole = normalizeRole((metadata as Record<string, unknown>)?.role);
     const resolvedRole = claimRole || metadataRole || resolveRoleFromEmail(email);
     if (resolvedRole && dbUser.role !== resolvedRole) {
-      await db.update(users).set({ role: resolvedRole }).where(eq(users.id, dbUser.id));
-      dbUser = { ...dbUser, role: resolvedRole as Roles };
+      // Only sync if the resolved role is higher than the DB role (never downgrade)
+      const roleHierarchy: Roles[] = ["student", "coach", "admin"];
+      const resolvedLevel = roleHierarchy.indexOf(resolvedRole as Roles);
+      const dbLevel = roleHierarchy.indexOf(dbUser.role as Roles);
+      if (resolvedLevel > dbLevel) {
+        await db.update(users).set({ role: resolvedRole }).where(eq(users.id, dbUser.id));
+        dbUser = { ...dbUser, role: resolvedRole as Roles };
+      }
     }
   }
 

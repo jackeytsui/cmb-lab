@@ -133,11 +133,20 @@ export async function POST(req: NextRequest) {
 
       if (primaryEmail) {
         const normalizedEmail = primaryEmail.trim().toLowerCase();
-        const role = resolveRoleFromEmail(primaryEmail);
+        const allowlistRole = resolveRoleFromEmail(primaryEmail);
         const existingByEmail = await db.query.users.findFirst({
           where: ilike(users.email, normalizedEmail),
-          columns: { id: true },
+          columns: { id: true, role: true },
         });
+
+        // For existing users, only upgrade role (never downgrade)
+        const roleHierarchy = ["student", "coach", "admin"];
+        const effectiveRole = existingByEmail
+          ? roleHierarchy.indexOf(allowlistRole) > roleHierarchy.indexOf(existingByEmail.role ?? "student")
+            ? allowlistRole
+            : existingByEmail.role ?? allowlistRole
+          : allowlistRole;
+
         const [created] = existingByEmail
           ? await db
               .update(users)
@@ -145,7 +154,7 @@ export async function POST(req: NextRequest) {
                 clerkId: id,
                 email: normalizedEmail,
                 name: [first_name, last_name].filter(Boolean).join(" ") || null,
-                role,
+                role: effectiveRole,
                 deletedAt: null,
               })
               .where(eq(users.id, existingByEmail.id))
@@ -156,11 +165,11 @@ export async function POST(req: NextRequest) {
                 clerkId: id,
                 email: normalizedEmail,
                 name: [first_name, last_name].filter(Boolean).join(" ") || null,
-                role,
+                role: allowlistRole,
               })
               .returning({ id: users.id });
 
-        if (role === "student") {
+        if (effectiveRole === "student") {
           await ensureDefaultStudentRoleAssignment(created.id);
         }
 
@@ -176,13 +185,26 @@ export async function POST(req: NextRequest) {
 
       if (primaryEmail) {
         const normalizedEmail = primaryEmail.trim().toLowerCase();
-        const role = resolveRoleFromEmail(primaryEmail);
+        const allowlistRole = resolveRoleFromEmail(primaryEmail);
+
+        // Look up existing role so we never downgrade
+        const existingUser = await db.query.users.findFirst({
+          where: eq(users.clerkId, id),
+          columns: { id: true, role: true },
+        });
+        const roleHierarchy = ["student", "coach", "admin"];
+        const effectiveRole = existingUser
+          ? roleHierarchy.indexOf(allowlistRole) > roleHierarchy.indexOf(existingUser.role ?? "student")
+            ? allowlistRole
+            : existingUser.role ?? allowlistRole
+          : allowlistRole;
+
         let [updated] = await db
           .update(users)
           .set({
             email: normalizedEmail,
             name: [first_name, last_name].filter(Boolean).join(" ") || null,
-            role,
+            role: effectiveRole,
           })
           .where(eq(users.clerkId, id))
           .returning({ id: users.id });
@@ -190,16 +212,20 @@ export async function POST(req: NextRequest) {
         if (!updated) {
           const existingByEmail = await db.query.users.findFirst({
             where: ilike(users.email, normalizedEmail),
-            columns: { id: true },
+            columns: { id: true, role: true },
           });
           if (existingByEmail) {
+            // Never downgrade existing role
+            const fallbackRole = roleHierarchy.indexOf(allowlistRole) > roleHierarchy.indexOf(existingByEmail.role ?? "student")
+              ? allowlistRole
+              : existingByEmail.role ?? allowlistRole;
             [updated] = await db
               .update(users)
               .set({
                 clerkId: id,
                 email: normalizedEmail,
                 name: [first_name, last_name].filter(Boolean).join(" ") || null,
-                role,
+                role: fallbackRole,
                 deletedAt: null,
               })
               .where(eq(users.id, existingByEmail.id))
@@ -207,7 +233,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        if (role === "student" && updated) {
+        if (effectiveRole === "student" && updated) {
           await ensureDefaultStudentRoleAssignment(updated.id);
         }
 

@@ -336,8 +336,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const isAdmin = await hasMinimumRole("admin");
+  if (!isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -4,10 +4,10 @@ import type { Roles } from "@/types/globals";
 const DEFAULT_ADMIN_EMAILS = [
   "contact@thecmblueprint.com",
   "jackey.tsui@thecmblueprint.com",
+  "janelle.wong@thecmblueprint.com",
 ];
 
 const DEFAULT_COACH_EMAILS = [
-  "janelle.wong@thecmblueprint.com",
   "jackeytsui.wf@gmail.com",
 ];
 
