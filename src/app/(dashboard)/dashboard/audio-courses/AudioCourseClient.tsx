@@ -5,6 +5,7 @@ import {
   AudioLines,
   ChevronDown,
   ChevronRight,
+  Download,
   ExternalLink,
   FileText,
   Loader2,
@@ -247,6 +248,45 @@ export function AudioCourseClient() {
 
   const hasTranscript = Boolean(currentLesson?.transcript);
 
+  // Download
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [downloadingAll, setDownloadingAll] = useState(false);
+
+  const downloadLesson = useCallback(async (lesson: AudioLesson) => {
+    setDownloadingIds((prev) => new Set(prev).add(lesson.id));
+    try {
+      const a = document.createElement("a");
+      a.href = `/api/audio-courses/stream/${lesson.id}?download=1`;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      // Small delay so the UI shows the loading state briefly
+      setTimeout(() => {
+        setDownloadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(lesson.id);
+          return next;
+        });
+      }, 1500);
+    }
+  }, []);
+
+  const downloadAllLessons = useCallback(
+    async (course: AudioCourse) => {
+      setDownloadingAll(true);
+      for (const lesson of course.lessons) {
+        if (!lesson.audioUrl) continue;
+        await downloadLesson(lesson);
+        // Stagger downloads to avoid overwhelming the browser
+        await new Promise((r) => setTimeout(r, 800));
+      }
+      setDownloadingAll(false);
+    },
+    [downloadLesson],
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -329,6 +369,25 @@ export function AudioCourseClient() {
             {/* Expanded course content */}
             {isExpanded && (
               <div className="border-t border-border">
+                {/* Download all bar */}
+                {course.lessons.some((l) => l.audioUrl) && (
+                  <div className="flex items-center justify-end border-b border-border/60 px-3 sm:px-4 py-2">
+                    <button
+                      type="button"
+                      disabled={downloadingAll}
+                      onClick={() => downloadAllLessons(course)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors disabled:opacity-50"
+                    >
+                      {downloadingAll ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5" />
+                      )}
+                      {downloadingAll ? "Downloading…" : "Download All"}
+                    </button>
+                  </div>
+                )}
+
                 {/* Student instructions */}
                 {course.studentInstructions && (
                   <div className="border-b border-border/60 bg-muted/20 px-3 sm:px-4 py-3">
@@ -370,12 +429,12 @@ export function AudioCourseClient() {
                       const isActive = currentLesson?.id === lesson.id;
                       const hasAudio = Boolean(lesson.audioUrl);
                       return (
-                        <button
+                        <div
                           key={lesson.id}
-                          type="button"
-                          disabled={!hasAudio}
-                          onClick={() => playLesson(lesson, course)}
-                          className={`flex w-full items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 text-left transition-colors ${
+                          role="button"
+                          tabIndex={hasAudio ? 0 : -1}
+                          onClick={() => hasAudio && playLesson(lesson, course)}
+                          className={`flex w-full items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 text-left transition-colors cursor-pointer ${
                             isActive
                               ? "bg-primary/5"
                               : hasAudio
@@ -421,8 +480,26 @@ export function AudioCourseClient() {
                                 {lesson.durationMinutes} min
                               </span>
                             )}
+                            {hasAudio && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  downloadLesson(lesson);
+                                }}
+                                disabled={downloadingIds.has(lesson.id)}
+                                className="rounded p-1 text-muted-foreground/50 hover:text-foreground transition-colors"
+                                aria-label="Download"
+                              >
+                                {downloadingIds.has(lesson.id) ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Download className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            )}
                           </div>
-                        </button>
+                        </div>
                       );
                     })
                   )}

@@ -20,9 +20,11 @@ export async function GET(
 
   const { lessonId } = await params;
 
+  const isDownload = request.nextUrl.searchParams.get("download") === "1";
+
   const lesson = await db.query.lessons.findFirst({
     where: and(eq(lessons.id, lessonId), isNull(lessons.deletedAt)),
-    columns: { content: true },
+    columns: { content: true, title: true },
   });
 
   if (!lesson) {
@@ -77,6 +79,21 @@ export async function GET(
   else responseHeaders.set("Accept-Ranges", "bytes");
 
   responseHeaders.set("Cache-Control", "private, max-age=3600");
+
+  // Download mode: add Content-Disposition for file download
+  if (isDownload) {
+    const ext = (contentType || "").includes("mp3") ? "mp3"
+      : (contentType || "").includes("mp4") || (contentType || "").includes("m4a") ? "m4a"
+      : (contentType || "").includes("wav") ? "wav"
+      : (contentType || "").includes("ogg") ? "ogg"
+      : (contentType || "").includes("flac") ? "flac"
+      : "mp3";
+    const safeName = (lesson.title || "audio").replace(/[^a-zA-Z0-9 _-]/g, "").trim() || "audio";
+    responseHeaders.set(
+      "Content-Disposition",
+      `attachment; filename="${safeName}.${ext}"`,
+    );
+  }
 
   return new NextResponse(blobResponse.body, {
     status: blobResponse.status,
