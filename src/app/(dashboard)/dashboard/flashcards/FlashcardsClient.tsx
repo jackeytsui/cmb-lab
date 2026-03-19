@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useTTS, type TTSOptions } from "@/hooks/useTTS";
 
 type FlashcardItem = {
   id: string;
@@ -21,49 +22,56 @@ type FlashcardItem = {
 type ScriptMode = "traditional" | "simplified";
 type SourceFilter = "all" | "coaching" | "vocabulary";
 
-const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5];
+type TTSRate = TTSOptions["rate"];
+const RATE_OPTIONS: { value: NonNullable<TTSRate>; label: string }[] = [
+  { value: "x-slow", label: "0.6x" },
+  { value: "slow", label: "0.8x" },
+  { value: "medium", label: "1x" },
+  { value: "fast", label: "1.4x" },
+];
 
-function SpeakButton({ text, lang }: { text: string; lang: "zh-CN" | "zh-HK" }) {
-  const [speed, setSpeed] = useState(1);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-
-  const handleSpeak = () => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
-    utterance.rate = speed;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
-  };
+function SpeakButton({
+  text,
+  lang,
+  speak,
+  isLoading,
+  isPlaying,
+}: {
+  text: string;
+  lang: "zh-CN" | "zh-HK";
+  speak: (text: string, options?: TTSOptions) => Promise<void>;
+  isLoading: boolean;
+  isPlaying: boolean;
+}) {
+  const [rate, setRate] = useState<NonNullable<TTSRate>>("medium");
 
   return (
     <div className="flex items-center gap-1.5">
       <button
         type="button"
-        onClick={handleSpeak}
+        onClick={() => speak(text, { language: lang, rate })}
+        disabled={isLoading}
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border transition-colors",
-          isSpeaking
+          isPlaying
             ? "border-primary/40 bg-primary/10 text-primary"
             : "border-input bg-background text-muted-foreground hover:text-foreground",
+          isLoading && "opacity-50",
         )}
         title={`Play (${lang === "zh-CN" ? "Mandarin" : "Cantonese"})`}
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polygon points="5 3 19 12 5 21 5 3" />
         </svg>
-        {speed}x
+        {isLoading ? "..." : RATE_OPTIONS.find((r) => r.value === rate)?.label ?? "1x"}
       </button>
       <select
-        value={speed}
-        onChange={(e) => setSpeed(Number(e.target.value))}
+        value={rate}
+        onChange={(e) => setRate(e.target.value as NonNullable<TTSRate>)}
         className="rounded border border-input bg-background px-1 py-0.5 text-[10px] text-muted-foreground"
       >
-        {SPEED_OPTIONS.map((s) => (
-          <option key={s} value={s}>{s}x</option>
+        {RATE_OPTIONS.map((r) => (
+          <option key={r.value} value={r.value}>{r.label}</option>
         ))}
       </select>
     </div>
@@ -76,12 +84,18 @@ function FlashCard({
   scriptMode,
   onFlip,
   onRemove,
+  speak,
+  ttsLoading,
+  ttsPlaying,
 }: {
   card: FlashcardItem;
   isFlipped: boolean;
   scriptMode: ScriptMode;
   onFlip: () => void;
   onRemove: () => void;
+  speak: (text: string, options?: TTSOptions) => Promise<void>;
+  ttsLoading: boolean;
+  ttsPlaying: boolean;
 }) {
   const displayChinese =
     scriptMode === "simplified" && card.simplified
@@ -142,7 +156,7 @@ function FlashCard({
               </span>
             )}
             <div className="mt-1" onClick={(e) => e.stopPropagation()}>
-              <SpeakButton text={displayChinese} lang={lang} />
+              <SpeakButton text={displayChinese} lang={lang} speak={speak} isLoading={ttsLoading} isPlaying={ttsPlaying} />
             </div>
           </div>
         </div>
@@ -170,12 +184,14 @@ export function FlashcardsClient() {
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
   const [allFlipped, setAllFlipped] = useState(false);
 
+  // TTS
+  const { speak, stop: stopTTS, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
+
   // Study mode
   const [studyMode, setStudyMode] = useState(false);
   const [studyIndex, setStudyIndex] = useState(0);
   const [studyFlipped, setStudyFlipped] = useState(false);
-  const [studySpeed, setStudySpeed] = useState(1);
-  const studySpeakingRef = useRef(false);
+  const [studyRate, setStudyRate] = useState<NonNullable<TTSRate>>("medium");
 
   const fetchCards = useCallback(async () => {
     try {
@@ -255,20 +271,14 @@ export function FlashcardsClient() {
   }, []);
 
   const handleStudySpeak = useCallback(() => {
-    if (!studyCard || typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
+    if (!studyCard) return;
     const displayChinese =
       scriptMode === "simplified" && studyCard.simplified
         ? studyCard.simplified
         : studyCard.chinese;
-    const lang = studyCard.pane === "cantonese" ? "zh-HK" : "zh-CN";
-    const utterance = new SpeechSynthesisUtterance(displayChinese);
-    utterance.lang = lang;
-    utterance.rate = studySpeed;
-    utterance.onstart = () => { studySpeakingRef.current = true; };
-    utterance.onend = () => { studySpeakingRef.current = false; };
-    window.speechSynthesis.speak(utterance);
-  }, [studyCard, scriptMode, studySpeed]);
+    const lang: "zh-CN" | "zh-HK" = studyCard.pane === "cantonese" ? "zh-HK" : "zh-CN";
+    speak(displayChinese, { language: lang, rate: studyRate });
+  }, [studyCard, scriptMode, studyRate, speak]);
 
   useEffect(() => {
     if (!studyMode) return;
@@ -283,6 +293,7 @@ export function FlashcardsClient() {
         e.preventDefault();
         handleStudyPrev();
       } else if (e.key === "Escape") {
+        stopTTS();
         setStudyMode(false);
       } else if (e.key === "p" || e.key === "P") {
         e.preventDefault();
@@ -410,20 +421,25 @@ export function FlashcardsClient() {
             <button
               type="button"
               onClick={handleStudySpeak}
-              className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-accent"
+              disabled={ttsLoading}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-accent",
+                ttsPlaying && "border-primary/40 bg-primary/10 text-primary",
+                ttsLoading && "opacity-50",
+              )}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="5 3 19 12 5 21 5 3" />
               </svg>
-              Play
+              {ttsLoading ? "Loading..." : ttsPlaying ? "Playing..." : "Play"}
             </button>
             <select
-              value={studySpeed}
-              onChange={(e) => setStudySpeed(Number(e.target.value))}
+              value={studyRate}
+              onChange={(e) => setStudyRate(e.target.value as NonNullable<TTSRate>)}
               className="rounded-lg border border-border bg-background px-2 py-2 text-sm"
             >
-              {SPEED_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}x</option>
+              {RATE_OPTIONS.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
               ))}
             </select>
           </div>
@@ -464,6 +480,9 @@ export function FlashcardsClient() {
               scriptMode={scriptMode}
               onFlip={() => toggleFlip(card.id)}
               onRemove={() => handleRemove(card)}
+              speak={speak}
+              ttsLoading={ttsLoading}
+              ttsPlaying={ttsPlaying}
             />
           ))}
         </div>
