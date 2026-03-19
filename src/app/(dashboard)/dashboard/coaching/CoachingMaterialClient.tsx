@@ -1474,6 +1474,56 @@ function CoachingPanel({
           return;
         }
 
+        // Auto-translate notes that don't have a translationOverride
+        const mandarinTexts: string[] = [];
+        const cantoneseTexts: string[] = [];
+        const mandarinIndices: Array<{ sIdx: number; nIdx: number }> = [];
+        const cantoneseIndices: Array<{ sIdx: number; nIdx: number }> = [];
+
+        for (let sIdx = 0; sIdx < exportSessions.length; sIdx++) {
+          const session = exportSessions[sIdx];
+          for (let nIdx = 0; nIdx < session.notes.length; nIdx++) {
+            const note = session.notes[nIdx];
+            if (!note.translationOverride) {
+              const text = note.textOverride || note.text;
+              if (text.trim()) {
+                if (note.pane === "mandarin") {
+                  mandarinTexts.push(text);
+                  mandarinIndices.push({ sIdx, nIdx });
+                } else {
+                  cantoneseTexts.push(text);
+                  cantoneseIndices.push({ sIdx, nIdx });
+                }
+              }
+            }
+          }
+        }
+
+        // Fetch translations in parallel for both panes
+        const [mandarinTranslations, cantoneseTranslations] = await Promise.all([
+          mandarinTexts.length > 0
+            ? fetchProperTranslations(mandarinTexts, "zh-CN")
+            : null,
+          cantoneseTexts.length > 0
+            ? fetchProperTranslations(cantoneseTexts, "zh-HK")
+            : null,
+        ]);
+
+        if (mandarinTranslations) {
+          mandarinIndices.forEach(({ sIdx, nIdx }, i) => {
+            if (mandarinTranslations[i]) {
+              exportSessions[sIdx].notes[nIdx].translationOverride = mandarinTranslations[i];
+            }
+          });
+        }
+        if (cantoneseTranslations) {
+          cantoneseIndices.forEach(({ sIdx, nIdx }, i) => {
+            if (cantoneseTranslations[i]) {
+              exportSessions[sIdx].notes[nIdx].translationOverride = cantoneseTranslations[i];
+            }
+          });
+        }
+
         const sessionTitle =
           mode === "current" && activeSession
             ? activeSession.title
