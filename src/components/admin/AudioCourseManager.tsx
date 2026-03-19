@@ -15,6 +15,7 @@ import {
   GripVertical,
   Eye,
   EyeOff,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -40,9 +41,23 @@ type AudioSeries = {
   youtubeMusicUrl: string;
   applePodcastUrl: string;
   studentInstructions: string;
+  allowedTagIds: string[];
+  allowedUserIds: string[];
   moduleId: string | null;
   lessons: AudioLesson[];
   isPublished: boolean;
+};
+
+type Tag = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+type StudentOption = {
+  id: string;
+  name: string;
+  email: string;
 };
 
 type PendingUpload = {
@@ -93,6 +108,10 @@ export function AudioCourseManager() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Tags & students for visibility
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [allStudents, setAllStudents] = useState<StudentOption[]>([]);
+
   // RSS copy state
   const [copiedRss, setCopiedRss] = useState(false);
 
@@ -131,6 +150,22 @@ export function AudioCourseManager() {
 
   useEffect(() => {
     void loadSeries();
+    // Load tags and students for visibility picker
+    fetch("/api/admin/tags")
+      .then((r) => r.json())
+      .then((d) => setAllTags(d.tags ?? []))
+      .catch(() => {});
+    fetch("/api/admin/students?limit=500")
+      .then((r) => r.json())
+      .then((d) => {
+        const students = (d.students ?? []).map((s: { id: string; name?: string; email?: string }) => ({
+          id: s.id,
+          name: s.name || s.email || "Unknown",
+          email: s.email || "",
+        }));
+        setAllStudents(students);
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -539,6 +574,17 @@ export function AudioCourseManager() {
                 />
               </section>
 
+              {/* Visibility / Access Control */}
+              <VisibilitySection
+                key={`vis-${activeSeries.id}`}
+                series={activeSeries}
+                allTags={allTags}
+                allStudents={allStudents}
+                onSave={(tagIds, userIds) =>
+                  saveSeries({ allowedTagIds: tagIds, allowedUserIds: userIds })
+                }
+              />
+
               {/* Podcast RSS Feed */}
               <section className="rounded-xl border border-border bg-card p-5 space-y-3">
                 <div className="flex items-center gap-2">
@@ -816,6 +862,172 @@ function EditableField({
         )}
       </div>
     </div>
+  );
+}
+
+function VisibilitySection({
+  series,
+  allTags,
+  allStudents,
+  onSave,
+}: {
+  series: AudioSeries;
+  allTags: Tag[];
+  allStudents: StudentOption[];
+  onSave: (tagIds: string[], userIds: string[]) => void;
+}) {
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(
+    series.allowedTagIds ?? [],
+  );
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>(
+    series.allowedUserIds ?? [],
+  );
+  const [studentSearch, setStudentSearch] = useState("");
+
+  const hasChanges =
+    JSON.stringify(selectedTagIds.sort()) !==
+      JSON.stringify((series.allowedTagIds ?? []).sort()) ||
+    JSON.stringify(selectedUserIds.sort()) !==
+      JSON.stringify((series.allowedUserIds ?? []).sort());
+
+  const isOpen = selectedTagIds.length > 0 || selectedUserIds.length > 0;
+
+  const filteredStudents = studentSearch.trim()
+    ? allStudents.filter(
+        (s) =>
+          !selectedUserIds.includes(s.id) &&
+          (s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
+            s.email.toLowerCase().includes(studentSearch.toLowerCase())),
+      ).slice(0, 8)
+    : [];
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-5 space-y-3">
+      <div className="flex items-center gap-2">
+        <Shield className="h-4 w-4 text-amber-400" />
+        <h3 className="text-base font-semibold text-foreground">
+          Visibility
+        </h3>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {isOpen
+          ? "This series is restricted to selected tags/students only."
+          : "This series is visible to all students. Add tags or specific students to restrict access."}
+      </p>
+
+      {/* Tag picker */}
+      <div>
+        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+          Restrict by Tags
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {allTags.map((tag) => {
+            const selected = selectedTagIds.includes(tag.id);
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() =>
+                  setSelectedTagIds((prev) =>
+                    selected
+                      ? prev.filter((id) => id !== tag.id)
+                      : [...prev, tag.id],
+                  )
+                }
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                  selected
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: tag.color }}
+                />
+                {tag.name}
+              </button>
+            );
+          })}
+          {allTags.length === 0 && (
+            <span className="text-xs text-muted-foreground">No tags created yet.</span>
+          )}
+        </div>
+      </div>
+
+      {/* Student picker */}
+      <div>
+        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+          Restrict by Specific Students
+        </p>
+
+        {/* Selected students */}
+        {selectedUserIds.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {selectedUserIds.map((uid) => {
+              const student = allStudents.find((s) => s.id === uid);
+              return (
+                <span
+                  key={uid}
+                  className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                >
+                  {student?.name || student?.email || uid}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedUserIds((prev) =>
+                        prev.filter((id) => id !== uid),
+                      )
+                    }
+                    className="ml-0.5 hover:text-red-400"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Search input */}
+        <div className="relative">
+          <input
+            value={studentSearch}
+            onChange={(e) => setStudentSearch(e.target.value)}
+            placeholder="Search students by name or email…"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          />
+          {filteredStudents.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-card shadow-lg">
+              {filteredStudents.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedUserIds((prev) => [...prev, s.id]);
+                    setStudentSearch("");
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/30"
+                >
+                  <span className="font-medium text-foreground">{s.name}</span>
+                  <span className="text-xs text-muted-foreground">{s.email}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Save button */}
+      {hasChanges && (
+        <Button
+          size="sm"
+          onClick={() => onSave(selectedTagIds, selectedUserIds)}
+        >
+          <Save className="mr-1 h-3.5 w-3.5" />
+          Save Visibility
+        </Button>
+      )}
+    </section>
   );
 }
 

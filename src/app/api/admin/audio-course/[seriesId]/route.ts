@@ -12,6 +12,8 @@ type AudioSeriesMeta = {
   youtubeMusicUrl?: string;
   applePodcastUrl?: string;
   studentInstructions?: string;
+  allowedTagIds?: string[];
+  allowedUserIds?: string[];
 };
 
 function parseMeta(raw: string | null): AudioSeriesMeta | null {
@@ -33,6 +35,8 @@ function stringifyMeta(input: Omit<AudioSeriesMeta, "audioCourse">): string {
     youtubeMusicUrl: input.youtubeMusicUrl?.trim() ?? "",
     applePodcastUrl: input.applePodcastUrl?.trim() ?? "",
     studentInstructions: input.studentInstructions?.trim() ?? "",
+    allowedTagIds: input.allowedTagIds ?? [],
+    allowedUserIds: input.allowedUserIds ?? [],
   });
 }
 
@@ -54,6 +58,8 @@ export async function PUT(
     youtubeMusicUrl?: string;
     applePodcastUrl?: string;
     studentInstructions?: string;
+    allowedTagIds?: string[];
+    allowedUserIds?: string[];
     isPublished?: boolean;
   };
 
@@ -70,17 +76,21 @@ export async function PUT(
     return NextResponse.json({ error: "Series title must be at least 3 characters" }, { status: 400 });
   }
 
+  const existingMeta = parseMeta(existing.description);
+
   const [updated] = await db
     .update(courses)
     .set({
       title: title ?? existing.title,
       description: stringifyMeta({
-        summary: body.summary ?? "",
-        helloAudioSeriesUrl: body.helloAudioSeriesUrl ?? "",
-        spotifyUrl: body.spotifyUrl ?? "",
-        youtubeMusicUrl: body.youtubeMusicUrl ?? "",
-        applePodcastUrl: body.applePodcastUrl ?? "",
-        studentInstructions: body.studentInstructions ?? "",
+        summary: body.summary ?? existingMeta?.summary ?? "",
+        helloAudioSeriesUrl: body.helloAudioSeriesUrl ?? existingMeta?.helloAudioSeriesUrl ?? "",
+        spotifyUrl: body.spotifyUrl ?? existingMeta?.spotifyUrl ?? "",
+        youtubeMusicUrl: body.youtubeMusicUrl ?? existingMeta?.youtubeMusicUrl ?? "",
+        applePodcastUrl: body.applePodcastUrl ?? existingMeta?.applePodcastUrl ?? "",
+        studentInstructions: body.studentInstructions ?? existingMeta?.studentInstructions ?? "",
+        allowedTagIds: body.allowedTagIds ?? existingMeta?.allowedTagIds ?? [],
+        allowedUserIds: body.allowedUserIds ?? existingMeta?.allowedUserIds ?? [],
       }),
       isPublished: body.isPublished ?? existing.isPublished,
     })

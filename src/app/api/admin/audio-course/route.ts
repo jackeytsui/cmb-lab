@@ -12,6 +12,8 @@ type AudioSeriesMeta = {
   youtubeMusicUrl?: string;
   applePodcastUrl?: string;
   studentInstructions?: string;
+  allowedTagIds?: string[];
+  allowedUserIds?: string[];
 };
 
 function parseAudioSeriesMeta(raw: string | null): AudioSeriesMeta | null {
@@ -27,6 +29,8 @@ function parseAudioSeriesMeta(raw: string | null): AudioSeriesMeta | null {
       youtubeMusicUrl: parsed.youtubeMusicUrl ?? "",
       applePodcastUrl: parsed.applePodcastUrl ?? "",
       studentInstructions: parsed.studentInstructions ?? "",
+      allowedTagIds: Array.isArray(parsed.allowedTagIds) ? parsed.allowedTagIds : [],
+      allowedUserIds: Array.isArray(parsed.allowedUserIds) ? parsed.allowedUserIds : [],
     };
   } catch {
     return null;
@@ -52,6 +56,8 @@ function stringifySeriesMeta(input: Omit<AudioSeriesMeta, "audioCourse">): strin
     youtubeMusicUrl: input.youtubeMusicUrl?.trim() ?? "",
     applePodcastUrl: input.applePodcastUrl?.trim() ?? "",
     studentInstructions: input.studentInstructions?.trim() ?? "",
+    allowedTagIds: input.allowedTagIds ?? [],
+    allowedUserIds: input.allowedUserIds ?? [],
   });
 }
 
@@ -120,6 +126,8 @@ export async function GET() {
       youtubeMusicUrl: meta?.youtubeMusicUrl ?? "",
       applePodcastUrl: meta?.applePodcastUrl ?? "",
       studentInstructions: meta?.studentInstructions ?? "",
+      allowedTagIds: meta?.allowedTagIds ?? [],
+      allowedUserIds: meta?.allowedUserIds ?? [],
       moduleId: mainModule?.id ?? null,
       lessons: moduleLessons.map((lesson) => ({
         id: lesson.id,
@@ -149,6 +157,8 @@ export async function POST(request: NextRequest) {
     youtubeMusicUrl?: string;
     applePodcastUrl?: string;
     studentInstructions?: string;
+    allowedTagIds?: string[];
+    allowedUserIds?: string[];
   };
 
   const title = body.title?.trim() ?? "";
@@ -173,6 +183,8 @@ export async function POST(request: NextRequest) {
         youtubeMusicUrl: body.youtubeMusicUrl ?? "",
         applePodcastUrl: body.applePodcastUrl ?? "",
         studentInstructions: body.studentInstructions ?? "",
+        allowedTagIds: body.allowedTagIds ?? [],
+        allowedUserIds: body.allowedUserIds ?? [],
       }),
       isPublished: false,
       sortOrder: (maxOrder?.sortOrder ?? 0) + 1,
@@ -200,6 +212,8 @@ export async function POST(request: NextRequest) {
       youtubeMusicUrl: body.youtubeMusicUrl ?? "",
       applePodcastUrl: body.applePodcastUrl ?? "",
       studentInstructions: body.studentInstructions ?? "",
+      allowedTagIds: body.allowedTagIds ?? [],
+      allowedUserIds: body.allowedUserIds ?? [],
       moduleId: mainModule.id,
       lessons: [],
       isPublished: false,
