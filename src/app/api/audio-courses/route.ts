@@ -127,9 +127,11 @@ export async function GET() {
       studentInstructions: (meta.studentInstructions as string) ?? "",
       lessons: moduleLessons.map((lesson) => {
         let audioUrl = "";
+        let transcript = "";
         try {
           const content = JSON.parse(lesson.content ?? "{}");
           audioUrl = typeof content.audioUrl === "string" ? content.audioUrl : "";
+          transcript = typeof content.transcript === "string" ? content.transcript : "";
         } catch {
           // no-op
         }
@@ -138,6 +140,7 @@ export async function GET() {
           title: lesson.title,
           description: lesson.description ?? "",
           audioUrl,
+          transcript,
           durationMinutes: lesson.durationSeconds
             ? Math.ceil(lesson.durationSeconds / 60)
             : null,

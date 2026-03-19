@@ -12,6 +12,8 @@ import {
   Rss,
   Copy,
   Check,
+  ChevronDown,
+  ChevronRight,
   GripVertical,
   Eye,
   EyeOff,
@@ -28,6 +30,7 @@ type AudioLesson = {
   title: string;
   description: string;
   audioUrl: string;
+  transcript: string;
   durationMinutes: number | null;
   sortOrder: number;
 };
@@ -1045,80 +1048,109 @@ function LessonRow({
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(lesson.title);
   const [description, setDescription] = useState(lesson.description);
+  const [transcript, setTranscript] = useState(lesson.transcript || "");
+  const [showTranscript, setShowTranscript] = useState(false);
 
-  const hasChanges = title !== lesson.title || description !== lesson.description;
+  const hasChanges =
+    title !== lesson.title ||
+    description !== lesson.description ||
+    transcript !== (lesson.transcript || "");
 
   return (
-    <div className="group flex items-center gap-2 rounded-lg border border-border bg-background p-2.5 transition-colors hover:border-border/80">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-        {index + 1}
-      </div>
-      <div className="min-w-0 flex-1">
-        {isEditing ? (
-          <div className="space-y-1.5">
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="h-8 w-full rounded border border-input bg-background px-2 text-sm"
-            />
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Description (optional)"
-              className="h-8 w-full rounded border border-input bg-background px-2 text-sm"
-            />
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                className="h-7 text-xs"
-                disabled={!hasChanges}
-                onClick={() => {
-                  onSave(lesson.id, { title, description });
-                  setIsEditing(false);
-                }}
-              >
-                Save
-              </Button>
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setTitle(lesson.title);
-                  setDescription(lesson.description);
-                  setIsEditing(false);
-                }}
-              >
-                Cancel
-              </button>
+    <div className="group rounded-lg border border-border bg-background p-2.5 transition-colors hover:border-border/80">
+      <div className="flex items-center gap-2">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+          {index + 1}
+        </div>
+        <div className="min-w-0 flex-1">
+          {isEditing ? (
+            <div className="space-y-1.5">
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="h-8 w-full rounded border border-input bg-background px-2 text-sm"
+              />
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Description (optional)"
+                className="h-8 w-full rounded border border-input bg-background px-2 text-sm"
+              />
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowTranscript(!showTranscript)}
+                  className="mb-1 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  {showTranscript ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  Transcript {transcript ? "(has content)" : "(empty)"}
+                </button>
+                {showTranscript && (
+                  <textarea
+                    value={transcript}
+                    onChange={(e) => setTranscript(e.target.value)}
+                    placeholder="Paste transcript here (optional). Students will see this as a collapsible panel while listening."
+                    className="min-h-[100px] w-full rounded border border-input bg-background px-2 py-1.5 text-xs"
+                  />
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={!hasChanges}
+                  onClick={() => {
+                    onSave(lesson.id, { title, description, transcript });
+                    setIsEditing(false);
+                  }}
+                >
+                  Save
+                </Button>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setTitle(lesson.title);
+                    setDescription(lesson.description);
+                    setTranscript(lesson.transcript || "");
+                    setIsEditing(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
+          ) : (
+            <button
+              type="button"
+              className="text-left"
+              onClick={() => setIsEditing(true)}
+            >
+              <p className="text-sm font-medium text-foreground">{lesson.title}</p>
+              {lesson.description && (
+                <p className="text-xs text-muted-foreground">{lesson.description}</p>
+              )}
+              {lesson.transcript && (
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5">Has transcript</p>
+              )}
+            </button>
+          )}
+        </div>
+        {lesson.durationMinutes && (
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {lesson.durationMinutes}m
+          </span>
+        )}
+        {!isEditing && (
           <button
             type="button"
-            className="text-left"
-            onClick={() => setIsEditing(true)}
+            onClick={() => onDelete(lesson.id)}
+            className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
           >
-            <p className="text-sm font-medium text-foreground">{lesson.title}</p>
-            {lesson.description && (
-              <p className="text-xs text-muted-foreground">{lesson.description}</p>
-            )}
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
-      {lesson.durationMinutes && (
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {lesson.durationMinutes}m
-        </span>
-      )}
-      {!isEditing && (
-        <button
-          type="button"
-          onClick={() => onDelete(lesson.id)}
-          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      )}
     </div>
   );
 }

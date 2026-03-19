@@ -37,13 +37,16 @@ function parseAudioSeriesMeta(raw: string | null): AudioSeriesMeta | null {
   }
 }
 
-function parseLessonAudioUrl(raw: string | null): string {
-  if (!raw) return "";
+function parseLessonContent(raw: string | null): { audioUrl: string; transcript: string } {
+  if (!raw) return { audioUrl: "", transcript: "" };
   try {
-    const parsed = JSON.parse(raw) as { audioUrl?: string };
-    return typeof parsed.audioUrl === "string" ? parsed.audioUrl : "";
+    const parsed = JSON.parse(raw) as { audioUrl?: string; transcript?: string };
+    return {
+      audioUrl: typeof parsed.audioUrl === "string" ? parsed.audioUrl : "",
+      transcript: typeof parsed.transcript === "string" ? parsed.transcript : "",
+    };
   } catch {
-    return "";
+    return { audioUrl: "", transcript: "" };
   }
 }
 
@@ -129,14 +132,18 @@ export async function GET() {
       allowedTagIds: meta?.allowedTagIds ?? [],
       allowedUserIds: meta?.allowedUserIds ?? [],
       moduleId: mainModule?.id ?? null,
-      lessons: moduleLessons.map((lesson) => ({
-        id: lesson.id,
-        title: lesson.title,
-        description: lesson.description ?? "",
-        durationMinutes: lesson.durationSeconds ? Math.ceil(lesson.durationSeconds / 60) : null,
-        audioUrl: parseLessonAudioUrl(lesson.content),
-        sortOrder: lesson.sortOrder,
-      })),
+      lessons: moduleLessons.map((lesson) => {
+        const lc = parseLessonContent(lesson.content);
+        return {
+          id: lesson.id,
+          title: lesson.title,
+          description: lesson.description ?? "",
+          durationMinutes: lesson.durationSeconds ? Math.ceil(lesson.durationSeconds / 60) : null,
+          audioUrl: lc.audioUrl,
+          transcript: lc.transcript,
+          sortOrder: lesson.sortOrder,
+        };
+      }),
     };
   });
 

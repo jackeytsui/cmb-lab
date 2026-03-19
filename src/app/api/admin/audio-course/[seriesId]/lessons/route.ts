@@ -14,8 +14,10 @@ function parseSeries(raw: string | null) {
   }
 }
 
-function stringifyLessonContent(audioUrl: string) {
-  return JSON.stringify({ audioUrl: audioUrl.trim() });
+function stringifyLessonContent(audioUrl: string, transcript?: string) {
+  const content: Record<string, string> = { audioUrl: audioUrl.trim() };
+  if (transcript?.trim()) content.transcript = transcript.trim();
+  return JSON.stringify(content);
 }
 
 async function ensureSeriesModule(seriesId: string) {
@@ -43,6 +45,7 @@ type LessonInput = {
   title?: string;
   description?: string;
   audioUrl?: string;
+  transcript?: string;
   durationMinutes?: number | null;
 };
 
@@ -89,7 +92,7 @@ export async function POST(
         moduleId: seriesModule.id,
         title,
         description: input.description?.trim() ?? null,
-        content: stringifyLessonContent(audioUrl),
+        content: stringifyLessonContent(audioUrl, input.transcript),
         durationSeconds:
           typeof input.durationMinutes === "number" && input.durationMinutes > 0
             ? Math.round(input.durationMinutes * 60)

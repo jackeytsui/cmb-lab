@@ -6,11 +6,18 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  FileText,
+  Loader2,
+  NotebookPen,
   Pause,
   Play,
+  RotateCcw,
+  RotateCw,
   SkipBack,
   SkipForward,
   Volume2,
+  VolumeX,
+  X,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +29,7 @@ type AudioLesson = {
   title: string;
   description: string;
   audioUrl: string;
+  transcript: string;
   durationMinutes: number | null;
   sortOrder: number;
 };
@@ -43,8 +51,10 @@ type AudioCourse = {
 // ---------------------------------------------------------------------------
 
 function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
@@ -64,8 +74,17 @@ export function AudioCourseClient() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Side panels
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [noteContent, setNoteContent] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteLoaded, setNoteLoaded] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetch("/api/audio-courses")
@@ -79,6 +98,53 @@ export function AudioCourseClient() {
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Load notes when lesson changes
+  useEffect(() => {
+    if (!currentLesson) {
+      setNoteContent("");
+      setNoteLoaded(false);
+      return;
+    }
+    setNoteLoaded(false);
+    fetch(`/api/audio-courses/notes/${currentLesson.id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setNoteContent(d.content ?? "");
+        setNoteLoaded(true);
+      })
+      .catch(() => setNoteLoaded(true));
+  }, [currentLesson?.id]);
+
+  // Auto-save notes (debounced)
+  const saveNote = useCallback(
+    (content: string) => {
+      if (!currentLesson) return;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(async () => {
+        setNoteSaving(true);
+        try {
+          await fetch(`/api/audio-courses/notes/${currentLesson.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content }),
+          });
+        } catch {
+          // silent
+        }
+        setNoteSaving(false);
+      }, 800);
+    },
+    [currentLesson?.id],
+  );
+
+  const handleNoteChange = useCallback(
+    (value: string) => {
+      setNoteContent(value);
+      saveNote(value);
+    },
+    [saveNote],
+  );
 
   const playLesson = useCallback(
     (lesson: AudioLesson, course: AudioCourse) => {
@@ -94,7 +160,7 @@ export function AudioCourseClient() {
         audioRef.current.play().catch(() => setIsPlaying(false));
       }
     },
-    [playbackRate]
+    [playbackRate],
   );
 
   const togglePlayPause = useCallback(() => {
@@ -122,6 +188,17 @@ export function AudioCourseClient() {
     }
   }, [currentCourse, currentLesson, playLesson]);
 
+  const skip = useCallback(
+    (seconds: number) => {
+      if (!audioRef.current) return;
+      audioRef.current.currentTime = Math.max(
+        0,
+        Math.min(audioRef.current.currentTime + seconds, duration),
+      );
+    },
+    [duration],
+  );
+
   const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
     if (audioRef.current) {
@@ -134,10 +211,22 @@ export function AudioCourseClient() {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const vol = parseFloat(e.target.value);
       setVolume(vol);
+      setIsMuted(vol === 0);
       if (audioRef.current) audioRef.current.volume = vol;
     },
-    []
+    [],
   );
+
+  const toggleMute = useCallback(() => {
+    if (!audioRef.current) return;
+    if (isMuted) {
+      audioRef.current.volume = volume || 1;
+      setIsMuted(false);
+    } else {
+      audioRef.current.volume = 0;
+      setIsMuted(true);
+    }
+  }, [isMuted, volume]);
 
   const cyclePlaybackRate = useCallback(() => {
     const rates = [0.75, 1, 1.25, 1.5, 2];
@@ -155,6 +244,8 @@ export function AudioCourseClient() {
       playLesson(currentCourse.lessons[idx + 1], currentCourse);
     }
   }, [currentCourse, currentLesson, playLesson]);
+
+  const hasTranscript = Boolean(currentLesson?.transcript);
 
   if (isLoading) {
     return (
@@ -209,13 +300,11 @@ export function AudioCourseClient() {
             {/* Course header */}
             <button
               type="button"
-              onClick={() =>
-                setExpandedCourseId(isExpanded ? null : course.id)
-              }
-              className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/30 active:bg-muted/50"
+              onClick={() => setExpandedCourseId(isExpanded ? null : course.id)}
+              className="flex w-full items-center gap-3 p-3 sm:p-4 text-left transition-colors hover:bg-muted/30 active:bg-muted/50"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                <AudioLines className="h-5 w-5 text-primary" />
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <AudioLines className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-sm font-semibold text-foreground sm:text-base">
@@ -242,8 +331,8 @@ export function AudioCourseClient() {
               <div className="border-t border-border">
                 {/* Student instructions */}
                 {course.studentInstructions && (
-                  <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
-                    <p className="text-xs leading-relaxed text-muted-foreground">
+                  <div className="border-b border-border/60 bg-muted/20 px-3 sm:px-4 py-3">
+                    <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line">
                       {course.studentInstructions}
                     </p>
                   </div>
@@ -254,30 +343,18 @@ export function AudioCourseClient() {
                   course.youtubeMusicUrl ||
                   course.applePodcastUrl ||
                   course.helloAudioSeriesUrl) && (
-                  <div className="flex flex-wrap gap-2 border-b border-border/60 px-4 py-3">
+                  <div className="flex flex-wrap gap-2 border-b border-border/60 px-3 sm:px-4 py-3">
                     {course.helloAudioSeriesUrl && (
-                      <ExternalLinkBadge
-                        href={course.helloAudioSeriesUrl}
-                        label="HelloAudio"
-                      />
+                      <ExternalLinkBadge href={course.helloAudioSeriesUrl} label="HelloAudio" />
                     )}
                     {course.spotifyUrl && (
-                      <ExternalLinkBadge
-                        href={course.spotifyUrl}
-                        label="Spotify"
-                      />
+                      <ExternalLinkBadge href={course.spotifyUrl} label="Spotify" />
                     )}
                     {course.youtubeMusicUrl && (
-                      <ExternalLinkBadge
-                        href={course.youtubeMusicUrl}
-                        label="YouTube Music"
-                      />
+                      <ExternalLinkBadge href={course.youtubeMusicUrl} label="YouTube Music" />
                     )}
                     {course.applePodcastUrl && (
-                      <ExternalLinkBadge
-                        href={course.applePodcastUrl}
-                        label="Apple Podcasts"
-                      />
+                      <ExternalLinkBadge href={course.applePodcastUrl} label="Apple Podcasts" />
                     )}
                   </div>
                 )}
@@ -298,7 +375,7 @@ export function AudioCourseClient() {
                           type="button"
                           disabled={!hasAudio}
                           onClick={() => playLesson(lesson, course)}
-                          className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+                          className={`flex w-full items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 text-left transition-colors ${
                             isActive
                               ? "bg-primary/5"
                               : hasAudio
@@ -307,14 +384,14 @@ export function AudioCourseClient() {
                           }`}
                         >
                           <div
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium ${
+                            className={`flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium ${
                               isActive
                                 ? "bg-primary text-primary-foreground"
                                 : "bg-muted text-muted-foreground"
                             }`}
                           >
                             {isActive && isPlaying ? (
-                              <Pause className="h-3.5 w-3.5" />
+                              <Pause className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                             ) : (
                               idx + 1
                             )}
@@ -335,11 +412,16 @@ export function AudioCourseClient() {
                               </p>
                             )}
                           </div>
-                          {lesson.durationMinutes && (
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {lesson.durationMinutes} min
-                            </span>
-                          )}
+                          <div className="flex shrink-0 items-center gap-2">
+                            {lesson.transcript && (
+                              <FileText className="h-3.5 w-3.5 text-muted-foreground/50" />
+                            )}
+                            {lesson.durationMinutes && (
+                              <span className="text-xs text-muted-foreground">
+                                {lesson.durationMinutes} min
+                              </span>
+                            )}
+                          </div>
                         </button>
                       );
                     })
@@ -351,38 +433,131 @@ export function AudioCourseClient() {
         );
       })}
 
+      {/* Transcript slide-over panel */}
+      {showTranscript && currentLesson?.transcript && (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowTranscript(false)}
+          />
+          <div className="relative w-full max-w-md bg-card border-l border-border shadow-xl overflow-y-auto">
+            <div className="sticky top-0 flex items-center justify-between border-b border-border bg-card px-4 py-3">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Transcript</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTranscript(false)}
+                className="rounded p-1 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-4 py-4">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                {currentLesson.title}
+              </p>
+              <div className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-foreground/90 whitespace-pre-line">
+                {currentLesson.transcript}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notes slide-over panel */}
+      {showNotes && currentLesson && (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowNotes(false)}
+          />
+          <div className="relative w-full max-w-md bg-card border-l border-border shadow-xl flex flex-col">
+            <div className="sticky top-0 flex items-center justify-between border-b border-border bg-card px-4 py-3">
+              <div className="flex items-center gap-2">
+                <NotebookPen className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">My Notes</h3>
+                {noteSaving && (
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNotes(false)}
+                className="rounded p-1 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 p-4">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                {currentLesson.title}
+              </p>
+              <textarea
+                value={noteLoaded ? noteContent : ""}
+                onChange={(e) => handleNoteChange(e.target.value)}
+                disabled={!noteLoaded}
+                placeholder={noteLoaded ? "Type your notes here… They save automatically." : "Loading…"}
+                className="h-full min-h-[300px] w-full resize-none rounded-lg border border-input bg-background p-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sticky bottom audio player */}
       {currentLesson && (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-          <div className="mx-auto max-w-4xl px-4 py-3">
+          <div className="mx-auto max-w-4xl px-3 sm:px-4 py-2 sm:py-3">
             {/* Progress bar */}
-            <input
-              type="range"
-              min={0}
-              max={duration || 1}
-              step={0.1}
-              value={currentTime}
-              onChange={handleSeek}
-              className="mb-2 h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
-            />
+            <div className="mb-1.5 sm:mb-2 flex items-center gap-2">
+              <span className="text-[10px] sm:text-xs tabular-nums text-muted-foreground w-10 sm:w-12 text-right shrink-0">
+                {formatTime(currentTime)}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={duration || 1}
+                step={0.1}
+                value={currentTime}
+                onChange={handleSeek}
+                className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+              />
+              <span className="text-[10px] sm:text-xs tabular-nums text-muted-foreground w-10 sm:w-12 shrink-0">
+                {formatTime(duration)}
+              </span>
+            </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {/* Track info */}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
+                <p className="truncate text-xs sm:text-sm font-medium text-foreground">
                   {currentLesson.title}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="truncate text-[10px] sm:text-xs text-muted-foreground">
                   {currentCourse?.title}
                 </p>
               </div>
 
               {/* Controls */}
-              <div className="flex items-center gap-1 sm:gap-2">
+              <div className="flex items-center gap-0.5 sm:gap-1">
+                {/* 15s back */}
+                <button
+                  type="button"
+                  onClick={() => skip(-15)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Back 15 seconds"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+
                 <button
                   type="button"
                   onClick={skipPrev}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                  className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
                   aria-label="Previous"
                 >
                   <SkipBack className="h-4 w-4" />
@@ -390,59 +565,132 @@ export function AudioCourseClient() {
                 <button
                   type="button"
                   onClick={togglePlayPause}
-                  className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                   aria-label={isPlaying ? "Pause" : "Play"}
                 >
                   {isPlaying ? (
-                    <Pause className="h-5 w-5" />
+                    <Pause className="h-4 w-4 sm:h-5 sm:w-5" />
                   ) : (
-                    <Play className="h-5 w-5 ml-0.5" />
+                    <Play className="h-4 w-4 sm:h-5 sm:w-5 ml-0.5" />
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={skipNext}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                  className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
                   aria-label="Next"
                 >
                   <SkipForward className="h-4 w-4" />
                 </button>
-              </div>
 
-              {/* Time + Speed */}
-              <div className="hidden items-center gap-2 sm:flex">
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
+                {/* 15s forward */}
                 <button
                   type="button"
-                  onClick={cyclePlaybackRate}
-                  className="rounded-md border border-border px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => skip(15)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Forward 15 seconds"
                 >
-                  {playbackRate}x
+                  <RotateCw className="h-3.5 w-3.5" />
                 </button>
               </div>
 
+              {/* Speed */}
+              <button
+                type="button"
+                onClick={cyclePlaybackRate}
+                className="rounded-md border border-border px-1.5 py-0.5 text-[10px] sm:text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {playbackRate}x
+              </button>
+
               {/* Volume - desktop only */}
-              <div className="hidden items-center gap-1 lg:flex">
-                <Volume2 className="h-4 w-4 text-muted-foreground" />
+              <div className="hidden lg:flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  {isMuted ? (
+                    <VolumeX className="h-4 w-4" />
+                  ) : (
+                    <Volume2 className="h-4 w-4" />
+                  )}
+                </button>
                 <input
                   type="range"
                   min={0}
                   max={1}
                   step={0.05}
-                  value={volume}
+                  value={isMuted ? 0 : volume}
                   onChange={handleVolumeChange}
                   className="h-1 w-16 cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
                 />
               </div>
+
+              {/* Transcript button */}
+              {hasTranscript && (
+                <button
+                  type="button"
+                  onClick={() => { setShowTranscript(!showTranscript); setShowNotes(false); }}
+                  className={`hidden sm:flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                    showTranscript
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-label="Transcript"
+                  title="Transcript"
+                >
+                  <FileText className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* Notes button */}
+              <button
+                type="button"
+                onClick={() => { setShowNotes(!showNotes); setShowTranscript(false); }}
+                className={`hidden sm:flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                  showNotes
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                aria-label="My Notes"
+                title="My Notes"
+              >
+                <NotebookPen className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Mobile: extra row for transcript & notes buttons */}
+            <div className="flex sm:hidden items-center justify-center gap-4 mt-1.5 pb-0.5">
+              {hasTranscript && (
+                <button
+                  type="button"
+                  onClick={() => { setShowTranscript(!showTranscript); setShowNotes(false); }}
+                  className={`flex items-center gap-1 text-[10px] font-medium transition-colors ${
+                    showTranscript ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  <FileText className="h-3 w-3" />
+                  Transcript
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => { setShowNotes(!showNotes); setShowTranscript(false); }}
+                className={`flex items-center gap-1 text-[10px] font-medium transition-colors ${
+                  showNotes ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                <NotebookPen className="h-3 w-3" />
+                Notes
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* Spacer for fixed player */}
-      {currentLesson && <div className="h-24" />}
+      {currentLesson && <div className="h-28 sm:h-24" />}
     </div>
   );
 }
@@ -457,7 +705,7 @@ function ExternalLinkBadge({ href, label }: { href: string; label: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted active:bg-muted/70"
+      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium text-foreground transition-colors hover:bg-muted active:bg-muted/70"
     >
       {label}
       <ExternalLink className="h-3 w-3" />

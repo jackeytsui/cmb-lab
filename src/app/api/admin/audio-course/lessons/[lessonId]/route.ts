@@ -14,8 +14,22 @@ function parseLessonAudioUrl(raw: string | null): string {
   }
 }
 
-function stringifyLessonContent(audioUrl: string) {
-  return JSON.stringify({ audioUrl: audioUrl.trim() });
+function parseLessonTranscript(raw: string | null): string {
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as { transcript?: string };
+    return typeof parsed.transcript === "string" ? parsed.transcript : "";
+  } catch {
+    return "";
+  }
+}
+
+function stringifyLessonContent(audioUrl: string, transcript?: string) {
+  const content: Record<string, string> = { audioUrl: audioUrl.trim() };
+  if (transcript !== undefined) {
+    if (transcript.trim()) content.transcript = transcript.trim();
+  }
+  return JSON.stringify(content);
 }
 
 export async function PUT(
@@ -41,6 +55,7 @@ export async function PUT(
     title?: string;
     description?: string;
     audioUrl?: string;
+    transcript?: string;
     durationMinutes?: number | null;
   };
 
@@ -52,12 +67,17 @@ export async function PUT(
     return NextResponse.json({ error: "Lesson audio URL is required" }, { status: 400 });
   }
 
+  const nextTranscript =
+    body.transcript !== undefined
+      ? body.transcript
+      : parseLessonTranscript(existing.content);
+
   const [updated] = await db
     .update(lessons)
     .set({
       title: body.title?.trim() || existing.title,
       description: body.description?.trim() ?? null,
-      content: stringifyLessonContent(nextAudioUrl),
+      content: stringifyLessonContent(nextAudioUrl, nextTranscript),
       durationSeconds:
         typeof body.durationMinutes === "number" && body.durationMinutes > 0
           ? Math.round(body.durationMinutes * 60)
