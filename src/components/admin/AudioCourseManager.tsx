@@ -637,7 +637,7 @@ export function AudioCourseManager() {
                     Drop audio files here or click to browse
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    MP3, M4A, WAV, OGG, AAC, FLAC — up to 500MB each
+                    MP3, M4A, WAV, OGG, AAC, FLAC — up to 4.5GB each
                   </p>
                   <input
                     ref={fileInputRef}

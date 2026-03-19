@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { hasMinimumRole } from "@/lib/auth";
 
+// Allow large uploads and long-running requests
+export const maxDuration = 300; // 5 minutes
+
 /**
  * POST /api/admin/audio-course/upload
  * Accepts a single audio file via FormData and uploads it to Vercel Blob.
@@ -40,9 +43,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Max 500MB per file
-  if (file.size > 500 * 1024 * 1024) {
-    return NextResponse.json({ error: "File too large. Maximum 500MB." }, { status: 400 });
+  // Max 4.5GB per file (Vercel Blob limit is 5GB, leave headroom)
+  if (file.size > 4.5 * 1024 * 1024 * 1024) {
+    return NextResponse.json({ error: "File too large. Maximum 4.5GB." }, { status: 400 });
   }
 
   const timestamp = Date.now();
