@@ -26,6 +26,7 @@ export const users = pgTable("users", {
   longestStreak: integer("longest_streak").notNull().default(0),
   showCohortRankings: boolean("show_cohort_rankings").notNull().default(false),
   assignedCoachId: uuid("assigned_coach_id"),
+  coachingGoals: text("coaching_goals"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
     .notNull()

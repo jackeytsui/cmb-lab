@@ -815,18 +815,33 @@ function CoachingPanel({
   const [isEditingRecordingUrl, setIsEditingRecordingUrl] = useState(false);
   const [isSavingRecordingUrl, setIsSavingRecordingUrl] = useState(false);
 
-  // Goals state
+  // Goals state — student-level (not session-level)
+  const [studentGoals, setStudentGoals] = useState<string | null>(null);
   const [goalsDraft, setGoalsDraft] = useState("");
   const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [isSavingGoals, setIsSavingGoals] = useState(false);
 
-  // Sync recording URL and goals draft when active session changes
+  // Sync recording URL when active session changes
   useEffect(() => {
     setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
     setIsEditingRecordingUrl(false);
-    setGoalsDraft(activeSession?.goals ?? "");
-    setIsEditingGoals(false);
   }, [activeSessionId]);
+
+  // Fetch student goals when student changes (by email)
+  const goalsStudentEmail = canWrite
+    ? studentEmailFilter
+    : userEmail;
+  useEffect(() => {
+    if (!goalsStudentEmail) {
+      setStudentGoals(null);
+      return;
+    }
+    const params = new URLSearchParams({ studentEmail: goalsStudentEmail });
+    fetch(`/api/coaching/goals?${params}`)
+      .then((r) => r.json())
+      .then((d) => setStudentGoals(d.goals ?? null))
+      .catch(() => {});
+  }, [goalsStudentEmail, canWrite]);
 
   const handleSaveRecordingUrl = useCallback(async () => {
     if (!activeSessionId) return;
@@ -855,22 +870,20 @@ function CoachingPanel({
   }, [activeSessionId, recordingUrlDraft]);
 
   const handleSaveGoals = useCallback(async () => {
-    if (!activeSessionId) return;
+    if (!goalsStudentEmail) return;
     setIsSavingGoals(true);
     try {
-      const res = await fetch(`/api/coaching/sessions/${activeSessionId}`, {
+      const res = await fetch("/api/coaching/goals", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goals: goalsDraft.trim() || null }),
+        body: JSON.stringify({
+          studentEmail: goalsStudentEmail,
+          goals: goalsDraft.trim() || null,
+        }),
       });
       if (res.ok) {
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === activeSessionId
-              ? { ...s, goals: goalsDraft.trim() || null }
-              : s,
-          ),
-        );
+        const data = await res.json();
+        setStudentGoals(data.goals ?? null);
         setIsEditingGoals(false);
       }
     } catch {
@@ -878,7 +891,7 @@ function CoachingPanel({
     } finally {
       setIsSavingGoals(false);
     }
-  }, [activeSessionId, goalsDraft]);
+  }, [goalsStudentEmail, goalsDraft]);
 
   // Fetch existing rating when active session changes
   useEffect(() => {
@@ -1132,7 +1145,11 @@ function CoachingPanel({
     const data = await res.json();
     const normalized = normalizeSessions(data.sessions ?? []);
     setSessions(normalized);
-    setActiveSessionId(normalized[0]?.id ?? null);
+    setActiveSessionId((prev) => {
+      // Preserve current session if it still exists, otherwise default to first
+      if (prev && normalized.some((s) => s.id === prev)) return prev;
+      return normalized[0]?.id ?? null;
+    });
     setIsLoaded(true);
   }, [canWrite, normalizeSessions, sessionType, studentEmailFilter]);
 
@@ -1506,8 +1523,8 @@ function CoachingPanel({
             <p className="text-sm text-muted-foreground">{subtitle}</p>
           </div>
 
-          {/* Right: Goals widget */}
-          {activeSession && sessionType === "one-on-one" && (
+          {/* Right: Goals widget — student-level, shown when a student is loaded */}
+          {goalsStudentEmail && sessionType === "one-on-one" && (
             <div className="lg:max-w-[55%] w-full rounded-lg border border-teal-500/25 bg-gradient-to-br from-teal-500/10 to-cyan-500/10 dark:from-teal-500/[0.07] dark:to-cyan-500/[0.07] p-3.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -1520,13 +1537,13 @@ function CoachingPanel({
                   <button
                     type="button"
                     onClick={() => {
-                      setGoalsDraft(activeSession.goals ?? "");
+                      setGoalsDraft(studentGoals ?? "");
                       setIsEditingGoals(true);
                     }}
                     className="inline-flex items-center justify-center rounded-md border border-teal-500/25 bg-teal-500/10 px-2.5 py-1 text-xs font-medium text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 transition-colors"
                   >
                     <Pencil className="size-3 mr-1" />
-                    {activeSession.goals ? "Edit" : "Add"}
+                    {studentGoals ? "Edit" : "Add"}
                   </button>
                 )}
               </div>
@@ -1560,20 +1577,20 @@ function CoachingPanel({
                     </button>
                   </div>
                 </div>
-              ) : activeSession.goals ? (
+              ) : studentGoals ? (
                 <div className="mt-2">
                   <p className="text-xs text-teal-600/80 dark:text-teal-400/70 mb-1">
                     Before our next session, please complete:
                   </p>
                   <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                    {activeSession.goals}
+                    {studentGoals}
                   </p>
                 </div>
               ) : (
                 <p className="mt-1.5 text-xs text-teal-600/70 dark:text-teal-400/60">
                   {canWrite
                     ? "No goals set yet — click \"Add\" to set prep work."
-                    : "No goals set for this session yet."}
+                    : "No goals set yet."}
                 </p>
               )}
             </div>

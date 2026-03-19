@@ -54,13 +54,10 @@ export async function GET() {
   const coachingCards = starredRows.map((row) => ({
     id: `coaching-${row.noteId}`,
     source: "coaching" as const,
-    sourceLabel:
-      row.sessionType === "one_on_one"
-        ? "1:1 Coaching"
-        : "Inner Circle",
-    sessionTitle: row.sessionTitle,
     chinese: row.textOverride || row.text,
     romanization: row.romanization || "",
+    pinyin: row.pane === "mandarin" ? (row.romanization || "") : "",
+    jyutping: row.pane === "cantonese" ? (row.romanization || "") : "",
     english: row.translation || "",
     pane: row.pane,
     createdAt: row.starredAt?.toISOString() ?? new Date().toISOString(),
@@ -77,9 +74,10 @@ export async function GET() {
   const vocabCards = vocabRows.map((row) => ({
     id: `vocab-${row.id}`,
     source: "vocabulary" as const,
-    sourceLabel: "Saved Vocabulary",
     chinese: row.traditional,
     simplified: row.simplified,
+    pinyin: row.pinyin || "",
+    jyutping: row.jyutping || "",
     romanization: [row.pinyin, row.jyutping].filter(Boolean).join(" / "),
     english: (row.definitions ?? []).join("; "),
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
