@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     .select()
     .from(coachingSessions)
     .where(whereClause)
-    .orderBy(desc(coachingSessions.updatedAt));
+    .orderBy(desc(coachingSessions.createdAt));
 
   if (sessions.length === 0) {
     return NextResponse.json({ sessions: [] });

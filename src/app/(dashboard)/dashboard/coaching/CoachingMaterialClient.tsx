@@ -795,24 +795,6 @@ function CoachingPanel({
     localStorage.setItem("coaching-note-font-size", String(noteFontSize));
   }, [noteFontSize]);
 
-  // Visual Font toggle for Cantonese — uses locally installed VF Cantonese font
-  const [useVisualFont, setUseVisualFont] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("coaching-visual-font") === "true";
-  });
-  const [visualFontAvailable, setVisualFontAvailable] = useState(false);
-  useEffect(() => {
-    localStorage.setItem("coaching-visual-font", String(useVisualFont));
-  }, [useVisualFont]);
-  useEffect(() => {
-    // Detect if VF Cantonese font is installed locally
-    if (typeof document === "undefined") return;
-    document.fonts.check("16px 'VF Cantonese'") ||
-    document.fonts.ready.then(() => {
-      const available = document.fonts.check("16px 'VF Cantonese'") || document.fonts.check("16px 'VF-Canto'");
-      setVisualFontAvailable(available);
-    });
-  }, []);
   // Panel collapse/resize state
   const [mandoCollapsed, setMandoCollapsed] = useState(false);
   const [cantoCollapsed, setCantoCollapsed] = useState(false);
@@ -975,12 +957,9 @@ function CoachingPanel({
 
   const sortedSessions = useMemo(
     () =>
-      [...sessions].sort((a, b) => {
-        const updatedDiff =
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-        if (updatedDiff !== 0) return updatedDiff;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }),
+      [...sessions].sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ),
     [sessions],
   );
   const visibleSessions = showAllSessions
@@ -2346,26 +2325,6 @@ function CoachingPanel({
               </button>
             </div>
           </div>
-          {/* Visual Font toggle */}
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setUseVisualFont((p) => !p)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium border transition-colors",
-                useVisualFont
-                  ? "border-teal-500/40 bg-teal-500/10 text-teal-700 dark:text-teal-300"
-                  : "border-input bg-background text-muted-foreground hover:text-foreground hover:border-primary/40",
-              )}
-              title={visualFontAvailable ? "Toggle VF Cantonese visual font (installed)" : "Toggle VF Cantonese visual font (not detected — install locally)"}
-            >
-              <span className="text-[13px]">字</span>
-              Visual Font {useVisualFont ? "ON" : "OFF"}
-            </button>
-            {useVisualFont && !visualFontAvailable && (
-              <span className="text-[10px] text-amber-500">Font not detected — install VF-Canto.ttf locally</span>
-            )}
-          </div>
 
           <div className="mt-4 space-y-2">
             <label className="text-sm font-medium text-foreground">
@@ -2460,11 +2419,10 @@ function CoachingPanel({
                       language="zh-HK"
                       scriptMode={activeSession.cantonese.scriptMode}
                       showPinyin={false}
-                      showJyutping={!useVisualFont}
+                      showJyutping={true}
                       canEdit={canEditNotes}
                       canStar={canStarNotes}
-                      fontSize={useVisualFont ? Math.round(noteFontSize * 1.33) : noteFontSize}
-                      visualFontClass={useVisualFont ? "font-cantonese-visual" : undefined}
+                      fontSize={noteFontSize}
                       onToggleStar={() => {
                         if (!activeSession) return;
                         if (!canStarNotes) return;
@@ -2495,12 +2453,11 @@ function CoachingPanel({
               <ReaderTextArea
                 segments={cantonesePane.segments}
                 showPinyin={false}
-                showJyutping={!useVisualFont}
+                showJyutping={true}
                 showEnglish={true}
                 translationMode="proper"
-                fontSize={useVisualFont ? Math.round(noteFontSize * 1.33) : noteFontSize}
+                fontSize={noteFontSize}
                 language="zh-HK"
-                className={useVisualFont ? "font-cantonese-visual" : undefined}
                 onSpeakSentence={cantonesePane.handleSpeakSentence}
                 isSpeaking={cantonesePane.isPlaying || cantonesePane.ttsLoading}
                 speakingText={cantonesePane.speakingText}

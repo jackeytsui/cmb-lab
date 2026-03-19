@@ -10,7 +10,7 @@ import { AnalyticsDashboard } from "./AnalyticsDashboard";
  * - Non-admins are redirected to /dashboard
  */
 export default async function AnalyticsPage() {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
     redirect("/dashboard");
   }

@@ -13,7 +13,7 @@ const COOKIE_NAME = "view_as_user_id";
  * Body: { email: string }
  */
 export async function POST(request: Request) {
-  const isAdmin = await hasMinimumRole("admin");
+  const isAdmin = await hasMinimumRole("coach");
   if (!isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
  * Stop impersonation.
  */
 export async function DELETE() {
-  const isAdmin = await hasMinimumRole("admin");
+  const isAdmin = await hasMinimumRole("coach");
   if (!isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -76,7 +76,7 @@ export async function DELETE() {
  * Check current impersonation status.
  */
 export async function GET() {
-  const isAdmin = await hasMinimumRole("admin");
+  const isAdmin = await hasMinimumRole("coach");
   if (!isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
