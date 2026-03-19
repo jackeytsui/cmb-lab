@@ -18,8 +18,11 @@ import {
   Eye,
   EyeOff,
   Shield,
+  ListChecks,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ExerciseForm } from "@/components/admin/exercises/ExerciseForm";
+import type { PracticeExercise } from "@/db/schema";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1178,6 +1181,7 @@ function LessonRow({
   const [description, setDescription] = useState(lesson.description);
   const [transcript, setTranscript] = useState(lesson.transcript || "");
   const [showTranscript, setShowTranscript] = useState(false);
+  const [showExercises, setShowExercises] = useState(false);
 
   const hasChanges =
     title !== lesson.title ||
@@ -1264,21 +1268,309 @@ function LessonRow({
             </button>
           )}
         </div>
-        {lesson.durationMinutes && (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {lesson.durationMinutes}m
-          </span>
-        )}
-        {!isEditing && (
+        <div className="flex shrink-0 items-center gap-1">
+          {lesson.durationMinutes && (
+            <span className="text-xs text-muted-foreground mr-1">
+              {lesson.durationMinutes}m
+            </span>
+          )}
           <button
             type="button"
-            onClick={() => onDelete(lesson.id)}
-            className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+            onClick={() => setShowExercises(!showExercises)}
+            className={`rounded p-1 transition-colors ${
+              showExercises ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
+            title="Manage exercises"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <ListChecks className="h-3.5 w-3.5" />
           </button>
-        )}
+          {!isEditing && (
+            <button
+              type="button"
+              onClick={() => onDelete(lesson.id)}
+              className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Exercises section */}
+      {showExercises && (
+        <div className="mt-2 border-t border-border/60 pt-2">
+          <LessonExercises lessonId={lesson.id} lessonTitle={lesson.title} />
+        </div>
+      )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Lesson Exercises Manager
+// ---------------------------------------------------------------------------
+
+const EXERCISE_TYPE_LABELS: Record<string, string> = {
+  multiple_choice: "Multiple Choice",
+  fill_in_blank: "Fill in Blank",
+  matching: "Matching",
+  ordering: "Ordering",
+  audio_recording: "Audio Recording",
+  free_text: "Free Text",
+  video_recording: "Video Response",
+};
+
+function LessonExercises({
+  lessonId,
+  lessonTitle,
+}: {
+  lessonId: string;
+  lessonTitle: string;
+}) {
+  const [exercises, setExercises] = useState<PracticeExercise[]>([]);
+  const [practiceSetId, setPracticeSetId] = useState<string | null>(null);
+  const [practiceSetStatus, setPracticeSetStatus] = useState<string>("draft");
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingExercise, setEditingExercise] = useState<PracticeExercise | null>(null);
+  const [togglingStatus, setTogglingStatus] = useState(false);
+
+  const fetchExercises = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/admin/audio-course/lessons/${lessonId}/exercises`,
+      );
+      const data = await res.json();
+      setExercises(data.exercises ?? []);
+      setPracticeSetId(data.practiceSetId ?? null);
+      setPracticeSetStatus(data.practiceSetStatus ?? "draft");
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, [lessonId]);
+
+  useEffect(() => {
+    fetchExercises();
+  }, [fetchExercises]);
+
+  const handleSave = useCallback(
+    (exercise: PracticeExercise) => {
+      setExercises((prev) => {
+        const idx = prev.findIndex((e) => e.id === exercise.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = exercise;
+          return updated;
+        }
+        return [...prev, exercise];
+      });
+      setShowForm(false);
+      setEditingExercise(null);
+      // Refetch to get the practiceSetId if it was just created
+      fetchExercises();
+    },
+    [fetchExercises],
+  );
+
+  const handleDelete = useCallback(
+    async (exerciseId: string) => {
+      if (!confirm("Delete this exercise?")) return;
+      try {
+        await fetch(
+          `/api/admin/audio-course/lessons/${lessonId}/exercises`,
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ exerciseId }),
+          },
+        );
+        setExercises((prev) => prev.filter((e) => e.id !== exerciseId));
+      } catch {
+        // silent
+      }
+    },
+    [lessonId],
+  );
+
+  const togglePublish = useCallback(async () => {
+    setTogglingStatus(true);
+    const newStatus = practiceSetStatus === "published" ? "draft" : "published";
+    try {
+      await fetch(
+        `/api/admin/audio-course/lessons/${lessonId}/exercises-status`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus }),
+        },
+      );
+      setPracticeSetStatus(newStatus);
+    } catch {
+      // silent
+    }
+    setTogglingStatus(false);
+  }, [lessonId, practiceSetStatus]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" /> Loading exercises…
+      </div>
+    );
+  }
+
+  // If showing the form (create or edit)
+  if (showForm || editingExercise) {
+    // We need a practiceSetId for ExerciseForm. If we don't have one yet,
+    // the POST handler will auto-create it. We use a placeholder and
+    // intercept via onLocalSave.
+    const formSetId = practiceSetId ?? "auto";
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold text-foreground">
+            {editingExercise ? "Edit Exercise" : "New Exercise"} — {lessonTitle}
+          </h4>
+        </div>
+        <ExerciseForm
+          practiceSetId={formSetId}
+          exercise={editingExercise ?? undefined}
+          onSave={(exercise) => handleSave(exercise)}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingExercise(null);
+          }}
+          onLocalSave={
+            !practiceSetId
+              ? async (data) => {
+                  // Auto-create via our lesson exercise API
+                  try {
+                    const res = await fetch(
+                      `/api/admin/audio-course/lessons/${lessonId}/exercises`,
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(data),
+                      },
+                    );
+                    const result = await res.json();
+                    if (result.exercise) {
+                      handleSave(result.exercise);
+                    }
+                  } catch {
+                    // silent
+                  }
+                }
+              : undefined
+          }
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+          <ListChecks className="h-3.5 w-3.5" />
+          Exercises ({exercises.length})
+          {practiceSetId && (
+            <span
+              className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                practiceSetStatus === "published"
+                  ? "bg-green-500/10 text-green-500"
+                  : "bg-yellow-500/10 text-yellow-500"
+              }`}
+            >
+              {practiceSetStatus}
+            </span>
+          )}
+        </h4>
+        <div className="flex items-center gap-1.5">
+          {practiceSetId && exercises.length > 0 && (
+            <button
+              type="button"
+              disabled={togglingStatus}
+              onClick={togglePublish}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                practiceSetStatus === "published"
+                  ? "bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20"
+                  : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
+              }`}
+            >
+              {togglingStatus
+                ? "…"
+                : practiceSetStatus === "published"
+                  ? "Unpublish"
+                  : "Publish"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/10 transition-colors"
+          >
+            <Plus className="h-3 w-3" /> Add
+          </button>
+        </div>
+      </div>
+
+      {exercises.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">
+          No exercises yet. Add exercises for students to practice after listening.
+        </p>
+      ) : (
+        <div className="space-y-1">
+          {exercises.map((exercise, idx) => (
+            <div
+              key={exercise.id}
+              className="flex items-center gap-2 rounded border border-border/60 bg-muted/20 px-2 py-1.5"
+            >
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-medium text-muted-foreground">
+                {idx + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground truncate">
+                  {EXERCISE_TYPE_LABELS[exercise.type] ?? exercise.type}
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {getExercisePreview(exercise)}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setEditingExercise(exercise)}
+                  className="rounded p-0.5 text-muted-foreground hover:text-foreground text-[10px]"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(exercise.id)}
+                  className="rounded p-0.5 text-muted-foreground hover:text-red-400"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getExercisePreview(exercise: PracticeExercise): string {
+  const def = exercise.definition as unknown as Record<string, unknown>;
+  if (typeof def.question === "string") return def.question;
+  if (typeof def.prompt === "string") return def.prompt;
+  if (typeof def.sentence === "string") return def.sentence;
+  if (typeof def.targetPhrase === "string") return def.targetPhrase;
+  if (Array.isArray(def.items)) return `${def.items.length} items to order`;
+  if (Array.isArray(def.pairs)) return `${def.pairs.length} pairs to match`;
+  return "";
 }

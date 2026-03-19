@@ -8,6 +8,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  ListChecks,
   Loader2,
   NotebookPen,
   Pause,
@@ -16,6 +17,7 @@ import {
   RotateCw,
   SkipBack,
   SkipForward,
+  Trophy,
   Volume2,
   VolumeX,
   X,
@@ -82,6 +84,12 @@ export function AudioCourseClient() {
   // Side panels
   const [showTranscript, setShowTranscript] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
+  const [showExercises, setShowExercises] = useState(false);
+
+  // Exercises state - keyed by lessonId
+  const [lessonExerciseInfo, setLessonExerciseInfo] = useState<
+    Record<string, { hasExercises: boolean; bestScore: number | null; practiceSetId: string | null }>
+  >({});
   const [noteContent, setNoteContent] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteLoaded, setNoteLoaded] = useState(false);
@@ -99,6 +107,27 @@ export function AudioCourseClient() {
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Load exercise info for all lessons
+  useEffect(() => {
+    if (courses.length === 0) return;
+    const allLessons = courses.flatMap((c) => c.lessons);
+    for (const lesson of allLessons) {
+      fetch(`/api/audio-courses/exercises/${lesson.id}`)
+        .then((r) => r.json())
+        .then((d) => {
+          setLessonExerciseInfo((prev) => ({
+            ...prev,
+            [lesson.id]: {
+              hasExercises: d.hasExercises ?? false,
+              bestScore: d.bestScore ?? null,
+              practiceSetId: d.practiceSetId ?? null,
+            },
+          }));
+        })
+        .catch(() => {});
+    }
+  }, [courses]);
 
   // Load notes when lesson changes
   useEffect(() => {
@@ -154,6 +183,7 @@ export function AudioCourseClient() {
       setIsPlaying(true);
       setCurrentTime(0);
       setDuration(0);
+      setShowExercises(false);
 
       if (audioRef.current) {
         audioRef.current.src = `/api/audio-courses/stream/${lesson.id}`;
@@ -247,6 +277,10 @@ export function AudioCourseClient() {
   }, [currentCourse, currentLesson, playLesson]);
 
   const hasTranscript = Boolean(currentLesson?.transcript);
+  const currentExerciseInfo = currentLesson
+    ? lessonExerciseInfo[currentLesson.id]
+    : null;
+  const hasExercises = currentExerciseInfo?.hasExercises ?? false;
 
   // Download
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
@@ -472,6 +506,16 @@ export function AudioCourseClient() {
                             )}
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
+                            {lessonExerciseInfo[lesson.id]?.hasExercises && (
+                              <span className="flex items-center gap-0.5" title="Has exercises">
+                                <ListChecks className="h-3.5 w-3.5 text-primary/60" />
+                                {lessonExerciseInfo[lesson.id]?.bestScore !== null && (
+                                  <span className="text-[10px] font-medium text-primary/60">
+                                    {lessonExerciseInfo[lesson.id]?.bestScore}%
+                                  </span>
+                                )}
+                              </span>
+                            )}
                             {lesson.transcript && (
                               <FileText className="h-3.5 w-3.5 text-muted-foreground/50" />
                             )}
@@ -579,6 +623,58 @@ export function AudioCourseClient() {
                 disabled={!noteLoaded}
                 placeholder={noteLoaded ? "Type your notes here… They save automatically." : "Loading…"}
                 className="h-full min-h-[300px] w-full resize-none rounded-lg border border-input bg-background p-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exercises slide-over panel */}
+      {showExercises && currentLesson && currentExerciseInfo?.practiceSetId && (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowExercises(false)}
+          />
+          <div className="relative w-full max-w-lg bg-card border-l border-border shadow-xl flex flex-col overflow-y-auto">
+            <div className="sticky top-0 flex items-center justify-between border-b border-border bg-card px-4 py-3 z-10">
+              <div className="flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Exercises</h3>
+                {currentExerciseInfo.bestScore !== null && (
+                  <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    <Trophy className="h-3 w-3" />
+                    Best: {currentExerciseInfo.bestScore}%
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExercises(false)}
+                className="rounded p-1 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 p-4">
+              <p className="mb-3 text-xs font-medium text-muted-foreground">
+                {currentLesson.title}
+              </p>
+              <LessonPracticeEmbed
+                practiceSetId={currentExerciseInfo.practiceSetId}
+                lessonId={currentLesson.id}
+                onComplete={(score) => {
+                  setLessonExerciseInfo((prev) => ({
+                    ...prev,
+                    [currentLesson.id]: {
+                      ...prev[currentLesson.id],
+                      bestScore:
+                        prev[currentLesson.id]?.bestScore !== null
+                          ? Math.max(prev[currentLesson.id].bestScore!, score)
+                          : score,
+                    },
+                  }));
+                }}
               />
             </div>
           </div>
@@ -708,7 +804,7 @@ export function AudioCourseClient() {
               {hasTranscript && (
                 <button
                   type="button"
-                  onClick={() => { setShowTranscript(!showTranscript); setShowNotes(false); }}
+                  onClick={() => { setShowTranscript(!showTranscript); setShowNotes(false); setShowExercises(false); }}
                   className={`hidden sm:flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
                     showTranscript
                       ? "bg-primary/10 text-primary"
@@ -724,7 +820,7 @@ export function AudioCourseClient() {
               {/* Notes button */}
               <button
                 type="button"
-                onClick={() => { setShowNotes(!showNotes); setShowTranscript(false); }}
+                onClick={() => { setShowNotes(!showNotes); setShowTranscript(false); setShowExercises(false); }}
                 className={`hidden sm:flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
                   showNotes
                     ? "bg-primary/10 text-primary"
@@ -735,14 +831,31 @@ export function AudioCourseClient() {
               >
                 <NotebookPen className="h-4 w-4" />
               </button>
+
+              {/* Exercises button */}
+              {hasExercises && (
+                <button
+                  type="button"
+                  onClick={() => { setShowExercises(!showExercises); setShowTranscript(false); setShowNotes(false); }}
+                  className={`hidden sm:flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                    showExercises
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-label="Exercises"
+                  title="Exercises"
+                >
+                  <ListChecks className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
-            {/* Mobile: extra row for transcript & notes buttons */}
+            {/* Mobile: extra row for transcript, notes & exercises buttons */}
             <div className="flex sm:hidden items-center justify-center gap-4 mt-1.5 pb-0.5">
               {hasTranscript && (
                 <button
                   type="button"
-                  onClick={() => { setShowTranscript(!showTranscript); setShowNotes(false); }}
+                  onClick={() => { setShowTranscript(!showTranscript); setShowNotes(false); setShowExercises(false); }}
                   className={`flex items-center gap-1 text-[10px] font-medium transition-colors ${
                     showTranscript ? "text-primary" : "text-muted-foreground"
                   }`}
@@ -753,7 +866,7 @@ export function AudioCourseClient() {
               )}
               <button
                 type="button"
-                onClick={() => { setShowNotes(!showNotes); setShowTranscript(false); }}
+                onClick={() => { setShowNotes(!showNotes); setShowTranscript(false); setShowExercises(false); }}
                 className={`flex items-center gap-1 text-[10px] font-medium transition-colors ${
                   showNotes ? "text-primary" : "text-muted-foreground"
                 }`}
@@ -761,6 +874,18 @@ export function AudioCourseClient() {
                 <NotebookPen className="h-3 w-3" />
                 Notes
               </button>
+              {hasExercises && (
+                <button
+                  type="button"
+                  onClick={() => { setShowExercises(!showExercises); setShowTranscript(false); setShowNotes(false); }}
+                  className={`flex items-center gap-1 text-[10px] font-medium transition-colors ${
+                    showExercises ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  <ListChecks className="h-3 w-3" />
+                  Practice
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -775,6 +900,71 @@ export function AudioCourseClient() {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
+
+function LessonPracticeEmbed({
+  practiceSetId,
+  lessonId,
+  onComplete,
+}: {
+  practiceSetId: string;
+  lessonId: string;
+  onComplete: (score: number) => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [practiceSet, setPracticeSet] = useState<Record<string, unknown> | null>(null);
+  const [exercises, setExercises] = useState<unknown[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [Player, setPlayer] = useState<React.ComponentType<any> | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+
+    Promise.all([
+      fetch(`/api/audio-courses/exercises/${lessonId}`).then((r) => r.json()),
+      import("@/components/practice/player/PracticePlayer").then((mod) => mod.PracticePlayer),
+    ])
+      .then(([exerciseData, PlayerComponent]) => {
+        if (!exerciseData.practiceSetId || !exerciseData.exercises?.length) {
+          setError("No exercises available.");
+          return;
+        }
+        setPracticeSet({
+          id: exerciseData.practiceSetId,
+          title: exerciseData.practiceSetTitle ?? "Exercises",
+          description: null,
+          status: "published",
+          createdBy: "",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          deletedAt: null,
+        });
+        setExercises(exerciseData.exercises);
+        setPlayer(() => PlayerComponent);
+      })
+      .catch(() => setError("Failed to load exercises."))
+      .finally(() => setLoading(false));
+  }, [lessonId, practiceSetId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error || !practiceSet || exercises.length === 0 || !Player) {
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">
+        {error ?? "No exercises available for this lesson."}
+      </div>
+    );
+  }
+
+  return <Player practiceSet={practiceSet} exercises={exercises} userId="" />;
+}
 
 function ExternalLinkBadge({ href, label }: { href: string; label: string }) {
   return (

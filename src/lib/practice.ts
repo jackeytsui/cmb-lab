@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { practiceSets, practiceExercises } from "@/db/schema";
+import { practiceSets, practiceExercises, practiceSetAssignments } from "@/db/schema";
 import { eq, isNull, asc, and, desc } from "drizzle-orm";
 import type { ExerciseDefinition } from "@/types/exercises";
 
@@ -176,6 +176,85 @@ export async function getExercise(id: string) {
     );
 
   return exercise ?? null;
+}
+
+// ============================================================
+// Lesson-level Practice Set (auto-create for audio lesson exercises)
+// ============================================================
+
+/**
+ * Get or create a practice set linked to an audio lesson.
+ * Uses practiceSetAssignments with targetType="lesson" to find existing set.
+ * If none exists, creates one and links it.
+ */
+export async function getOrCreateLessonPracticeSet(
+  lessonId: string,
+  lessonTitle: string,
+  createdBy: string,
+) {
+  // Check for existing assignment
+  const existing = await db
+    .select({
+      assignmentId: practiceSetAssignments.id,
+      practiceSetId: practiceSetAssignments.practiceSetId,
+    })
+    .from(practiceSetAssignments)
+    .where(
+      and(
+        eq(practiceSetAssignments.targetType, "lesson"),
+        eq(practiceSetAssignments.targetId, lessonId),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    const set = await getPracticeSet(existing[0].practiceSetId);
+    if (set) return set;
+  }
+
+  // Create new practice set for this lesson
+  const [newSet] = await db
+    .insert(practiceSets)
+    .values({
+      title: `Exercises: ${lessonTitle}`,
+      description: `Interactive exercises for audio lesson "${lessonTitle}"`,
+      status: "draft",
+      createdBy,
+    })
+    .returning();
+
+  // Link it to the lesson
+  await db.insert(practiceSetAssignments).values({
+    practiceSetId: newSet.id,
+    targetType: "lesson",
+    targetId: lessonId,
+    assignedBy: createdBy,
+  });
+
+  return newSet;
+}
+
+/**
+ * Find the practice set linked to a lesson (if any).
+ */
+export async function getLessonPracticeSet(lessonId: string) {
+  const assignment = await db
+    .select({
+      practiceSetId: practiceSetAssignments.practiceSetId,
+    })
+    .from(practiceSetAssignments)
+    .where(
+      and(
+        eq(practiceSetAssignments.targetType, "lesson"),
+        eq(practiceSetAssignments.targetId, lessonId),
+      ),
+    )
+    .limit(1);
+
+  if (assignment.length === 0) return null;
+
+  const set = await getPracticeSet(assignment[0].practiceSetId);
+  return set;
 }
 
 // ============================================================
