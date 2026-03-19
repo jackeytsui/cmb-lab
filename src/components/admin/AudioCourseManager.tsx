@@ -885,101 +885,124 @@ function VisibilitySection({
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>(
     series.allowedUserIds ?? [],
   );
+  const [tagSearch, setTagSearch] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
+  const [bulkInput, setBulkInput] = useState("");
+  const [showBulk, setShowBulk] = useState(false);
 
   const hasChanges =
-    JSON.stringify(selectedTagIds.sort()) !==
-      JSON.stringify((series.allowedTagIds ?? []).sort()) ||
-    JSON.stringify(selectedUserIds.sort()) !==
-      JSON.stringify((series.allowedUserIds ?? []).sort());
+    JSON.stringify([...selectedTagIds].sort()) !==
+      JSON.stringify([...(series.allowedTagIds ?? [])].sort()) ||
+    JSON.stringify([...selectedUserIds].sort()) !==
+      JSON.stringify([...(series.allowedUserIds ?? [])].sort());
 
-  const isOpen = selectedTagIds.length > 0 || selectedUserIds.length > 0;
+  const isRestricted = selectedTagIds.length > 0 || selectedUserIds.length > 0;
 
+  // Tag search/filter
+  const filteredTags = tagSearch.trim()
+    ? allTags.filter((t) =>
+        t.name.toLowerCase().includes(tagSearch.toLowerCase()),
+      )
+    : allTags;
+
+  // Student search (single)
   const filteredStudents = studentSearch.trim()
-    ? allStudents.filter(
-        (s) =>
-          !selectedUserIds.includes(s.id) &&
-          (s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-            s.email.toLowerCase().includes(studentSearch.toLowerCase())),
-      ).slice(0, 8)
+    ? allStudents
+        .filter(
+          (s) =>
+            !selectedUserIds.includes(s.id) &&
+            (s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
+              s.email.toLowerCase().includes(studentSearch.toLowerCase())),
+        )
+        .slice(0, 10)
     : [];
+
+  // Bulk add: parse comma/newline separated emails, match to students
+  const handleBulkAdd = () => {
+    const inputs = bulkInput
+      .split(/[,\n]+/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (inputs.length === 0) return;
+
+    const newIds: string[] = [];
+    for (const input of inputs) {
+      const match = allStudents.find(
+        (s) =>
+          s.email.toLowerCase() === input ||
+          s.name.toLowerCase() === input,
+      );
+      if (match && !selectedUserIds.includes(match.id) && !newIds.includes(match.id)) {
+        newIds.push(match.id);
+      }
+    }
+    if (newIds.length > 0) {
+      setSelectedUserIds((prev) => [...prev, ...newIds]);
+    }
+    setBulkInput("");
+    setShowBulk(false);
+  };
 
   return (
     <section className="rounded-xl border border-border bg-card p-5 space-y-3">
       <div className="flex items-center gap-2">
         <Shield className="h-4 w-4 text-amber-400" />
-        <h3 className="text-base font-semibold text-foreground">
-          Visibility
-        </h3>
+        <h3 className="text-base font-semibold text-foreground">Visibility</h3>
       </div>
       <p className="text-xs text-muted-foreground">
-        {isOpen
+        {isRestricted
           ? "This series is restricted to selected tags/students only."
           : "This series is visible to all students. Add tags or specific students to restrict access."}
       </p>
 
-      {/* Tag picker */}
+      {/* ---- Tag picker ---- */}
       <div>
-        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-          Restrict by Tags
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {allTags.map((tag) => {
-            const selected = selectedTagIds.includes(tag.id);
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() =>
-                  setSelectedTagIds((prev) =>
-                    selected
-                      ? prev.filter((id) => id !== tag.id)
-                      : [...prev, tag.id],
-                  )
-                }
-                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-                  selected
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:border-primary/40"
-                }`}
-              >
-                <span
-                  className="inline-block h-2 w-2 rounded-full"
-                  style={{ backgroundColor: tag.color }}
-                />
-                {tag.name}
-              </button>
-            );
-          })}
-          {allTags.length === 0 && (
-            <span className="text-xs text-muted-foreground">No tags created yet.</span>
+        <div className="mb-1.5 flex items-center justify-between">
+          <p className="text-xs font-medium text-muted-foreground">
+            Restrict by Tags
+            {selectedTagIds.length > 0 && (
+              <span className="ml-1 text-primary">({selectedTagIds.length})</span>
+            )}
+          </p>
+          {selectedTagIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedTagIds([])}
+              className="text-[10px] text-red-400 hover:text-red-300"
+            >
+              Clear all
+            </button>
           )}
         </div>
-      </div>
 
-      {/* Student picker */}
-      <div>
-        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-          Restrict by Specific Students
-        </p>
+        {/* Tag search */}
+        <input
+          value={tagSearch}
+          onChange={(e) => setTagSearch(e.target.value)}
+          placeholder="Search tags…"
+          className="mb-2 h-8 w-full rounded-md border border-input bg-background px-3 text-xs"
+        />
 
-        {/* Selected students */}
-        {selectedUserIds.length > 0 && (
+        {/* Selected tags */}
+        {selectedTagIds.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
-            {selectedUserIds.map((uid) => {
-              const student = allStudents.find((s) => s.id === uid);
+            {selectedTagIds.map((tid) => {
+              const tag = allTags.find((t) => t.id === tid);
+              if (!tag) return null;
               return (
                 <span
-                  key={uid}
+                  key={tid}
                   className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
                 >
-                  {student?.name || student?.email || uid}
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: tag.color }}
+                  />
+                  {tag.name}
                   <button
                     type="button"
                     onClick={() =>
-                      setSelectedUserIds((prev) =>
-                        prev.filter((id) => id !== uid),
-                      )
+                      setSelectedTagIds((prev) => prev.filter((id) => id !== tid))
                     }
                     className="ml-0.5 hover:text-red-400"
                   >
@@ -991,33 +1014,138 @@ function VisibilitySection({
           </div>
         )}
 
-        {/* Search input */}
-        <div className="relative">
-          <input
-            value={studentSearch}
-            onChange={(e) => setStudentSearch(e.target.value)}
-            placeholder="Search students by name or email…"
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          />
-          {filteredStudents.length > 0 && (
-            <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-card shadow-lg">
-              {filteredStudents.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedUserIds((prev) => [...prev, s.id]);
-                    setStudentSearch("");
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/30"
-                >
-                  <span className="font-medium text-foreground">{s.name}</span>
-                  <span className="text-xs text-muted-foreground">{s.email}</span>
-                </button>
-              ))}
-            </div>
+        {/* Available tags */}
+        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+          {filteredTags
+            .filter((t) => !selectedTagIds.includes(t.id))
+            .map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => setSelectedTagIds((prev) => [...prev, tag.id])}
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: tag.color }}
+                />
+                {tag.name}
+              </button>
+            ))}
+          {filteredTags.filter((t) => !selectedTagIds.includes(t.id)).length === 0 && (
+            <span className="text-xs text-muted-foreground">
+              {allTags.length === 0
+                ? "No tags created yet."
+                : tagSearch
+                  ? "No matching tags."
+                  : "All tags selected."}
+            </span>
           )}
         </div>
+      </div>
+
+      {/* ---- Student picker ---- */}
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <p className="text-xs font-medium text-muted-foreground">
+            Restrict by Specific Students
+            {selectedUserIds.length > 0 && (
+              <span className="ml-1 text-primary">({selectedUserIds.length})</span>
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            {selectedUserIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedUserIds([])}
+                className="text-[10px] text-red-400 hover:text-red-300"
+              >
+                Clear all
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowBulk(!showBulk)}
+              className="text-[10px] text-primary hover:text-primary/80"
+            >
+              {showBulk ? "Single search" : "Bulk add"}
+            </button>
+          </div>
+        </div>
+
+        {/* Selected students */}
+        {selectedUserIds.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+            {selectedUserIds.map((uid) => {
+              const student = allStudents.find((s) => s.id === uid);
+              return (
+                <span
+                  key={uid}
+                  className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                >
+                  {student?.email || student?.name || uid}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedUserIds((prev) => prev.filter((id) => id !== uid))
+                    }
+                    className="ml-0.5 hover:text-red-400"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {showBulk ? (
+          /* Bulk input mode */
+          <div className="space-y-2">
+            <textarea
+              value={bulkInput}
+              onChange={(e) => setBulkInput(e.target.value)}
+              placeholder={"Paste emails separated by commas or new lines:\nstudent1@example.com, student2@example.com\nstudent3@example.com"}
+              className="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono"
+            />
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              disabled={!bulkInput.trim()}
+              onClick={handleBulkAdd}
+            >
+              Add matching students
+            </Button>
+          </div>
+        ) : (
+          /* Single search mode */
+          <div className="relative">
+            <input
+              value={studentSearch}
+              onChange={(e) => setStudentSearch(e.target.value)}
+              placeholder="Search students by name or email…"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            />
+            {filteredStudents.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto rounded-md border border-border bg-card shadow-lg">
+                {filteredStudents.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedUserIds((prev) => [...prev, s.id]);
+                      setStudentSearch("");
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/30"
+                  >
+                    <span className="font-medium text-foreground">{s.name}</span>
+                    <span className="text-xs text-muted-foreground">{s.email}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Save button */}
