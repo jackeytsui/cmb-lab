@@ -51,18 +51,24 @@ export async function GET() {
     .where(eq(coachingNoteStars.userId, dbUser.id))
     .orderBy(desc(coachingNoteStars.createdAt));
 
-  const coachingCards = starredRows.map((row) => ({
-    id: `coaching-${row.noteId}`,
-    source: "coaching" as const,
-    chinese: row.textOverride || row.text,
-    romanization: row.romanization || "",
-    pinyin: row.pane === "mandarin" ? (row.romanization || "") : "",
-    jyutping: row.pane === "cantonese" ? (row.romanization || "") : "",
-    english: row.translation || "",
-    pane: row.pane,
-    createdAt: row.starredAt?.toISOString() ?? new Date().toISOString(),
-    noteId: row.noteId,
-  }));
+  const coachingCards = starredRows.map((row) => {
+    const text = row.textOverride || row.text;
+    // Mandarin pane = simplified input, Cantonese pane = traditional input
+    const isMandarin = row.pane === "mandarin";
+    return {
+      id: `coaching-${row.noteId}`,
+      source: "coaching" as const,
+      chinese: text, // traditional (or original text)
+      simplified: isMandarin ? text : undefined, // mandarin notes are already simplified
+      romanization: row.romanization || "",
+      pinyin: isMandarin ? (row.romanization || "") : "",
+      jyutping: !isMandarin ? (row.romanization || "") : "",
+      english: row.translation || "",
+      pane: row.pane,
+      createdAt: row.starredAt?.toISOString() ?? new Date().toISOString(),
+      noteId: row.noteId,
+    };
+  });
 
   // 2. Saved vocabulary (from Reader and Listening Lab)
   const vocabRows = await db
