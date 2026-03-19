@@ -1474,55 +1474,79 @@ function CoachingPanel({
           return;
         }
 
-        // Auto-translate notes that don't have a translationOverride
-        const mandarinTexts: string[] = [];
-        const cantoneseTexts: string[] = [];
-        const mandarinIndices: Array<{ sIdx: number; nIdx: number }> = [];
-        const cantoneseIndices: Array<{ sIdx: number; nIdx: number }> = [];
+        // Auto-translate notes missing English meaning
+        // Collect all untranslated notes with their session/note indices
+        const untranslated: Array<{
+          sIdx: number;
+          nIdx: number;
+          text: string;
+          lang: "zh-CN" | "zh-HK";
+        }> = [];
 
         for (let sIdx = 0; sIdx < exportSessions.length; sIdx++) {
           const session = exportSessions[sIdx];
           for (let nIdx = 0; nIdx < session.notes.length; nIdx++) {
             const note = session.notes[nIdx];
             if (!note.translationOverride) {
-              const text = note.textOverride || note.text;
-              if (text.trim()) {
-                if (note.pane === "mandarin") {
-                  mandarinTexts.push(text);
-                  mandarinIndices.push({ sIdx, nIdx });
-                } else {
-                  cantoneseTexts.push(text);
-                  cantoneseIndices.push({ sIdx, nIdx });
-                }
+              const text = (note.textOverride || note.text || "").trim();
+              if (text) {
+                untranslated.push({
+                  sIdx,
+                  nIdx,
+                  text,
+                  lang: note.pane === "mandarin" ? "zh-CN" : "zh-HK",
+                });
               }
             }
           }
         }
 
-        // Fetch translations in parallel for both panes
-        const [mandarinTranslations, cantoneseTranslations] = await Promise.all([
-          mandarinTexts.length > 0
-            ? fetchProperTranslations(mandarinTexts, "zh-CN")
-            : null,
-          cantoneseTexts.length > 0
-            ? fetchProperTranslations(cantoneseTexts, "zh-HK")
-            : null,
-        ]);
+        // Group by language, then translate in chunks of 25
+        const byLang: Record<string, typeof untranslated> = {};
+        for (const item of untranslated) {
+          (byLang[item.lang] ??= []).push(item);
+        }
 
-        if (mandarinTranslations) {
-          mandarinIndices.forEach(({ sIdx, nIdx }, i) => {
-            if (mandarinTranslations[i]) {
-              exportSessions[sIdx].notes[nIdx].translationOverride = mandarinTranslations[i];
+        const CHUNK_SIZE = 25;
+        const translateChunk = async (
+          items: typeof untranslated,
+          lang: "zh-CN" | "zh-HK",
+        ) => {
+          for (let start = 0; start < items.length; start += CHUNK_SIZE) {
+            const chunk = items.slice(start, start + CHUNK_SIZE);
+            try {
+              const translateRes = await fetch("/api/reader/translate-batch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  texts: chunk.map((c) => c.text),
+                  mode: "proper",
+                  language: lang,
+                }),
+              });
+
+              if (translateRes.ok) {
+                const translateData = await translateRes.json();
+                const translations: string[] = translateData.translations ?? [];
+                for (let i = 0; i < chunk.length; i++) {
+                  if (translations[i]) {
+                    exportSessions[chunk[i].sIdx].notes[chunk[i].nIdx].translationOverride =
+                      translations[i];
+                  }
+                }
+              }
+            } catch {
+              // Continue with remaining chunks even if one fails
             }
-          });
-        }
-        if (cantoneseTranslations) {
-          cantoneseIndices.forEach(({ sIdx, nIdx }, i) => {
-            if (cantoneseTranslations[i]) {
-              exportSessions[sIdx].notes[nIdx].translationOverride = cantoneseTranslations[i];
-            }
-          });
-        }
+          }
+        };
+
+        // Translate both languages in parallel
+        await Promise.all(
+          Object.entries(byLang).map(([lang, items]) =>
+            translateChunk(items, lang as "zh-CN" | "zh-HK"),
+          ),
+        );
 
         const sessionTitle =
           mode === "current" && activeSession
