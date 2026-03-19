@@ -52,15 +52,25 @@ export async function POST(request: NextRequest) {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const pathname = `audio-courses/${timestamp}-${safeName}`;
 
-  const blob = await put(pathname, file, {
-    access: "public",
-    contentType: file.type || "audio/mpeg",
-  });
+  try {
+    const blob = await put(pathname, file, {
+      access: "public",
+      contentType: file.type || "audio/mpeg",
+    });
 
-  return NextResponse.json({
-    url: blob.url,
-    filename: file.name,
-    size: file.size,
-    contentType: file.type,
-  });
+    return NextResponse.json({
+      url: blob.url,
+      filename: file.name,
+      size: file.size,
+      contentType: file.type,
+    });
+  } catch (err) {
+    console.error("Audio upload failed:", err);
+    const message =
+      err instanceof Error ? err.message : "Upload failed";
+    return NextResponse.json(
+      { error: `Upload failed: ${message}` },
+      { status: 500 },
+    );
+  }
 }

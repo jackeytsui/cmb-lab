@@ -258,8 +258,16 @@ export function AudioCourseManager() {
           method: "POST",
           body: formData,
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Upload failed");
+        const text = await res.text();
+        let data: { url?: string; error?: string };
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error(
+            res.ok ? "Empty response from server" : `Upload failed (${res.status})`
+          );
+        }
+        if (!res.ok) throw new Error((data.error as string) || "Upload failed");
 
         setPendingUploads((prev) =>
           prev.map((p, idx) =>
@@ -268,7 +276,7 @@ export function AudioCourseManager() {
               : p,
           ),
         );
-        results.push({ title: item.title, audioUrl: data.url });
+        results.push({ title: item.title, audioUrl: data.url! });
       } catch (err) {
         setPendingUploads((prev) =>
           prev.map((p, idx) =>
