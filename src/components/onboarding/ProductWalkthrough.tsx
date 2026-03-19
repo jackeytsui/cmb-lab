@@ -170,26 +170,64 @@ export function ProductWalkthrough({
     setIsOpen(false);
   };
 
+  const [bubbleHeight, setBubbleHeight] = useState(170);
+
+  // Measure actual bubble height after render
+  useEffect(() => {
+    if (!bubbleRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setBubbleHeight(entry.contentRect.height + 24); // +padding
+      }
+    });
+    ro.observe(bubbleRef.current);
+    return () => ro.disconnect();
+  }, [currentIndex, showSkipConfirm]);
+
   const bubblePosition = useMemo(() => {
     if (!targetRect || !currentStep) return null;
     if (typeof window === "undefined") return null;
     const bubbleWidth = 320;
     const margin = 12;
+    const gap = 14; // gap between target highlight border and bubble
     const left = clamp(
       targetRect.left + targetRect.width / 2 - bubbleWidth / 2,
       margin,
       window.innerWidth - bubbleWidth - margin,
     );
 
-    const wantsTop = currentStep.placement === "top";
     const offsetY = currentStep.bubbleOffsetY ?? 0;
-    const proposedTop = wantsTop
-      ? targetRect.top - 12 - 150 + offsetY
-      : targetRect.top + targetRect.height + 12 + offsetY;
-    const top = clamp(proposedTop, margin, window.innerHeight - 170);
+    const wantsTop = currentStep.placement === "top";
+
+    // Calculate both positions
+    const topAbove = targetRect.top - gap - bubbleHeight + offsetY;
+    const topBelow = targetRect.top + targetRect.height + gap + offsetY;
+
+    // Check if each position fits without overlapping the target or going off-screen
+    const fitsAbove = topAbove >= margin;
+    const fitsBelow = topBelow + bubbleHeight <= window.innerHeight - margin;
+
+    let top: number;
+    if (wantsTop && fitsAbove) {
+      top = topAbove;
+    } else if (!wantsTop && fitsBelow) {
+      top = topBelow;
+    } else if (fitsBelow) {
+      // Preferred didn't fit, try below
+      top = topBelow;
+    } else if (fitsAbove) {
+      // Try above
+      top = topAbove;
+    } else {
+      // Neither fits perfectly — place below and clamp, but ensure no overlap with target
+      top = Math.max(
+        targetRect.top + targetRect.height + gap,
+        margin,
+      );
+    }
 
     return { top, left };
-  }, [currentStep, targetRect]);
+  }, [currentStep, targetRect, bubbleHeight]);
 
   const isLast = currentIndex === steps.length - 1;
   const hasTarget = Boolean(targetRect && bubblePosition);
