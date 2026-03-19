@@ -1441,7 +1441,7 @@ function CoachingPanel({
       setShowExportMenu(false);
       try {
         const typeParam = sessionType === "one-on-one" ? "one_on_one" : "inner_circle";
-        const params = new URLSearchParams({ type: typeParam });
+        const params = new URLSearchParams({ type: typeParam, translate: "1" });
         if (mode === "current" && activeSessionId) {
           params.set("sessionId", activeSessionId);
         }
@@ -1449,7 +1449,7 @@ function CoachingPanel({
           params.set("studentEmail", studentEmailFilter.trim());
         }
 
-        const res = await fetchWithTimeout(`/api/coaching/export?${params.toString()}`);
+        const res = await fetch(`/api/coaching/export?${params.toString()}`);
         if (!res.ok) {
           console.error("Export fetch failed:", res.status);
           return;
@@ -1473,80 +1473,6 @@ function CoachingPanel({
           console.warn("No sessions to export");
           return;
         }
-
-        // Auto-translate notes missing English meaning
-        // Collect all untranslated notes with their session/note indices
-        const untranslated: Array<{
-          sIdx: number;
-          nIdx: number;
-          text: string;
-          lang: "zh-CN" | "zh-HK";
-        }> = [];
-
-        for (let sIdx = 0; sIdx < exportSessions.length; sIdx++) {
-          const session = exportSessions[sIdx];
-          for (let nIdx = 0; nIdx < session.notes.length; nIdx++) {
-            const note = session.notes[nIdx];
-            if (!note.translationOverride) {
-              const text = (note.textOverride || note.text || "").trim();
-              if (text) {
-                untranslated.push({
-                  sIdx,
-                  nIdx,
-                  text,
-                  lang: note.pane === "mandarin" ? "zh-CN" : "zh-HK",
-                });
-              }
-            }
-          }
-        }
-
-        // Group by language, then translate in chunks of 25
-        const byLang: Record<string, typeof untranslated> = {};
-        for (const item of untranslated) {
-          (byLang[item.lang] ??= []).push(item);
-        }
-
-        const CHUNK_SIZE = 25;
-        const translateChunk = async (
-          items: typeof untranslated,
-          lang: "zh-CN" | "zh-HK",
-        ) => {
-          for (let start = 0; start < items.length; start += CHUNK_SIZE) {
-            const chunk = items.slice(start, start + CHUNK_SIZE);
-            try {
-              const translateRes = await fetch("/api/reader/translate-batch", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  texts: chunk.map((c) => c.text),
-                  mode: "proper",
-                  language: lang,
-                }),
-              });
-
-              if (translateRes.ok) {
-                const translateData = await translateRes.json();
-                const translations: string[] = translateData.translations ?? [];
-                for (let i = 0; i < chunk.length; i++) {
-                  if (translations[i]) {
-                    exportSessions[chunk[i].sIdx].notes[chunk[i].nIdx].translationOverride =
-                      translations[i];
-                  }
-                }
-              }
-            } catch {
-              // Continue with remaining chunks even if one fails
-            }
-          }
-        };
-
-        // Translate both languages in parallel
-        await Promise.all(
-          Object.entries(byLang).map(([lang, items]) =>
-            translateChunk(items, lang as "zh-CN" | "zh-HK"),
-          ),
-        );
 
         const sessionTitle =
           mode === "current" && activeSession
