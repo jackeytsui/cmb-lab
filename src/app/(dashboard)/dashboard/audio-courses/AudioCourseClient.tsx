@@ -89,7 +89,7 @@ export function AudioCourseClient() {
       setDuration(0);
 
       if (audioRef.current) {
-        audioRef.current.src = lesson.audioUrl;
+        audioRef.current.src = `/api/audio-courses/stream/${lesson.id}`;
         audioRef.current.playbackRate = playbackRate;
         audioRef.current.play().catch(() => setIsPlaying(false));
       }

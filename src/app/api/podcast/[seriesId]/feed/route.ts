@@ -99,9 +99,11 @@ export async function GET(
   // Build RSS items
   const items = lessonRows
     .map((lesson, index) => {
-      const audioUrl = parseLessonAudioUrl(lesson.content);
-      if (!audioUrl) return null;
+      const rawAudioUrl = parseLessonAudioUrl(lesson.content);
+      if (!rawAudioUrl) return null;
 
+      // Use public streaming proxy so podcast apps can access private blob audio
+      const audioUrl = `${baseUrl}/api/podcast/audio/${lesson.id}`;
       const lessonTitle = lesson.title;
       const lessonDescription = lesson.description || "";
       const durationSeconds = lesson.durationSeconds || 0;

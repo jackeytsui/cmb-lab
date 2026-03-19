@@ -27,6 +27,7 @@ const isPublicRoute = createRouteMatcher([
   "/verify(.*)",
   "/api/certificates/(.*)/download",
   "/api/podcast/(.*)/feed",
+  "/api/podcast/audio/(.*)",
 ]);
 
 function normalizeEmail(value: unknown) {
