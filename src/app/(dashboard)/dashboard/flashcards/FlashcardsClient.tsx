@@ -130,12 +130,12 @@ function FlashCard({
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg p-4 [transform:rotateY(180deg)]"
             style={{ backfaceVisibility: "hidden" }}
           >
-            <span className="text-xl font-bold text-foreground">
-              {displayChinese}
-            </span>
             {romanLabel && (
               <span className="text-sm text-blue-400">{romanLabel}</span>
             )}
+            <span className="text-xl font-bold text-foreground">
+              {displayChinese}
+            </span>
             {card.english && (
               <span className="text-center text-xs text-muted-foreground">
                 {card.english}
@@ -166,7 +166,7 @@ export function FlashcardsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
-  const [scriptMode, setScriptMode] = useState<ScriptMode>("traditional");
+  const [scriptMode, setScriptMode] = useState<ScriptMode>("simplified");
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
   const [allFlipped, setAllFlipped] = useState(false);
 
@@ -381,12 +381,12 @@ export function FlashcardsClient() {
               className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl p-6 [transform:rotateY(180deg)]"
               style={{ backfaceVisibility: "hidden" }}
             >
-              <span className="text-4xl font-bold text-foreground">
-                {studyDisplayChinese}
-              </span>
               {studyRoman && (
                 <span className="text-lg text-blue-400">{studyRoman}</span>
               )}
+              <span className="text-4xl font-bold text-foreground">
+                {studyDisplayChinese}
+              </span>
               {studyCard.english && (
                 <span className="mt-2 text-center text-base text-muted-foreground">
                   {studyCard.english}
@@ -477,7 +477,7 @@ export function FlashcardsClient() {
       <div className="flex flex-wrap items-center gap-3">
         {/* Script toggle */}
         <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
-          {(["traditional", "simplified"] as const).map((mode) => (
+          {(["simplified", "traditional"] as const).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -489,7 +489,7 @@ export function FlashcardsClient() {
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {mode === "traditional" ? "Traditional" : "Simplified"}
+              {mode === "simplified" ? "Simplified" : "Traditional"}
             </button>
           ))}
         </div>
@@ -544,11 +544,11 @@ export function FlashcardsClient() {
         )}
       </div>
 
-      {/* Two-column layout: Cantonese | Mandarin */}
+      {/* Two-column layout: Mandarin | Cantonese */}
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
-        {renderColumn("Cantonese", cantoneseCards)}
-        <div className="hidden lg:block w-px bg-border" />
         {renderColumn("Mandarin", mandarinCards)}
+        <div className="hidden lg:block w-px bg-border" />
+        {renderColumn("Cantonese", cantoneseCards)}
       </div>
     </div>
   );
