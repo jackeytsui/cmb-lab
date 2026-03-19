@@ -18,6 +18,7 @@ import {
   Headphones,
   LayoutDashboard,
   AudioLines,
+  Layers,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
 
@@ -86,6 +87,17 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         url: "/dashboard/coaching/inner-circle",
         icon: FileText,
         featureKey: "coaching_material",
+      },
+    ],
+  },
+  {
+    label: "Review",
+    minRole: "student",
+    items: [
+      {
+        title: "Flashcards",
+        url: "/dashboard/flashcards",
+        icon: Layers,
       },
     ],
   },
