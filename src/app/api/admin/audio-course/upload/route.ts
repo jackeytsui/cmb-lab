@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
     const blob = await put(pathname, file, {
       access: "public",
       contentType: file.type || "audio/mpeg",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
     });
 
     return NextResponse.json({
