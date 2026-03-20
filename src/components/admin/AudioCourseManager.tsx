@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { upload } from "@vercel/blob/client";
 import {
   Plus,
   Save,
@@ -293,31 +294,34 @@ export function AudioCourseManager() {
       );
 
       try {
-        const formData = new FormData();
-        formData.append("file", item.file);
-        const res = await fetch("/api/admin/audio-course/upload", {
-          method: "POST",
-          body: formData,
+        const timestamp = Date.now();
+        const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const pathname = `audio-courses/${timestamp}-${safeName}`;
+
+        const blob = await upload(pathname, item.file, {
+          access: "private",
+          contentType: item.file.type || "audio/mpeg",
+          handleUploadUrl: "/api/admin/audio-course/upload",
+          multipart: item.file.size > 20 * 1024 * 1024,
+          onUploadProgress: ({ percentage }) => {
+            setPendingUploads((prev) =>
+              prev.map((p, idx) =>
+                idx === i
+                  ? { ...p, progress: Math.max(30, Math.min(99, Math.round(percentage))) }
+                  : p,
+              ),
+            );
+          },
         });
-        const text = await res.text();
-        let data: { url?: string; error?: string };
-        try {
-          data = JSON.parse(text);
-        } catch {
-          throw new Error(
-            res.ok ? "Empty response from server" : `Upload failed (${res.status})`
-          );
-        }
-        if (!res.ok) throw new Error((data.error as string) || "Upload failed");
 
         setPendingUploads((prev) =>
           prev.map((p, idx) =>
             idx === i
-              ? { ...p, status: "done" as const, progress: 100, url: data.url }
+              ? { ...p, status: "done" as const, progress: 100, url: blob.url }
               : p,
           ),
         );
-        results.push({ title: item.title, audioUrl: data.url! });
+        results.push({ title: item.title, audioUrl: blob.url });
       } catch (err) {
         setPendingUploads((prev) =>
           prev.map((p, idx) =>
