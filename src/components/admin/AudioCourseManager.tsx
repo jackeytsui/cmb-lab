@@ -95,6 +95,71 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientUploadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /blob service is currently not available|failed to fetch|fetch failed|networkerror/i.test(message);
+}
+
+function normalizeUploadError(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Upload failed";
+
+  if (/blob service is currently not available/i.test(message)) {
+    return "Blob service is temporarily unavailable. Retry started automatically; please try again in 1-2 minutes if it still fails.";
+  }
+
+  if (/file is too large/i.test(message)) {
+    return "File is too large for current upload limit.";
+  }
+
+  if (/content type mismatch|content type/i.test(message)) {
+    return "Unsupported file type. Please upload MP3, M4A, WAV, OGG, AAC, FLAC, WEBM, or MP4 audio.";
+  }
+
+  return message;
+}
+
+async function uploadWithFallback(
+  pathname: string,
+  file: File,
+  onProgress: (percentage: number) => void,
+) {
+  const shouldUseMultipartFirst = file.size > 100 * 1024 * 1024;
+  const attempts = [
+    { multipart: shouldUseMultipartFirst, label: "primary" },
+    { multipart: !shouldUseMultipartFirst, label: "fallback" },
+  ];
+
+  let lastError: unknown;
+
+  for (let idx = 0; idx < attempts.length; idx++) {
+    const attempt = attempts[idx];
+    try {
+      return await upload(pathname, file, {
+        access: "private",
+        contentType: file.type || "audio/mpeg",
+        handleUploadUrl: "/api/admin/audio-course/upload",
+        multipart: attempt.multipart,
+        onUploadProgress: ({ percentage }) => onProgress(percentage),
+      });
+    } catch (error) {
+      lastError = error;
+      console.error(`Audio upload attempt failed (${attempt.label})`, error);
+
+      if (!isTransientUploadError(error) || idx === attempts.length - 1) {
+        throw error;
+      }
+
+      await wait(1000 * (idx + 1));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Upload failed");
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -298,20 +363,14 @@ export function AudioCourseManager() {
         const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const pathname = `audio-courses/${timestamp}-${safeName}`;
 
-        const blob = await upload(pathname, item.file, {
-          access: "private",
-          contentType: item.file.type || "audio/mpeg",
-          handleUploadUrl: "/api/admin/audio-course/upload",
-          multipart: item.file.size > 20 * 1024 * 1024,
-          onUploadProgress: ({ percentage }) => {
-            setPendingUploads((prev) =>
-              prev.map((p, idx) =>
-                idx === i
-                  ? { ...p, progress: Math.max(30, Math.min(99, Math.round(percentage))) }
-                  : p,
-              ),
-            );
-          },
+        const blob = await uploadWithFallback(pathname, item.file, (percentage) => {
+          setPendingUploads((prev) =>
+            prev.map((p, idx) =>
+              idx === i
+                ? { ...p, progress: Math.max(30, Math.min(99, Math.round(percentage))) }
+                : p,
+            ),
+          );
         });
 
         setPendingUploads((prev) =>
@@ -329,7 +388,7 @@ export function AudioCourseManager() {
               ? {
                   ...p,
                   status: "error" as const,
-                  error: err instanceof Error ? err.message : "Failed",
+                  error: normalizeUploadError(err),
                 }
               : p,
           ),
