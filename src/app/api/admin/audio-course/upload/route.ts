@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       request,
       token: process.env.BLOB_READ_WRITE_TOKEN,
       onBeforeGenerateToken: async (pathname) => {
-        const hasAccess = await hasMinimumRole("admin");
+        const hasAccess = await hasMinimumRole("coach");
         if (!hasAccess) {
           throw new Error("Forbidden");
         }

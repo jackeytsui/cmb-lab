@@ -44,7 +44,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ seriesId: string }> },
 ) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -104,7 +104,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ seriesId: string }> },
 ) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

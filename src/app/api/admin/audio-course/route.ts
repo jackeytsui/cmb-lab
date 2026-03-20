@@ -65,7 +65,7 @@ function stringifySeriesMeta(input: Omit<AudioSeriesMeta, "audioCourse">): strin
 }
 
 export async function GET() {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -151,7 +151,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

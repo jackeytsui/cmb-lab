@@ -10,7 +10,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
