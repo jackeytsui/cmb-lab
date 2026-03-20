@@ -4,6 +4,14 @@ import { hasMinimumRole } from "@/lib/auth";
 
 // Allow large uploads and long-running requests
 export const maxDuration = 300; // 5 minutes
+export const config = {
+  api: {
+    bodyParser: false,
+    responseLimit: false,
+  },
+};
+// Next.js 14+ route segment config for body size
+export const bodySizeLimit = "500mb";
 
 /**
  * POST /api/admin/audio-course/upload
