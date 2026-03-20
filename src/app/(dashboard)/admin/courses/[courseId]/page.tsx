@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { CourseForm } from "@/components/admin/CourseForm";
 import { ContentList } from "@/components/admin/ContentList";
+import { CourseContentImporter } from "@/components/admin/CourseContentImporter";
 import type { Course, Module } from "@/db/schema/courses";
 
 interface CourseWithModules extends Course {
@@ -207,6 +208,13 @@ export default function AdminCourseDetailPage({ params }: PageProps) {
             />
           </div>
         )}
+
+        <CourseContentImporter
+          courseId={courseId}
+          onImported={() => {
+            fetchCourse();
+          }}
+        />
 
         {/* Modules section */}
         <section>
