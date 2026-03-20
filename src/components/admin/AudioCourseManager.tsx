@@ -342,87 +342,119 @@ export function AudioCourseManager() {
     setIsUploading(true);
     setError(null);
 
-    const results: { title: string; audioUrl: string }[] = [];
+    try {
+      const resultsByIndex = new Map<number, { title: string; audioUrl: string }>();
+      const toUploadIndices: number[] = [];
 
-    for (let i = 0; i < pendingUploads.length; i++) {
-      const item = pendingUploads[i];
-      if (item.status === "done") {
-        if (item.url) results.push({ title: item.title, audioUrl: item.url });
-        continue;
+      for (let i = 0; i < pendingUploads.length; i++) {
+        const item = pendingUploads[i];
+        if (item?.status === "done" && item.url) {
+          resultsByIndex.set(i, { title: item.title, audioUrl: item.url });
+          continue;
+        }
+        toUploadIndices.push(i);
       }
 
-      // Mark uploading
-      setPendingUploads((prev) =>
-        prev.map((p, idx) =>
-          idx === i ? { ...p, status: "uploading" as const, progress: 30 } : p,
-        ),
-      );
+      const uploadOne = async (index: number) => {
+        const item = pendingUploads[index];
+        if (!item) return;
 
-      try {
-        const timestamp = Date.now();
-        const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const pathname = `audio-courses/${timestamp}-${safeName}`;
+        setPendingUploads((prev) =>
+          prev.map((p, idx) =>
+            idx === index ? { ...p, status: "uploading" as const, progress: 30 } : p,
+          ),
+        );
 
-        const blob = await uploadWithFallback(pathname, item.file, (percentage) => {
+        try {
+          const timestamp = Date.now();
+          const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const pathname = `audio-courses/${timestamp}-${safeName}`;
+
+          const blob = await uploadWithFallback(pathname, item.file, (percentage) => {
+            setPendingUploads((prev) =>
+              prev.map((p, idx) =>
+                idx === index
+                  ? { ...p, progress: Math.max(30, Math.min(99, Math.round(percentage))) }
+                  : p,
+              ),
+            );
+          });
+
           setPendingUploads((prev) =>
             prev.map((p, idx) =>
-              idx === i
-                ? { ...p, progress: Math.max(30, Math.min(99, Math.round(percentage))) }
+              idx === index
+                ? { ...p, status: "done" as const, progress: 100, url: blob.url }
                 : p,
             ),
           );
-        });
+          resultsByIndex.set(index, { title: item.title, audioUrl: blob.url });
+        } catch (err) {
+          setPendingUploads((prev) =>
+            prev.map((p, idx) =>
+              idx === index
+                ? {
+                    ...p,
+                    status: "error" as const,
+                    error: normalizeUploadError(err),
+                  }
+                : p,
+            ),
+          );
+        }
+      };
 
-        setPendingUploads((prev) =>
-          prev.map((p, idx) =>
-            idx === i
-              ? { ...p, status: "done" as const, progress: 100, url: blob.url }
-              : p,
-          ),
-        );
-        results.push({ title: item.title, audioUrl: blob.url });
-      } catch (err) {
-        setPendingUploads((prev) =>
-          prev.map((p, idx) =>
-            idx === i
-              ? {
-                  ...p,
-                  status: "error" as const,
-                  error: normalizeUploadError(err),
-                }
-              : p,
-          ),
-        );
-      }
-    }
+      const CONCURRENT_UPLOADS = 2;
+      let cursor = 0;
 
-    // Create lessons in bulk
-    if (results.length > 0) {
-      const res = await fetch(
-        `/api/admin/audio-course/${activeSeries.id}/lessons`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lessons: results.map((r) => ({
-              title: r.title,
-              audioUrl: r.audioUrl,
-            })),
-          }),
-        },
+      const worker = async () => {
+        while (cursor < toUploadIndices.length) {
+          const next = toUploadIndices[cursor];
+          cursor += 1;
+          if (typeof next === "number") {
+            await uploadOne(next);
+          }
+        }
+      };
+
+      await Promise.all(
+        Array.from(
+          { length: Math.min(CONCURRENT_UPLOADS, toUploadIndices.length) },
+          () => worker(),
+        ),
       );
-      if (res.ok) {
-        const data = await res.json();
-        showSuccess(`${data.count} lesson${data.count !== 1 ? "s" : ""} added`);
-        setPendingUploads([]);
-        await loadSeries();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || "Failed to create lessons");
-      }
-    }
 
-    setIsUploading(false);
+      const results = Array.from(resultsByIndex.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([, value]) => value);
+
+      // Create lessons in bulk
+      if (results.length > 0) {
+        const res = await fetch(
+          `/api/admin/audio-course/${activeSeries.id}/lessons`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              lessons: results.map((r) => ({
+                title: r.title,
+                audioUrl: r.audioUrl,
+              })),
+            }),
+          },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          showSuccess(`${data.count} lesson${data.count !== 1 ? "s" : ""} added`);
+          setPendingUploads([]);
+          await loadSeries();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setError(data.error || "Failed to create lessons");
+        }
+      }
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // ---- Drag & Drop ----
