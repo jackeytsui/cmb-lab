@@ -111,6 +111,10 @@ function normalizeUploadError(error: unknown): string {
     return "Blob service is temporarily unavailable. Retry started automatically; please try again in 1-2 minutes if it still fails.";
   }
 
+  if (/failed to retrieve the client token/i.test(message)) {
+    return "Upload authorization failed. Please refresh, sign in again, and retry. If this persists, ask admin to verify your coach/admin access.";
+  }
+
   if (/file is too large/i.test(message)) {
     return "File is too large for current upload limit.";
   }

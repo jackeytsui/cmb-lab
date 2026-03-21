@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { hasMinimumRole } from "@/lib/auth";
+import { getCurrentUser, hasMinimumRole } from "@/lib/auth";
 
 const MAX_AUDIO_SIZE_BYTES = 4.5 * 1024 * 1024 * 1024;
 const PATHNAME_PREFIX = "audio-courses/";
@@ -36,8 +36,9 @@ export async function POST(request: NextRequest) {
       request,
       token: process.env.BLOB_READ_WRITE_TOKEN,
       onBeforeGenerateToken: async (pathname) => {
-        const hasAccess = await hasMinimumRole("coach");
-        if (!hasAccess) {
+        const hasRoleAccess = await hasMinimumRole("coach");
+        const user = await getCurrentUser();
+        if (!hasRoleAccess && !user) {
           throw new Error("Forbidden");
         }
 
