@@ -8,6 +8,7 @@ import { StudentTagsSection } from "./StudentTagsSection";
 import { StudentAccessAttribution } from "@/components/admin/StudentAccessAttribution";
 import { StudentPortalAccessControls } from "@/components/admin/StudentPortalAccessControls";
 import { StudentProfileEditor } from "@/components/admin/StudentProfileEditor";
+import { StudentRoleAssignment } from "@/components/admin/StudentRoleAssignment";
 import { AssignCoachDropdown } from "@/components/admin/AssignCoachDropdown";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import {
@@ -600,6 +601,16 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
             initialEmail={student.email}
             initialRole={student.role}
           />
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Additional Roles</h2>
+        <p className="mb-3 text-sm text-zinc-400">
+          Base role is single-select (Student, Coach, Admin). Add extra access roles here as separate tags.
+        </p>
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+          <StudentRoleAssignment studentId={studentId} />
         </div>
       </section>
 
