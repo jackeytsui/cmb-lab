@@ -96,6 +96,9 @@ export function StudentProfileEditor({
             <option value="coach">Coach</option>
             <option value="admin">Admin</option>
           </select>
+          <p className="mt-1 text-[11px] text-zinc-500">
+            Single role only. Use Tags below for labels/segments.
+          </p>
         </div>
       </div>
 

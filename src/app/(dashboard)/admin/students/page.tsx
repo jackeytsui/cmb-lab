@@ -346,9 +346,6 @@ export default async function AdminStudentsPage({
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <span className="capitalize text-foreground">{user.role}</span>
-                          {user.role === "admin" && (
-                            <span className="ml-1.5 text-[10px] text-muted-foreground">(+coach)</span>
-                          )}
                         </td>
                         {(usersRoleFilter === "all" || usersRoleFilter === "student") && (
                         <td className="px-4 py-3 text-sm">
