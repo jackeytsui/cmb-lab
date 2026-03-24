@@ -15,7 +15,7 @@ const cspHeader = `
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data: https://img.clerk.com https://image.mux.com https://i.ytimg.com;
   font-src 'self';
-  connect-src 'self'${clerkCspSource} https://api.openai.com https://*.mux.com https://*.upstash.io;
+  connect-src 'self'${clerkCspSource} https://api.openai.com https://*.mux.com https://*.upstash.io https://vercel.com;
   frame-src https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com;
   media-src 'self' blob: https://stream.mux.com https://*.mux.com;
   worker-src 'self' blob:;
