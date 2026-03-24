@@ -101,7 +101,7 @@ function wait(ms: number): Promise<void> {
 
 function isTransientUploadError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /blob service is currently not available|failed to fetch|fetch failed|networkerror/i.test(message);
+  return /blob service is currently not available|failed to fetch|fetch failed|networkerror|timed out/i.test(message);
 }
 
 function normalizeUploadError(error: unknown): string {
@@ -126,12 +126,14 @@ function normalizeUploadError(error: unknown): string {
   return message;
 }
 
+const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes per file
+
 async function uploadWithFallback(
   pathname: string,
   file: File,
   onProgress: (percentage: number) => void,
 ) {
-  const shouldUseMultipartFirst = file.size > 100 * 1024 * 1024;
+  const shouldUseMultipartFirst = file.size > 5 * 1024 * 1024;
   const attempts = [
     { multipart: shouldUseMultipartFirst, label: "primary" },
     { multipart: !shouldUseMultipartFirst, label: "fallback" },
@@ -141,15 +143,29 @@ async function uploadWithFallback(
 
   for (let idx = 0; idx < attempts.length; idx++) {
     const attempt = attempts[idx];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
     try {
-      return await upload(pathname, file, {
+      const result = await upload(pathname, file, {
         access: "private",
         contentType: file.type || "audio/mpeg",
         handleUploadUrl: "/api/admin/audio-course/upload",
         multipart: attempt.multipart,
         onUploadProgress: ({ percentage }) => onProgress(percentage),
+        abortSignal: controller.signal,
       });
+      clearTimeout(timeout);
+      return result;
     } catch (error) {
+      clearTimeout(timeout);
+
+      if (controller.signal.aborted) {
+        throw new Error(
+          `Upload timed out after 5 minutes. Check your network connection and try again.`,
+        );
+      }
+
       lastError = error;
       console.error(`Audio upload attempt failed (${attempt.label})`, error);
 
@@ -365,7 +381,7 @@ export function AudioCourseManager() {
 
         setPendingUploads((prev) =>
           prev.map((p, idx) =>
-            idx === index ? { ...p, status: "uploading" as const, progress: 30 } : p,
+            idx === index ? { ...p, status: "uploading" as const, progress: 0 } : p,
           ),
         );
 
@@ -378,7 +394,7 @@ export function AudioCourseManager() {
             setPendingUploads((prev) =>
               prev.map((p, idx) =>
                 idx === index
-                  ? { ...p, progress: Math.max(30, Math.min(99, Math.round(percentage))) }
+                  ? { ...p, progress: Math.min(99, Math.round(percentage)) }
                   : p,
               ),
             );
@@ -407,7 +423,7 @@ export function AudioCourseManager() {
         }
       };
 
-      const CONCURRENT_UPLOADS = 2;
+      const CONCURRENT_UPLOADS = 4;
       let cursor = 0;
 
       const worker = async () => {
