@@ -195,7 +195,9 @@ function xhrUpload(
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const params = new URLSearchParams({ pathname });
-    const apiUrl = `https://vercel.com/api/blob/?${params.toString()}`;
+    // Use same-origin proxy to avoid CORS — next.config rewrites this to
+    // https://vercel.com/api/blob/ while keeping it same-origin for the browser.
+    const apiUrl = `/api/blob-proxy?${params.toString()}`;
 
     xhr.open("PUT", apiUrl, true);
     // Headers must exactly match what @vercel/blob SDK sends — extra headers
