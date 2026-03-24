@@ -76,6 +76,37 @@ Requirements for Mastery & Intelligence milestone. Each maps to roadmap phases.
 - [x] **AUTOX-05**: Coach can review, approve, edit, or reject auto-generated exercises before they appear to students
 - [x] **AUTOX-06**: Approved auto-exercises integrate into the practice set system as assignable content with existing exercise types and Zod validation
 
+## Phase 75 Requirements
+
+Requirements for LTO Student Access & Mandarin Accelerator. Maps to Phase 75.
+
+### Access Gating
+
+- **LTO-01**: LTO students are identified by a CRM tag mapped to the `mandarin_accelerator` feature key via the existing tag-feature override system
+- **LTO-02**: Tag is manageable via admin panel (manual coach tagging) and GHL CRM sync (auto on purchase)
+- **LTO-03**: Mandarin Accelerator sidebar section is completely hidden for non-LTO students (no locked/teaser state)
+- **LTO-04**: Tag removal revokes access but preserves all progress data; re-adding tag restores access with progress intact
+
+### Typing Unlock Kit
+
+- **LTO-05**: Student can practice typing Chinese characters from English + romanisation prompts with exact-match checking (green/red feedback, character-by-character detail)
+- **LTO-06**: Two sections: Mandarin (20 sentences) and Cantonese (20 sentences) with per-section progress bars
+- **LTO-07**: Retry until correct -- unlimited retries, must get it right to advance; progress tracked per student with resume capability
+- **LTO-08**: Coach can manage typing sentences via admin panel with CRUD and JSON bulk upload
+
+### Conversation Scripts
+
+- **LTO-09**: 10 scenarios displayed as card grid; each opens a two-column dialogue practice flow with speaker/responder roles
+- **LTO-10**: Both Cantonese and Mandarin shown inline per dialogue line (Canto first), with pre-recorded audio playback after speaking attempt
+- **LTO-11**: Student self-rates each line as "good" or "not good"; progress tracked per script with ability to revisit not-good lines
+- **LTO-12**: Coach can manage scripts with dialogue lines, upload audio files per line via Vercel Blob, and bulk upload via JSON
+
+### Reader Passages
+
+- **LTO-13**: Curated passages list shows 5 passages with read/unread badges; student opens passage in existing Reader with full features
+- **LTO-14**: LTO students cannot create/import their own passages from the curated reader page (import UI hidden)
+- **LTO-15**: Coach can manage curated passages via admin panel with CRUD and JSON bulk upload
+
 ## v11.0+ Requirements
 
 Deferred to future releases. Tracked but not in current roadmap.
@@ -164,12 +195,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTOX-04 | Phase 73 | Done |
 | AUTOX-05 | Phase 73 | Done |
 | AUTOX-06 | Phase 73 | Done |
+| LTO-01 | Phase 75 | Planned |
+| LTO-02 | Phase 75 | Planned |
+| LTO-03 | Phase 75 | Planned |
+| LTO-04 | Phase 75 | Planned |
+| LTO-05 | Phase 75 | Planned |
+| LTO-06 | Phase 75 | Planned |
+| LTO-07 | Phase 75 | Planned |
+| LTO-08 | Phase 75 | Planned |
+| LTO-09 | Phase 75 | Planned |
+| LTO-10 | Phase 75 | Planned |
+| LTO-11 | Phase 75 | Planned |
+| LTO-12 | Phase 75 | Planned |
+| LTO-13 | Phase 75 | Planned |
+| LTO-14 | Phase 75 | Planned |
+| LTO-15 | Phase 75 | Planned |
 
 **Coverage:**
-- v10.0 requirements: 48 total
-- Mapped to phases: 48
+- v10.0 requirements: 48 total (all done)
+- Phase 75 requirements: 15 total (planned)
+- Mapped to phases: 63
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-16*
-*Last updated: 2026-02-16 after v10.0 milestone completion*
+*Last updated: 2026-03-24 after Phase 75 planning*

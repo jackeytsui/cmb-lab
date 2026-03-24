@@ -127,10 +127,28 @@ See `.planning/MILESTONES.md` for milestone summaries.
   3. Student sets a daily study time goal (15min, 30min, 1hr) and sees a personalized daily study plan with time-based breakdown of activities
   4. System recommends specific lessons, practice sets, flashcard decks, or grammar patterns based on performance gaps and learning progression
 
+### Phase 75: LTO Student Access & Mandarin Accelerator
+**Goal:** Deliver three bonus "Mandarin Accelerator" features for LTO students gated by a CRM tag: Chinese Typing Unlock Kit (Duolingo-style typing drills), Conversation Confidence Starter Scripts (dialogue practice with pre-recorded audio and self-check), and Comprehensive AI Reader (curated passages in the existing Reader)
+**Depends on:** Phase 74
+**Requirements**: LTO-01, LTO-02, LTO-03, LTO-04, LTO-05, LTO-06, LTO-07, LTO-08, LTO-09, LTO-10, LTO-11, LTO-12, LTO-13, LTO-14, LTO-15
+**Success Criteria** (what must be TRUE):
+  1. LTO students with the `feature:enable:mandarin_accelerator` tag see a "Mandarin Accelerator" sidebar section; non-LTO students see nothing (no locked/teaser state)
+  2. Student practices typing Chinese characters from English + romanisation prompts with exact-match checking, character-by-character feedback, and retry-until-correct flow across Mandarin and Cantonese sections
+  3. Student practices 10 conversation scenarios via card grid, two-column dialogue layout with Canto-first inline display, pre-recorded audio playback, and self-check rating with progress tracking
+  4. Student reads 5 curated passages in the full Reader (dictionary, TTS, annotations) but cannot create/import own content; read/unread status tracked
+  5. Coach manages all content (typing sentences, scripts with audio, passages) via admin panels with CRUD and JSON bulk upload
+**Plans:** 4 plans
+
+Plans:
+- [ ] 75-01-PLAN.md -- Infrastructure: feature key, sidebar, DB schema for all features
+- [ ] 75-02-PLAN.md -- Typing Unlock Kit: admin CRUD + student drill UI with progress
+- [ ] 75-03-PLAN.md -- Conversation Scripts: admin CRUD + audio upload + student practice flow
+- [ ] 75-04-PLAN.md -- Reader Passages: admin CRUD + student curated reader with read status
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
+Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74 -> 75
 Decimal phases (if inserted) execute between their surrounding integers.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -141,7 +159,8 @@ Decimal phases (if inserted) execute between their surrounding integers.
 | 72. Assessment & Placement | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 73. Auto-Exercise Generation & Prompt Lab | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 74. Smart Study Engine | v10.0 | 1/1 | Complete | 2026-02-16 |
+| 75. LTO Student Access & Mandarin Accelerator | -- | 0/4 | Planning | -- |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16 after v10.0 milestone completion*
+*Last updated: 2026-03-24 after Phase 75 planning*
