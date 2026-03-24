@@ -16,9 +16,11 @@ import {
   Users,
   FileText,
   Headphones,
+  Keyboard,
   LayoutDashboard,
   AudioLines,
   Layers,
+  MessageSquare,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
 
@@ -32,7 +34,8 @@ type FeatureKey =
   | "coaching_material"
   | "video_threads"
   | "certificates"
-  | "ai_chat";
+  | "ai_chat"
+  | "mandarin_accelerator";
 
 type NavItemWithFeature = NavSection["items"][number] & {
   featureKey?: FeatureKey;
@@ -98,6 +101,30 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         title: "Flashcards",
         url: "/dashboard/flashcards",
         icon: Layers,
+      },
+    ],
+  },
+  {
+    label: "Mandarin Accelerator",
+    minRole: "student",
+    items: [
+      {
+        title: "Typing Unlock Kit",
+        url: "/dashboard/accelerator/typing",
+        icon: Keyboard,
+        featureKey: "mandarin_accelerator",
+      },
+      {
+        title: "Conversation Scripts",
+        url: "/dashboard/accelerator/scripts",
+        icon: MessageSquare,
+        featureKey: "mandarin_accelerator",
+      },
+      {
+        title: "AI Reader (Curated)",
+        url: "/dashboard/accelerator/reader",
+        icon: BookOpenText,
+        featureKey: "mandarin_accelerator",
       },
     ],
   },
