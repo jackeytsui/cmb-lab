@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  put,
   createMultipartUpload,
   uploadPart,
   completeMultipartUpload,
@@ -98,6 +99,25 @@ export async function POST(request: NextRequest) {
         access: "private",
         uploadId,
         key,
+        token: BLOB_TOKEN(),
+      });
+
+      return NextResponse.json({ url: blob.url });
+    }
+
+    // ---- SIMPLE PUT (for small files that don't need multipart) ----
+    if (action === "put") {
+      const pathname = request.nextUrl.searchParams.get("pathname");
+      const contentType = request.nextUrl.searchParams.get("contentType") || "audio/mpeg";
+
+      if (!pathname) {
+        return NextResponse.json({ error: "pathname required" }, { status: 400 });
+      }
+
+      const body = await request.arrayBuffer();
+      const blob = await put(pathname, Buffer.from(body), {
+        access: "private",
+        contentType,
         token: BLOB_TOKEN(),
       });
 

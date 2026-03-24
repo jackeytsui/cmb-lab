@@ -166,7 +166,24 @@ async function uploadFile(
   const base = "/api/admin/audio-course/upload-multipart";
   const contentType = file.type || "audio/mpeg";
 
-  console.log(`[audio-upload] starting chunked upload for "${file.name}" (${formatSize(file.size)})`);
+  console.log(`[audio-upload] starting upload for "${file.name}" (${formatSize(file.size)})`);
+
+  // Small files (< 5 MB): simple put, no multipart needed
+  if (file.size < 5 * 1024 * 1024) {
+    const params = new URLSearchParams({ action: "put", pathname, contentType });
+    onProgress(10);
+    const res = await fetch(`${base}?${params}`, { method: "POST", body: file });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.error || `Upload failed (${res.status})`);
+    }
+    const { url } = await res.json();
+    onProgress(100);
+    console.log(`[audio-upload] complete: ${url}`);
+    return { url };
+  }
+
+  // Large files: chunked multipart upload
 
   // 1. Create multipart upload session
   const createRes = await fetch(`${base}?action=create`, {
