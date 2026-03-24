@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   put,
   createMultipartUpload,
-  uploadPart,
   completeMultipartUpload,
 } from "@vercel/blob";
 import { hasMinimumRole } from "@/lib/auth";
@@ -24,8 +23,10 @@ async function checkAuth(): Promise<NextResponse | null> {
  *
  * Actions (via ?action= query param):
  *   create   — Start a multipart upload session
- *   part     — Upload a single part (body = raw binary chunk)
  *   complete — Finalize the upload and get the blob URL
+ *   put      — Simple upload for small files (< 5 MB)
+ *
+ * Part uploads go to /upload-part (Edge Runtime, no body size limit).
  */
 export async function POST(request: NextRequest) {
   const authErr = await checkAuth();
@@ -50,37 +51,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         uploadId: result.uploadId,
         key: result.key,
-      });
-    }
-
-    // ---- UPLOAD PART ----
-    if (action === "part") {
-      const pathname = request.nextUrl.searchParams.get("pathname");
-      const uploadId = request.nextUrl.searchParams.get("uploadId");
-      const key = request.nextUrl.searchParams.get("key");
-      const partNumber = Number(request.nextUrl.searchParams.get("partNumber"));
-
-      if (!pathname || !uploadId || !key || !partNumber) {
-        return NextResponse.json(
-          { error: "pathname, uploadId, key, partNumber required" },
-          { status: 400 },
-        );
-      }
-
-      // Read the raw binary body (the chunk)
-      const body = await request.arrayBuffer();
-
-      const result = await uploadPart(pathname, Buffer.from(body), {
-        access: "private",
-        uploadId,
-        key,
-        partNumber,
-        token: BLOB_TOKEN(),
-      });
-
-      return NextResponse.json({
-        etag: result.etag,
-        partNumber: result.partNumber,
       });
     }
 

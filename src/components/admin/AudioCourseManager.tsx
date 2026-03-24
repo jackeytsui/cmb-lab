@@ -210,14 +210,14 @@ async function uploadFile(
     const partNumber = i + 1;
 
     const params = new URLSearchParams({
-      action: "part",
       pathname,
       uploadId,
       key,
       partNumber: String(partNumber),
     });
 
-    const partRes = await fetch(`${base}?${params}`, {
+    // Parts go to the Edge endpoint (no body size limit)
+    const partRes = await fetch(`/api/admin/audio-course/upload-part?${params}`, {
       method: "POST",
       body: chunk,
     });
