@@ -232,6 +232,13 @@
       "when": 1774156800000,
       "tag": "0032_add_user_coaching_goals",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1774391755775,
+      "tag": "0033_ancient_odin",
+      "breakpoints": true
     }
   ]
 }
