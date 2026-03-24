@@ -130,7 +130,7 @@ See `.planning/MILESTONES.md` for milestone summaries.
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
+Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74 -> 75
 Decimal phases (if inserted) execute between their surrounding integers.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -141,7 +141,8 @@ Decimal phases (if inserted) execute between their surrounding integers.
 | 72. Assessment & Placement | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 73. Auto-Exercise Generation & Prompt Lab | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 74. Smart Study Engine | v10.0 | 1/1 | Complete | 2026-02-16 |
+| 75. LTO Student Access & Mandarin Accelerator | - | 1/4 | In Progress | - |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-02-16 after v10.0 milestone completion*
+*Last updated: 2026-03-24 after 75-01 plan completion*
