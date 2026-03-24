@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { upload } from "@vercel/blob/client";
+// upload() from @vercel/blob/client doesn't work — multipart hits CORS on
+// the /mpu endpoint, single PUT rejects files >~10MB. We use our own
+// server-proxied chunked upload instead (see upload-multipart route).
 import {
   Plus,
   Save,
@@ -153,61 +155,85 @@ async function preflightUploadCheck(): Promise<void> {
   }
 }
 
+// 4 MB per chunk — safely under Vercel's 4.5 MB serverless body limit.
+const CHUNK_SIZE = 4 * 1024 * 1024;
+
 async function uploadFile(
   pathname: string,
   file: File,
   onProgress: (percentage: number) => void,
 ) {
-  const MAX_RETRIES = 2;
-  let lastError: unknown;
+  const base = "/api/admin/audio-course/upload-multipart";
+  const contentType = file.type || "audio/mpeg";
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  console.log(`[audio-upload] starting chunked upload for "${file.name}" (${formatSize(file.size)})`);
 
-    try {
-      console.log(
-        `[audio-upload] attempt ${attempt + 1}/${MAX_RETRIES + 1} for "${file.name}" (${formatSize(file.size)})`,
-      );
+  // 1. Create multipart upload session
+  const createRes = await fetch(`${base}?action=create`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pathname, contentType }),
+  });
+  if (!createRes.ok) {
+    const d = await createRes.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to create upload session (${createRes.status})`);
+  }
+  const { uploadId, key } = await createRes.json();
+  console.log("[audio-upload] session created:", uploadId);
 
-      const result = await upload(pathname, file, {
-        access: "public",
-        contentType: file.type || "audio/mpeg",
-        handleUploadUrl: "/api/admin/audio-course/upload",
-        multipart: file.size > 5 * 1024 * 1024,
-        onUploadProgress: ({ percentage }) => {
-          console.log(`[audio-upload] progress: ${percentage}%`);
-          onProgress(percentage);
-        },
-        abortSignal: controller.signal,
-      });
-      clearTimeout(timeout);
+  // 2. Upload parts
+  const totalParts = Math.ceil(file.size / CHUNK_SIZE);
+  const parts: { etag: string; partNumber: number }[] = [];
+  let uploadedBytes = 0;
 
-      console.log(`[audio-upload] success: ${result.url}`);
-      return result;
-    } catch (error) {
-      clearTimeout(timeout);
+  for (let i = 0; i < totalParts; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
+    const partNumber = i + 1;
 
-      if (controller.signal.aborted) {
-        lastError = new Error(
-          "Upload timed out after 5 minutes. Check your network connection and try again.",
-        );
-        console.error(`[audio-upload] timed out: "${file.name}"`);
-        break;
-      }
+    const params = new URLSearchParams({
+      action: "part",
+      pathname,
+      uploadId,
+      key,
+      partNumber: String(partNumber),
+    });
 
-      lastError = error;
-      console.error(`[audio-upload] attempt ${attempt + 1} failed:`, error);
+    const partRes = await fetch(`${base}?${params}`, {
+      method: "POST",
+      body: chunk,
+    });
 
-      if (!isTransientUploadError(error) || attempt === MAX_RETRIES) {
-        break;
-      }
-
-      await wait(1000 * (attempt + 1));
+    if (!partRes.ok) {
+      const d = await partRes.json().catch(() => ({}));
+      throw new Error(d.error || `Part ${partNumber} failed (${partRes.status})`);
     }
+
+    const part = await partRes.json();
+    parts.push({ etag: part.etag, partNumber: part.partNumber });
+
+    uploadedBytes += end - start;
+    const pct = Math.min(99, Math.round((uploadedBytes / file.size) * 100));
+    onProgress(pct);
+    console.log(`[audio-upload] part ${partNumber}/${totalParts} done (${pct}%)`);
   }
 
-  throw lastError instanceof Error ? lastError : new Error("Upload failed");
+  // 3. Complete
+  const completeRes = await fetch(`${base}?action=complete`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pathname, uploadId, key, parts }),
+  });
+  if (!completeRes.ok) {
+    const d = await completeRes.json().catch(() => ({}));
+    throw new Error(d.error || `Complete failed (${completeRes.status})`);
+  }
+
+  const { url } = await completeRes.json();
+  onProgress(100);
+  console.log(`[audio-upload] complete: ${url}`);
+  return { url };
 }
 
 // ---------------------------------------------------------------------------
