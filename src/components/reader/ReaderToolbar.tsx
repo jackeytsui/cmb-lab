@@ -21,7 +21,7 @@ export interface ReaderToolbarProps {
   onScriptModeChange: (mode: ScriptMode) => void;
   onFontSizeChange: (size: number) => void;
   onTtsLanguageChange: (lang: "zh-CN" | "zh-HK") => void;
-  onImportClick: () => void;
+  onImportClick?: () => void;
   importButtonTourId?: string;
   onPlayAll?: () => void;
   onStopAll?: () => void;
@@ -104,18 +104,22 @@ export function ReaderToolbar({
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/80 p-2 backdrop-blur">
       {/* Import */}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onImportClick}
-        data-tour-id={importButtonTourId}
-        className="border-border bg-background text-foreground/90 hover:bg-muted"
-      >
-        <FileText className="size-4" />
-        <span className="hidden sm:inline">Import</span>
-      </Button>
+      {onImportClick && (
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onImportClick}
+            data-tour-id={importButtonTourId}
+            className="border-border bg-background text-foreground/90 hover:bg-muted"
+          >
+            <FileText className="size-4" />
+            <span className="hidden sm:inline">Import</span>
+          </Button>
 
-      <Separator orientation="vertical" className="mx-1 h-6 bg-border" />
+          <Separator orientation="vertical" className="mx-1 h-6 bg-border" />
+        </>
+      )}
 
       {/* Annotation toggles */}
       <div className="flex items-center gap-3">

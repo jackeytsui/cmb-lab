@@ -135,7 +135,7 @@ function normalizeSentenceForTranslation(text: string): string {
   return text.replace(/[\uFFFD\u200B\u200C\u200D\uFEFF]/g, "").trim();
 }
 
-export function ReaderClient({ initialText }: { initialText?: string }) {
+export function ReaderClient({ initialText, hideImport }: { initialText?: string; hideImport?: boolean }) {
   const { trackAction } = useFeatureEngagement("ai_passage_reader");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -881,7 +881,7 @@ export function ReaderClient({ initialText }: { initialText?: string }) {
           onScriptModeChange={setScriptMode}
           onFontSizeChange={setFontSize}
           onTtsLanguageChange={setTtsLanguage}
-          onImportClick={() => {
+          onImportClick={hideImport ? undefined : () => {
             setImportDialogOpen(true);
             setHasOpenedImportForTour(true);
             setImportClickSignal((prev) => prev + 1);
@@ -965,7 +965,7 @@ export function ReaderClient({ initialText }: { initialText?: string }) {
         onCancelHide={cancelHide}
       />
 
-      <ImportDialog
+      {!hideImport && <ImportDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         onImport={handleImport}
@@ -997,7 +997,7 @@ export function ReaderClient({ initialText }: { initialText?: string }) {
         lockDuringOnboarding={isOnboardingLaunch}
         forcedActiveTab={isOnboardingLaunch ? forcedImportTabForTour : undefined}
         storageScopeKey={user?.id}
-      />
+      />}
 
       <div className="pt-6 mt-auto border-t border-border text-xs text-muted-foreground" data-tour-id="reader-footer">
         This is an AI-assisted product. We do not guarantee accuracy or
