@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 ## Current Position
 
-Phase: 74 - Smart Study Engine
-Plan: 01
-Status: v10.0 complete (Phases 69-74 shipped)
-Last activity: 2026-02-16 -- executed all v10.0 phases, updated planning artifacts, passed type-check and production build
+Phase: 75 - LTO Student Access & Mandarin Accelerator
+Plan: 04
+Status: Plan 75-03 complete, plan 04 remaining
+Last activity: 2026-03-24 -- completed conversation scripts admin + student practice (plan 75-03)
 
 ## Milestone Summary
 
@@ -29,6 +29,8 @@ Last activity: 2026-02-16 -- executed all v10.0 phases, updated planning artifac
 | 3 | Grammar authoring uses existing TipTap component | Reuses existing editor and avoids UI fragmentation | ✓ Completed |
 | 4 | Prompt Lab and auto-exercise generation share AI webhook-first pattern | Single integration model with local fallback | ✓ Completed |
 | 5 | Study recommendations are heuristic (non-ML) | Small cohort, high interpretability, low ops overhead | ✓ Completed |
+| 6 | Amber for Cantonese, Sky blue for Mandarin in dialogue practice | Visual language distinction at a glance | ✓ Applied |
+| 7 | Self-check rating: good/not_good with upsert on unique(userId, lineId) | Simple honor-system progress tracking | ✓ Applied |
 
 ## Pending Todos
 
@@ -51,6 +53,6 @@ Last activity: 2026-02-16 -- executed all v10.0 phases, updated planning artifac
 
 ## Session Continuity
 
-Last session: 2026-02-16
-Stopped at: v10.0 completed and artifacts synchronized
-Resume with: `/gsd:new-milestone` for v11.0 planning
+Last session: 2026-03-24
+Stopped at: Completed 75-03-PLAN.md
+Resume with: Execute plan 75-04 (AI Reader curated passages)
