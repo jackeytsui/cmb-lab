@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 75 - LTO Student Access & Mandarin Accelerator
-Plan: 01 complete, advancing to 02
-Status: Phase 75 in progress (plan 01 of 4 complete)
-Last activity: 2026-03-24 -- completed 75-01 infrastructure plan (feature key, DB schema, sidebar nav, seed tag)
+Plan: 04 complete (parallel execution with 02, 03)
+Status: Phase 75 in progress (plans 01, 04 of 4 complete)
+Last activity: 2026-03-24 -- completed 75-04 curated passages (admin CRUD + student reader integration)
 
 ## Milestone Summary
 
@@ -31,6 +31,8 @@ Last activity: 2026-03-24 -- completed 75-01 infrastructure plan (feature key, D
 | 5 | Study recommendations are heuristic (non-ML) | Small cohort, high interpretability, low ops overhead | ✓ Completed |
 | 6 | LTO gating via existing tag-feature override system | No new infra needed, reuses feature:enable:* pattern | ✓ Completed |
 | 7 | Seed tag as system type | Consistent with GHL auto-created tags | ✓ Completed |
+| 8 | hideImport prop on ReaderClient (Option B) | Cleaner than CSS selector targeting for state-controlled ImportDialog | ✓ Completed |
+| 9 | Div-based admin table layout | No shadcn Table component in project | ✓ Completed |
 
 ## Pending Todos
 
@@ -54,5 +56,5 @@ Last activity: 2026-03-24 -- completed 75-01 infrastructure plan (feature key, D
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 75-01-PLAN.md (infrastructure)
-Resume with: Execute 75-02-PLAN.md (Typing Unlock Kit)
+Stopped at: Completed 75-04-PLAN.md (curated passages)
+Resume with: Merge parallel worktrees for 75-02, 75-03, 75-04
