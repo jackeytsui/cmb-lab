@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await createMultipartUpload(pathname, {
-        access: "public",
+        access: "private",
         contentType: contentType || "audio/mpeg",
         token: BLOB_TOKEN(),
       });
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       const body = await request.arrayBuffer();
 
       const result = await uploadPart(pathname, Buffer.from(body), {
-        access: "public",
+        access: "private",
         uploadId,
         key,
         partNumber,
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       }
 
       const blob = await completeMultipartUpload(pathname, parts, {
-        access: "public",
+        access: "private",
         uploadId,
         key,
         token: BLOB_TOKEN(),
