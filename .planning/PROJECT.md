@@ -168,6 +168,10 @@ The interactive video player that transforms passive watching into active engage
 - [x] Assessment and placement framework with HSK estimate
 - [x] Grammar pattern library (coach-authored + AI draft generation + bookmarks)
 - [x] Auto-generated exercise pipeline with draft integration
+- [x] Gated Mandarin Accelerator section with tag-based feature access (LTO students only). Validated in Phase 75
+- [x] Chinese Typing Unlock Kit with exact-match drills and per-student progress. Validated in Phase 75
+- [x] Conversation Confidence Starter Scripts with audio playback and self-check ratings. Validated in Phase 75
+- [x] Curated AI Reader Passages with read/unread tracking and existing Reader integration. Validated in Phase 75
 
 ### Out of Scope
 
@@ -228,4 +232,4 @@ The interactive video player that transforms passive watching into active engage
 | Webcam recording in builder | Coaches record directly in flow editor, not separate upload workflow | — Pending |
 
 ---
-*Last updated: 2026-02-16 after v10.0 milestone completion*
+*Last updated: 2026-03-24 after Phase 75 (LTO Student Access — Mandarin Accelerator) completion*
