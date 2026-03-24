@@ -198,12 +198,15 @@ function xhrUpload(
     const apiUrl = `https://vercel.com/api/blob/?${params.toString()}`;
 
     xhr.open("PUT", apiUrl, true);
+    // Headers must exactly match what @vercel/blob SDK sends — extra headers
+    // break CORS preflight because they're not in the API's allow-list.
     xhr.setRequestHeader("authorization", `Bearer ${token}`);
     xhr.setRequestHeader("x-api-version", "12");
     xhr.setRequestHeader("x-content-length", String(file.size));
+    xhr.setRequestHeader("x-api-blob-request-id", `${Date.now()}:${Math.random().toString(16).slice(2)}`);
+    xhr.setRequestHeader("x-api-blob-request-attempt", "0");
     xhr.setRequestHeader("x-content-type", file.type || "audio/mpeg");
     xhr.setRequestHeader("x-vercel-blob-access", "public");
-    xhr.setRequestHeader("x-add-random-suffix", "1");
 
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable && file.size > 0) {
