@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 75 - LTO Student Access & Mandarin Accelerator
-Plan: 04
-Status: Plan 75-03 complete, plan 04 remaining
-Last activity: 2026-03-24 -- completed conversation scripts admin + student practice (plan 75-03)
+Plan: 04 complete (parallel execution with 02, 03)
+Status: Phase 75 in progress (plans 01, 04 of 4 complete)
+Last activity: 2026-03-24 -- completed 75-04 curated passages (admin CRUD + student reader integration)
 
 ## Milestone Summary
 
@@ -29,8 +29,10 @@ Last activity: 2026-03-24 -- completed conversation scripts admin + student prac
 | 3 | Grammar authoring uses existing TipTap component | Reuses existing editor and avoids UI fragmentation | ✓ Completed |
 | 4 | Prompt Lab and auto-exercise generation share AI webhook-first pattern | Single integration model with local fallback | ✓ Completed |
 | 5 | Study recommendations are heuristic (non-ML) | Small cohort, high interpretability, low ops overhead | ✓ Completed |
-| 6 | Amber for Cantonese, Sky blue for Mandarin in dialogue practice | Visual language distinction at a glance | ✓ Applied |
-| 7 | Self-check rating: good/not_good with upsert on unique(userId, lineId) | Simple honor-system progress tracking | ✓ Applied |
+| 6 | LTO gating via existing tag-feature override system | No new infra needed, reuses feature:enable:* pattern | ✓ Completed |
+| 7 | Seed tag as system type | Consistent with GHL auto-created tags | ✓ Completed |
+| 8 | hideImport prop on ReaderClient (Option B) | Cleaner than CSS selector targeting for state-controlled ImportDialog | ✓ Completed |
+| 9 | Div-based admin table layout | No shadcn Table component in project | ✓ Completed |
 
 ## Pending Todos
 
@@ -54,5 +56,5 @@ Last activity: 2026-03-24 -- completed conversation scripts admin + student prac
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 75-03-PLAN.md
-Resume with: Execute plan 75-04 (AI Reader curated passages)
+Stopped at: Completed 75-04-PLAN.md (curated passages)
+Resume with: Merge parallel worktrees for 75-02, 75-03, 75-04

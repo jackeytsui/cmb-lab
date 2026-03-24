@@ -207,9 +207,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LTO-10 | Phase 75 | Planned |
 | LTO-11 | Phase 75 | Planned |
 | LTO-12 | Phase 75 | Planned |
-| LTO-13 | Phase 75 | Planned |
-| LTO-14 | Phase 75 | Planned |
-| LTO-15 | Phase 75 | Planned |
+| LTO-13 | Phase 75 | Done |
+| LTO-14 | Phase 75 | Done |
+| LTO-15 | Phase 75 | Done |
 
 **Coverage:**
 - v10.0 requirements: 48 total (all done)
