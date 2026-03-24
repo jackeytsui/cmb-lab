@@ -126,7 +126,32 @@ function normalizeUploadError(error: unknown): string {
   return message;
 }
 
-const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes per file
+const UPLOAD_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes per file
+
+async function preflightUploadCheck(): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const res = await fetch("/api/admin/audio-course/upload", {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: `Server returned ${res.status}` }));
+      throw new Error(data.error || `Upload service error (${res.status})`);
+    }
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(
+        "Upload service is not responding (timed out after 15s). The server may be overloaded — try again in a minute.",
+      );
+    }
+    throw err;
+  }
+}
 
 async function uploadWithFallback(
   pathname: string,
@@ -398,6 +423,9 @@ export function AudioCourseManager() {
     setError(null);
 
     try {
+      // Pre-flight: verify auth + blob storage are working before uploading
+      await preflightUploadCheck();
+
       const resultsByIndex = new Map<number, { title: string; audioUrl: string }>();
       const toUploadIndices: number[] = [];
 
@@ -507,6 +535,8 @@ export function AudioCourseManager() {
           setError(data.error || "Failed to create lessons");
         }
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setIsUploading(false);
     }

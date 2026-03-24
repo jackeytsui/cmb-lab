@@ -25,12 +25,50 @@ function isValidPathname(pathname: string): boolean {
 }
 
 /**
+ * GET /api/admin/audio-course/upload
+ * Pre-flight check — verifies auth + blob token are working before uploads start.
+ */
+export async function GET() {
+  try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json(
+        { error: "Blob storage is not configured. Ask admin to set BLOB_READ_WRITE_TOKEN." },
+        { status: 500 },
+      );
+    }
+
+    const hasRoleAccess = await hasMinimumRole("coach");
+    if (!hasRoleAccess) {
+      const user = await getCurrentUser();
+      if (!user) {
+        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      }
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Upload pre-flight check failed:", err);
+    return NextResponse.json(
+      { error: `Pre-flight check failed: ${err instanceof Error ? err.message : "Unknown error"}` },
+      { status: 500 },
+    );
+  }
+}
+
+/**
  * POST /api/admin/audio-course/upload
  * Handles Vercel Blob client-upload token generation.
  * This enables large uploads directly from browser -> Blob and avoids 413 errors on Vercel functions.
  */
 export async function POST(request: NextRequest) {
   try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json(
+        { error: "Blob storage is not configured. Ask admin to set BLOB_READ_WRITE_TOKEN." },
+        { status: 500 },
+      );
+    }
+
     const body = (await request.json()) as HandleUploadBody;
 
     const jsonResponse = await handleUpload({
@@ -39,9 +77,11 @@ export async function POST(request: NextRequest) {
       token: process.env.BLOB_READ_WRITE_TOKEN,
       onBeforeGenerateToken: async (pathname) => {
         const hasRoleAccess = await hasMinimumRole("coach");
-        const user = await getCurrentUser();
-        if (!hasRoleAccess && !user) {
-          throw new Error("Forbidden");
+        if (!hasRoleAccess) {
+          const user = await getCurrentUser();
+          if (!user) {
+            throw new Error("Forbidden");
+          }
         }
 
         if (!isValidPathname(pathname)) {
