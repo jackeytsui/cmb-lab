@@ -5,8 +5,8 @@ import {
   timestamp,
   integer,
   pgEnum,
-  index,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { users } from "./users";
@@ -59,11 +59,11 @@ export const typingProgress = pgTable(
     completedAt: timestamp("completed_at").notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("typing_progress_user_sentence_unique").on(
+    uniqueIndex("typing_progress_user_sentence_idx").on(
       table.userId,
       table.sentenceId
     ),
-    index("typing_progress_user_id_idx").on(table.userId),
+    index("typing_progress_user_idx").on(table.userId),
   ]
 );
 
@@ -105,7 +105,7 @@ export const scriptLines = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
-    index("script_lines_script_id_idx").on(table.scriptId),
+    index("script_lines_script_idx").on(table.scriptId),
     index("script_lines_sort_order_idx").on(table.sortOrder),
   ]
 );
@@ -127,16 +127,16 @@ export const scriptLineProgress = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    uniqueIndex("script_line_progress_user_line_unique").on(
+    uniqueIndex("script_line_progress_user_line_idx").on(
       table.userId,
       table.lineId
     ),
-    index("script_line_progress_user_id_idx").on(table.userId),
+    index("script_line_progress_user_idx").on(table.userId),
   ]
 );
 
 // ---------------------------------------------------------------------------
-// Curated Passages (AI Reader)
+// Curated Passages
 // ---------------------------------------------------------------------------
 
 export const curatedPassages = pgTable("curated_passages", {
@@ -165,11 +165,11 @@ export const passageReadStatus = pgTable(
     readAt: timestamp("read_at").notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("passage_read_status_user_passage_unique").on(
+    uniqueIndex("passage_read_status_user_passage_idx").on(
       table.userId,
       table.passageId
     ),
-    index("passage_read_status_user_id_idx").on(table.userId),
+    index("passage_read_status_user_idx").on(table.userId),
   ]
 );
 
@@ -187,13 +187,13 @@ export const typingSentencesRelations = relations(
 export const typingProgressRelations = relations(
   typingProgress,
   ({ one }) => ({
-    user: one(users, {
-      fields: [typingProgress.userId],
-      references: [users.id],
-    }),
     sentence: one(typingSentences, {
       fields: [typingProgress.sentenceId],
       references: [typingSentences.id],
+    }),
+    user: one(users, {
+      fields: [typingProgress.userId],
+      references: [users.id],
     }),
   })
 );
@@ -216,13 +216,13 @@ export const scriptLinesRelations = relations(scriptLines, ({ one, many }) => ({
 export const scriptLineProgressRelations = relations(
   scriptLineProgress,
   ({ one }) => ({
-    user: one(users, {
-      fields: [scriptLineProgress.userId],
-      references: [users.id],
-    }),
     line: one(scriptLines, {
       fields: [scriptLineProgress.lineId],
       references: [scriptLines.id],
+    }),
+    user: one(users, {
+      fields: [scriptLineProgress.userId],
+      references: [users.id],
     }),
   })
 );
@@ -230,45 +230,20 @@ export const scriptLineProgressRelations = relations(
 export const curatedPassagesRelations = relations(
   curatedPassages,
   ({ many }) => ({
-    readStatuses: many(passageReadStatus),
+    readStatus: many(passageReadStatus),
   })
 );
 
 export const passageReadStatusRelations = relations(
   passageReadStatus,
   ({ one }) => ({
-    user: one(users, {
-      fields: [passageReadStatus.userId],
-      references: [users.id],
-    }),
     passage: one(curatedPassages, {
       fields: [passageReadStatus.passageId],
       references: [curatedPassages.id],
     }),
+    user: one(users, {
+      fields: [passageReadStatus.userId],
+      references: [users.id],
+    }),
   })
 );
-
-// ---------------------------------------------------------------------------
-// Type Inference
-// ---------------------------------------------------------------------------
-
-export type TypingSentence = typeof typingSentences.$inferSelect;
-export type NewTypingSentence = typeof typingSentences.$inferInsert;
-
-export type TypingProgress = typeof typingProgress.$inferSelect;
-export type NewTypingProgress = typeof typingProgress.$inferInsert;
-
-export type ConversationScript = typeof conversationScripts.$inferSelect;
-export type NewConversationScript = typeof conversationScripts.$inferInsert;
-
-export type ScriptLine = typeof scriptLines.$inferSelect;
-export type NewScriptLine = typeof scriptLines.$inferInsert;
-
-export type ScriptLineProgress = typeof scriptLineProgress.$inferSelect;
-export type NewScriptLineProgress = typeof scriptLineProgress.$inferInsert;
-
-export type CuratedPassage = typeof curatedPassages.$inferSelect;
-export type NewCuratedPassage = typeof curatedPassages.$inferInsert;
-
-export type PassageReadStatus = typeof passageReadStatus.$inferSelect;
-export type NewPassageReadStatus = typeof passageReadStatus.$inferInsert;
