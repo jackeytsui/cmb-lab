@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
+import { del } from "@vercel/blob";
 import { db } from "@/db";
 import { lessons } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
@@ -99,6 +100,24 @@ export async function DELETE(
   }
 
   const { lessonId } = await params;
+
+  // Get audio URL before deleting so we can clean up blob storage
+  const [lesson] = await db
+    .select({ content: lessons.content })
+    .from(lessons)
+    .where(and(eq(lessons.id, lessonId), isNull(lessons.deletedAt)));
+
   await db.update(lessons).set({ deletedAt: new Date() }).where(eq(lessons.id, lessonId));
+
+  // Delete the audio file from Vercel Blob storage
+  if (lesson) {
+    const audioUrl = parseLessonAudioUrl(lesson.content);
+    if (audioUrl) {
+      del(audioUrl, { token: process.env.BLOB_READ_WRITE_TOKEN }).catch((err) =>
+        console.error("[delete-lesson] blob cleanup failed:", err),
+      );
+    }
+  }
+
   return NextResponse.json({ success: true });
 }

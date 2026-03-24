@@ -209,6 +209,13 @@ export function AudioCourseManager() {
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [allStudents, setAllStudents] = useState<StudentOption[]>([]);
 
+  // Lesson selection for bulk operations
+  const [selectedLessonIds, setSelectedLessonIds] = useState<string[]>([]);
+
+  // Lesson drag-to-reorder
+  const lessonDragRef = useRef<number | null>(null);
+  const lessonDragOverRef = useRef<number | null>(null);
+
   // RSS copy state
   const [copiedRss, setCopiedRss] = useState(false);
 
@@ -561,7 +568,7 @@ export function AudioCourseManager() {
   };
 
   const deleteLesson = async (lessonId: string) => {
-    if (!window.confirm("Remove this lesson?")) return;
+    if (!window.confirm("Are you sure you want to delete this lesson? The audio file will be permanently removed.")) return;
     const res = await fetch(`/api/admin/audio-course/lessons/${lessonId}`, {
       method: "DELETE",
     });
@@ -569,8 +576,54 @@ export function AudioCourseManager() {
       setError("Failed to delete lesson");
       return;
     }
+    setSelectedLessonIds((prev) => prev.filter((id) => id !== lessonId));
     await loadSeries();
     showSuccess("Lesson removed");
+  };
+
+  const bulkDeleteLessons = async () => {
+    if (selectedLessonIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Are you sure you want to delete ${selectedLessonIds.length} lesson${selectedLessonIds.length !== 1 ? "s" : ""}? The audio files will be permanently removed.`,
+      )
+    )
+      return;
+    setError(null);
+    const res = await fetch("/api/admin/audio-course/lessons/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", lessonIds: selectedLessonIds }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Failed to delete lessons");
+      return;
+    }
+    const count = selectedLessonIds.length;
+    setSelectedLessonIds([]);
+    await loadSeries();
+    showSuccess(`${count} lesson${count !== 1 ? "s" : ""} deleted`);
+  };
+
+  const reorderLessons = async (reordered: AudioLesson[]) => {
+    if (!activeSeries) return;
+    const order = reordered.map((l, i) => ({ id: l.id, sortOrder: i }));
+    // Optimistic update
+    setSeries((prev) =>
+      prev.map((s) =>
+        s.id === activeSeries.id ? { ...s, lessons: reordered } : s,
+      ),
+    );
+    const res = await fetch("/api/admin/audio-course/lessons/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reorder", order }),
+    });
+    if (!res.ok) {
+      setError("Failed to reorder");
+      await loadSeries();
+    }
   };
 
   // ---- RSS Feed URL ----
@@ -655,7 +708,7 @@ export function AudioCourseManager() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActiveSeriesId(item.id)}
+                onClick={() => { setActiveSeriesId(item.id); setSelectedLessonIds([]); }}
                 className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                   item.id === activeSeriesId
                     ? "border-primary bg-primary/10"
@@ -1009,17 +1062,74 @@ export function AudioCourseManager() {
 
               {/* Existing lessons */}
               <section className="rounded-xl border border-border bg-card p-5">
-                <h3 className="text-base font-semibold text-foreground">
-                  Lessons ({activeSeries.lessons.length})
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-foreground">
+                    Lessons ({activeSeries.lessons.length})
+                  </h3>
+                  {activeSeries.lessons.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      {selectedLessonIds.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs text-red-500 border-red-500/30 hover:bg-red-500/10"
+                          onClick={bulkDeleteLessons}
+                        >
+                          <Trash2 className="mr-1 h-3 w-3" />
+                          Delete {selectedLessonIds.length}
+                        </Button>
+                      )}
+                      <button
+                        type="button"
+                        className="text-[10px] text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          if (selectedLessonIds.length === activeSeries.lessons.length) {
+                            setSelectedLessonIds([]);
+                          } else {
+                            setSelectedLessonIds(activeSeries.lessons.map((l) => l.id));
+                          }
+                        }}
+                      >
+                        {selectedLessonIds.length === activeSeries.lessons.length
+                          ? "Deselect all"
+                          : "Select all"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {activeSeries.lessons.length > 1 && (
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Drag to reorder
+                  </p>
+                )}
                 <div className="mt-3 space-y-2">
                   {activeSeries.lessons.map((lesson, index) => (
                     <LessonRow
                       key={lesson.id}
                       lesson={lesson}
                       index={index}
+                      selected={selectedLessonIds.includes(lesson.id)}
+                      onToggleSelect={(id) =>
+                        setSelectedLessonIds((prev) =>
+                          prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                        )
+                      }
                       onSave={saveLesson}
                       onDelete={deleteLesson}
+                      draggable={activeSeries.lessons.length > 1}
+                      onDragStart={() => { lessonDragRef.current = index; }}
+                      onDragOver={(e) => { e.preventDefault(); lessonDragOverRef.current = index; }}
+                      onDrop={() => {
+                        const from = lessonDragRef.current;
+                        const to = lessonDragOverRef.current;
+                        lessonDragRef.current = null;
+                        lessonDragOverRef.current = null;
+                        if (from === null || to === null || from === to) return;
+                        const updated = [...activeSeries.lessons];
+                        const [moved] = updated.splice(from, 1);
+                        if (moved) updated.splice(to, 0, moved);
+                        reorderLessons(updated);
+                      }}
                     />
                   ))}
                   {activeSeries.lessons.length === 0 && (
@@ -1393,13 +1503,25 @@ function VisibilitySection({
 function LessonRow({
   lesson,
   index,
+  selected,
+  onToggleSelect,
   onSave,
   onDelete,
+  draggable,
+  onDragStart,
+  onDragOver,
+  onDrop,
 }: {
   lesson: AudioLesson;
   index: number;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
   onSave: (lessonId: string, payload: Partial<AudioLesson>) => void;
   onDelete: (lessonId: string) => void;
+  draggable?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(lesson.title);
@@ -1414,8 +1536,25 @@ function LessonRow({
     transcript !== (lesson.transcript || "");
 
   return (
-    <div className="group rounded-lg border border-border bg-background p-2.5 transition-colors hover:border-border/80">
+    <div
+      className={`group rounded-lg border bg-background p-2.5 transition-colors hover:border-border/80 ${
+        selected ? "border-primary/40 bg-primary/5" : "border-border"
+      } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
       <div className="flex items-center gap-2">
+        {draggable && (
+          <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground/40" />
+        )}
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(lesson.id)}
+          className="h-3.5 w-3.5 shrink-0 rounded border-border accent-primary"
+        />
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
           {index + 1}
         </div>
