@@ -174,7 +174,7 @@ async function uploadFile(
         access: "public",
         contentType: file.type || "audio/mpeg",
         handleUploadUrl: "/api/admin/audio-course/upload",
-        multipart: false,
+        multipart: file.size > 5 * 1024 * 1024,
         onUploadProgress: ({ percentage }) => {
           console.log(`[audio-upload] progress: ${percentage}%`);
           onProgress(percentage);
