@@ -357,6 +357,41 @@ export function AudioCourseManager() {
     );
   }, []);
 
+  // ---- Drag-to-reorder pending uploads ----
+  const dragIndexRef = useRef<number | null>(null);
+  const dragOverIndexRef = useRef<number | null>(null);
+
+  const handleReorderDragStart = useCallback((index: number) => {
+    dragIndexRef.current = index;
+  }, []);
+
+  const handleReorderDragOver = useCallback(
+    (e: React.DragEvent, index: number) => {
+      e.preventDefault();
+      dragOverIndexRef.current = index;
+    },
+    [],
+  );
+
+  const handleReorderDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const from = dragIndexRef.current;
+      const to = dragOverIndexRef.current;
+      dragIndexRef.current = null;
+      dragOverIndexRef.current = null;
+      if (from === null || to === null || from === to) return;
+
+      setPendingUploads((prev) => {
+        const updated = [...prev];
+        const [moved] = updated.splice(from, 1);
+        if (moved) updated.splice(to, 0, moved);
+        return updated;
+      });
+    },
+    [],
+  );
+
   const uploadAllAndCreateLessons = async () => {
     if (!activeSeries || pendingUploads.length === 0) return;
     setIsUploading(true);
@@ -830,22 +865,73 @@ export function AudioCourseManager() {
                 {/* Pending uploads list */}
                 {pendingUploads.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {pendingUploads.length} file{pendingUploads.length !== 1 ? "s" : ""} ready
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {pendingUploads.length} file{pendingUploads.length !== 1 ? "s" : ""} queued
+                        {isUploading && ` — ${pendingUploads.filter((p) => p.status === "done").length}/${pendingUploads.length} done`}
+                      </p>
+                      {!isUploading && pendingUploads.length > 1 && (
+                        <p className="text-xs text-muted-foreground">
+                          Drag to reorder
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Overall progress bar */}
+                    {isUploading && (
+                      <div className="space-y-1">
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all duration-300"
+                            style={{
+                              width: `${Math.round(
+                                pendingUploads.reduce(
+                                  (sum, p) =>
+                                    sum +
+                                    (p.status === "done"
+                                      ? 100
+                                      : p.status === "error"
+                                        ? 0
+                                        : p.progress),
+                                  0,
+                                ) / pendingUploads.length,
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     {pendingUploads.map((item, index) => (
                       <div
                         key={`${item.file.name}-${index}`}
-                        className="flex items-center gap-2 rounded-lg border border-border bg-background p-2.5"
+                        draggable={!isUploading && item.status === "pending"}
+                        onDragStart={() => handleReorderDragStart(index)}
+                        onDragOver={(e) => handleReorderDragOver(e, index)}
+                        onDrop={handleReorderDrop}
+                        className={`flex items-center gap-2 rounded-lg border bg-background p-2.5 ${
+                          item.status === "done"
+                            ? "border-green-500/30 bg-green-500/5"
+                            : item.status === "error"
+                              ? "border-red-500/30 bg-red-500/5"
+                              : "border-border"
+                        } ${!isUploading && item.status === "pending" ? "cursor-grab active:cursor-grabbing" : ""}`}
                       >
-                        <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground/40" />
+                        <div className="flex shrink-0 items-center gap-1">
+                          <span className="w-5 text-center text-xs font-medium text-muted-foreground">
+                            {index + 1}
+                          </span>
+                          {!isUploading && item.status === "pending" && (
+                            <GripVertical className="h-4 w-4 text-muted-foreground/40" />
+                          )}
+                        </div>
                         <div className="min-w-0 flex-1 space-y-1">
                           <input
                             value={item.title}
                             onChange={(e) =>
                               updatePendingTitle(index, e.target.value)
                             }
-                            disabled={item.status === "uploading"}
+                            disabled={item.status === "uploading" || item.status === "done"}
                             className="h-8 w-full rounded border border-input bg-background px-2 text-sm"
                             placeholder="Lesson title"
                           />
@@ -854,21 +940,35 @@ export function AudioCourseManager() {
                             <span>·</span>
                             <span>{formatSize(item.file.size)}</span>
                             {item.status === "done" && (
-                              <Check className="h-3 w-3 text-green-400" />
+                              <span className="flex items-center gap-1 text-green-500">
+                                <Check className="h-3 w-3" /> Done
+                              </span>
                             )}
                             {item.status === "uploading" && (
-                              <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                              <span className="flex items-center gap-1 text-primary">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                {item.progress}%
+                              </span>
                             )}
                             {item.status === "error" && (
                               <span className="text-red-400">{item.error}</span>
                             )}
                           </div>
+                          {/* Per-file progress bar */}
+                          {item.status === "uploading" && (
+                            <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+                              <div
+                                className="h-full rounded-full bg-primary transition-all duration-300"
+                                style={{ width: `${item.progress}%` }}
+                              />
+                            </div>
+                          )}
                         </div>
                         <button
                           type="button"
                           onClick={() => removePending(index)}
                           disabled={item.status === "uploading"}
-                          className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground"
+                          className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -883,7 +983,7 @@ export function AudioCourseManager() {
                       {isUploading ? (
                         <>
                           <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                          Uploading…
+                          Uploading {pendingUploads.filter((p) => p.status === "done").length}/{pendingUploads.length}…
                         </>
                       ) : (
                         <>

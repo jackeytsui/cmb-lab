@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { getCurrentUser, hasMinimumRole } from "@/lib/auth";
 
+export const maxDuration = 60;
+
 const MAX_AUDIO_SIZE_BYTES = 4.5 * 1024 * 1024 * 1024;
 const PATHNAME_PREFIX = "audio-courses/";
 const ALLOWED_AUDIO_CONTENT_TYPES = [
