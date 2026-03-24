@@ -126,7 +126,7 @@ function normalizeUploadError(error: unknown): string {
   return message;
 }
 
-const UPLOAD_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes per file
+const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes per file
 
 async function preflightUploadCheck(): Promise<void> {
   const controller = new AbortController();
@@ -153,52 +153,58 @@ async function preflightUploadCheck(): Promise<void> {
   }
 }
 
-async function uploadWithFallback(
+async function uploadFile(
   pathname: string,
   file: File,
   onProgress: (percentage: number) => void,
 ) {
-  const shouldUseMultipartFirst = file.size > 5 * 1024 * 1024;
-  const attempts = [
-    { multipart: shouldUseMultipartFirst, label: "primary" },
-    { multipart: !shouldUseMultipartFirst, label: "fallback" },
-  ];
-
+  // Client uploads go directly from browser → Vercel Blob storage (no server
+  // body-size limit), so simple PUT works for files of any practical size.
+  // Multipart via client tokens is unreliable and causes uploads to hang.
+  const MAX_RETRIES = 2;
   let lastError: unknown;
 
-  for (let idx = 0; idx < attempts.length; idx++) {
-    const attempt = attempts[idx];
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
 
     try {
+      console.log(
+        `[audio-upload] attempt ${attempt + 1}/${MAX_RETRIES + 1} for "${file.name}" (${formatSize(file.size)})`,
+      );
+
       const result = await upload(pathname, file, {
-        access: "private",
+        access: "public",
         contentType: file.type || "audio/mpeg",
         handleUploadUrl: "/api/admin/audio-course/upload",
-        multipart: attempt.multipart,
+        multipart: false,
         onUploadProgress: ({ percentage }) => onProgress(percentage),
         abortSignal: controller.signal,
       });
       clearTimeout(timeout);
+
+      console.log(`[audio-upload] success: "${file.name}" → ${result.url}`);
       return result;
     } catch (error) {
       clearTimeout(timeout);
 
       if (controller.signal.aborted) {
-        throw new Error(
-          `Upload timed out after 5 minutes. Check your network connection and try again.`,
+        lastError = new Error(
+          "Upload timed out after 5 minutes. Check your network connection and try again.",
         );
+        console.error(`[audio-upload] timed out: "${file.name}"`);
+        break; // don't retry timeouts
       }
 
       lastError = error;
-      console.error(`Audio upload attempt failed (${attempt.label})`, error);
+      console.error(`[audio-upload] attempt ${attempt + 1} failed for "${file.name}":`, error);
 
-      if (!isTransientUploadError(error) || idx === attempts.length - 1) {
-        throw error;
+      if (!isTransientUploadError(error) || attempt === MAX_RETRIES) {
+        break;
       }
 
-      await wait(1000 * (idx + 1));
+      // Wait before retrying (1s, 2s)
+      await wait(1000 * (attempt + 1));
     }
   }
 
@@ -453,7 +459,7 @@ export function AudioCourseManager() {
           const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
           const pathname = `audio-courses/${timestamp}-${safeName}`;
 
-          const blob = await uploadWithFallback(pathname, item.file, (percentage) => {
+          const blob = await uploadFile(pathname, item.file, (percentage) => {
             setPendingUploads((prev) =>
               prev.map((p, idx) =>
                 idx === index
