@@ -155,8 +155,8 @@ async function preflightUploadCheck(): Promise<void> {
   }
 }
 
-// 4 MB per chunk — safely under Vercel's 4.5 MB serverless body limit.
-const CHUNK_SIZE = 4 * 1024 * 1024;
+// Vercel Blob requires each multipart part to be at least 5 MB (except last).
+const CHUNK_SIZE = 5.5 * 1024 * 1024;
 
 async function uploadFile(
   pathname: string,
