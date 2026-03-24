@@ -28,16 +28,6 @@ const cspHeader = `
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["jieba-wasm"],
-  async rewrites() {
-    return [
-      {
-        // Proxy Vercel Blob uploads through our own domain so the browser
-        // makes a same-origin request — avoids CORS issues entirely.
-        source: "/api/blob-proxy",
-        destination: "https://vercel.com/api/blob/",
-      },
-    ];
-  },
   async headers() {
     return [
       {

@@ -1,9 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-// NOTE: We intentionally do NOT use `upload` from "@vercel/blob/client".
-// The SDK's upload() hangs silently for large files. Instead we manually
-// request a client token from our server and PUT directly via XHR.
+import { upload } from "@vercel/blob/client";
 import {
   Plus,
   Save,
@@ -155,116 +153,6 @@ async function preflightUploadCheck(): Promise<void> {
   }
 }
 
-/**
- * Step 1: Request a client token from our server.
- * This mirrors what @vercel/blob/client does internally but gives us control.
- */
-async function getClientToken(pathname: string): Promise<string> {
-  console.log("[audio-upload] requesting client token…");
-  const res = await fetch("/api/admin/audio-course/upload", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      type: "blob.generate-client-token",
-      payload: { pathname, clientPayload: null, multipart: false },
-    }),
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `Token request failed (${res.status})`);
-  }
-
-  const { clientToken } = await res.json();
-  if (!clientToken) throw new Error("Server returned empty client token");
-  console.log("[audio-upload] got client token");
-  return clientToken;
-}
-
-/**
- * Step 2: PUT the file directly to Vercel Blob via XHR.
- * XHR gives us reliable upload progress events in every browser.
- */
-function xhrUpload(
-  pathname: string,
-  file: File,
-  token: string,
-  onProgress: (pct: number) => void,
-  signal: AbortSignal,
-): Promise<{ url: string }> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const params = new URLSearchParams({ pathname });
-    // Use same-origin proxy to avoid CORS — next.config rewrites this to
-    // https://vercel.com/api/blob/ while keeping it same-origin for the browser.
-    const apiUrl = `/api/blob-proxy?${params.toString()}`;
-
-    xhr.open("PUT", apiUrl, true);
-    // Headers must exactly match what @vercel/blob SDK sends — extra headers
-    // break CORS preflight because they're not in the API's allow-list.
-    xhr.setRequestHeader("authorization", `Bearer ${token}`);
-    xhr.setRequestHeader("x-api-version", "12");
-    xhr.setRequestHeader("x-content-length", String(file.size));
-    xhr.setRequestHeader("x-api-blob-request-id", `${Date.now()}:${Math.random().toString(16).slice(2)}`);
-    xhr.setRequestHeader("x-api-blob-request-attempt", "0");
-    xhr.setRequestHeader("x-content-type", file.type || "audio/mpeg");
-    xhr.setRequestHeader("x-vercel-blob-access", "public");
-
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable && file.size > 0) {
-        const pct = Math.round((e.loaded / e.total) * 100);
-        onProgress(pct);
-      }
-    });
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          console.log("[audio-upload] XHR success:", data.url);
-          resolve({ url: data.url });
-        } catch {
-          reject(new Error("Invalid response from blob storage"));
-        }
-      } else {
-        let msg = `Upload failed (${xhr.status})`;
-        try {
-          const data = JSON.parse(xhr.responseText);
-          msg = data.error || data.message || msg;
-        } catch { /* use default msg */ }
-        console.error("[audio-upload] XHR error:", xhr.status, msg);
-        reject(new Error(msg));
-      }
-    };
-
-    xhr.onerror = () => {
-      console.error("[audio-upload] XHR network error");
-      reject(new Error("Network error during upload. Check your connection."));
-    };
-
-    xhr.ontimeout = () => {
-      reject(new Error("Upload timed out"));
-    };
-
-    // Wire up AbortController
-    function handleAbort() { xhr.abort(); }
-    if (signal.aborted) {
-      handleAbort();
-    } else {
-      signal.addEventListener("abort", handleAbort, { once: true });
-    }
-    xhr.onabort = () => {
-      signal.removeEventListener("abort", handleAbort);
-      reject(new Error("Upload was cancelled"));
-    };
-
-    xhr.send(file);
-  });
-}
-
-/**
- * Full upload pipeline: get token → XHR upload → retry on transient errors.
- */
 async function uploadFile(
   pathname: string,
   file: File,
@@ -282,9 +170,20 @@ async function uploadFile(
         `[audio-upload] attempt ${attempt + 1}/${MAX_RETRIES + 1} for "${file.name}" (${formatSize(file.size)})`,
       );
 
-      const token = await getClientToken(pathname);
-      const result = await xhrUpload(pathname, file, token, onProgress, controller.signal);
+      const result = await upload(pathname, file, {
+        access: "public",
+        contentType: file.type || "audio/mpeg",
+        handleUploadUrl: "/api/admin/audio-course/upload",
+        multipart: false,
+        onUploadProgress: ({ percentage }) => {
+          console.log(`[audio-upload] progress: ${percentage}%`);
+          onProgress(percentage);
+        },
+        abortSignal: controller.signal,
+      });
       clearTimeout(timeout);
+
+      console.log(`[audio-upload] success: ${result.url}`);
       return result;
     } catch (error) {
       clearTimeout(timeout);
