@@ -24,6 +24,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   video_threads: "Video Threads",
   certificates: "Certificates",
   ai_chat: "AI Chat",
+  mandarin_accelerator: "Mandarin Accelerator",
 };
 
 // ---------------------------------------------------------------------------
