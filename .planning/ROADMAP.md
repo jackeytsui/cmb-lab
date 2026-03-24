@@ -141,7 +141,7 @@ Decimal phases (if inserted) execute between their surrounding integers.
 | 72. Assessment & Placement | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 73. Auto-Exercise Generation & Prompt Lab | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 74. Smart Study Engine | v10.0 | 1/1 | Complete | 2026-02-16 |
-| 75. LTO Student Access & Mandarin Accelerator | - | 1/4 | In Progress | - |
+| 75. LTO Student Access & Mandarin Accelerator | - | 1/4 | In Progress|  |
 
 ---
 *Roadmap created: 2026-02-16*
