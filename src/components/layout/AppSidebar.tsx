@@ -94,17 +94,6 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     ],
   },
   {
-    label: "Review",
-    minRole: "student",
-    items: [
-      {
-        title: "Flashcards",
-        url: "/dashboard/flashcards",
-        icon: Layers,
-      },
-    ],
-  },
-  {
     label: "Mandarin Accelerator",
     minRole: "student",
     items: [
@@ -125,6 +114,18 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         url: "/dashboard/accelerator/reader",
         icon: BookOpenText,
         featureKey: "mandarin_accelerator",
+      },
+    ],
+  },
+  {
+    label: "Review",
+    minRole: "student",
+    items: [
+      {
+        title: "Flashcards",
+        url: "/dashboard/flashcards",
+        icon: Layers,
+        featureKey: "dictionary_reader",
       },
     ],
   },

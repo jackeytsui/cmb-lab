@@ -145,16 +145,16 @@ function FlashCard({
             style={{ backfaceVisibility: "hidden" }}
           >
             {romanLabel && (
-              <span className="text-sm text-blue-400">{romanLabel}</span>
+              <span className="text-xl font-bold text-blue-600 dark:text-blue-400">{romanLabel}</span>
             )}
-            <span className="text-xl font-bold text-foreground">
-              {displayChinese}
-            </span>
             {card.english && (
-              <span className="text-center text-xs text-muted-foreground">
+              <span className="text-center text-sm text-muted-foreground">
                 {card.english}
               </span>
             )}
+            <span className="text-xs text-muted-foreground/60">
+              {displayChinese}
+            </span>
             <div className="mt-1" onClick={(e) => e.stopPropagation()}>
               <SpeakButton text={displayChinese} lang={lang} speak={speak} isLoading={ttsLoading} isPlaying={ttsPlaying} />
             </div>
@@ -393,16 +393,16 @@ export function FlashcardsClient() {
               style={{ backfaceVisibility: "hidden" }}
             >
               {studyRoman && (
-                <span className="text-lg text-blue-400">{studyRoman}</span>
+                <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">{studyRoman}</span>
               )}
-              <span className="text-4xl font-bold text-foreground">
-                {studyDisplayChinese}
-              </span>
               {studyCard.english && (
-                <span className="mt-2 text-center text-base text-muted-foreground">
+                <span className="mt-1 text-center text-lg text-muted-foreground">
                   {studyCard.english}
                 </span>
               )}
+              <span className="mt-2 text-sm text-muted-foreground/60">
+                {studyDisplayChinese}
+              </span>
             </div>
           </div>
         </button>
