@@ -192,7 +192,7 @@ export function VocabularyClient({ items: initialItems }: VocabularyClientProps)
                 </div>
                 {item.definitions && item.definitions.length > 0 && (
                   <p className="text-sm text-zinc-300 mt-1 line-clamp-2">
-                    {item.definitions.join(", ")}
+                    {item.definitions.filter((d: string) => !d.startsWith("CL:")).join(", ")}
                   </p>
                 )}
               </div>

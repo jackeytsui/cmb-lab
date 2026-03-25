@@ -44,7 +44,7 @@ export function ExampleWords({ examples }: ExampleWordsProps) {
                 {example.pinyinDisplay}
               </span>
               <span className="truncate text-xs text-muted-foreground">
-                {example.definitions.slice(0, 2).join("; ")}
+                {example.definitions.filter((d: string) => !d.startsWith("CL:")).slice(0, 2).join("; ")}
               </span>
             </div>
           ))}

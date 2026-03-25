@@ -216,7 +216,7 @@ export function CharacterPopup({
                             </span>
                           )}
                           <span className="text-muted-foreground text-xs">
-                            {entry.definitions.slice(0, 3).join("; ")}
+                            {entry.definitions.filter((d: string) => !d.startsWith("CL:")).slice(0, 3).join("; ")}
                           </span>
                         </div>
                       </div>
@@ -262,7 +262,7 @@ export function CharacterPopup({
                     simplified={entry.simplified || activeWord}
                     pinyin={entry.pinyinDisplay}
                     jyutping={entry.jyutping}
-                    meaning={entry.definitions.slice(0, 3).join("; ") || "No definition"}
+                    meaning={entry.definitions.filter((d: string) => !d.startsWith("CL:")).slice(0, 3).join("; ") || "No definition"}
                   />
                 )}
                 <VocabularyListManager 

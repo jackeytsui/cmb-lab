@@ -70,7 +70,7 @@ export async function createSrsCardFromSavedVocabulary(params: {
       simplified: vocab.simplified,
       pinyin: vocab.pinyin,
       jyutping: vocab.jyutping,
-      meaning: (vocab.definitions ?? []).slice(0, 3).join("; ") || "No definition",
+      meaning: (vocab.definitions ?? []).filter((d: string) => !d.startsWith("CL:")).slice(0, 3).join("; ") || "No definition",
       example: vocab.notes ?? null,
     })
     .returning({ id: srsCards.id });

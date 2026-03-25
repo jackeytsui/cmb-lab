@@ -57,7 +57,7 @@ export function PopupHeader({
 
   const pinyinDisplay = entry.pinyinDisplay || null;
   const jyutping = entry.jyutping || null;
-  const definitions = entry.definitions.slice(0, 3);
+  const definitions = entry.definitions.filter((d: string) => !d.startsWith("CL:")).slice(0, 3);
   const sourceBadge = SOURCE_BADGE_STYLES[entry.source] ?? SOURCE_BADGE_STYLES.both;
 
   return (

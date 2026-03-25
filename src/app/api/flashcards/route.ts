@@ -85,7 +85,7 @@ export async function GET() {
     pinyin: row.pinyin || "",
     jyutping: row.jyutping || "",
     romanization: [row.pinyin, row.jyutping].filter(Boolean).join(" / "),
-    english: (row.definitions ?? []).join("; "),
+    english: (row.definitions ?? []).filter((d) => !d.startsWith("CL:")).join("; "),
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
     vocabId: row.id,
   }));
