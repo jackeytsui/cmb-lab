@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v10.0
 milestone_name: Mastery & Intelligence
-status: completed
-stopped_at: Completed 75-04-PLAN.md (curated passages)
-last_updated: "2026-03-24T23:00:55.645Z"
-last_activity: 2026-03-24
+status: in_progress
+stopped_at: Completed 76-01-PLAN.md
+last_updated: "2026-03-25T13:59:34Z"
+last_activity: 2026-03-25
 progress:
   total_phases: 6
   completed_phases: 6
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 ## Current Position
 
-Phase: 75
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-03-24
+Phase: 76
+Plan: 2 of 3
+Status: In progress
+Last activity: 2026-03-25
 
 ## Milestone Summary
 
@@ -48,6 +48,9 @@ Last activity: 2026-03-24
 | 7 | Seed tag as system type | Consistent with GHL auto-created tags | ✓ Completed |
 | 8 | hideImport prop on ReaderClient (Option B) | Cleaner than CSS selector targeting for state-controlled ImportDialog | ✓ Completed |
 | 9 | Div-based admin table layout | No shadcn Table component in project | ✓ Completed |
+| 10 | Derive TTS language from note.pane field | Ensures correctness regardless of parent prop | ✓ Completed |
+| 11 | Return DB user ID from invitation endpoint | Fixes coach assignment (Clerk ID vs UUID mismatch) | ✓ Completed |
+| 12 | Add fathomLink to coachingSessions table | Self-contained export without cross-table joins | ✓ Completed |
 
 ## Pending Todos
 
@@ -70,6 +73,6 @@ Last activity: 2026-03-24
 
 ## Session Continuity
 
-Last session: 2026-03-24
-Stopped at: Completed 75-04-PLAN.md (curated passages)
-Resume with: Merge parallel worktrees for 75-02, 75-03, 75-04
+Last session: 2026-03-25
+Stopped at: Completed 76-01-PLAN.md
+Resume with: Continue with 76-02-PLAN.md and 76-03-PLAN.md
