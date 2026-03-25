@@ -658,42 +658,101 @@ function NoteCard({
             </div>
           ) : note.romanizationOverride || note.translationOverride || note.textOverride ? (
             <>
-              {/* If romanization is overridden, show it as a single line above */}
-              {note.romanizationOverride && (showPinyin || showJyutping) ? (
-                <div
-                  className={cn(
-                    "select-none",
-                    showJyutping ? "text-orange-400" : "text-blue-400",
-                  )}
-                  style={{ fontSize: `${annotationSize}px` }}
-                >
-                  {note.romanizationOverride}
-                </div>
-              ) : null}
-              {/* Render with WordSpan for word highlighting support */}
-              {processed.segments.length > 0 ? (
-                <span
-                  className={cn(
-                    (showPinyin || showJyutping) && !note.romanizationOverride
-                      ? "inline-flex items-end flex-wrap gap-y-1"
-                      : "inline",
-                  )}
-                  style={{ fontSize: `${fontSize}px`, lineHeight: (showPinyin || showJyutping) && !note.romanizationOverride ? "1.2" : "2" }}
-                >
-                  {processed.segments.map((seg, i) => (
-                    <WordSpan
-                      key={i}
-                      text={seg.text}
-                      index={i}
-                      isWordLike={seg.isWordLike}
-                      showPinyin={!note.romanizationOverride && showPinyin}
-                      showJyutping={!note.romanizationOverride && showJyutping}
-                      showEnglish={false}
-                      fontSize={fontSize}
-                    />
-                  ))}
-                </span>
-              ) : (
+              {/* Render text with per-character aligned romanization */}
+              {processed.segments.length > 0 ? (() => {
+                // When romanization is overridden, distribute syllables to Han characters
+                // for per-word alignment instead of a grouped sentence string
+                const hasOverrideAnnotation = note.romanizationOverride && (showPinyin || showJyutping);
+                const overrideSyllables = hasOverrideAnnotation
+                  ? note.romanizationOverride!.split(/\s+/).filter(Boolean)
+                  : [];
+                // Build a lookup: for each Han char index in the full text, map to override syllable
+                let overrideMap: Map<number, string> | null = null;
+                if (hasOverrideAnnotation && overrideSyllables.length > 0) {
+                  overrideMap = new Map();
+                  const fullText = processed.displayText || baseText;
+                  let syllableIdx = 0;
+                  [...fullText].forEach((char, charIdx) => {
+                    if (/\p{Script=Han}/u.test(char) && syllableIdx < overrideSyllables.length) {
+                      overrideMap!.set(charIdx, overrideSyllables[syllableIdx++]);
+                    }
+                  });
+                }
+
+                // Track global char offset across segments
+                let globalCharOffset = 0;
+
+                return (
+                  <span
+                    className={cn(
+                      (showPinyin || showJyutping)
+                        ? "inline-flex items-end flex-wrap gap-y-1"
+                        : "inline",
+                    )}
+                    style={{ fontSize: `${fontSize}px`, lineHeight: (showPinyin || showJyutping) ? "1.2" : "2" }}
+                  >
+                    {processed.segments.map((seg, i) => {
+                      // If override exists, render per-char aligned override for this segment
+                      if (overrideMap && seg.isWordLike) {
+                        const segChars = [...seg.text];
+                        const startOffset = globalCharOffset;
+                        globalCharOffset += segChars.length;
+
+                        const hasAnySyllable = segChars.some((_, ci) => overrideMap!.has(startOffset + ci));
+                        if (!hasAnySyllable) {
+                          return (
+                            <span key={i} data-word={seg.text} data-index={i}
+                              className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20">
+                              {seg.text}
+                            </span>
+                          );
+                        }
+
+                        const annotationColor = showJyutping ? "text-orange-400" : "text-blue-400";
+                        return (
+                          <span key={i} data-word={seg.text} data-index={i}
+                            className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20 inline-flex flex-col items-center">
+                            <span className="inline-flex items-end">
+                              {segChars.map((char, ci) => {
+                                const syllable = overrideMap!.get(startOffset + ci);
+                                if (syllable) {
+                                  return (
+                                    <span key={ci} className="inline-flex flex-col items-center" style={{ minWidth: "1.1em" }}>
+                                      <span
+                                        className={cn("text-center leading-tight select-none whitespace-nowrap", annotationColor)}
+                                        style={{ fontSize: `${annotationSize}px` }}
+                                      >
+                                        {syllable}
+                                      </span>
+                                      <span>{char}</span>
+                                    </span>
+                                  );
+                                }
+                                return <span key={ci}>{char}</span>;
+                              })}
+                            </span>
+                          </span>
+                        );
+                      }
+
+                      // No override — use WordSpan for runtime-derived annotations
+                      globalCharOffset += [...seg.text].length;
+                      return (
+                        <WordSpan
+                          key={i}
+                          text={seg.text}
+                          index={i}
+                          isWordLike={seg.isWordLike}
+                          showPinyin={!note.romanizationOverride && showPinyin}
+                          showJyutping={!note.romanizationOverride && showJyutping}
+                          showEnglish={false}
+                          fontSize={fontSize}
+                        />
+                      );
+                    })}
+                  </span>
+                );
+              })() : (
                 <div style={{ fontSize: `${fontSize}px` }} className="text-foreground">
                   {processed.displayText || baseText}
                 </div>

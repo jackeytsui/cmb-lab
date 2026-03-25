@@ -286,7 +286,9 @@ export function CharacterPopup({
             {/* Tone Comparison */}
             <ToneComparison
               word={activeWord}
+              simplified={entry?.simplified ?? null}
               pinyinDisplay={entry?.pinyinDisplay ?? null}
+              pinyinNumbered={entry?.pinyin ?? null}
               jyutping={entry?.jyutping ?? null}
             />
 

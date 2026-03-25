@@ -73,3 +73,30 @@ export async function convertScript(
 
   return text;
 }
+
+/**
+ * Synchronous simplified conversion — returns the simplified form if the
+ * converter has already been loaded, otherwise returns the text unchanged.
+ *
+ * Used by WordSpan to always derive Mandarin pinyin from simplified characters
+ * (source of truth) regardless of the display script mode.
+ *
+ * Safe to call at any time; if opencc-js hasn't been loaded yet the text
+ * passes through unchanged (pinyin-pro will use its own best guess).
+ */
+export function toSimplifiedSync(text: string): string {
+  return toSimplifiedFn ? toSimplifiedFn(text) : text;
+}
+
+/**
+ * Pre-load the simplified converter so it's available synchronously.
+ * Call once when the Reader mounts or when script mode changes.
+ */
+export async function ensureSimplifiedConverter(): Promise<void> {
+  if (toSimplifiedFn) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const OpenCC = (await import("opencc-js")) as any;
+  toSimplifiedFn = OpenCC.Converter({ from: "hk", to: "cn" }) as (
+    text: string,
+  ) => string;
+}

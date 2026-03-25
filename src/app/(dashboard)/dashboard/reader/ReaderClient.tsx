@@ -5,7 +5,7 @@ import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import { useCharacterPopup } from "@/hooks/useCharacterPopup";
 import { useTTS } from "@/hooks/useTTS";
 import { segmentText, type WordSegment } from "@/lib/segmenter";
-import { convertScript } from "@/lib/chinese-convert";
+import { convertScript, ensureSimplifiedConverter } from "@/lib/chinese-convert";
 import { detectSentences } from "@/lib/sentences";
 import { ImportDialog } from "@/components/reader/ImportDialog";
 import { ReaderToolbar } from "@/components/reader/ReaderToolbar";
@@ -588,8 +588,11 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
     setIsConverting(true);
 
     convertScript(rawText, "original", scriptMode)
-      .then((converted) => {
+      .then(async (converted) => {
         if (!cancelled) setDisplayText(converted);
+        // Pre-load the simplified converter so WordSpan can derive stable
+        // Mandarin pinyin from simplified characters synchronously
+        await ensureSimplifiedConverter();
       })
       .catch((err) => {
         console.error("T/S conversion failed:", err);

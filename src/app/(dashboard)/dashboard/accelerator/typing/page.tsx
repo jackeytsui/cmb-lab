@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { users, typingSentences, typingProgress } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
-import TypingDrillClient from "./TypingDrillClient";
+import TypingDrillClient, { type PhrasePair } from "./TypingDrillClient";
 import { AdminEditLink } from "../AdminEditLink";
 
 export default async function TypingDrillPage() {
@@ -17,7 +17,7 @@ export default async function TypingDrillPage() {
   });
   if (!user) redirect("/sign-in");
 
-  // Fetch all sentences ordered by language then sortOrder
+  // Fetch all sentences ordered by sortOrder
   const sentences = await db
     .select({
       id: typingSentences.id,
@@ -28,7 +28,35 @@ export default async function TypingDrillPage() {
       sortOrder: typingSentences.sortOrder,
     })
     .from(typingSentences)
-    .orderBy(asc(typingSentences.language), asc(typingSentences.sortOrder));
+    .orderBy(asc(typingSentences.sortOrder), asc(typingSentences.language));
+
+  // Group into pairs by sortOrder (same sortOrder = same phrase pair)
+  const pairMap = new Map<number, PhrasePair>();
+  for (const s of sentences) {
+    if (!pairMap.has(s.sortOrder)) {
+      pairMap.set(s.sortOrder, {
+        sortOrder: s.sortOrder,
+        english: s.englishText,
+        cantonese: null,
+        mandarin: null,
+      });
+    }
+    const pair = pairMap.get(s.sortOrder)!;
+    const side = {
+      id: s.id,
+      chineseText: s.chineseText,
+      romanisation: s.romanisation,
+    };
+    if (s.language === "cantonese") {
+      pair.cantonese = side;
+    } else {
+      pair.mandarin = side;
+    }
+    pair.english = s.englishText;
+  }
+  const pairs = Array.from(pairMap.values()).sort(
+    (a, b) => a.sortOrder - b.sortOrder
+  );
 
   // Fetch user's completed sentence IDs
   const progressRows = await db
@@ -47,16 +75,13 @@ export default async function TypingDrillPage() {
               Typing Unlock Kit
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Practice typing Chinese characters from English and romanisation
-              prompts.
+              Practice typing Chinese characters — Cantonese and Mandarin side
+              by side.
             </p>
           </div>
           <AdminEditLink href="/admin/accelerator/typing" />
         </div>
-        <TypingDrillClient
-          sentences={sentences}
-          initialCompletedIds={completedIds}
-        />
+        <TypingDrillClient pairs={pairs} initialCompletedIds={completedIds} />
       </div>
     </FeatureGate>
   );

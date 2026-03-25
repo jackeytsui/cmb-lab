@@ -17,7 +17,7 @@ export interface ReaderPreferences {
 
 const DEFAULT_PREFERENCES: ReaderPreferences = {
   showPinyin: true,
-  showJyutping: true,
+  showJyutping: false,
   showEnglish: true,
   translationMode: "proper",
   scriptMode: "original",

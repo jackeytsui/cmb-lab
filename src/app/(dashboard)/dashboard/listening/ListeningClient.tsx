@@ -17,7 +17,7 @@ import { useWatchProgress } from "@/hooks/useWatchProgress";
 import { useTTS } from "@/hooks/useTTS";
 import { useCharacterPopup } from "@/hooks/useCharacterPopup";
 import { CharacterPopup } from "@/components/reader/CharacterPopup";
-import { convertScript, type ScriptMode } from "@/lib/chinese-convert";
+import { convertScript, ensureSimplifiedConverter, type ScriptMode } from "@/lib/chinese-convert";
 import { segmentText } from "@/lib/segmenter";
 import type { AnnotationMode } from "@/components/reader/WordSpan";
 import { ProductWalkthrough, type WalkthroughStep } from "@/components/onboarding/ProductWalkthrough";
@@ -548,10 +548,11 @@ export function ListeningClient() {
     Promise.all(
       captions.map((c) => convertScript(c.text, "original", scriptMode))
     )
-      .then((converted) => {
+      .then(async (converted) => {
         if (!cancelled) {
           setDisplayTexts(converted);
         }
+        await ensureSimplifiedConverter();
       })
       .catch((err) => {
         console.error("T/S conversion failed:", err);

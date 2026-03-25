@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { applyThirdToneSandhi } from "@/lib/tone-sandhi";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
+import { toSimplifiedSync } from "@/lib/chinese-convert";
 import {
   extractToneFromPinyin,
   extractToneFromJyutping,
@@ -31,7 +32,10 @@ export interface WordSpanProps {
 }
 
 function getPinyinArray(text: string): string[] {
-  return applyThirdToneSandhi(text);
+  // Always derive Mandarin pinyin from simplified characters (source of truth)
+  // so pinyin stays stable regardless of traditional/simplified display toggle
+  const simplified = toSimplifiedSync(text);
+  return applyThirdToneSandhi(simplified);
 }
 
 function getJyutpingArray(text: string): (string | null)[] {
@@ -43,8 +47,10 @@ function buildPinyinRuby(
   showSandhi: boolean,
 ): React.ReactElement[] {
   const chars = [...text];
+  // Always derive pinyin from simplified form (source of truth)
+  const simplified = toSimplifiedSync(text);
   if (showSandhi) {
-    const syllables = applyThirdToneSandhi(text);
+    const syllables = applyThirdToneSandhi(simplified);
     return chars.map((char, i) => (
       <ruby key={i}>
         <span>{char}</span>
@@ -56,7 +62,7 @@ function buildPinyinRuby(
       </ruby>
     ));
   }
-  const syllables = pinyin(text, { type: "array" });
+  const syllables = pinyin(simplified, { type: "array" });
   return chars.map((char, i) => (
     <ruby key={i}>
       <span>{char}</span>

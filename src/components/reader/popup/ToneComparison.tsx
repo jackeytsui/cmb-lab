@@ -9,7 +9,10 @@
  *   - Cantonese jyutping syllable (right, cyan)
  *
  * Highlights matching tone numbers with a subtle green underline.
- * Uses pinyin-pro and to-jyutping for per-character phonetics.
+ *
+ * Uses dictionary-provided pinyin/jyutping when available (source of truth).
+ * Falls back to pinyin-pro/to-jyutping using SIMPLIFIED characters to
+ * ensure Mandarin pinyin never changes with traditional/simplified toggle.
  */
 
 import { useMemo } from "react";
@@ -18,7 +21,13 @@ import ToJyutping from "to-jyutping";
 
 export interface ToneComparisonProps {
   word: string;
+  /** Simplified form of the word (stable source for pinyin derivation) */
+  simplified?: string | null;
+  /** Dictionary pinyin with tone marks, space-separated (e.g. "shuì jiào") */
   pinyinDisplay: string | null;
+  /** Dictionary pinyin with tone numbers, space-separated (e.g. "shui4 jiao4") */
+  pinyinNumbered?: string | null;
+  /** Dictionary jyutping, space-separated (e.g. "seoi6 gaau3") */
   jyutping: string | null;
 }
 
@@ -39,26 +48,43 @@ function splitSyllable(syllable: string): { base: string; tone: string | null } 
 
 export function ToneComparison({
   word,
-  // pinyinDisplay and jyutping from the dictionary entry are not used for
-  // per-character breakdown — we generate them dynamically per character
+  simplified,
+  pinyinDisplay,
+  pinyinNumbered,
+  jyutping,
 }: ToneComparisonProps) {
   const chars = useMemo(() => [...word], [word]);
 
-  // Get per-character pinyin (numbered tones for comparison)
-  const pinyinSyllables = useMemo(() => {
-    return pinyin(word, { type: "array", toneType: "num" }) as string[];
-  }, [word]);
+  // Use simplified form for any runtime derivation (source of truth for Mandarin pinyin)
+  const simplifiedWord = simplified ?? word;
 
-  // Get per-character jyutping
+  // Per-character pinyin (numbered) — prefer dictionary, fall back to runtime
+  const pinyinSyllables = useMemo(() => {
+    if (pinyinNumbered) {
+      return pinyinNumbered.split(/\s+/);
+    }
+    // Fall back to runtime derivation from SIMPLIFIED form
+    return pinyin(simplifiedWord, { type: "array", toneType: "num" }) as string[];
+  }, [pinyinNumbered, simplifiedWord]);
+
+  // Per-character pinyin (display with tone marks) — prefer dictionary, fall back to runtime
+  const pinyinDisplaySyllables = useMemo(() => {
+    if (pinyinDisplay) {
+      return pinyinDisplay.split(/\s+/);
+    }
+    // Fall back to runtime derivation from SIMPLIFIED form
+    return pinyin(simplifiedWord, { type: "array" }) as string[];
+  }, [pinyinDisplay, simplifiedWord]);
+
+  // Per-character jyutping — prefer dictionary, fall back to runtime
   const jyutpingSyllables = useMemo(() => {
+    if (jyutping) {
+      return jyutping.split(/\s+/);
+    }
+    // Fall back to runtime derivation (jyutping is the same for T/S)
     const list = ToJyutping.getJyutpingList(word);
     return list.map(([, jp]) => jp ?? "");
-  }, [word]);
-
-  // Get per-character pinyin with tone marks (for display)
-  const pinyinDisplaySyllables = useMemo(() => {
-    return pinyin(word, { type: "array" }) as string[];
-  }, [word]);
+  }, [jyutping, word]);
 
   // Guard: don't render for empty/whitespace
   if (chars.length === 0 || !chars.some((c) => /\p{Script=Han}/u.test(c))) {
