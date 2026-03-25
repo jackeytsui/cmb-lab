@@ -7,7 +7,7 @@ import {
   scriptLines,
   scriptLineProgress,
 } from "@/db/schema/accelerator";
-import { eq, asc, and } from "drizzle-orm";
+import { eq, asc, and, gt } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import ScriptPracticeClient from "./ScriptPracticeClient";
 
@@ -70,6 +70,13 @@ async function ScriptPracticeContent({ scriptId }: { scriptId: string }) {
     }
   }
 
+  // Find next script
+  const nextScript = await db.query.conversationScripts.findFirst({
+    where: gt(conversationScripts.sortOrder, script.sortOrder),
+    orderBy: [asc(conversationScripts.sortOrder)],
+    columns: { id: true, title: true },
+  });
+
   return (
     <ScriptPracticeClient
       script={{
@@ -79,6 +86,8 @@ async function ScriptPracticeContent({ scriptId }: { scriptId: string }) {
         speakerRole: script.speakerRole,
         responderRole: script.responderRole,
       }}
+      nextScriptId={nextScript?.id ?? null}
+      nextScriptTitle={nextScript?.title ?? null}
       lines={script.lines.map((l) => ({
         id: l.id,
         sortOrder: l.sortOrder,
