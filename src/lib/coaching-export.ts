@@ -14,6 +14,7 @@ type ExportNote = {
 type ExportSession = {
   title: string;
   studentEmail?: string | null;
+  fathomLink?: string | null;
   notes: ExportNote[];
 };
 
@@ -38,8 +39,8 @@ export async function exportCoachingNotes(
   const isMultiSession = sessions.length > 1;
 
   // Collect all notes separated by pane
-  const mandarinNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string }> = [];
-  const cantoneseNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string }> = [];
+  const mandarinNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string; fathomLink: string }> = [];
+  const cantoneseNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string; fathomLink: string }> = [];
 
   for (const session of sessions) {
     for (const note of session.notes) {
@@ -47,6 +48,7 @@ export async function exportCoachingNotes(
         ...note,
         sessionTitle: session.title,
         studentEmail: session.studentEmail ?? "",
+        fathomLink: session.fathomLink ?? "",
       };
       if (note.pane === "mandarin") {
         mandarinNotes.push(entry);
@@ -77,8 +79,11 @@ export async function exportCoachingNotes(
     ? [
         { header: "Session", key: "session", width: 20 } as Partial<ExcelJS.Column> as ExcelJS.Column,
         { header: "Student Email", key: "studentEmail", width: 28 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+        { header: "Fathom Link", key: "fathomLink", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
       ]
-    : [];
+    : [
+        { header: "Fathom Link", key: "fathomLink", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+      ];
 
   // Mandarin tab
   const mandarinSheet = wb.addWorksheet("Mandarin");
@@ -97,7 +102,7 @@ export async function exportCoachingNotes(
     const romanization =
       note.romanizationOverride || pinyin(traditional, { toneType: "symbol" });
     const translation = note.translationOverride || "";
-    const row: Record<string, string> = { traditional, simplified, romanization, translation };
+    const row: Record<string, string> = { traditional, simplified, romanization, translation, fathomLink: note.fathomLink };
     if (isMultiSession) {
       row.session = note.sessionTitle;
       row.studentEmail = note.studentEmail;
@@ -122,7 +127,7 @@ export async function exportCoachingNotes(
     const romanization =
       note.romanizationOverride || toJyutpingString(traditional);
     const translation = note.translationOverride || "";
-    const row: Record<string, string> = { traditional, simplified, romanization, translation };
+    const row: Record<string, string> = { traditional, simplified, romanization, translation, fathomLink: note.fathomLink };
     if (isMultiSession) {
       row.session = note.sessionTitle;
       row.studentEmail = note.studentEmail;

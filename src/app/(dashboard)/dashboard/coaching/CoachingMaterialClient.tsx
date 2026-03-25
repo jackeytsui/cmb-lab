@@ -104,6 +104,7 @@ type CoachingSession = {
   type: "one_on_one" | "inner_circle";
   studentEmail?: string | null;
   recordingUrl?: string | null;
+  fathomLink?: string | null;
   goals?: string | null;
   createdAt: string | number;
   updatedAt: string | number;
@@ -819,16 +820,23 @@ function CoachingPanel({
   const [isEditingRecordingUrl, setIsEditingRecordingUrl] = useState(false);
   const [isSavingRecordingUrl, setIsSavingRecordingUrl] = useState(false);
 
+  // Fathom link state
+  const [fathomLinkDraft, setFathomLinkDraft] = useState("");
+  const [isEditingFathomLink, setIsEditingFathomLink] = useState(false);
+  const [isSavingFathomLink, setIsSavingFathomLink] = useState(false);
+
   // Goals state — student-level (not session-level)
   const [studentGoals, setStudentGoals] = useState<string | null>(null);
   const [goalsDraft, setGoalsDraft] = useState("");
   const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [isSavingGoals, setIsSavingGoals] = useState(false);
 
-  // Sync recording URL when active session changes
+  // Sync recording URL and fathom link when active session changes
   useEffect(() => {
     setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
     setIsEditingRecordingUrl(false);
+    setFathomLinkDraft(activeSession?.fathomLink ?? "");
+    setIsEditingFathomLink(false);
   }, [activeSessionId]);
 
   // Fetch student goals when student changes (by email)
@@ -872,6 +880,32 @@ function CoachingPanel({
       setIsSavingRecordingUrl(false);
     }
   }, [activeSessionId, recordingUrlDraft]);
+
+  const handleSaveFathomLink = useCallback(async () => {
+    if (!activeSessionId) return;
+    setIsSavingFathomLink(true);
+    try {
+      const res = await fetch(`/api/coaching/sessions/${activeSessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fathomLink: fathomLinkDraft.trim() || null }),
+      });
+      if (res.ok) {
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === activeSessionId
+              ? { ...s, fathomLink: fathomLinkDraft.trim() || null }
+              : s,
+          ),
+        );
+        setIsEditingFathomLink(false);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsSavingFathomLink(false);
+    }
+  }, [activeSessionId, fathomLinkDraft]);
 
   const handleSaveGoals = useCallback(async () => {
     if (!goalsStudentEmail) return;
@@ -1460,9 +1494,10 @@ function CoachingPanel({
         }
         const data = await res.json();
         const exportSessions = (data.sessions ?? []).map(
-          (s: { title: string; studentEmail?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string }> }) => ({
+          (s: { title: string; studentEmail?: string; fathomLink?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string }> }) => ({
             title: s.title,
             studentEmail: s.studentEmail,
+            fathomLink: s.fathomLink,
             notes: s.notes.map((n) => ({
               text: n.text,
               pane: n.pane as "mandarin" | "cantonese",
@@ -1982,6 +2017,78 @@ function CoachingPanel({
           ) : (
             <p className="mt-2 text-xs text-muted-foreground">
               No recording link added yet.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Fathom Link Section */}
+      {activeSession && canWrite && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <LinkIcon className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold text-foreground">Fathom Link</h3>
+            </div>
+            {!isEditingFathomLink && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFathomLinkDraft(activeSession.fathomLink ?? "");
+                  setIsEditingFathomLink(true);
+                }}
+                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+              >
+                <Pencil className="size-3 mr-1" />
+                {activeSession.fathomLink ? "Edit" : "Add Link"}
+              </button>
+            )}
+          </div>
+          {isEditingFathomLink ? (
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                value={fathomLinkDraft}
+                onChange={(e) => setFathomLinkDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSaveFathomLink();
+                  }
+                }}
+                placeholder="https://fathom.video/..."
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveFathomLink}
+                  disabled={isSavingFathomLink}
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
+                >
+                  {isSavingFathomLink ? "Saving..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingFathomLink(false)}
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : activeSession.fathomLink ? (
+            <a
+              href={activeSession.fathomLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
+            >
+              <ExternalLink className="size-3.5 shrink-0" />
+              {activeSession.fathomLink}
+            </a>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              No fathom link added yet.
             </p>
           )}
         </div>

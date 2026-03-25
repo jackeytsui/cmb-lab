@@ -87,10 +87,11 @@ export function AddUserQuickDialog() {
         return;
       }
 
-      // If coach was selected, assign after user creation
-      if (form.assignedCoachId && firstResult?.userId) {
+      // If coach was selected, assign after user creation (use DB user ID, not Clerk ID)
+      const studentDbId = firstResult?.dbUserId ?? firstResult?.userId;
+      if (form.assignedCoachId && studentDbId) {
         try {
-          await fetch(`/api/admin/students/${firstResult.userId}/coach`, {
+          await fetch(`/api/admin/students/${studentDbId}/coach`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ coachId: form.assignedCoachId }),

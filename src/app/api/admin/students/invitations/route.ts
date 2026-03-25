@@ -61,6 +61,7 @@ type AccessResult = {
   email: string;
   success: boolean;
   userId?: string;
+  dbUserId?: string;
   invitationId?: string;
   message?: string;
   error?: string;
@@ -276,7 +277,7 @@ async function upsertDbUserFromInvite(params: {
   firstName?: string;
   lastName?: string;
   role?: string;
-}) {
+}): Promise<string | undefined> {
   const normalizedEmail = params.email.trim().toLowerCase();
   const normalizedRole = normalizeRole(params.role);
   const name = [params.firstName?.trim(), params.lastName?.trim()]
@@ -300,7 +301,7 @@ async function upsertDbUserFromInvite(params: {
         deletedAt: null,
       })
       .where(eq(users.id, existingByClerk.id));
-    return;
+    return existingByClerk.id;
   }
 
   // CSV overwrite behavior by unique email.
@@ -319,15 +320,16 @@ async function upsertDbUserFromInvite(params: {
         deletedAt: null,
       })
       .where(eq(users.id, existingByEmail.id));
-    return;
+    return existingByEmail.id;
   }
 
-  await db.insert(users).values({
+  const [inserted] = await db.insert(users).values({
     clerkId: params.clerkId,
     email: normalizedEmail,
     name: safeName,
     role: normalizedRole,
-  });
+  }).returning({ id: users.id });
+  return inserted?.id;
 }
 
 export async function POST(req: NextRequest) {
@@ -438,7 +440,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Always persist invite uploads to LMS users table immediately.
-      await upsertDbUserFromInvite({
+      const dbUserId = await upsertDbUserFromInvite({
         clerkId: user.id,
         email: target.email,
         firstName: target.firstName,
@@ -468,6 +470,7 @@ export async function POST(req: NextRequest) {
           email: target.email,
           success: true,
           userId: user.id,
+          dbUserId,
           message: "Uploaded without sending invitation",
         });
         continue;
@@ -505,6 +508,7 @@ export async function POST(req: NextRequest) {
         email: target.email,
         success: true,
         userId: user.id,
+        dbUserId,
         invitationId: invitation.id,
         message:
           action === "resend_invite"
