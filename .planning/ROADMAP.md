@@ -127,6 +127,21 @@ See `.planning/MILESTONES.md` for milestone summaries.
   3. Student sets a daily study time goal (15min, 30min, 1hr) and sees a personalized daily study plan with time-based breakdown of activities
   4. System recommends specific lessons, practice sets, flashcard decks, or grammar patterns based on performance gaps and learning progression
 
+### Phase 76: Team Feedback & Polish
+**Goal**: Address 9 team and student feedback items: sidebar icon differentiation, TTS bug fix, coaching note enhancements (Mando-Canto copy-over translation, per-entry notes, GHL form embed), student export access, tone-colored characters across the platform, fathom link in CSV, and assigned coach display fix
+**Depends on**: Phase 75
+**Requirements**: FB-01, FB-02, FB-03, FB-04, FB-05, FB-06, FB-07, FB-08, FB-09
+**Success Criteria** (what must be TRUE):
+  1. Inner Circle and 1:1 Coaching have distinct icons in the sidebar (visible when collapsed)
+  2. Editing Cantonese jyutping in coaching notes does not trigger Mandarin TTS
+  3. Coaching notes have a "Copy Over" button that translates entries between Mandarin and Cantonese using GPT-4o-mini
+  4. Each coaching note entry has an "Add Notes" button for explanations and extra notes
+  5. GHL tracking form is embedded in the 1:1 lesson notes page
+  6. Students can see and use the export button in 1:1 and Inner Circle sessions
+  7. Chinese characters are tone-colored (Pleco-style) across Reader, flashcards, coaching notes, and dictionary popups
+  8. Fathom link is included in CSV export files
+  9. Assigned coach shows correctly in admin Students tab
+
 ## Progress
 
 **Execution Order:**
@@ -142,7 +157,8 @@ Decimal phases (if inserted) execute between their surrounding integers.
 | 73. Auto-Exercise Generation & Prompt Lab | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 74. Smart Study Engine | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 75. LTO Student Access & Mandarin Accelerator | - | 2/4 | Complete    | 2026-03-24 |
+| 76. Team Feedback & Polish | - | 0/3 | Not Started | - |
 
 ---
 *Roadmap created: 2026-02-16*
-*Last updated: 2026-03-24 after 75-04 plan completion*
+*Last updated: 2026-03-25 after adding phase 76*
