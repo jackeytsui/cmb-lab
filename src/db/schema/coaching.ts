@@ -45,6 +45,7 @@ export const coachingNotes = pgTable(
     textOverride: text("text_override"),
     romanizationOverride: text("romanization_override"),
     translationOverride: text("translation_override"),
+    explanation: text("explanation"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at")
       .notNull()
