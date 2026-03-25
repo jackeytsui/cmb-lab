@@ -68,6 +68,8 @@ export interface ReaderTextAreaProps {
   firstSentencePlayTourId?: string;
   disableSentencePlayback?: boolean;
   className?: string;
+  /** When true, color each character by its tone (Pleco scheme) */
+  toneColorsEnabled?: boolean;
 }
 
 function findWordElement(target: EventTarget): HTMLElement | null {
@@ -101,6 +103,7 @@ export function ReaderTextArea({
   firstSentencePlayTourId,
   disableSentencePlayback = false,
   className: outerClassName,
+  toneColorsEnabled = false,
 }: ReaderTextAreaProps) {
   const lastHoveredIndexRef = useRef<number | null>(null);
   const fallbackRef = useRef<HTMLDivElement>(null);
@@ -224,6 +227,7 @@ export function ReaderTextArea({
                       showEnglish={isDirectWithEnglish}
                       englishGloss={gloss}
                       fontSize={fontSize}
+                      toneColorsEnabled={toneColorsEnabled}
                     />
                   );
                 })}

@@ -12,6 +12,7 @@ export interface ReaderPreferences {
   scriptMode: "original" | "simplified" | "traditional";
   fontSize: number;
   ttsLanguage: "zh-CN" | "zh-HK";
+  toneColorsEnabled: boolean;
 }
 
 const DEFAULT_PREFERENCES: ReaderPreferences = {
@@ -22,6 +23,7 @@ const DEFAULT_PREFERENCES: ReaderPreferences = {
   scriptMode: "original",
   fontSize: 18,
   ttsLanguage: "zh-CN",
+  toneColorsEnabled: false,
 };
 
 export interface UseReaderPreferencesReturn extends ReaderPreferences {
@@ -32,6 +34,7 @@ export interface UseReaderPreferencesReturn extends ReaderPreferences {
   setScriptMode: (mode: ReaderPreferences["scriptMode"]) => void;
   setFontSize: (size: number) => void;
   setTtsLanguage: (lang: "zh-CN" | "zh-HK") => void;
+  setToneColorsEnabled: (v: boolean) => void;
 }
 
 function getStorageKey(scopeKey?: string) {
@@ -70,6 +73,7 @@ export function useReaderPreferences(scopeKey?: string): UseReaderPreferencesRet
             : DEFAULT_PREFERENCES.scriptMode,
           fontSize: typeof parsed.fontSize === "number" ? parsed.fontSize : DEFAULT_PREFERENCES.fontSize,
           ttsLanguage: parsed.ttsLanguage === "zh-HK" ? "zh-HK" : "zh-CN",
+          toneColorsEnabled: typeof parsed.toneColorsEnabled === "boolean" ? parsed.toneColorsEnabled : DEFAULT_PREFERENCES.toneColorsEnabled,
         });
       }
     } catch {
@@ -121,6 +125,10 @@ export function useReaderPreferences(scopeKey?: string): UseReaderPreferencesRet
     setPreferences((prev) => ({ ...prev, ttsLanguage: lang }));
   }, []);
 
+  const setToneColorsEnabled = useCallback((v: boolean) => {
+    setPreferences((prev) => ({ ...prev, toneColorsEnabled: v }));
+  }, []);
+
   return {
     ...preferences,
     setShowPinyin,
@@ -130,5 +138,6 @@ export function useReaderPreferences(scopeKey?: string): UseReaderPreferencesRet
     setScriptMode,
     setFontSize,
     setTtsLanguage,
+    setToneColorsEnabled,
   };
 }
