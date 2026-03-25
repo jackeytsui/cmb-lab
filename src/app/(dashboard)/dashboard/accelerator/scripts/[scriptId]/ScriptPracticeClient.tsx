@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { useTTS } from "@/hooks/useTTS";
+import { useTTS, type TTSOptions } from "@/hooks/useTTS";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -167,7 +167,7 @@ function LanguageSection({
   ratings: Map<string, string>;
   saving: string | null;
   onRate: (lineId: string, rating: "good" | "not_good") => void;
-  speak: (text: string, options?: { language: string }) => Promise<void>;
+  speak: (text: string, options?: TTSOptions) => Promise<void>;
   ttsLoading: boolean;
   ttsPlaying: boolean;
   playingAllIndex: number;
