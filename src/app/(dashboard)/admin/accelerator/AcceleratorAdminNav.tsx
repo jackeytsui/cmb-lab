@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Keyboard, MessageSquare, BookOpenText } from "lucide-react";
+import { Keyboard, MessageSquare, BookOpenText, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
+  { href: "/admin/accelerator/content", label: "Content Pages", icon: Settings },
   { href: "/admin/accelerator/typing", label: "Typing Drills", icon: Keyboard },
   { href: "/admin/accelerator/scripts", label: "Conversation Scripts", icon: MessageSquare },
   { href: "/admin/accelerator/reader", label: "Curated Passages", icon: BookOpenText },

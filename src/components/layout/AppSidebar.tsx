@@ -22,6 +22,8 @@ import {
   Layers,
   MessageSquare,
   Gift,
+  ClipboardList,
+  Package,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
 
@@ -98,6 +100,18 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     label: "Mandarin Accelerator",
     minRole: "student",
     items: [
+      {
+        title: "Practice Plan",
+        url: "/dashboard/accelerator/practice-plan",
+        icon: ClipboardList,
+        featureKey: "mandarin_accelerator",
+      },
+      {
+        title: "Starter Pack",
+        url: "/dashboard/accelerator/starter-pack",
+        icon: Package,
+        featureKey: "mandarin_accelerator",
+      },
       {
         title: "Typing Unlock Kit",
         url: "/dashboard/accelerator/typing",
