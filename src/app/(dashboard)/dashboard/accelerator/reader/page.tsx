@@ -5,7 +5,7 @@ import { users, curatedPassages, passageReadStatus } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import Link from "next/link";
-import { BookOpen, CheckCircle2 } from "lucide-react";
+import { BookOpen, CheckCircle2, ArrowRight } from "lucide-react";
 import { AdminEditLink } from "../AdminEditLink";
 
 async function CuratedPassagesList() {
@@ -18,13 +18,11 @@ async function CuratedPassagesList() {
   });
   if (!user) redirect("/sign-in");
 
-  // Fetch all passages ordered by sortOrder
   const passages = await db
     .select()
     .from(curatedPassages)
     .orderBy(asc(curatedPassages.sortOrder));
 
-  // Fetch current user's read status
   const readStatuses = await db
     .select({ passageId: passageReadStatus.passageId })
     .from(passageReadStatus)
@@ -33,14 +31,15 @@ async function CuratedPassagesList() {
   const readPassageIds = new Set(readStatuses.map((s) => s.passageId));
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-6">
+    <div className="container mx-auto px-4 py-8 space-y-6 max-w-3xl">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
             AI Reader (Curated Passages)
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Read curated Mandarin passages with full Reader features.
+            Short Mandarin reading passages. Tap any passage to open in the
+            Reader with dictionary lookup, pinyin, and audio.
           </p>
         </div>
         <AdminEditLink href="/admin/accelerator/reader" />
@@ -51,22 +50,19 @@ async function CuratedPassagesList() {
           No passages available yet. Check back soon!
         </p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {passages.map((passage) => {
+        <div className="space-y-6">
+          {passages.map((passage, idx) => {
             const isRead = readPassageIds.has(passage.id);
             return (
-              <Link
+              <div
                 key={passage.id}
-                href={`/dashboard/accelerator/reader/${passage.id}`}
-                className="block rounded-lg border border-border bg-card p-5 hover:bg-accent hover:border-border transition-colors"
+                className="rounded-xl border border-border bg-card overflow-hidden"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <BookOpen className="w-5 h-5 text-muted-foreground shrink-0" />
-                    <h2 className="text-lg font-semibold text-foreground truncate">
-                      {passage.title}
-                    </h2>
-                  </div>
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 pt-4 pb-2">
+                  <h2 className="text-lg font-bold text-foreground">
+                    Passage {idx + 1} — {passage.title}
+                  </h2>
                   {isRead ? (
                     <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                       <CheckCircle2 className="w-3 h-3" />
@@ -78,11 +74,26 @@ async function CuratedPassagesList() {
                     </span>
                   )}
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
-                  {passage.body.slice(0, 120)}
-                  {passage.body.length > 120 ? "..." : ""}
-                </p>
-              </Link>
+
+                {/* Passage text */}
+                <div className="px-5 pb-3">
+                  <p className="text-base leading-relaxed text-foreground">
+                    {passage.body}
+                  </p>
+                </div>
+
+                {/* Open in Reader button */}
+                <div className="px-5 pb-4">
+                  <Link
+                    href={`/dashboard/accelerator/reader/${passage.id}`}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-accent/50 px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    Open in Reader
+                    <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+                  </Link>
+                </div>
+              </div>
             );
           })}
         </div>
