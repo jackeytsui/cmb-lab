@@ -10,6 +10,7 @@ import { eq, asc, and, sql } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import Link from "next/link";
 import { MessageSquare } from "lucide-react";
+import { AdminEditLink } from "../AdminEditLink";
 
 export default async function ScriptsPage() {
   return (
@@ -66,13 +67,16 @@ async function ScriptsContent() {
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          Conversation Scripts
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Practice speaking with real-life dialogue scenarios.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            Conversation Scripts
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Practice speaking with real-life dialogue scenarios.
+          </p>
+        </div>
+        <AdminEditLink href="/admin/accelerator/scripts" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

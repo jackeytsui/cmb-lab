@@ -5,6 +5,7 @@ import { users, typingSentences, typingProgress } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import TypingDrillClient from "./TypingDrillClient";
+import { AdminEditLink } from "../AdminEditLink";
 
 export default async function TypingDrillPage() {
   const { userId: clerkId } = await auth();
@@ -40,14 +41,17 @@ export default async function TypingDrillPage() {
   return (
     <FeatureGate feature="mandarin_accelerator">
       <div className="container mx-auto px-4 py-8 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            Typing Unlock Kit
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Practice typing Chinese characters from English and romanisation
-            prompts.
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              Typing Unlock Kit
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Practice typing Chinese characters from English and romanisation
+              prompts.
+            </p>
+          </div>
+          <AdminEditLink href="/admin/accelerator/typing" />
         </div>
         <TypingDrillClient
           sentences={sentences}

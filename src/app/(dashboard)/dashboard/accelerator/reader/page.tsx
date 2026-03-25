@@ -6,6 +6,7 @@ import { eq, asc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import Link from "next/link";
 import { BookOpen, CheckCircle2 } from "lucide-react";
+import { AdminEditLink } from "../AdminEditLink";
 
 async function CuratedPassagesList() {
   const { userId: clerkId } = await auth();
@@ -33,13 +34,16 @@ async function CuratedPassagesList() {
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          AI Reader (Curated Passages)
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Read curated Mandarin passages with full Reader features.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            AI Reader (Curated Passages)
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Read curated Mandarin passages with full Reader features.
+          </p>
+        </div>
+        <AdminEditLink href="/admin/accelerator/reader" />
       </div>
 
       {passages.length === 0 ? (
