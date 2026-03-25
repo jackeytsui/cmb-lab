@@ -4,7 +4,7 @@ import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import { courses, lessons, users, aiPrompts, kbEntries, practiceSets } from "@/db/schema";
 import { isNull, count, eq } from "drizzle-orm";
-import { Sparkles, BookOpen, BarChart3, Link2, ClipboardList } from "lucide-react";
+import { Sparkles, BookOpen, BarChart3, Link2, ClipboardList, Zap } from "lucide-react";
 import { AdminDashboardGrid, type AdminTile } from "@/components/admin/AdminDashboardGrid";
 
 export default async function AdminDashboardPage() {
@@ -167,6 +167,19 @@ export default async function AdminDashboardPage() {
       stat: stats
         ? `${stats.kbEntries} ${stats.kbEntries === 1 ? "entry" : "entries"}`
         : undefined,
+      section: "management",
+    },
+    {
+      id: "accelerator",
+      href: "/admin/accelerator/typing",
+      icon: (
+        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+          <Zap className="h-6 w-6" />
+        </div>
+      ),
+      title: "Mandarin Accelerator",
+      description: "Manage typing drills, conversation scripts, and curated passages for LTO students",
+      hoverColor: "group-hover:text-emerald-600 dark:group-hover:text-emerald-300",
       section: "management",
     },
     {

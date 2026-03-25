@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, hasMinimumRole } from "@/lib/auth";
 import AdminTypingClient from "./AdminTypingClient";
+import { AcceleratorAdminNav } from "../AcceleratorAdminNav";
 
 export default async function AdminTypingPage() {
   const user = await getCurrentUser();
@@ -11,14 +12,14 @@ export default async function AdminTypingPage() {
   return (
     <div className="container mx-auto px-4 py-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">
-          Manage Typing Sentences
+        <h1 className="text-2xl font-bold text-foreground">
+          Mandarin Accelerator
         </h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          Create, edit, and bulk-upload Chinese typing drill sentences for the
-          Mandarin Accelerator.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Manage content for LTO students.
         </p>
       </div>
+      <AcceleratorAdminNav />
       <AdminTypingClient />
     </div>
   );

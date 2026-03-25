@@ -34,6 +34,9 @@ const allSections: PortalSection[] = [
       { id: "knowledge-base", title: "Knowledge Base", href: "/admin/knowledge", description: "Update KB entries used by AI assistants." },
       { id: "ai-prompts", title: "AI Prompts", href: "/admin/prompts", description: "Control production prompts and versions." },
       { id: "prompt-lab", title: "Prompt Lab", href: "/admin/prompt-lab", description: "Test prompts before rollout." },
+      { id: "accelerator-typing", title: "Typing Drills", href: "/admin/accelerator/typing", description: "Manage typing sentences for LTO students." },
+      { id: "accelerator-scripts", title: "Conversation Scripts", href: "/admin/accelerator/scripts", description: "Manage dialogue scripts and audio for LTO students." },
+      { id: "accelerator-reader", title: "Curated Passages", href: "/admin/accelerator/reader", description: "Manage curated reading passages for LTO students." },
     ],
   },
   {
