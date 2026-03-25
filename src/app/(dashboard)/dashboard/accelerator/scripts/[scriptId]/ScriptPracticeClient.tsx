@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import {
   ThumbsUp,
   ThumbsDown,
@@ -175,28 +174,28 @@ export default function ScriptPracticeClient({
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <div className="text-center space-y-6">
-          <CheckCircle className="w-16 h-16 text-green-400 mx-auto" />
-          <h1 className="text-2xl font-bold text-zinc-100">
+          <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto" />
+          <h1 className="text-2xl font-bold text-foreground">
             Practice Complete!
           </h1>
-          <p className="text-zinc-400">{script.title}</p>
+          <p className="text-muted-foreground">{script.title}</p>
 
           <div className="flex justify-center gap-8 py-4">
             <div className="text-center">
-              <p className="text-3xl font-bold text-green-400">{goodCount}</p>
-              <p className="text-sm text-zinc-400">Good</p>
+              <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{goodCount}</p>
+              <p className="text-sm text-muted-foreground">Good</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold text-amber-400">
+              <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">
                 {notGoodCount}
               </p>
-              <p className="text-sm text-zinc-400">Not Good</p>
+              <p className="text-sm text-muted-foreground">Not Good</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold text-zinc-300">
+              <p className="text-3xl font-bold text-foreground">
                 {lines.length - ratedCount}
               </p>
-              <p className="text-sm text-zinc-400">Skipped</p>
+              <p className="text-sm text-muted-foreground">Skipped</p>
             </div>
           </div>
 
@@ -233,7 +232,7 @@ export default function ScriptPracticeClient({
   if (!currentLine) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
-        <p className="text-zinc-400">No lines to practice.</p>
+        <p className="text-muted-foreground">No lines to practice.</p>
         <Link href="/dashboard/accelerator/scripts">
           <Button variant="ghost" className="mt-4">
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -257,15 +256,15 @@ export default function ScriptPracticeClient({
       <div className="flex items-center justify-between">
         <Link
           href="/dashboard/accelerator/scripts"
-          className="text-zinc-400 hover:text-zinc-200 transition-colors"
+          className="text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="text-center">
-          <h1 className="text-lg font-semibold text-zinc-100">
+          <h1 className="text-lg font-semibold text-foreground">
             {script.title}
           </h1>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             {script.speakerRole} / {script.responderRole}
           </p>
         </div>
@@ -274,7 +273,7 @@ export default function ScriptPracticeClient({
 
       {/* Progress bar */}
       <div className="space-y-1">
-        <div className="flex items-center justify-between text-xs text-zinc-400">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             Line {currentIndex + 1} of {totalLines}
           </span>
@@ -282,11 +281,11 @@ export default function ScriptPracticeClient({
             {ratedCount}/{lines.length} rated
           </span>
         </div>
-        <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden flex">
+        <div className="w-full h-2 bg-muted rounded-full overflow-hidden flex">
           {lines.map((line) => {
             const r = ratings.get(line.id);
-            let color = "bg-zinc-700";
-            if (r === "good") color = "bg-green-500";
+            let color = "bg-muted-foreground/20";
+            if (r === "good") color = "bg-emerald-500";
             else if (r === "not_good") color = "bg-amber-500";
             return (
               <div
@@ -300,14 +299,14 @@ export default function ScriptPracticeClient({
       </div>
 
       {/* Current line card */}
-      <div className="border border-zinc-800 rounded-xl bg-zinc-900/50 overflow-hidden">
+      <div className="border border-border rounded-xl bg-card overflow-hidden">
         {/* Role badge */}
         <div className="px-5 pt-4 pb-2">
           <span
             className={`text-xs font-medium px-3 py-1 rounded-full ${
               currentLine.role === "speaker"
-                ? "bg-blue-900/40 text-blue-400"
-                : "bg-emerald-900/40 text-emerald-400"
+                ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
             }`}
           >
             {roleName}
@@ -318,32 +317,32 @@ export default function ScriptPracticeClient({
         <div className="px-5 pb-5 space-y-4">
           {/* Cantonese block (shown first per D-16) */}
           <div className="space-y-1">
-            <p className="text-[10px] uppercase tracking-wider text-amber-500 font-semibold">
+            <p className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-500 font-semibold">
               Cantonese
             </p>
-            <p className="text-xl font-medium text-amber-200">
+            <p className="text-xl font-medium text-amber-700 dark:text-amber-200">
               {currentLine.cantoneseText}
             </p>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-muted-foreground">
               {currentLine.cantoneseRomanisation}
             </p>
-            <p className="text-sm text-zinc-500 italic">
+            <p className="text-sm text-muted-foreground italic">
               {currentLine.englishText}
             </p>
           </div>
 
           {/* Divider */}
-          <div className="border-t border-zinc-800" />
+          <div className="border-t border-border" />
 
           {/* Mandarin block */}
           <div className="space-y-1">
-            <p className="text-[10px] uppercase tracking-wider text-sky-500 font-semibold">
+            <p className="text-[10px] uppercase tracking-wider text-sky-600 dark:text-sky-500 font-semibold">
               Mandarin
             </p>
-            <p className="text-xl font-medium text-sky-200">
+            <p className="text-xl font-medium text-sky-700 dark:text-sky-200">
               {currentLine.mandarinText}
             </p>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-muted-foreground">
               {currentLine.mandarinRomanisation}
             </p>
           </div>
@@ -384,7 +383,7 @@ export default function ScriptPracticeClient({
 
       {/* Self-rating buttons */}
       <div className="space-y-2">
-        <p className="text-center text-sm text-zinc-400">
+        <p className="text-center text-sm text-muted-foreground">
           How did you do on this line?
         </p>
         <div className="flex justify-center gap-4">
@@ -393,8 +392,8 @@ export default function ScriptPracticeClient({
             disabled={saving}
             className={`gap-2 px-6 ${
               lineRating === "good"
-                ? "bg-green-600 hover:bg-green-700"
-                : "bg-green-900/40 hover:bg-green-900/60 text-green-400"
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
             }`}
           >
             <ThumbsUp className="w-4 h-4" />
@@ -405,8 +404,8 @@ export default function ScriptPracticeClient({
             disabled={saving}
             className={`gap-2 px-6 ${
               lineRating === "not_good"
-                ? "bg-amber-600 hover:bg-amber-700"
-                : "bg-amber-900/40 hover:bg-amber-900/60 text-amber-400"
+                ? "bg-amber-600 hover:bg-amber-700 text-white"
+                : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400"
             }`}
           >
             <ThumbsDown className="w-4 h-4" />

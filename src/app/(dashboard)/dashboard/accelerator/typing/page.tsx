@@ -41,10 +41,10 @@ export default async function TypingDrillPage() {
     <FeatureGate feature="mandarin_accelerator">
       <div className="container mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">
+          <h1 className="text-2xl font-bold text-foreground">
             Typing Unlock Kit
           </h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-muted-foreground">
             Practice typing Chinese characters from English and romanisation
             prompts.
           </p>

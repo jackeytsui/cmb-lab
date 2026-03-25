@@ -34,16 +34,16 @@ async function CuratedPassagesList() {
   return (
     <div className="container mx-auto px-4 py-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">
+        <h1 className="text-2xl font-bold text-foreground">
           AI Reader (Curated Passages)
         </h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-muted-foreground">
           Read curated Mandarin passages with full Reader features.
         </p>
       </div>
 
       {passages.length === 0 ? (
-        <p className="text-zinc-500 text-sm py-8">
+        <p className="text-muted-foreground text-sm py-8">
           No passages available yet. Check back soon!
         </p>
       ) : (
@@ -54,27 +54,27 @@ async function CuratedPassagesList() {
               <Link
                 key={passage.id}
                 href={`/dashboard/accelerator/reader/${passage.id}`}
-                className="block rounded-lg border border-zinc-800 bg-zinc-900/50 p-5 hover:bg-zinc-800/50 hover:border-zinc-700 transition-colors"
+                className="block rounded-lg border border-border bg-card p-5 hover:bg-accent hover:border-border transition-colors"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <BookOpen className="w-5 h-5 text-zinc-400 shrink-0" />
-                    <h2 className="text-lg font-semibold text-zinc-100 truncate">
+                    <BookOpen className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <h2 className="text-lg font-semibold text-foreground truncate">
                       {passage.title}
                     </h2>
                   </div>
                   {isRead ? (
-                    <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-emerald-900/40 px-2.5 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-800/50">
+                    <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                       <CheckCircle2 className="w-3 h-3" />
                       Read
                     </span>
                   ) : (
-                    <span className="inline-flex items-center shrink-0 rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-400 border border-zinc-700">
+                    <span className="inline-flex items-center shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground border border-border">
                       Unread
                     </span>
                   )}
                 </div>
-                <p className="mt-2 text-sm text-zinc-500 line-clamp-2">
+                <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
                   {passage.body.slice(0, 120)}
                   {passage.body.length > 120 ? "..." : ""}
                 </p>

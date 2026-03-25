@@ -216,8 +216,8 @@ export default function TypingDrillClient({
     return (
       <div className="space-y-6">
         {/* Demo video placeholder */}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-8 text-center">
-          <p className="text-zinc-500 text-sm">Demo video coming soon</p>
+        <div className="rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-muted-foreground text-sm">Demo video coming soon</p>
         </div>
 
         {/* Section cards */}
@@ -225,17 +225,17 @@ export default function TypingDrillClient({
           {/* Mandarin section */}
           <button
             onClick={() => startDrill("mandarin")}
-            className="group rounded-lg border border-zinc-800 bg-zinc-900/60 p-6 text-left hover:border-blue-700 hover:bg-zinc-800/60 transition-all"
+            className="group rounded-lg border border-border bg-card p-6 text-left hover:border-blue-500/50 hover:bg-accent transition-all"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-zinc-100">Mandarin</h3>
-              <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-blue-400 transition-colors" />
+              <h3 className="text-lg font-semibold text-foreground">Mandarin</h3>
+              <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-blue-500 transition-colors" />
             </div>
-            <p className="text-sm text-zinc-400 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               {mandarinCompleted}/{mandarinSentences.length} completed
             </p>
             {/* Progress bar */}
-            <div className="mt-3 h-2 rounded-full bg-zinc-800 overflow-hidden">
+            <div className="mt-3 h-2 rounded-full bg-muted overflow-hidden">
               <div
                 className="h-full rounded-full bg-blue-500 transition-all"
                 style={{
@@ -252,19 +252,19 @@ export default function TypingDrillClient({
           {/* Cantonese section */}
           <button
             onClick={() => startDrill("cantonese")}
-            className="group rounded-lg border border-zinc-800 bg-zinc-900/60 p-6 text-left hover:border-amber-700 hover:bg-zinc-800/60 transition-all"
+            className="group rounded-lg border border-border bg-card p-6 text-left hover:border-amber-500/50 hover:bg-accent transition-all"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-zinc-100">
+              <h3 className="text-lg font-semibold text-foreground">
                 Cantonese
               </h3>
-              <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-amber-400 transition-colors" />
+              <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-amber-500 transition-colors" />
             </div>
-            <p className="text-sm text-zinc-400 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               {cantoneseCompleted}/{cantoneseSentences.length} completed
             </p>
             {/* Progress bar */}
-            <div className="mt-3 h-2 rounded-full bg-zinc-800 overflow-hidden">
+            <div className="mt-3 h-2 rounded-full bg-muted overflow-hidden">
               <div
                 className="h-full rounded-full bg-amber-500 transition-all"
                 style={{
@@ -290,9 +290,6 @@ export default function TypingDrillClient({
     completedIds.has(s.id)
   ).length;
 
-  const accentColor =
-    activeLanguage === "mandarin" ? "blue" : "amber";
-
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Top bar: back button + progress */}
@@ -301,16 +298,16 @@ export default function TypingDrillClient({
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back to sections
         </Button>
-        <span className="text-sm text-zinc-400">
+        <span className="text-sm text-muted-foreground">
           {completedInSection}/{activeSentences.length} completed
         </span>
       </div>
 
       {/* Progress bar */}
-      <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+      <div className="h-2 rounded-full bg-muted overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${
-            accentColor === "blue" ? "bg-blue-500" : "bg-amber-500"
+            activeLanguage === "mandarin" ? "bg-blue-500" : "bg-amber-500"
           }`}
           style={{
             width: `${
@@ -327,18 +324,18 @@ export default function TypingDrillClient({
         <div
           className={`rounded-xl border p-8 space-y-6 transition-colors ${
             feedbackState === "correct"
-              ? "border-emerald-700 bg-emerald-900/20"
+              ? "border-emerald-500/50 bg-emerald-500/10"
               : feedbackState === "wrong"
-                ? "border-red-700 bg-red-900/20"
-                : "border-zinc-800 bg-zinc-900/60"
+                ? "border-red-500/50 bg-red-500/10"
+                : "border-border bg-card"
           }`}
         >
           {/* Prompt */}
           <div className="text-center space-y-2">
-            <p className="text-xl font-semibold text-zinc-100">
+            <p className="text-xl font-semibold text-foreground">
               {currentSentence.englishText}
             </p>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted-foreground">
               {currentSentence.romanisation}
             </p>
           </div>
@@ -353,10 +350,10 @@ export default function TypingDrillClient({
               placeholder="Type the Chinese characters..."
               className={`text-center text-2xl h-14 font-medium transition-colors ${
                 feedbackState === "correct"
-                  ? "border-emerald-500 bg-emerald-900/30 text-emerald-300"
+                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
                   : feedbackState === "wrong"
-                    ? "border-red-500 bg-red-900/30 text-red-300"
-                    : "border-zinc-700 bg-zinc-800"
+                    ? "border-red-500 bg-red-500/10 text-red-600 dark:text-red-300"
+                    : ""
               }`}
               disabled={feedbackState !== "idle"}
               autoComplete="off"
@@ -367,7 +364,7 @@ export default function TypingDrillClient({
 
             {/* Feedback icons */}
             {feedbackState === "correct" && (
-              <div className="flex items-center justify-center gap-2 text-emerald-400 animate-pulse">
+              <div className="flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400 animate-pulse">
                 <Check className="w-5 h-5" />
                 <span className="text-sm font-medium">Correct!</span>
               </div>
@@ -375,7 +372,7 @@ export default function TypingDrillClient({
 
             {feedbackState === "wrong" && (
               <div className="space-y-2">
-                <div className="flex items-center justify-center gap-2 text-red-400">
+                <div className="flex items-center justify-center gap-2 text-red-600 dark:text-red-400">
                   <X className="w-5 h-5" />
                   <span className="text-sm font-medium">Try again</span>
                 </div>
@@ -387,7 +384,9 @@ export default function TypingDrillClient({
                       <span
                         key={i}
                         className={
-                          cf.correct ? "text-emerald-400" : "text-red-400"
+                          cf.correct
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-600 dark:text-red-400"
                         }
                       >
                         {cf.char}
@@ -397,7 +396,7 @@ export default function TypingDrillClient({
                 )}
 
                 {/* Show correct answer */}
-                <p className="text-center text-emerald-400 text-lg font-medium">
+                <p className="text-center text-emerald-600 dark:text-emerald-400 text-lg font-medium">
                   {currentSentence.chineseText}
                 </p>
               </div>
@@ -419,18 +418,18 @@ export default function TypingDrillClient({
 
           {/* Already completed badge */}
           {completedIds.has(currentSentence.id) && feedbackState === "idle" && (
-            <p className="text-center text-xs text-zinc-600">
+            <p className="text-center text-xs text-muted-foreground">
               Already completed — practicing again
             </p>
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-8 text-center">
-          <Check className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-          <h3 className="text-lg font-semibold text-zinc-100">
+        <div className="rounded-xl border border-border bg-card p-8 text-center">
+          <Check className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+          <h3 className="text-lg font-semibold text-foreground">
             All done!
           </h3>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             You have completed all{" "}
             {activeLanguage === "mandarin" ? "Mandarin" : "Cantonese"} typing
             drills.

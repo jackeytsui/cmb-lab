@@ -46,13 +46,13 @@ async function CuratedPassageReader({ params }: PageProps) {
     <div className="container mx-auto px-4 py-6 space-y-4">
       <Link
         href="/dashboard/accelerator/reader"
-        className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Passages
       </Link>
 
-      <h1 className="text-xl font-bold text-zinc-100">{passage.title}</h1>
+      <h1 className="text-xl font-bold text-foreground">{passage.title}</h1>
 
       <ReaderClient initialText={passage.body} hideImport />
     </div>
