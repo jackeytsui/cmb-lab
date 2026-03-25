@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v10.0
 milestone_name: Mastery & Intelligence
-status: in_progress
-stopped_at: Completed 76-01-PLAN.md
-last_updated: "2026-03-25T13:59:34Z"
-last_activity: 2026-03-25
+status: Milestone complete
+stopped_at: Completed 76-04-PLAN.md (tone colors gap closure)
+last_updated: "2026-03-25T15:03:35.386Z"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 7
+  completed_phases: 7
+  total_plans: 10
+  completed_plans: 10
 ---
 
 # Project State
@@ -20,14 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** The interactive video player that transforms passive watching into active engagement -- students can't just watch, they must demonstrate understanding at each checkpoint to progress.
-**Current focus:** v10.0 Mastery & Intelligence
+**Current focus:** Phase 76 — team-feedback-polish
 
 ## Current Position
 
 Phase: 76
-Plan: 2 of 3
-Status: In progress
-Last activity: 2026-03-25
+Plan: Not started
 
 ## Milestone Summary
 
@@ -52,6 +49,10 @@ Last activity: 2026-03-25
 | 11 | Return DB user ID from invitation endpoint | Fixes coach assignment (Clerk ID vs UUID mismatch) | ✓ Completed |
 | 12 | Add fathomLink to coachingSessions table | Self-contained export without cross-table joins | ✓ Completed |
 
+- [Phase 76]: Direct OpenAI fetch for translation, partial PATCH updates, native details/summary accordion
+- [Phase 76]: Pleco-style tone colors (T1 red, T2 green, T3 blue, T4 purple) with Palette toggle in Reader toolbar
+- [Phase 76]: Used default scope useReaderPreferences() so coaching shares Reader tone color toggle
+
 ## Pending Todos
 
 - Configure Azure Speech credentials (AZURE_SPEECH_KEY, AZURE_SPEECH_REGION) for production tone scoring
@@ -73,6 +74,6 @@ Last activity: 2026-03-25
 
 ## Session Continuity
 
-Last session: 2026-03-25
-Stopped at: Completed 76-01-PLAN.md
+Last session: 2026-03-25T14:57:03.317Z
+Stopped at: Completed 76-04-PLAN.md (tone colors gap closure)
 Resume with: Continue with 76-02-PLAN.md and 76-03-PLAN.md
