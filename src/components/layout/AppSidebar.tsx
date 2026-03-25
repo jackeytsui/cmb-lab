@@ -125,7 +125,6 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         title: "Flashcards",
         url: "/dashboard/flashcards",
         icon: Layers,
-        featureKey: "dictionary_reader",
       },
     ],
   },
