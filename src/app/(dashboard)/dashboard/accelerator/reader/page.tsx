@@ -5,7 +5,7 @@ import { users, curatedPassages, passageReadStatus } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import Link from "next/link";
-import { BookOpen, CheckCircle2, ArrowRight } from "lucide-react";
+import { BookOpen, CheckCircle2, ArrowRight, Trophy } from "lucide-react";
 import { AdminEditLink } from "../AdminEditLink";
 
 async function CuratedPassagesList() {
@@ -29,6 +29,9 @@ async function CuratedPassagesList() {
     .where(eq(passageReadStatus.userId, user.id));
 
   const readPassageIds = new Set(readStatuses.map((s) => s.passageId));
+  const allRead =
+    passages.length > 0 && passages.every((p) => readPassageIds.has(p.id));
+  const readCount = passages.filter((p) => readPassageIds.has(p.id)).length;
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-6 max-w-3xl">
@@ -44,6 +47,39 @@ async function CuratedPassagesList() {
         </div>
         <AdminEditLink href="/admin/accelerator/reader" />
       </div>
+
+      {/* Progress bar */}
+      {passages.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>Progress</span>
+            <span>
+              {readCount}/{passages.length} read
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all"
+              style={{
+                width: `${(readCount / passages.length) * 100}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* All completed banner */}
+      {allRead && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 flex items-center gap-3">
+          <Trophy className="w-6 h-6 text-emerald-500 shrink-0" />
+          <div>
+            <p className="font-semibold text-foreground">All Completed!</p>
+            <p className="text-sm text-muted-foreground">
+              You have read all {passages.length} passages.
+            </p>
+          </div>
+        </div>
+      )}
 
       {passages.length === 0 ? (
         <p className="text-muted-foreground text-sm py-8">
@@ -74,6 +110,15 @@ async function CuratedPassagesList() {
                     </span>
                   )}
                 </div>
+
+                {/* English description */}
+                {passage.description && (
+                  <div className="px-5 pb-2">
+                    <p className="text-sm text-muted-foreground italic">
+                      {passage.description}
+                    </p>
+                  </div>
+                )}
 
                 {/* Passage text */}
                 <div className="px-5 pb-3">

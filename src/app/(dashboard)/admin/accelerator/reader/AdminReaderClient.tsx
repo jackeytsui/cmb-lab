@@ -17,6 +17,7 @@ import { Plus, Upload, Pencil, Trash2 } from "lucide-react";
 interface Passage {
   id: string;
   title: string;
+  description: string | null;
   body: string;
   sortOrder: number;
   createdAt: string;
@@ -33,6 +34,7 @@ export default function AdminReaderClient() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [body, setBody] = useState("");
   const [sortOrder, setSortOrder] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -66,6 +68,7 @@ export default function AdminReaderClient() {
   function openAdd() {
     setEditingId(null);
     setTitle("");
+    setDescription("");
     setBody("");
     setSortOrder(0);
     setDialogOpen(true);
@@ -74,6 +77,7 @@ export default function AdminReaderClient() {
   function openEdit(passage: Passage) {
     setEditingId(passage.id);
     setTitle(passage.title);
+    setDescription(passage.description ?? "");
     setBody(passage.body);
     setSortOrder(passage.sortOrder);
     setDialogOpen(true);
@@ -88,7 +92,7 @@ export default function AdminReaderClient() {
         const res = await fetch(API_URL, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editingId, title, body, sortOrder }),
+          body: JSON.stringify({ id: editingId, title, description: description || null, body, sortOrder }),
         });
         if (res.ok) {
           setDialogOpen(false);
@@ -99,7 +103,7 @@ export default function AdminReaderClient() {
         const res = await fetch(API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, body, sortOrder }),
+          body: JSON.stringify({ title, description: description || undefined, body, sortOrder }),
         });
         if (res.ok) {
           setDialogOpen(false);
@@ -260,6 +264,15 @@ export default function AdminReaderClient() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Ordering at a Restaurant"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="passage-desc">Description (English, optional)</Label>
+              <Input
+                id="passage-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="e.g. A short passage about daily morning routines"
               />
             </div>
             <div className="space-y-2">

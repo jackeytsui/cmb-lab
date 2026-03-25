@@ -142,6 +142,7 @@ export const scriptLineProgress = pgTable(
 export const curatedPassages = pgTable("curated_passages", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: text("title").notNull(),
+  description: text("description"),
   body: text("body").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
   createdBy: uuid("created_by").references(() => users.id),

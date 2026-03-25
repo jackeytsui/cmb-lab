@@ -102,6 +102,12 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     minRole: "student",
     items: [
       {
+        title: "My Progress",
+        url: "/dashboard/accelerator",
+        icon: LayoutDashboard,
+        featureKey: "mandarin_accelerator",
+      },
+      {
         title: "Practice Plan",
         url: "/dashboard/accelerator/practice-plan",
         icon: ClipboardList,

@@ -8,6 +8,7 @@ import { z } from "zod";
 
 const singlePassageSchema = z.object({
   title: z.string().min(1),
+  description: z.string().optional(),
   body: z.string().min(1),
   sortOrder: z.number().int().optional(),
 });
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest) {
       .values(
         passageList.map((p) => ({
           title: p.title,
+          description: p.description ?? null,
           body: p.body,
           sortOrder: p.sortOrder ?? 0,
           createdBy: user.id,
@@ -126,6 +128,7 @@ export async function PUT(request: NextRequest) {
     const schema = z.object({
       id: z.string().uuid(),
       title: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
       body: z.string().min(1).optional(),
       sortOrder: z.number().int().optional(),
     });
