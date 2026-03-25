@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bookmark, Brain, Check, Search, Trash2, Volume2 } from "lucide-react";
 import { useTTS } from "@/hooks/useTTS";
 import type { SavedVocabulary } from "@/db/schema/vocabulary";
+import { ToneColoredText } from "@/components/ToneColoredText";
 
 // ============================================================
 // Types
@@ -170,9 +171,12 @@ export function VocabularyClient({ items: initialItems }: VocabularyClientProps)
             >
               {/* Left: Characters */}
               <div className="min-w-[60px] shrink-0">
-                <p className="text-xl font-bold text-zinc-100">
-                  {item.traditional}
-                </p>
+                <ToneColoredText
+                  text={item.traditional}
+                  lang="mandarin"
+                  pinyinStr={item.pinyin}
+                  className="text-xl font-bold"
+                />
                 {item.simplified !== item.traditional && (
                   <p className="text-xs text-zinc-500 mt-0.5">
                     ({item.simplified})

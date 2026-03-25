@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useTTS, type TTSOptions } from "@/hooks/useTTS";
+import { ToneColoredText } from "@/components/ToneColoredText";
 
 type FlashcardItem = {
   id: string;
@@ -134,9 +135,13 @@ function FlashCard({
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg p-4"
             style={{ backfaceVisibility: "hidden" }}
           >
-            <span className="text-2xl font-bold text-foreground">
-              {displayChinese}
-            </span>
+            <ToneColoredText
+              text={displayChinese}
+              lang={card.pane === "cantonese" ? "cantonese" : "mandarin"}
+              jyutping={card.pane === "cantonese" ? card.jyutping : undefined}
+              pinyinStr={card.pane !== "cantonese" ? card.pinyin : undefined}
+              className="text-2xl font-bold"
+            />
           </div>
 
           {/* Back */}
@@ -152,9 +157,13 @@ function FlashCard({
                 {card.english}
               </span>
             )}
-            <span className="text-xs text-muted-foreground/60">
-              {displayChinese}
-            </span>
+            <ToneColoredText
+              text={displayChinese}
+              lang={card.pane === "cantonese" ? "cantonese" : "mandarin"}
+              jyutping={card.pane === "cantonese" ? card.jyutping : undefined}
+              pinyinStr={card.pane !== "cantonese" ? card.pinyin : undefined}
+              className="text-xs opacity-60"
+            />
             <div className="mt-1" onClick={(e) => e.stopPropagation()}>
               <SpeakButton text={displayChinese} lang={lang} speak={speak} isLoading={ttsLoading} isPlaying={ttsPlaying} />
             </div>
@@ -379,9 +388,13 @@ export function FlashcardsClient() {
               className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl p-6"
               style={{ backfaceVisibility: "hidden" }}
             >
-              <span className="text-4xl font-bold text-foreground">
-                {studyDisplayChinese}
-              </span>
+              <ToneColoredText
+                text={studyDisplayChinese}
+                lang={studyCard.pane === "cantonese" ? "cantonese" : "mandarin"}
+                jyutping={studyCard.pane === "cantonese" ? studyCard.jyutping : undefined}
+                pinyinStr={studyCard.pane !== "cantonese" ? studyCard.pinyin : undefined}
+                className="text-4xl font-bold"
+              />
               <span className="mt-4 text-xs text-muted-foreground">
                 Click or press Space to flip
               </span>
@@ -400,9 +413,13 @@ export function FlashcardsClient() {
                   {studyCard.english}
                 </span>
               )}
-              <span className="mt-2 text-sm text-muted-foreground/60">
-                {studyDisplayChinese}
-              </span>
+              <ToneColoredText
+                text={studyDisplayChinese}
+                lang={studyCard.pane === "cantonese" ? "cantonese" : "mandarin"}
+                jyutping={studyCard.pane === "cantonese" ? studyCard.jyutping : undefined}
+                pinyinStr={studyCard.pane !== "cantonese" ? studyCard.pinyin : undefined}
+                className="mt-2 text-sm opacity-60"
+              />
             </div>
           </div>
         </button>
