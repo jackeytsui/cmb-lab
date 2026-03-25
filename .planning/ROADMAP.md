@@ -142,6 +142,13 @@ See `.planning/MILESTONES.md` for milestone summaries.
   8. Fathom link is included in CSV export files
   9. Assigned coach shows correctly in admin Students tab
 
+**Plans:** 4 plans
+Plans:
+- [x] 76-01-PLAN.md — Quick fixes (sidebar icons, TTS bug, export access, fathom link, coach display)
+- [x] 76-02-PLAN.md — Coaching enhancements (copy-over translation, per-entry notes, GHL form)
+- [x] 76-03-PLAN.md — Tone-colored characters (Reader, flashcards, vocabulary)
+- [ ] 76-04-PLAN.md — Gap closure: tone colors in coaching notes and dictionary popups
+
 ## Progress
 
 **Execution Order:**
@@ -157,7 +164,7 @@ Decimal phases (if inserted) execute between their surrounding integers.
 | 73. Auto-Exercise Generation & Prompt Lab | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 74. Smart Study Engine | v10.0 | 1/1 | Complete | 2026-02-16 |
 | 75. LTO Student Access & Mandarin Accelerator | - | 2/4 | Complete    | 2026-03-24 |
-| 76. Team Feedback & Polish | - | 1/3 | In Progress | - |
+| 76. Team Feedback & Polish | - | 3/4 | In Progress|  |
 
 ---
 *Roadmap created: 2026-02-16*
