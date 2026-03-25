@@ -394,10 +394,14 @@ function NoteCard({
   visualFontClass?: string;
 }) {
   const baseText = note.textOverride ?? note.text;
+  // Derive language from the note's own pane field to ensure TTS always
+  // speaks the correct language, even if the parent prop gets stale.
+  const noteLanguage: "zh-CN" | "zh-HK" =
+    note.pane === "cantonese" ? "zh-HK" : "zh-CN";
   const processed = useProcessedText({
     committedText: baseText,
     scriptMode,
-    language,
+    language: noteLanguage,
   });
   const [isEditing, setIsEditing] = useState(false);
   const [draftText, setDraftText] = useState(baseText);
@@ -410,14 +414,14 @@ function NoteCard({
 
   const defaultRomanization = useMemo(() => {
     if (!baseText.trim()) return "";
-    if (language === "zh-HK") {
+    if (noteLanguage === "zh-HK") {
       return ToJyutping.getJyutpingList(baseText)
         .map(([, jp]) => jp ?? "")
         .filter(Boolean)
         .join(" ");
     }
     return pinyin(baseText, { type: "array" }).filter(Boolean).join(" ");
-  }, [baseText, language]);
+  }, [baseText, noteLanguage]);
 
   const defaultTranslation = useMemo(() => {
     if (!processed.sentences.length) return "";
@@ -473,7 +477,7 @@ function NoteCard({
       const res = await fetch("/api/reader/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, language }),
+        body: JSON.stringify({ text, language: noteLanguage }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -489,7 +493,7 @@ function NoteCard({
     } finally {
       setTranslationLoading(false);
     }
-  }, [processed, baseText, language]);
+  }, [processed, baseText, noteLanguage]);
 
   const annotationSize = Math.round(fontSize * 1.2);
   const englishSize = Math.round(fontSize * 1.1);
@@ -556,7 +560,7 @@ function NoteCard({
                 value={draftRomanization}
                 onChange={handleRomanizationChange}
                 className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                placeholder={language === "zh-HK" ? "Jyutping" : "Pinyin (type chang4 → chàng, nü3 → nǚ)"}
+                placeholder={noteLanguage === "zh-HK" ? "Jyutping" : "Pinyin (type chang4 → chàng, nü3 → nǚ)"}
               />
               <textarea
                 value={draftTranslation}

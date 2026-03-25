@@ -108,7 +108,10 @@ export async function GET(request: Request) {
   }
 
   const isCoachOrAdmin = await hasMinimumRole("coach");
-  if (!isCoachOrAdmin) {
+  const isStudent = !isCoachOrAdmin;
+
+  // Students can only export their own sessions; coaches/admins can export any
+  if (isStudent && !dbUser.email) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -117,6 +120,9 @@ export async function GET(request: Request) {
   const studentEmailParam = url.searchParams.get("studentEmail");
   const sessionIdParam = url.searchParams.get("sessionId");
   const includeTranslations = url.searchParams.get("translate") === "1";
+
+  // Students can only export sessions matching their own email
+  const effectiveStudentEmail = isStudent ? dbUser.email! : studentEmailParam;
 
   if (typeParam !== "one_on_one" && typeParam !== "inner_circle") {
     return NextResponse.json({ error: "Invalid type" }, { status: 400 });
@@ -133,6 +139,10 @@ export async function GET(request: Request) {
     if (!session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
+    // Students can only export their own sessions
+    if (isStudent && session.studentEmail?.toLowerCase() !== dbUser.email?.toLowerCase()) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     sessionList = [session];
     allNotes = await db
       .select()
@@ -142,11 +152,11 @@ export async function GET(request: Request) {
   } else {
     let whereClause;
     if (typeParam === "one_on_one") {
-      const normalizedStudentEmail = studentEmailParam?.trim() || "";
-      if (normalizedStudentEmail) {
+      const normalizedEmail = (effectiveStudentEmail ?? "").trim();
+      if (normalizedEmail) {
         whereClause = and(
           eq(coachingSessions.type, "one_on_one"),
-          ilike(coachingSessions.studentEmail, normalizedStudentEmail),
+          ilike(coachingSessions.studentEmail, normalizedEmail),
         );
       } else {
         whereClause = eq(coachingSessions.type, "one_on_one");

@@ -18,6 +18,7 @@ import {
   Headphones,
   Keyboard,
   LayoutDashboard,
+  UsersRound,
   AudioLines,
   Layers,
   MessageSquare,
@@ -91,7 +92,7 @@ const navSections: NavSectionWithRoleAndFeature[] = [
       {
         title: "Inner Circle Group Coaching",
         url: "/dashboard/coaching/inner-circle",
-        icon: FileText,
+        icon: UsersRound,
         featureKey: "coaching_material",
       },
     ],
