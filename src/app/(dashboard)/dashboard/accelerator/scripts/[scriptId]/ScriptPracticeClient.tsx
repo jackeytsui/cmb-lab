@@ -3,15 +3,15 @@
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  ThumbsUp,
-  ThumbsDown,
   Play,
   ArrowLeft,
-  ArrowRight,
-  RotateCcw,
+  ChevronDown,
+  ChevronUp,
   CheckCircle,
+  RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,6 +50,120 @@ interface ScriptPracticeClientProps {
 }
 
 // ---------------------------------------------------------------------------
+// Audio button
+// ---------------------------------------------------------------------------
+
+function AudioButton({ src, label }: { src: string; label: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const handlePlay = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play();
+      setPlaying(true);
+    }
+  };
+
+  return (
+    <>
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="auto"
+        onEnded={() => setPlaying(false)}
+      />
+      <button
+        type="button"
+        onClick={handlePlay}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border transition-colors",
+          playing
+            ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            : "border-border bg-card text-muted-foreground hover:text-foreground"
+        )}
+        title={`Play ${label}`}
+      >
+        <Play className="w-3 h-3" />
+        {label}
+      </button>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Speech bubble
+// ---------------------------------------------------------------------------
+
+function SpeechBubble({
+  line,
+  role,
+  roleName,
+  isSpeaker,
+}: {
+  line: LineData;
+  role: string;
+  roleName: string;
+  isSpeaker: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl p-4 space-y-2 border-2",
+        isSpeaker
+          ? "border-amber-500/50 bg-amber-500/5"
+          : "border-border bg-muted/50"
+      )}
+    >
+      {/* Role label */}
+      <span
+        className={cn(
+          "text-[10px] uppercase tracking-wider font-semibold",
+          isSpeaker
+            ? "text-amber-600 dark:text-amber-400"
+            : "text-sky-600 dark:text-sky-400"
+        )}
+      >
+        {roleName}
+      </span>
+
+      {/* Cantonese */}
+      <div>
+        <p className="text-lg font-medium text-foreground">
+          {line.cantoneseText}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {line.cantoneseRomanisation}
+        </p>
+      </div>
+
+      {/* Mandarin */}
+      <div>
+        <p className="text-lg font-medium text-foreground/80">
+          {line.mandarinText}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {line.mandarinRomanisation}
+        </p>
+      </div>
+
+      {/* English */}
+      <p className="text-sm text-muted-foreground italic">{line.englishText}</p>
+
+      {/* Audio buttons */}
+      <div className="flex gap-2 pt-1">
+        {line.cantoneseAudioUrl && (
+          <AudioButton src={line.cantoneseAudioUrl} label="Cantonese" />
+        )}
+        {line.mandarinAudioUrl && (
+          <AudioButton src={line.mandarinAudioUrl} label="Mandarin" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -66,23 +180,8 @@ export default function ScriptPracticeClient({
     return map;
   });
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [mode, setMode] = useState<"practice" | "summary" | "revisit">(
-    "practice"
-  );
-  const [saving, setSaving] = useState(false);
-
-  const cantoAudioRef = useRef<HTMLAudioElement>(null);
-  const mandoAudioRef = useRef<HTMLAudioElement>(null);
-
-  // Filter lines for revisit mode
-  const activeLines =
-    mode === "revisit"
-      ? lines.filter((l) => ratings.get(l.id) === "not_good")
-      : lines;
-
-  const currentLine = activeLines[currentIndex];
-  const totalLines = activeLines.length;
+  const [scriptOpen, setScriptOpen] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
 
   const goodCount = Array.from(ratings.values()).filter(
     (v) => v === "good"
@@ -97,161 +196,43 @@ export default function ScriptPracticeClient({
   // -----------------------------------------------------------------------
 
   const handleRate = useCallback(
-    async (selfRating: "good" | "not_good") => {
-      if (!currentLine || saving) return;
-      setSaving(true);
-
+    async (lineId: string, selfRating: "good" | "not_good") => {
+      setSaving(lineId);
       try {
         const res = await fetch("/api/accelerator/scripts/progress", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lineId: currentLine.id, selfRating }),
+          body: JSON.stringify({ lineId, selfRating }),
         });
-
         if (!res.ok) throw new Error("Failed to save rating");
 
         setRatings((prev) => {
           const next = new Map(prev);
-          next.set(currentLine.id, selfRating);
+          next.set(lineId, selfRating);
           return next;
         });
-
-        // Auto-advance or show summary
-        if (currentIndex < totalLines - 1) {
-          setCurrentIndex((prev) => prev + 1);
-        } else {
-          setMode("summary");
-        }
       } catch (err) {
         console.error("Error saving rating:", err);
       } finally {
-        setSaving(false);
+        setSaving(null);
       }
     },
-    [currentLine, currentIndex, totalLines, saving]
+    []
   );
 
-  // -----------------------------------------------------------------------
-  // Audio playback
-  // -----------------------------------------------------------------------
-
-  function playAudio(ref: React.RefObject<HTMLAudioElement | null>) {
-    if (ref.current) {
-      ref.current.currentTime = 0;
-      ref.current.play();
-    }
-  }
+  const resetAllRatings = useCallback(() => {
+    setRatings(new Map());
+  }, []);
 
   // -----------------------------------------------------------------------
-  // Navigation
+  // Progress bar segments
   // -----------------------------------------------------------------------
 
-  function goToLine(index: number) {
-    if (index >= 0 && index < totalLines) {
-      setCurrentIndex(index);
-    }
-  }
-
-  function startRevisit() {
-    const notGoodLines = lines.filter(
-      (l) => ratings.get(l.id) === "not_good"
-    );
-    if (notGoodLines.length === 0) return;
-    setMode("revisit");
-    setCurrentIndex(0);
-  }
-
-  function restartPractice() {
-    setMode("practice");
-    setCurrentIndex(0);
-  }
-
-  // -----------------------------------------------------------------------
-  // Summary view
-  // -----------------------------------------------------------------------
-
-  if (mode === "summary") {
-    return (
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="text-center space-y-6">
-          <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto" />
-          <h1 className="text-2xl font-bold text-foreground">
-            Practice Complete!
-          </h1>
-          <p className="text-muted-foreground">{script.title}</p>
-
-          <div className="flex justify-center gap-8 py-4">
-            <div className="text-center">
-              <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{goodCount}</p>
-              <p className="text-sm text-muted-foreground">Good</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">
-                {notGoodCount}
-              </p>
-              <p className="text-sm text-muted-foreground">Not Good</p>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl font-bold text-foreground">
-                {lines.length - ratedCount}
-              </p>
-              <p className="text-sm text-muted-foreground">Skipped</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 items-center">
-            {notGoodCount > 0 && (
-              <Button onClick={startRevisit} className="w-60">
-                <RotateCcw className="w-4 h-4 mr-2" />
-                Revisit Not-Good Lines ({notGoodCount})
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              onClick={restartPractice}
-              className="w-60"
-            >
-              Restart All Lines
-            </Button>
-            <Link href="/dashboard/accelerator/scripts">
-              <Button variant="ghost" className="w-60">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Scripts
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // -----------------------------------------------------------------------
-  // Practice view (one line at a time)
-  // -----------------------------------------------------------------------
-
-  if (!currentLine) {
-    return (
-      <div className="container mx-auto px-4 py-8 text-center">
-        <p className="text-muted-foreground">No lines to practice.</p>
-        <Link href="/dashboard/accelerator/scripts">
-          <Button variant="ghost" className="mt-4">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Scripts
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  const roleName =
-    currentLine.role === "speaker"
-      ? script.speakerRole
-      : script.responderRole;
-
-  const lineRating = ratings.get(currentLine.id);
+  const progressPercent =
+    lines.length > 0 ? Math.round((ratedCount / lines.length) * 100) : 0;
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl space-y-6">
+    <div className="container mx-auto px-4 py-8 max-w-3xl space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <Link
@@ -260,26 +241,27 @@ export default function ScriptPracticeClient({
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <div className="text-center">
-          <h1 className="text-lg font-semibold text-foreground">
-            {script.title}
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            {script.speakerRole} / {script.responderRole}
+        <div className="text-center flex-1">
+          <h1 className="text-xl font-bold text-foreground">{script.title}</h1>
+          {script.description && (
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {script.description}
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            {script.speakerRole} &amp; {script.responderRole}
           </p>
         </div>
         <div className="w-5" />
       </div>
 
-      {/* Progress bar */}
+      {/* Progress */}
       <div className="space-y-1">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
-            Line {currentIndex + 1} of {totalLines}
-          </span>
-          <span>
             {ratedCount}/{lines.length} rated
           </span>
+          <span>{progressPercent}%</span>
         </div>
         <div className="w-full h-2 bg-muted rounded-full overflow-hidden flex">
           {lines.map((line) => {
@@ -298,154 +280,126 @@ export default function ScriptPracticeClient({
         </div>
       </div>
 
-      {/* Current line card */}
-      <div className="border border-border rounded-xl bg-card overflow-hidden">
-        {/* Role badge */}
-        <div className="px-5 pt-4 pb-2">
-          <span
-            className={`text-xs font-medium px-3 py-1 rounded-full ${
-              currentLine.role === "speaker"
-                ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-            }`}
-          >
-            {roleName}
-          </span>
-        </div>
-
-        {/* Two-column layout: role label + content */}
-        <div className="px-5 pb-5 space-y-4">
-          {/* Cantonese block (shown first per D-16) */}
-          <div className="space-y-1">
-            <p className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-500 font-semibold">
-              Cantonese
-            </p>
-            <p className="text-xl font-medium text-amber-700 dark:text-amber-200">
-              {currentLine.cantoneseText}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {currentLine.cantoneseRomanisation}
-            </p>
-            <p className="text-sm text-muted-foreground italic">
-              {currentLine.englishText}
-            </p>
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-border" />
-
-          {/* Mandarin block */}
-          <div className="space-y-1">
-            <p className="text-[10px] uppercase tracking-wider text-sky-600 dark:text-sky-500 font-semibold">
-              Mandarin
-            </p>
-            <p className="text-xl font-medium text-sky-700 dark:text-sky-200">
-              {currentLine.mandarinText}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {currentLine.mandarinRomanisation}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Audio hidden elements */}
-      {currentLine.cantoneseAudioUrl && (
-        <audio ref={cantoAudioRef} src={currentLine.cantoneseAudioUrl} preload="auto" />
-      )}
-      {currentLine.mandarinAudioUrl && (
-        <audio ref={mandoAudioRef} src={currentLine.mandarinAudioUrl} preload="auto" />
-      )}
-
-      {/* Audio playback buttons */}
-      <div className="flex justify-center gap-3">
-        {currentLine.cantoneseAudioUrl && (
-          <Button
-            variant="outline"
-            onClick={() => playAudio(cantoAudioRef)}
-            className="gap-2"
-          >
-            <Play className="w-4 h-4" />
-            Play Cantonese
-          </Button>
+      {/* Script toggle */}
+      <button
+        type="button"
+        onClick={() => setScriptOpen(!scriptOpen)}
+        className="flex items-center gap-2 text-lg font-semibold text-foreground hover:text-foreground/80 transition-colors"
+      >
+        Script
+        {scriptOpen ? (
+          <ChevronUp className="w-5 h-5" />
+        ) : (
+          <ChevronDown className="w-5 h-5" />
         )}
-        {currentLine.mandarinAudioUrl && (
-          <Button
-            variant="outline"
-            onClick={() => playAudio(mandoAudioRef)}
-            className="gap-2"
-          >
-            <Play className="w-4 h-4" />
-            Play Mandarin
-          </Button>
-        )}
-      </div>
+      </button>
 
-      {/* Self-rating buttons */}
-      <div className="space-y-2">
-        <p className="text-center text-sm text-muted-foreground">
-          How did you do on this line?
-        </p>
-        <div className="flex justify-center gap-4">
-          <Button
-            onClick={() => handleRate("good")}
-            disabled={saving}
-            className={`gap-2 px-6 ${
-              lineRating === "good"
-                ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-            }`}
-          >
-            <ThumbsUp className="w-4 h-4" />
-            Good
-          </Button>
-          <Button
-            onClick={() => handleRate("not_good")}
-            disabled={saving}
-            className={`gap-2 px-6 ${
-              lineRating === "not_good"
-                ? "bg-amber-600 hover:bg-amber-700 text-white"
-                : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400"
-            }`}
-          >
-            <ThumbsDown className="w-4 h-4" />
-            Not Good
+      {/* Script content */}
+      {scriptOpen && (
+        <div className="space-y-6">
+          {lines.map((line) => {
+            const isSpeaker = line.role === "speaker";
+            const roleName = isSpeaker
+              ? script.speakerRole
+              : script.responderRole;
+            const lineRating = ratings.get(line.id);
+            const isLineSaving = saving === line.id;
+
+            return (
+              <div key={line.id} className="space-y-3">
+                {/* Two-column: speech bubble left/right based on role */}
+                <div
+                  className={cn(
+                    "flex gap-4",
+                    isSpeaker ? "justify-start" : "justify-end"
+                  )}
+                >
+                  <div className={cn("w-full max-w-lg", !isSpeaker && "ml-auto")}>
+                    <SpeechBubble
+                      line={line}
+                      role={line.role}
+                      roleName={roleName}
+                      isSpeaker={isSpeaker}
+                    />
+                  </div>
+                </div>
+
+                {/* Self-check inline */}
+                <div
+                  className={cn(
+                    "flex items-center gap-3",
+                    isSpeaker ? "justify-start pl-2" : "justify-end pr-2"
+                  )}
+                >
+                  {lineRating ? (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full",
+                        lineRating === "good"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      )}
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      {lineRating === "good" ? "Good" : "Not so great"}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        How did you do?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRate(line.id, "good")}
+                        disabled={isLineSaving}
+                        className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Good
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRate(line.id, "not_good")}
+                        disabled={isLineSaving}
+                        className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Not so great
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Summary / actions at bottom */}
+      {ratedCount === lines.length && ratedCount > 0 && (
+        <div className="rounded-xl border border-border bg-card p-6 text-center space-y-4">
+          <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto" />
+          <h2 className="text-lg font-bold text-foreground">
+            Practice Complete!
+          </h2>
+          <div className="flex justify-center gap-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                {goodCount}
+              </p>
+              <p className="text-xs text-muted-foreground">Good</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                {notGoodCount}
+              </p>
+              <p className="text-xs text-muted-foreground">Not so great</p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={resetAllRatings} className="gap-2">
+            <RotateCcw className="w-4 h-4" />
+            Practice Again
           </Button>
         </div>
-      </div>
-
-      {/* Navigation buttons */}
-      <div className="flex justify-between pt-2">
-        <Button
-          variant="ghost"
-          onClick={() => goToLine(currentIndex - 1)}
-          disabled={currentIndex === 0}
-          className="gap-1"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Previous
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => {
-            if (currentIndex < totalLines - 1) {
-              goToLine(currentIndex + 1);
-            } else {
-              setMode("summary");
-            }
-          }}
-          className="gap-1"
-        >
-          {currentIndex < totalLines - 1 ? (
-            <>
-              Skip
-              <ArrowRight className="w-4 h-4" />
-            </>
-          ) : (
-            "Finish"
-          )}
-        </Button>
-      </div>
+      )}
     </div>
   );
 }
