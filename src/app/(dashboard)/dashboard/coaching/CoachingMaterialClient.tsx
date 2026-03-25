@@ -14,6 +14,7 @@ import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
 import { exportCoachingNotes } from "@/lib/coaching-export";
+import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 
 async function fetchJiebaSegments(
   sentences: string[],
@@ -409,6 +410,7 @@ function NoteCard({
     scriptMode,
     language: noteLanguage,
   });
+  const { toneColorsEnabled } = useReaderPreferences();
   const [isEditing, setIsEditing] = useState(false);
   const [draftText, setDraftText] = useState(baseText);
   const [draftRomanization, setDraftRomanization] = useState("");
@@ -777,6 +779,7 @@ function NoteCard({
               }}
               batchTranslations={processed.batchTranslations}
               isTranslating={processed.isTranslating}
+              toneColorsEnabled={toneColorsEnabled}
             />
           )}
           {/* Explanation / notes section */}
@@ -839,6 +842,7 @@ function CoachingPanel({
       ? "coaching_one_on_one"
       : "coaching_inner_circle",
   );
+  const { toneColorsEnabled } = useReaderPreferences();
   const roleFromMetadata = user?.publicMetadata?.role as string | undefined;
   const role = (currentRole || roleFromMetadata) as string | undefined;
   const isAdmin = role === "admin";
@@ -2485,6 +2489,7 @@ function CoachingPanel({
                 }}
                 batchTranslations={mandarinPane.batchTranslations}
                 isTranslating={mandarinPane.isTranslating}
+                toneColorsEnabled={toneColorsEnabled}
               />
             </div>
           ) : (
@@ -2769,6 +2774,7 @@ function CoachingPanel({
                 }}
                 batchTranslations={cantonesePane.batchTranslations}
                 isTranslating={cantonesePane.isTranslating}
+                toneColorsEnabled={toneColorsEnabled}
               />
             </div>
           ) : (
