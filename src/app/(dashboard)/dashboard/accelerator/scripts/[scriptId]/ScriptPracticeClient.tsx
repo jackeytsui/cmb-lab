@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Play,
@@ -181,6 +181,60 @@ export default function ScriptPracticeClient({
 
   const [scriptOpen, setScriptOpen] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [playingAll, setPlayingAll] = useState(false);
+  const [playingIndex, setPlayingIndex] = useState(-1);
+  const playAllAudioRef = useRef<HTMLAudioElement | null>(null);
+  const playAllAbortRef = useRef(false);
+
+  // Build ordered queue of all audio URLs (cantonese then mandarin per line)
+  const audioQueue = useMemo(() => {
+    const queue: { url: string; lineIndex: number }[] = [];
+    lines.forEach((line, i) => {
+      if (line.cantoneseAudioUrl) queue.push({ url: line.cantoneseAudioUrl, lineIndex: i });
+      if (line.mandarinAudioUrl) queue.push({ url: line.mandarinAudioUrl, lineIndex: i });
+    });
+    return queue;
+  }, [lines]);
+
+  const handlePlayAll = useCallback(async () => {
+    if (playingAll) {
+      // Stop
+      playAllAbortRef.current = true;
+      if (playAllAudioRef.current) {
+        playAllAudioRef.current.pause();
+        playAllAudioRef.current = null;
+      }
+      setPlayingAll(false);
+      setPlayingIndex(-1);
+      return;
+    }
+
+    if (audioQueue.length === 0) return;
+
+    setPlayingAll(true);
+    playAllAbortRef.current = false;
+
+    for (let i = 0; i < audioQueue.length; i++) {
+      if (playAllAbortRef.current) break;
+      const item = audioQueue[i];
+      setPlayingIndex(item.lineIndex);
+
+      await new Promise<void>((resolve) => {
+        const audio = new Audio(item.url);
+        playAllAudioRef.current = audio;
+        audio.onended = () => {
+          // Small pause between lines
+          setTimeout(resolve, 400);
+        };
+        audio.onerror = () => resolve();
+        audio.play().catch(() => resolve());
+      });
+    }
+
+    setPlayingAll(false);
+    setPlayingIndex(-1);
+    playAllAudioRef.current = null;
+  }, [playingAll, audioQueue]);
 
   const goodCount = Array.from(ratings.values()).filter((v) => v === "good").length;
   const notGoodCount = Array.from(ratings.values()).filter((v) => v === "not_good").length;
@@ -242,6 +296,32 @@ export default function ScriptPracticeClient({
         <div className="w-5" />
       </div>
 
+      {/* Play entire conversation */}
+      {audioQueue.length > 0 && (
+        <button
+          type="button"
+          onClick={handlePlayAll}
+          className={cn(
+            "w-full flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-medium transition-colors",
+            playingAll
+              ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              : "border-border bg-card text-foreground hover:bg-accent"
+          )}
+        >
+          {playingAll ? (
+            <>
+              <div className="w-3 h-3 rounded-sm bg-amber-500" />
+              Stop Playback
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4" />
+              Play Full Conversation
+            </>
+          )}
+        </button>
+      )}
+
       {/* Progress */}
       <div className="space-y-1">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -278,16 +358,21 @@ export default function ScriptPracticeClient({
       {/* Script content */}
       {scriptOpen && (
         <div className="space-y-6">
-          {lines.map((line) => {
+          {lines.map((line, lineIdx) => {
             const isSpeaker = line.role === "speaker";
             const roleName = isSpeaker ? script.speakerRole : script.responderRole;
             const lineRating = ratings.get(line.id);
             const isLineSaving = saving === line.id;
+            const isActive = playingAll && playingIndex === lineIdx;
 
             return (
-              <div key={line.id} className="space-y-3">
+              <div key={line.id} className={cn("space-y-3 transition-all", isActive && "scale-[1.01]")}>
                 <div className={cn("flex gap-4", isSpeaker ? "justify-start" : "justify-end")}>
-                  <div className={cn("w-full max-w-lg", !isSpeaker && "ml-auto")}>
+                  <div className={cn(
+                    "w-full max-w-lg transition-shadow",
+                    !isSpeaker && "ml-auto",
+                    isActive && "ring-2 ring-amber-500/50 rounded-xl"
+                  )}>
                     <SpeechBubble line={line} roleName={roleName} isSpeaker={isSpeaker} />
                   </div>
                 </div>
