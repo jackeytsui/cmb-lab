@@ -4,6 +4,11 @@ import React, { useMemo } from "react";
 import { applyThirdToneSandhi } from "@/lib/tone-sandhi";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
+import {
+  extractToneFromPinyin,
+  extractToneFromJyutping,
+  getToneColorClass,
+} from "@/lib/tone-colors";
 
 // Keep AnnotationMode export for Listening tab backward compatibility
 export type AnnotationMode = "pinyin" | "jyutping" | "plain";
@@ -21,6 +26,8 @@ export interface WordSpanProps {
   /** Legacy prop (Listening tab) — overrides booleans if set */
   annotationMode?: AnnotationMode;
   showSandhi?: boolean;
+  /** When true, color each character by its tone (Pleco scheme) */
+  toneColorsEnabled?: boolean;
 }
 
 function getPinyinArray(text: string): string[] {
@@ -93,6 +100,7 @@ export const WordSpan = React.memo(function WordSpan({
   fontSize = 18,
   annotationMode,
   showSandhi = true,
+  toneColorsEnabled = false,
 }: WordSpanProps) {
   // Resolve props: legacy annotationMode overrides booleans
   const isLegacy = !!annotationMode;
@@ -125,6 +133,31 @@ export const WordSpan = React.memo(function WordSpan({
     () => (!isLegacy && showJyutping && isWordLike ? getJyutpingArray(text) : []),
     [text, showJyutping, isLegacy, isWordLike],
   );
+
+  // Compute per-character tone color classes
+  const toneColorClasses = useMemo(() => {
+    if (!toneColorsEnabled || !isWordLike) return [];
+    const chars = [...text];
+    // Prefer Mandarin tones when pinyin is shown (or neither shown), Cantonese when only jyutping
+    const useCantonese = showJyutping && !showPinyin;
+    if (useCantonese) {
+      const jpList = getJyutpingArray(text);
+      return chars.map((_, i) => {
+        const jp = jpList[i];
+        if (!jp) return "";
+        const tone = extractToneFromJyutping(jp);
+        return getToneColorClass(tone, "cantonese");
+      });
+    }
+    // Mandarin tones from pinyin
+    const pyArr = getPinyinArray(text);
+    return chars.map((_, i) => {
+      const py = pyArr[i];
+      if (!py) return "";
+      const tone = extractToneFromPinyin(py);
+      return getToneColorClass(tone, "mandarin");
+    });
+  }, [text, toneColorsEnabled, isWordLike, showPinyin, showJyutping]);
 
   if (!isWordLike) {
     if (text === "\n") return <br />;
@@ -172,7 +205,7 @@ export const WordSpan = React.memo(function WordSpan({
                   {jyutpingArr[i] ?? "\u00A0"}
                 </span>
               )}
-              <span className="text-center">{char}</span>
+              <span className={`text-center${toneColorsEnabled && toneColorClasses[i] ? ` ${toneColorClasses[i]}` : ""}`}>{char}</span>
             </span>
           ))}
         </span>
@@ -185,6 +218,18 @@ export const WordSpan = React.memo(function WordSpan({
             {englishGloss}
           </span>
         )}
+      </span>
+    );
+  }
+
+  // Plain mode with tone colors — split into per-character spans
+  if (toneColorsEnabled && toneColorClasses.length > 0) {
+    const chars = [...text];
+    return (
+      <span data-word={text} data-index={index} className={WORD_CLASS}>
+        {chars.map((char, i) => (
+          <span key={i} className={toneColorClasses[i] || undefined}>{char}</span>
+        ))}
       </span>
     );
   }

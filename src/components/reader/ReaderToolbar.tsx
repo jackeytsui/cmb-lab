@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Minus, Plus, Play, Square, Loader2 } from "lucide-react";
+import { FileText, Minus, Plus, Play, Square, Loader2, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { ScriptMode } from "@/lib/chinese-convert";
@@ -21,6 +21,8 @@ export interface ReaderToolbarProps {
   onScriptModeChange: (mode: ScriptMode) => void;
   onFontSizeChange: (size: number) => void;
   onTtsLanguageChange: (lang: "zh-CN" | "zh-HK") => void;
+  toneColorsEnabled: boolean;
+  onToneColorsChange: (v: boolean) => void;
   onImportClick?: () => void;
   importButtonTourId?: string;
   onPlayAll?: () => void;
@@ -93,6 +95,8 @@ export function ReaderToolbar({
   onScriptModeChange,
   onFontSizeChange,
   onTtsLanguageChange,
+  toneColorsEnabled,
+  onToneColorsChange,
   onImportClick,
   importButtonTourId,
   onPlayAll,
@@ -141,6 +145,20 @@ export function ReaderToolbar({
           onChange={onShowEnglishChange}
           color="bg-emerald-500 border-emerald-500"
         />
+        <button
+          type="button"
+          onClick={() => onToneColorsChange(!toneColorsEnabled)}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border transition-colors",
+            toneColorsEnabled
+              ? "border-pink-500 bg-pink-500/10 text-pink-400"
+              : "border-border bg-background text-muted-foreground hover:text-foreground",
+          )}
+          title="Toggle tone-colored characters (Pleco style)"
+        >
+          <Palette className="size-3.5" />
+          <span className="hidden sm:inline">Tones</span>
+        </button>
       </div>
 
       <Separator orientation="vertical" className="mx-1 h-6 bg-border" />

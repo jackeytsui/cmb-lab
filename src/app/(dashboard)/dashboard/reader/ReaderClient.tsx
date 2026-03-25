@@ -178,6 +178,8 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
     setScriptMode,
     setFontSize,
     setTtsLanguage,
+    toneColorsEnabled,
+    setToneColorsEnabled,
   } = useReaderPreferences(user?.id);
 
   const walkthroughSteps = useMemo<WalkthroughStep[]>(
@@ -881,6 +883,8 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
           onScriptModeChange={setScriptMode}
           onFontSizeChange={setFontSize}
           onTtsLanguageChange={setTtsLanguage}
+          toneColorsEnabled={toneColorsEnabled}
+          onToneColorsChange={setToneColorsEnabled}
           onImportClick={hideImport ? undefined : () => {
             setImportDialogOpen(true);
             setHasOpenedImportForTour(true);
@@ -931,6 +935,7 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
           isTranslating={isTranslating}
           playingSentenceIndex={playingSentenceIndex}
           containerRef={readerContainerRef}
+          toneColorsEnabled={toneColorsEnabled}
         />
       </div>
 
