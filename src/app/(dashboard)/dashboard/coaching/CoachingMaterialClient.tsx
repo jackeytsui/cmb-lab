@@ -9,7 +9,7 @@ import { convertScript } from "@/lib/chinese-convert";
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, GripVertical } from "lucide-react";
+import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, GripVertical, ArrowRightLeft, NotebookPen } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
@@ -96,6 +96,7 @@ type SessionNote = {
   textOverride?: string;
   romanizationOverride?: string;
   translationOverride?: string;
+  explanation?: string | null;
 };
 
 type CoachingSession = {
@@ -374,6 +375,8 @@ function NoteCard({
   onToggleStar,
   onSave,
   onDelete,
+  onCopyOver,
+  onSaveExplanation,
   visualFontClass,
 }: {
   note: SessionNote;
@@ -392,6 +395,8 @@ function NoteCard({
     translationOverride?: string;
   }) => void;
   onDelete: () => void;
+  onCopyOver?: () => void;
+  onSaveExplanation?: (explanation: string) => void;
   visualFontClass?: string;
 }) {
   const baseText = note.textOverride ?? note.text;
@@ -412,6 +417,10 @@ function NoteCard({
   const [ttsRate, setTtsRate] = useState<"slow" | "medium" | "fast">("medium");
   const [showTranslation, setShowTranslation] = useState(false);
   const [translationLoading, setTranslationLoading] = useState(false);
+  const [isCopyingOver, setIsCopyingOver] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(!!note.explanation);
+  const [explanationDraft, setExplanationDraft] = useState(note.explanation ?? "");
+  const explanationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const defaultRomanization = useMemo(() => {
     if (!baseText.trim()) return "";
@@ -496,6 +505,32 @@ function NoteCard({
     }
   }, [processed, baseText, noteLanguage]);
 
+  const handleCopyOver = useCallback(async () => {
+    if (!onCopyOver || isCopyingOver) return;
+    setIsCopyingOver(true);
+    try {
+      onCopyOver();
+    } finally {
+      setIsCopyingOver(false);
+    }
+  }, [onCopyOver, isCopyingOver]);
+
+  const handleExplanationChange = useCallback(
+    (value: string) => {
+      setExplanationDraft(value);
+      if (explanationTimerRef.current) clearTimeout(explanationTimerRef.current);
+      explanationTimerRef.current = setTimeout(() => {
+        onSaveExplanation?.(value);
+      }, 800);
+    },
+    [onSaveExplanation],
+  );
+
+  const handleExplanationBlur = useCallback(() => {
+    if (explanationTimerRef.current) clearTimeout(explanationTimerRef.current);
+    onSaveExplanation?.(explanationDraft);
+  }, [onSaveExplanation, explanationDraft]);
+
   const annotationSize = Math.round(fontSize * 1.2);
   const englishSize = Math.round(fontSize * 1.1);
 
@@ -525,6 +560,38 @@ function NoteCard({
               )}
               {canEdit && (
                 <>
+                  {onCopyOver && (
+                    <button
+                      type="button"
+                      onClick={handleCopyOver}
+                      disabled={isCopyingOver}
+                      className="inline-flex size-5 items-center justify-center rounded text-[11px] text-muted-foreground hover:text-cyan-500 transition-colors disabled:opacity-50"
+                      aria-label={`Translate to ${language === "zh-CN" ? "Cantonese" : "Mandarin"}`}
+                      title={`Copy over to ${language === "zh-CN" ? "Cantonese" : "Mandarin"}`}
+                    >
+                      {isCopyingOver ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <ArrowRightLeft className="size-3" />
+                      )}
+                    </button>
+                  )}
+                  {onSaveExplanation && (
+                    <button
+                      type="button"
+                      onClick={() => setShowExplanation((p) => !p)}
+                      className={cn(
+                        "inline-flex size-5 items-center justify-center rounded text-[11px] transition-colors",
+                        showExplanation || note.explanation
+                          ? "text-violet-500"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      aria-label="Add notes"
+                      title="Add notes / explanation"
+                    >
+                      <NotebookPen className="size-3" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setIsEditing(true)}
@@ -711,6 +778,25 @@ function NoteCard({
               batchTranslations={processed.batchTranslations}
               isTranslating={processed.isTranslating}
             />
+          )}
+          {/* Explanation / notes section */}
+          {(showExplanation || (note.explanation && !canEdit)) && (
+            <div className="mt-2 border-t border-border/50 pt-2">
+              {canEdit && onSaveExplanation ? (
+                <textarea
+                  value={explanationDraft}
+                  onChange={(e) => handleExplanationChange(e.target.value)}
+                  onBlur={handleExplanationBlur}
+                  rows={2}
+                  className="w-full rounded-md border border-violet-500/25 bg-violet-500/5 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-y"
+                  placeholder="Add notes or explanation for this entry..."
+                />
+              ) : note.explanation ? (
+                <p className="text-xs text-violet-400/80 whitespace-pre-wrap leading-relaxed">
+                  {note.explanation}
+                </p>
+              ) : null}
+            </div>
           )}
         </div>
       </div>
@@ -1636,6 +1722,26 @@ function CoachingPanel({
         </div>
       </div>
 
+      {/* GHL Session Tracking Form — coaches only, 1:1 sessions */}
+      {canWrite && sessionType === "one-on-one" && (
+        <details className="group rounded-lg border border-border bg-card">
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold text-foreground select-none list-none [&::-webkit-details-marker]:hidden">
+            <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+            Session Tracking Form
+          </summary>
+          <div className="px-4 pb-4">
+            <iframe
+              src="https://api.leadconnectorhq.com/widget/form/Vy75BI6BJuB4ibQlYA8P?notrack=true"
+              width="100%"
+              height="600"
+              frameBorder="0"
+              className="rounded-md border border-border"
+              title="GHL Session Tracking Form"
+            />
+          </div>
+        </details>
+      )}
+
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -2316,6 +2422,39 @@ function CoachingPanel({
                       onDelete={() => {
                         void handleDeleteNote(note.id);
                       }}
+                      onCopyOver={canEditNotes ? async () => {
+                        if (!activeSession) return;
+                        const sourceText = note.textOverride ?? note.text;
+                        try {
+                          const res = await fetch("/api/coaching/translate", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              text: sourceText,
+                              fromLang: "mandarin",
+                              toLang: "cantonese",
+                            }),
+                          });
+                          if (!res.ok) return;
+                          const data = await res.json();
+                          if (!data.translated) return;
+                          await fetch(`/api/coaching/sessions/${activeSession.id}/notes`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ text: data.translated, pane: "cantonese" }),
+                          });
+                          await fetchSessions();
+                        } catch {
+                          // ignore
+                        }
+                      } : undefined}
+                      onSaveExplanation={canEditNotes ? (explanation) => {
+                        fetch(`/api/coaching/notes/${note.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ explanation: explanation.trim() || null }),
+                        }).catch(() => null);
+                      } : undefined}
                     />
                   </div>
                 ))}
@@ -2567,6 +2706,39 @@ function CoachingPanel({
                       onDelete={() => {
                         void handleDeleteNote(note.id);
                       }}
+                      onCopyOver={canEditNotes ? async () => {
+                        if (!activeSession) return;
+                        const sourceText = note.textOverride ?? note.text;
+                        try {
+                          const res = await fetch("/api/coaching/translate", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              text: sourceText,
+                              fromLang: "cantonese",
+                              toLang: "mandarin",
+                            }),
+                          });
+                          if (!res.ok) return;
+                          const data = await res.json();
+                          if (!data.translated) return;
+                          await fetch(`/api/coaching/sessions/${activeSession.id}/notes`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ text: data.translated, pane: "mandarin" }),
+                          });
+                          await fetchSessions();
+                        } catch {
+                          // ignore
+                        }
+                      } : undefined}
+                      onSaveExplanation={canEditNotes ? (explanation) => {
+                        fetch(`/api/coaching/notes/${note.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ explanation: explanation.trim() || null }),
+                        }).catch(() => null);
+                      } : undefined}
                     />
                   </div>
                 ))}

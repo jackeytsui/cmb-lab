@@ -33,22 +33,27 @@ export async function PATCH(
     textOverride,
     romanizationOverride,
     translationOverride,
+    explanation,
     order,
   } = body as {
     textOverride?: string | null;
     romanizationOverride?: string | null;
     translationOverride?: string | null;
+    explanation?: string | null;
     order?: number;
   };
 
+  // Build update payload — only include fields that were explicitly provided
+  const updatePayload: Record<string, unknown> = {};
+  if ("textOverride" in body) updatePayload.textOverride = textOverride ?? null;
+  if ("romanizationOverride" in body) updatePayload.romanizationOverride = romanizationOverride ?? null;
+  if ("translationOverride" in body) updatePayload.translationOverride = translationOverride ?? null;
+  if ("explanation" in body) updatePayload.explanation = explanation ?? null;
+  if (typeof order === "number") updatePayload.order = order;
+
   const [updated] = await db
     .update(coachingNotes)
-    .set({
-      textOverride: textOverride ?? null,
-      romanizationOverride: romanizationOverride ?? null,
-      translationOverride: translationOverride ?? null,
-      ...(typeof order === "number" ? { order } : {}),
-    })
+    .set(updatePayload)
     .where(eq(coachingNotes.id, noteId))
     .returning();
 

@@ -239,6 +239,13 @@
       "when": 1774391755775,
       "tag": "0033_ancient_odin",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1774447547716,
+      "tag": "0034_cheerful_ikaris",
+      "breakpoints": true
     }
   ]
 }
