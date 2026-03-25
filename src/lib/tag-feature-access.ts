@@ -11,6 +11,15 @@ type FeatureOverrideState = {
 
 const FEATURE_KEY_SET = new Set<string>(FEATURE_KEYS);
 
+/**
+ * Exclusive tag mappings: when a student has one of these tags,
+ * they get ONLY the listed features (all others are denied).
+ * This replaces the student's default feature set entirely.
+ */
+const EXCLUSIVE_TAG_MAP: Record<string, FeatureKey[]> = {
+  LTO_student: ["mandarin_accelerator"],
+};
+
 function parseFeatureTag(tagName: string): { mode: "allow" | "deny"; feature: FeatureKey } | null {
   const normalized = tagName.trim().toLowerCase();
   const match = normalized.match(/^feature:(enable|disable):([a-z_]+)$/);
@@ -34,6 +43,22 @@ export async function getUserFeatureTagOverrides(userId: string): Promise<Featur
   const deny = new Set<FeatureKey>();
 
   for (const row of rows) {
+    // Check exclusive tag mappings first
+    const exclusiveFeatures = EXCLUSIVE_TAG_MAP[row.name];
+    if (exclusiveFeatures) {
+      // Deny all features, then allow only the mapped ones
+      for (const key of FEATURE_KEYS) {
+        if (!exclusiveFeatures.includes(key)) {
+          deny.add(key);
+        }
+      }
+      for (const feature of exclusiveFeatures) {
+        allow.add(feature);
+      }
+      continue;
+    }
+
+    // Standard feature:enable/disable convention
     const parsed = parseFeatureTag(row.name);
     if (!parsed) continue;
     if (parsed.mode === "allow") {
