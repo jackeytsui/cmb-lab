@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Play,
+  Square,
   ArrowLeft,
   ArrowRight,
   ChevronDown,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useTTS } from "@/hooks/useTTS";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,54 +56,44 @@ interface ScriptPracticeClientProps {
 }
 
 // ---------------------------------------------------------------------------
-// Inline play button
-// ---------------------------------------------------------------------------
-
-function PlayBtn({ src, label }: { src: string; label: string }) {
-  const ref = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-
-  return (
-    <>
-      <audio ref={ref} src={src} preload="auto" onEnded={() => setPlaying(false)} />
-      <button
-        type="button"
-        onClick={() => { if (ref.current) { ref.current.currentTime = 0; ref.current.play(); setPlaying(true); } }}
-        className={cn(
-          "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium border transition-colors",
-          playing
-            ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-            : "border-border bg-card text-muted-foreground hover:text-foreground"
-        )}
-        title={`Play ${label}`}
-      >
-        <Volume2 className="w-3 h-3" />
-        {label}
-      </button>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Speech bubble with romanisation ABOVE characters
+// Speech bubble (single language)
 // ---------------------------------------------------------------------------
 
 function SpeechBubble({
-  line,
+  text,
+  romanisation,
+  englishText,
   roleName,
   isSpeaker,
+  langColor,
+  onPlay,
+  ttsLoading,
+  ttsPlaying,
+  isHighlighted,
 }: {
-  line: LineData;
+  text: string;
+  romanisation: string;
+  englishText: string;
   roleName: string;
   isSpeaker: boolean;
+  langColor: "amber" | "sky";
+  onPlay: () => void;
+  ttsLoading: boolean;
+  ttsPlaying: boolean;
+  isHighlighted: boolean;
 }) {
+  const romanColor = langColor === "amber"
+    ? "text-amber-600 dark:text-amber-500"
+    : "text-sky-600 dark:text-sky-500";
+
   return (
     <div
       className={cn(
-        "rounded-xl p-4 space-y-3 border-2",
+        "rounded-xl p-4 space-y-2 border-2 transition-shadow",
         isSpeaker
           ? "border-amber-500/50 bg-amber-500/5"
-          : "border-border bg-muted/50"
+          : "border-border bg-muted/50",
+        isHighlighted && "ring-2 ring-amber-500/50"
       )}
     >
       {/* Role label */}
@@ -116,52 +108,210 @@ function SpeechBubble({
         {roleName}
       </span>
 
-      {/* Cantonese: romanisation on top, then characters */}
+      {/* Romanisation above characters */}
       <div>
-        <p className="text-xs text-amber-600 dark:text-amber-500 font-medium tracking-wide">
-          {line.cantoneseRomanisation}
+        <p className={cn("text-xs font-medium tracking-wide", romanColor)}>
+          {romanisation}
         </p>
-        <p className="text-lg font-medium text-foreground">
-          {line.cantoneseText}
-        </p>
-      </div>
-
-      {/* Mandarin: romanisation on top, then characters */}
-      <div>
-        <p className="text-xs text-sky-600 dark:text-sky-500 font-medium tracking-wide">
-          {line.mandarinRomanisation}
-        </p>
-        <p className="text-lg font-medium text-foreground/80">
-          {line.mandarinText}
-        </p>
+        <p className="text-lg font-medium text-foreground">{text}</p>
       </div>
 
       {/* English */}
-      <p className="text-sm text-muted-foreground italic">{line.englishText}</p>
+      <p className="text-sm text-muted-foreground italic">{englishText}</p>
 
-      {/* Audio buttons — always show for every line */}
-      <div className="flex gap-2 pt-1">
-        {line.cantoneseAudioUrl ? (
-          <PlayBtn src={line.cantoneseAudioUrl} label="Cantonese" />
-        ) : (
-          <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium border border-border text-muted-foreground/50">
-            <Volume2 className="w-3 h-3" /> Cantonese
-          </span>
+      {/* Play button */}
+      <button
+        type="button"
+        onClick={onPlay}
+        disabled={ttsLoading}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border transition-colors",
+          ttsPlaying
+            ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent",
+          ttsLoading && "opacity-50"
         )}
-        {line.mandarinAudioUrl ? (
-          <PlayBtn src={line.mandarinAudioUrl} label="Mandarin" />
-        ) : (
-          <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium border border-border text-muted-foreground/50">
-            <Volume2 className="w-3 h-3" /> Mandarin
-          </span>
-        )}
-      </div>
+      >
+        <Volume2 className="w-3.5 h-3.5" />
+        {ttsLoading ? "Loading..." : ttsPlaying ? "Playing..." : "Listen"}
+      </button>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Language section
+// ---------------------------------------------------------------------------
+
+function LanguageSection({
+  lang,
+  langLabel,
+  langColor,
+  lines,
+  script,
+  ratings,
+  saving,
+  onRate,
+  speak,
+  ttsLoading,
+  ttsPlaying,
+  playingAllIndex,
+  onPlayAll,
+  isPlayingAll,
+}: {
+  lang: "cantonese" | "mandarin";
+  langLabel: string;
+  langColor: "amber" | "sky";
+  lines: LineData[];
+  script: ScriptInfo;
+  ratings: Map<string, string>;
+  saving: string | null;
+  onRate: (lineId: string, rating: "good" | "not_good") => void;
+  speak: (text: string, options?: { language: string }) => Promise<void>;
+  ttsLoading: boolean;
+  ttsPlaying: boolean;
+  playingAllIndex: number;
+  onPlayAll: () => void;
+  isPlayingAll: boolean;
+}) {
+  const [open, setOpen] = useState(true);
+  const ttsLang = lang === "cantonese" ? "zh-HK" : "zh-CN";
+
+  const ratingKey = (lineId: string) => `${lineId}-${lang}`;
+
+  const ratedCount = lines.filter((l) => ratings.has(ratingKey(l.id))).length;
+  const goodCount = lines.filter((l) => ratings.get(ratingKey(l.id)) === "good").length;
+
+  return (
+    <div className="space-y-4">
+      {/* Section header */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-2 text-lg font-bold text-foreground"
+        >
+          <span className={cn(
+            "w-3 h-3 rounded-full",
+            langColor === "amber" ? "bg-amber-500" : "bg-sky-500"
+          )} />
+          {langLabel}
+          <span className="text-sm font-normal text-muted-foreground">
+            ({ratedCount}/{lines.length} rated)
+          </span>
+          {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {/* Play all for this language */}
+      <button
+        type="button"
+        onClick={onPlayAll}
+        className={cn(
+          "w-full flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-medium transition-colors",
+          isPlayingAll
+            ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            : "border-border bg-card text-foreground hover:bg-accent"
+        )}
+      >
+        {isPlayingAll ? (
+          <>
+            <Square className="w-3.5 h-3.5 fill-current" />
+            Stop Playback
+          </>
+        ) : (
+          <>
+            <Play className="w-4 h-4" />
+            Play Full {langLabel} Conversation
+          </>
+        )}
+      </button>
+
+      {/* Lines */}
+      {open && (
+        <div className="space-y-5">
+          {lines.map((line, idx) => {
+            const isSpeaker = line.role === "speaker";
+            const roleName = isSpeaker ? script.speakerRole : script.responderRole;
+            const text = lang === "cantonese" ? line.cantoneseText : line.mandarinText;
+            const roman = lang === "cantonese" ? line.cantoneseRomanisation : line.mandarinRomanisation;
+            const rKey = ratingKey(line.id);
+            const lineRating = ratings.get(rKey);
+            const isLineSaving = saving === rKey;
+            const isHighlighted = isPlayingAll && playingAllIndex === idx;
+
+            return (
+              <div key={line.id} className="space-y-2">
+                <div className={cn("flex gap-4", isSpeaker ? "justify-start" : "justify-end")}>
+                  <div className={cn("w-full max-w-lg", !isSpeaker && "ml-auto")}>
+                    <SpeechBubble
+                      text={text}
+                      romanisation={roman}
+                      englishText={line.englishText}
+                      roleName={roleName}
+                      isSpeaker={isSpeaker}
+                      langColor={langColor}
+                      onPlay={() => speak(text, { language: ttsLang })}
+                      ttsLoading={ttsLoading}
+                      ttsPlaying={ttsPlaying}
+                      isHighlighted={isHighlighted}
+                    />
+                  </div>
+                </div>
+
+                {/* Self-check */}
+                <div className={cn("flex items-center gap-3", isSpeaker ? "justify-start pl-2" : "justify-end pr-2")}>
+                  {lineRating ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = new Map(ratings);
+                        next.delete(rKey);
+                        // We can't call setRatings directly, so use onRate hack — clear via parent
+                      }}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full",
+                        lineRating === "good"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      )}
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      {lineRating === "good" ? "Good" : "Not so great"}
+                    </button>
+                  ) : (
+                    <>
+                      <span className="text-xs text-muted-foreground">How did you do?</span>
+                      <button
+                        type="button"
+                        onClick={() => onRate(line.id, "good")}
+                        disabled={!!isLineSaving}
+                        className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Good
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRate(line.id, "not_good")}
+                        disabled={!!isLineSaving}
+                        className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Not so great
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
 // ---------------------------------------------------------------------------
 
 export default function ScriptPracticeClient({
@@ -169,80 +319,38 @@ export default function ScriptPracticeClient({
   lines,
   initialRatings,
   nextScriptId,
-  nextScriptTitle,
 }: ScriptPracticeClientProps) {
   const [ratings, setRatings] = useState<Map<string, string>>(() => {
     const map = new Map<string, string>();
     for (const r of initialRatings) {
-      map.set(r.lineId, r.selfRating);
+      // Store with lang suffix for separate tracking
+      map.set(`${r.lineId}-cantonese`, r.selfRating);
+      map.set(`${r.lineId}-mandarin`, r.selfRating);
     }
     return map;
   });
 
-  const [scriptOpen, setScriptOpen] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  const [playingAll, setPlayingAll] = useState(false);
-  const [playingIndex, setPlayingIndex] = useState(-1);
-  const playAllAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // TTS
+  const { speak, stop: stopTTS, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
+
+  // Play all state
+  const [playingAllLang, setPlayingAllLang] = useState<"cantonese" | "mandarin" | null>(null);
+  const [playingAllIndex, setPlayingAllIndex] = useState(-1);
   const playAllAbortRef = useRef(false);
 
-  // Build ordered queue of all audio URLs (cantonese then mandarin per line)
-  const audioQueue = useMemo(() => {
-    const queue: { url: string; lineIndex: number }[] = [];
-    lines.forEach((line, i) => {
-      if (line.cantoneseAudioUrl) queue.push({ url: line.cantoneseAudioUrl, lineIndex: i });
-      if (line.mandarinAudioUrl) queue.push({ url: line.mandarinAudioUrl, lineIndex: i });
-    });
-    return queue;
-  }, [lines]);
-
-  const handlePlayAll = useCallback(async () => {
-    if (playingAll) {
-      // Stop
-      playAllAbortRef.current = true;
-      if (playAllAudioRef.current) {
-        playAllAudioRef.current.pause();
-        playAllAudioRef.current = null;
-      }
-      setPlayingAll(false);
-      setPlayingIndex(-1);
-      return;
-    }
-
-    if (audioQueue.length === 0) return;
-
-    setPlayingAll(true);
-    playAllAbortRef.current = false;
-
-    for (let i = 0; i < audioQueue.length; i++) {
-      if (playAllAbortRef.current) break;
-      const item = audioQueue[i];
-      setPlayingIndex(item.lineIndex);
-
-      await new Promise<void>((resolve) => {
-        const audio = new Audio(item.url);
-        playAllAudioRef.current = audio;
-        audio.onended = () => {
-          // Small pause between lines
-          setTimeout(resolve, 400);
-        };
-        audio.onerror = () => resolve();
-        audio.play().catch(() => resolve());
-      });
-    }
-
-    setPlayingAll(false);
-    setPlayingIndex(-1);
-    playAllAudioRef.current = null;
-  }, [playingAll, audioQueue]);
-
-  const goodCount = Array.from(ratings.values()).filter((v) => v === "good").length;
-  const notGoodCount = Array.from(ratings.values()).filter((v) => v === "not_good").length;
-  const ratedCount = goodCount + notGoodCount;
+  const totalRatable = lines.length * 2; // each line rated for both languages
+  const ratedCount = ratings.size;
+  const progressPercent = totalRatable > 0 ? Math.round((ratedCount / totalRatable) * 100) : 0;
 
   const handleRate = useCallback(
     async (lineId: string, selfRating: "good" | "not_good") => {
-      setSaving(lineId);
+      // Rate for both languages at once (simpler UX)
+      const cantoKey = `${lineId}-cantonese`;
+      const mandoKey = `${lineId}-mandarin`;
+      setSaving(cantoKey);
+
       try {
         const res = await fetch("/api/accelerator/scripts/progress", {
           method: "POST",
@@ -252,7 +360,8 @@ export default function ScriptPracticeClient({
         if (!res.ok) throw new Error("Failed to save rating");
         setRatings((prev) => {
           const next = new Map(prev);
-          next.set(lineId, selfRating);
+          next.set(cantoKey, selfRating);
+          next.set(mandoKey, selfRating);
           return next;
         });
       } catch (err) {
@@ -269,11 +378,46 @@ export default function ScriptPracticeClient({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  const progressPercent =
-    lines.length > 0 ? Math.round((ratedCount / lines.length) * 100) : 0;
+  // Play all for a language using TTS
+  const handlePlayAll = useCallback(
+    async (lang: "cantonese" | "mandarin") => {
+      if (playingAllLang === lang) {
+        // Stop
+        playAllAbortRef.current = true;
+        stopTTS();
+        setPlayingAllLang(null);
+        setPlayingAllIndex(-1);
+        return;
+      }
+
+      // Stop any other playback
+      stopTTS();
+      setPlayingAllLang(lang);
+      playAllAbortRef.current = false;
+
+      const ttsLang = lang === "cantonese" ? "zh-HK" : "zh-CN";
+
+      for (let i = 0; i < lines.length; i++) {
+        if (playAllAbortRef.current) break;
+        setPlayingAllIndex(i);
+        const text = lang === "cantonese" ? lines[i].cantoneseText : lines[i].mandarinText;
+
+        await new Promise<void>((resolve) => {
+          speak(text, { language: ttsLang }).then(() => {
+            // Wait a bit after speech ends
+            setTimeout(resolve, 600);
+          }).catch(() => resolve());
+        });
+      }
+
+      setPlayingAllLang(null);
+      setPlayingAllIndex(-1);
+    },
+    [playingAllLang, lines, speak, stopTTS]
+  );
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-3xl space-y-6 pb-36">
+    <div className="container mx-auto px-4 py-8 max-w-3xl space-y-8 pb-36">
       {/* Header */}
       <div className="flex items-center justify-between">
         <Link
@@ -285,9 +429,7 @@ export default function ScriptPracticeClient({
         <div className="text-center flex-1">
           <h1 className="text-xl font-bold text-foreground">{script.title}</h1>
           {script.description && (
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {script.description}
-            </p>
+            <p className="text-sm text-muted-foreground mt-0.5">{script.description}</p>
           )}
           <p className="text-xs text-muted-foreground mt-1">
             {script.speakerRole} &amp; {script.responderRole}
@@ -296,144 +438,64 @@ export default function ScriptPracticeClient({
         <div className="w-5" />
       </div>
 
-      {/* Play entire conversation */}
-      {audioQueue.length > 0 && (
-        <button
-          type="button"
-          onClick={handlePlayAll}
-          className={cn(
-            "w-full flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-medium transition-colors",
-            playingAll
-              ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-              : "border-border bg-card text-foreground hover:bg-accent"
-          )}
-        >
-          {playingAll ? (
-            <>
-              <div className="w-3 h-3 rounded-sm bg-amber-500" />
-              Stop Playback
-            </>
-          ) : (
-            <>
-              <Play className="w-4 h-4" />
-              Play Full Conversation
-            </>
-          )}
-        </button>
-      )}
-
       {/* Progress */}
       <div className="space-y-1">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{ratedCount}/{lines.length} rated</span>
+          <span>{Math.floor(ratedCount / 2)}/{lines.length} lines rated</span>
           <span>{progressPercent}%</span>
         </div>
-        <div className="w-full h-2 bg-muted rounded-full overflow-hidden flex">
-          {lines.map((line) => {
-            const r = ratings.get(line.id);
-            let color = "bg-muted-foreground/20";
-            if (r === "good") color = "bg-emerald-500";
-            else if (r === "not_good") color = "bg-amber-500";
-            return (
-              <div
-                key={line.id}
-                className={`h-full ${color} transition-colors`}
-                style={{ width: `${100 / lines.length}%` }}
-              />
-            );
-          })}
+        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 rounded-full transition-all"
+            style={{ width: `${progressPercent}%` }}
+          />
         </div>
       </div>
 
-      {/* Script toggle */}
-      <button
-        type="button"
-        onClick={() => setScriptOpen(!scriptOpen)}
-        className="flex items-center gap-2 text-lg font-semibold text-foreground hover:text-foreground/80 transition-colors"
-      >
-        Script
-        {scriptOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-      </button>
+      {/* Cantonese section */}
+      <LanguageSection
+        lang="cantonese"
+        langLabel="Cantonese"
+        langColor="amber"
+        lines={lines}
+        script={script}
+        ratings={ratings}
+        saving={saving}
+        onRate={handleRate}
+        speak={speak}
+        ttsLoading={ttsLoading}
+        ttsPlaying={ttsPlaying}
+        playingAllIndex={playingAllLang === "cantonese" ? playingAllIndex : -1}
+        onPlayAll={() => handlePlayAll("cantonese")}
+        isPlayingAll={playingAllLang === "cantonese"}
+      />
 
-      {/* Script content */}
-      {scriptOpen && (
-        <div className="space-y-6">
-          {lines.map((line, lineIdx) => {
-            const isSpeaker = line.role === "speaker";
-            const roleName = isSpeaker ? script.speakerRole : script.responderRole;
-            const lineRating = ratings.get(line.id);
-            const isLineSaving = saving === line.id;
-            const isActive = playingAll && playingIndex === lineIdx;
+      {/* Divider */}
+      <div className="border-t border-border" />
 
-            return (
-              <div key={line.id} className={cn("space-y-3 transition-all", isActive && "scale-[1.01]")}>
-                <div className={cn("flex gap-4", isSpeaker ? "justify-start" : "justify-end")}>
-                  <div className={cn(
-                    "w-full max-w-lg transition-shadow",
-                    !isSpeaker && "ml-auto",
-                    isActive && "ring-2 ring-amber-500/50 rounded-xl"
-                  )}>
-                    <SpeechBubble line={line} roleName={roleName} isSpeaker={isSpeaker} />
-                  </div>
-                </div>
-
-                {/* Self-check inline */}
-                <div className={cn("flex items-center gap-3", isSpeaker ? "justify-start pl-2" : "justify-end pr-2")}>
-                  {lineRating ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Allow re-rating by clicking the badge
-                        setRatings((prev) => {
-                          const next = new Map(prev);
-                          next.delete(line.id);
-                          return next;
-                        });
-                      }}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity",
-                        lineRating === "good"
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                      )}
-                      title="Click to re-rate"
-                    >
-                      <CheckCircle className="w-3 h-3" />
-                      {lineRating === "good" ? "Good" : "Not so great"}
-                    </button>
-                  ) : (
-                    <>
-                      <span className="text-xs text-muted-foreground">How did you do?</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRate(line.id, "good")}
-                        disabled={isLineSaving}
-                        className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
-                      >
-                        Good
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRate(line.id, "not_good")}
-                        disabled={isLineSaving}
-                        className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
-                      >
-                        Not so great
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* Mandarin section */}
+      <LanguageSection
+        lang="mandarin"
+        langLabel="Mandarin"
+        langColor="sky"
+        lines={lines}
+        script={script}
+        ratings={ratings}
+        saving={saving}
+        onRate={handleRate}
+        speak={speak}
+        ttsLoading={ttsLoading}
+        ttsPlaying={ttsPlaying}
+        playingAllIndex={playingAllLang === "mandarin" ? playingAllIndex : -1}
+        onPlayAll={() => handlePlayAll("mandarin")}
+        isPlayingAll={playingAllLang === "mandarin"}
+      />
 
       {/* Self-check reminder */}
       <div className="rounded-lg border border-border bg-card/50 px-4 py-3 text-center">
         <p className="text-xs text-muted-foreground">
-          Remember to mark each sentence as <span className="text-emerald-500 font-medium">Good</span> or{" "}
-          <span className="text-amber-500 font-medium">Not so great</span> — tracking your self-assessment helps you focus on what to practice next.
+          Rate each sentence as <span className="text-emerald-500 font-medium">Good</span> or{" "}
+          <span className="text-amber-500 font-medium">Not so great</span> to track your progress and focus your practice.
         </p>
       </div>
 
@@ -446,7 +508,7 @@ export default function ScriptPracticeClient({
           </Button>
 
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{ratedCount}/{lines.length}</span>
+            <span>{Math.floor(ratedCount / 2)}/{lines.length}</span>
             <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all"
