@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { Plus, Check, Loader2 } from "lucide-react";
+import { Plus, Check, Loader2, Trash2, Palette } from "lucide-react";
 import { TagBadge, TAG_COLORS } from "./TagBadge";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
@@ -38,6 +38,8 @@ export function TagManager({
   const [newColor, setNewColor] = useState<string>(TAG_COLORS[0]);
   const [creating, setCreating] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [editingColor, setEditingColor] = useState<string | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
 
   const assignedTagIds = new Set(currentTags.map((t) => t.id));
@@ -109,6 +111,45 @@ export function TagManager({
     }
   }, [newName, newColor, studentId, onTagsChange]);
 
+  const handleDeleteTag = useCallback(
+    async (tagId: string, tagName: string) => {
+      if (!confirm(`Delete tag "${tagName}"? This removes it from all students.`)) return;
+      setDeleting(tagId);
+      setOperationError(null);
+      try {
+        const res = await fetch(`/api/admin/tags/${tagId}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Failed to delete tag");
+        onTagsChange();
+      } catch (error) {
+        console.error("Failed to delete tag:", error);
+        setOperationError("Failed to delete tag. Please try again.");
+      } finally {
+        setDeleting(null);
+      }
+    },
+    [onTagsChange]
+  );
+
+  const handleUpdateColor = useCallback(
+    async (tagId: string, color: string) => {
+      setOperationError(null);
+      try {
+        const res = await fetch(`/api/admin/tags/${tagId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ color }),
+        });
+        if (!res.ok) throw new Error("Failed to update color");
+        setEditingColor(null);
+        onTagsChange();
+      } catch (error) {
+        console.error("Failed to update tag color:", error);
+        setOperationError("Failed to update color. Please try again.");
+      }
+    },
+    [onTagsChange]
+  );
+
   return (
     <Popover.Root open={isOpen} onOpenChange={setIsOpen}>
       <Popover.Trigger asChild>
@@ -148,33 +189,74 @@ export function TagManager({
             {allTags.map((tag) => {
               const isAssigned = assignedTagIds.has(tag.id);
               const isLoading = toggling === tag.id;
+              const isDeleting = deleting === tag.id;
+              const isEditingThisColor = editingColor === tag.id;
 
               return (
-                <button
-                  key={tag.id}
-                  onClick={() => handleToggleTag(tag.id, isAssigned)}
-                  disabled={isLoading}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-zinc-800 transition-colors text-left"
-                >
-                  <div
-                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                      isAssigned
-                        ? "bg-white/10 border-white/30"
-                        : "border-zinc-600"
-                    }`}
-                  >
-                    {isLoading ? (
-                      <Loader2 className="w-3 h-3 text-zinc-400 animate-spin" />
-                    ) : isAssigned ? (
-                      <Check className="w-3 h-3 text-white" />
-                    ) : null}
+                <div key={tag.id} className="space-y-1">
+                  <div className="flex items-center gap-1 w-full px-2 py-1.5 rounded hover:bg-zinc-800 transition-colors group/tag">
+                    <button
+                      onClick={() => handleToggleTag(tag.id, isAssigned)}
+                      disabled={isLoading}
+                      className="flex items-center gap-2 flex-1 text-left"
+                    >
+                      <div
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          isAssigned
+                            ? "bg-white/10 border-white/30"
+                            : "border-zinc-600"
+                        }`}
+                      >
+                        {isLoading ? (
+                          <Loader2 className="w-3 h-3 text-zinc-400 animate-spin" />
+                        ) : isAssigned ? (
+                          <Check className="w-3 h-3 text-white" />
+                        ) : null}
+                      </div>
+                      <TagBadge
+                        name={tag.name}
+                        color={tag.color}
+                        type={tag.type}
+                      />
+                    </button>
+                    <button
+                      onClick={() => setEditingColor(isEditingThisColor ? null : tag.id)}
+                      className="opacity-0 group-hover/tag:opacity-100 p-1 rounded hover:bg-zinc-700 transition-all"
+                      aria-label={`Edit color for ${tag.name}`}
+                    >
+                      <Palette className="w-3 h-3 text-zinc-400" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTag(tag.id, tag.name)}
+                      disabled={isDeleting}
+                      className="opacity-0 group-hover/tag:opacity-100 p-1 rounded hover:bg-red-900/50 transition-all"
+                      aria-label={`Delete tag ${tag.name}`}
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="w-3 h-3 text-red-400 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3 h-3 text-red-400" />
+                      )}
+                    </button>
                   </div>
-                  <TagBadge
-                    name={tag.name}
-                    color={tag.color}
-                    type={tag.type}
-                  />
-                </button>
+                  {isEditingThisColor && (
+                    <div className="flex flex-wrap gap-1.5 px-2 pb-1">
+                      {TAG_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => handleUpdateColor(tag.id, color)}
+                          className={`w-5 h-5 rounded-full border-2 transition-all ${
+                            tag.color === color
+                              ? "border-white scale-110"
+                              : "border-transparent hover:border-zinc-500"
+                          }`}
+                          style={{ backgroundColor: color }}
+                          aria-label={`Set color to ${color}`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
