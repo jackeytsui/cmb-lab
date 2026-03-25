@@ -1686,9 +1686,9 @@ function CoachingPanel({
 
       {/* GHL Session Tracking Form — coaches only, 1:1 sessions */}
       {canWrite && sessionType === "one-on-one" && (
-        <details className="rounded-lg border border-border bg-card">
-          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold text-foreground select-none [&>svg]:transition-transform [&[open]>svg]:rotate-180">
-            <ChevronDown className="size-4 text-muted-foreground" />
+        <details className="group rounded-lg border border-border bg-card">
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold text-foreground select-none list-none [&::-webkit-details-marker]:hidden">
+            <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
             Session Tracking Form
           </summary>
           <div className="px-4 pb-4">
