@@ -10,6 +10,7 @@
 
 import { Volume2, Loader2 } from "lucide-react";
 import type { DictionaryEntry } from "@/hooks/useCharacterPopup";
+import { ToneColoredText } from "@/components/ToneColoredText";
 
 export interface PopupHeaderProps {
   word: string;
@@ -18,6 +19,7 @@ export interface PopupHeaderProps {
   onSpeakCantonese: () => void;
   isPlayingTTS: boolean;
   isLoadingTTS: boolean;
+  toneColorsEnabled?: boolean;
 }
 
 /** Source badge styling by dictionary source */
@@ -43,6 +45,7 @@ export function PopupHeader({
   onSpeakCantonese,
   isPlayingTTS,
   isLoadingTTS,
+  toneColorsEnabled = false,
 }: PopupHeaderProps) {
   const entry = entries[0];
 
@@ -64,7 +67,17 @@ export function PopupHeader({
     <div className="px-3 py-2">
       {/* Word + source badge */}
       <div className="flex items-center gap-2">
-        <span className="text-3xl font-bold text-foreground">{word}</span>
+        {toneColorsEnabled ? (
+          <ToneColoredText
+            text={word}
+            lang={entry.source === "canto" ? "cantonese" : "mandarin"}
+            pinyinStr={entry.source !== "canto" ? entry.pinyin : undefined}
+            jyutping={entry.source === "canto" ? entry.jyutping : undefined}
+            className="text-3xl font-bold"
+          />
+        ) : (
+          <span className="text-3xl font-bold text-foreground">{word}</span>
+        )}
         <span
           className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${sourceBadge.className}`}
         >

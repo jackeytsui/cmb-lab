@@ -56,6 +56,7 @@ export interface CharacterPopupProps {
   onEnsureSaved: () => Promise<string | null>;
   onHide: () => void;
   onCancelHide: () => void;
+  toneColorsEnabled?: boolean;
 }
 
 // --- Component ---
@@ -75,6 +76,7 @@ export function CharacterPopup({
   onEnsureSaved,
   onHide,
   onCancelHide,
+  toneColorsEnabled = false,
 }: CharacterPopupProps) {
   const { speak, isLoading: isTTSLoading, isPlaying: isTTSPlaying } = useTTS();
   const popupRef = useRef<HTMLDivElement>(null);
@@ -254,6 +256,7 @@ export function CharacterPopup({
                 }
                 isPlayingTTS={isTTSPlaying}
                 isLoadingTTS={isTTSLoading}
+                toneColorsEnabled={toneColorsEnabled}
               />
               <div className="pt-2 pr-2 flex items-center gap-1">
                 {entry && (

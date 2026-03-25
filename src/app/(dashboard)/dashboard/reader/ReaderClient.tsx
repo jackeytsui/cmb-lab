@@ -968,6 +968,7 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
         }}
         onHide={hidePopup}
         onCancelHide={cancelHide}
+        toneColorsEnabled={toneColorsEnabled}
       />
 
       {!hideImport && <ImportDialog

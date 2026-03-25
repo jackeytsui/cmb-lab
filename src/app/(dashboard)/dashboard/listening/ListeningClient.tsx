@@ -24,6 +24,7 @@ import { ProductWalkthrough, type WalkthroughStep } from "@/components/onboardin
 import { useUser } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
+import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 
 type CaptionLine = {
   text: string;
@@ -65,6 +66,7 @@ type CaptionStatusType =
  */
 export function ListeningClient() {
   const { trackAction } = useFeatureEngagement("youtube_listening_lab");
+  const { toneColorsEnabled } = useReaderPreferences();
   const STARTER_VIDEO_URL = "https://www.youtube.com/watch?v=CcHWoRtK0fw&t=1215s";
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1336,6 +1338,7 @@ export function ListeningClient() {
         }}
         onHide={hidePopup}
         onCancelHide={cancelHide}
+        toneColorsEnabled={toneColorsEnabled}
       />
 
       {/* Team Recommendations (all users can view; coach/admin can manage) */}
