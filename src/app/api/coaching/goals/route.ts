@@ -35,11 +35,13 @@ export async function GET(request: NextRequest) {
 
   const student = await db.query.users.findFirst({
     where: eq(users.email, studentEmail),
-    columns: { coachingGoals: true },
+    columns: { coachingGoals: true, coachingLevel: true, coachingLessonNumber: true },
   });
 
   return NextResponse.json({
     goals: student?.coachingGoals ?? null,
+    level: student?.coachingLevel ?? null,
+    lessonNumber: student?.coachingLessonNumber ?? null,
   });
 }
 
@@ -62,7 +64,9 @@ export async function PATCH(request: NextRequest) {
 
   const body = (await request.json()) as {
     studentEmail: string;
-    goals: string | null;
+    goals?: string | null;
+    level?: string | null;
+    lessonNumber?: string | null;
   };
 
   if (!body.studentEmail) {
@@ -72,13 +76,20 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  const goalsValue = body.goals?.trim() || null;
+  const updates: Record<string, string | null> = {};
+  if ("goals" in body) updates.coachingGoals = body.goals?.trim() || null;
+  if ("level" in body) updates.coachingLevel = body.level?.trim() || null;
+  if ("lessonNumber" in body) updates.coachingLessonNumber = body.lessonNumber?.trim() || null;
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  }
 
   const [updated] = await db
     .update(users)
-    .set({ coachingGoals: goalsValue })
+    .set(updates)
     .where(eq(users.email, body.studentEmail))
-    .returning({ id: users.id, coachingGoals: users.coachingGoals });
+    .returning({ id: users.id, coachingGoals: users.coachingGoals, coachingLevel: users.coachingLevel, coachingLessonNumber: users.coachingLessonNumber });
 
   if (!updated) {
     return NextResponse.json({ error: "Student not found" }, { status: 404 });
@@ -87,5 +98,7 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json({
     success: true,
     goals: updated.coachingGoals,
+    level: updated.coachingLevel,
+    lessonNumber: updated.coachingLessonNumber,
   });
 }

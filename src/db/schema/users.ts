@@ -27,6 +27,8 @@ export const users = pgTable("users", {
   showCohortRankings: boolean("show_cohort_rankings").notNull().default(false),
   assignedCoachId: uuid("assigned_coach_id"),
   coachingGoals: text("coaching_goals"),
+  coachingLevel: text("coaching_level"), // "CMB Foundation" | "CMB Intermediate" | "CMB Advanced"
+  coachingLessonNumber: text("coaching_lesson_number"), // e.g. "Lesson 5" or "Chapter 3"
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")
     .notNull()
