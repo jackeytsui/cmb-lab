@@ -323,10 +323,11 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
     if (typeof window === "undefined") return;
     if (!user) return;
     if (isOnboardingLaunch) return;
+    if (hideImport) return; // Skip onboarding redirect for curated/accelerator reader
     const done = window.localStorage.getItem(onboardingDoneKey) === "done";
     if (done) return;
     router.replace("/dashboard/reader?onboarding=1");
-  }, [isOnboardingLaunch, onboardingDoneKey, router, user]);
+  }, [isOnboardingLaunch, onboardingDoneKey, router, user, hideImport]);
 
   const handleReaderStepChange = useCallback(
     (step: WalkthroughStep, _index: number, direction: "start" | "forward" | "back") => {
@@ -1016,7 +1017,7 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
       <ProductWalkthrough
         steps={walkthroughSteps}
         storageKey={onboardingDoneKey}
-        enabled={canRunWalkthrough}
+        enabled={canRunWalkthrough && !hideImport}
         autoStart={isOnboardingLaunch}
         runToken={isOnboardingLaunch ? 1 : 0}
         markDoneOnFinish={false}
