@@ -165,6 +165,14 @@ export async function POST(request: NextRequest) {
       provider = hasOpenAI ? "openai" : "azure";
     }
 
+    // Force Azure for Cantonese — OpenAI TTS doesn't reliably produce
+    // Cantonese pronunciation (e.g. 可 as "ho" not "kě"), while Azure has
+    // a dedicated zh-HK-HiuMaanNeural voice.
+    const isCantonese = language === "zh-HK" || language === "cantonese";
+    if (isCantonese && hasAzure) {
+      provider = "azure";
+    }
+
     if (provider === "openai" && !hasOpenAI && hasAzure) {
       provider = "azure";
     } else if (provider === "azure" && !hasAzure && hasOpenAI) {
