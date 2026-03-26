@@ -176,12 +176,7 @@ export function SentenceControls({
         </button>
       </span>
 
-      {/* TTS error */}
-      {ttsError && (
-        <span className="text-[10px] text-red-500/80 ml-1">
-          {ttsError}
-        </span>
-      )}
+      {/* TTS errors hidden — fallback happens silently */}
 
       {/* Translation display */}
       {showTranslation && displayTranslation && (

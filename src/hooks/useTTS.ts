@@ -250,18 +250,14 @@ export function useTTS(): UseTTSReturn {
               return;
             }
 
-            // Server TTS failed (e.g. Azure key not configured) — try browser fallback
+            // Server TTS failed — silently try browser fallback
             try {
-              if (mountedRef.current) {
-                setError("Using device voice (TTS service not configured).");
-              }
               if (mountedRef.current) setIsPlaying(true);
               await browserSpeak(text, language, rate);
               if (mountedRef.current) setIsPlaying(false);
             } catch {
               if (mountedRef.current) {
                 setIsPlaying(false);
-                setError("Audio not available.");
               }
             }
             return;
