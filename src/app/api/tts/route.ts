@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
     );
     if (isCantonese) {
       if (hasElevenLabs) {
-        provider = "elevenlabs" as typeof provider;
+        provider = "elevenlabs";
       } else if (hasAzure) {
         provider = "azure";
       }
