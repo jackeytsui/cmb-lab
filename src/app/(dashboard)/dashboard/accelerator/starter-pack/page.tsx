@@ -16,6 +16,7 @@ export default function StarterPackPage() {
           description="Download the starter pack with essential resources."
           videoKey="accelerator.starter_pack.video_url"
           pdfKey="accelerator.starter_pack.pdf_url"
+          completionKey="starter_pack"
         />
       </div>
     </FeatureGate>

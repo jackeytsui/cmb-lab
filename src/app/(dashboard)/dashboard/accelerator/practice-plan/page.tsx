@@ -16,6 +16,7 @@ export default function PracticePlanPage() {
           description="Download the practice plan to guide your study sessions."
           videoKey="accelerator.practice_plan.video_url"
           pdfKey="accelerator.practice_plan.pdf_url"
+          completionKey="practice_plan"
         />
       </div>
     </FeatureGate>

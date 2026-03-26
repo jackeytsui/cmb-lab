@@ -10,6 +10,7 @@ import {
   scriptLineProgress,
   curatedPassages,
   passageReadStatus,
+  acceleratorContentCompletion,
 } from "@/db/schema";
 import { eq, asc, count, sql } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
@@ -20,6 +21,8 @@ import {
   BookOpen,
   Trophy,
   ChevronRight,
+  ClipboardList,
+  Package,
 } from "lucide-react";
 
 interface SectionProgress {
@@ -121,7 +124,30 @@ async function AcceleratorDashboard() {
     .from(passageReadStatus)
     .where(eq(passageReadStatus.userId, user.id));
 
+  // --- Content page completions (Practice Plan, Starter Pack) ---
+  const contentCompletions = await db
+    .select({ contentKey: acceleratorContentCompletion.contentKey })
+    .from(acceleratorContentCompletion)
+    .where(eq(acceleratorContentCompletion.userId, user.id));
+  const completedKeys = new Set(contentCompletions.map((r) => r.contentKey));
+
   const sections: SectionProgress[] = [
+    {
+      label: "Practice Plan",
+      href: "/dashboard/accelerator/practice-plan",
+      icon: <ClipboardList className="w-5 h-5" />,
+      completed: completedKeys.has("practice_plan") ? 1 : 0,
+      total: 1,
+      color: "bg-purple-500/10 text-purple-500",
+    },
+    {
+      label: "Starter Pack",
+      href: "/dashboard/accelerator/starter-pack",
+      icon: <Package className="w-5 h-5" />,
+      completed: completedKeys.has("starter_pack") ? 1 : 0,
+      total: 1,
+      color: "bg-pink-500/10 text-pink-500",
+    },
     {
       label: "Typing Unlock Kit",
       href: "/dashboard/accelerator/typing",

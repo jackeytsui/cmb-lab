@@ -228,6 +228,32 @@ export const scriptLineProgressRelations = relations(
   })
 );
 
+// ---------------------------------------------------------------------------
+// Content Completion (for simple pages like Practice Plan, Starter Pack)
+// ---------------------------------------------------------------------------
+
+export const acceleratorContentCompletion = pgTable(
+  "accelerator_content_completion",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    contentKey: text("content_key").notNull(), // e.g. "practice_plan", "starter_pack"
+    completedAt: timestamp("completed_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("acc_content_completion_user_key_idx").on(
+      table.userId,
+      table.contentKey
+    ),
+    index("acc_content_completion_user_idx").on(table.userId),
+  ]
+);
+
+export type AcceleratorContentCompletion =
+  typeof acceleratorContentCompletion.$inferSelect;
+
 export const curatedPassagesRelations = relations(
   curatedPassages,
   ({ many }) => ({
