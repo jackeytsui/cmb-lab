@@ -14,6 +14,7 @@ import {
   buildCacheKey,
   getCacheTTL,
   synthesizeSpeech,
+  synthesizeSpeechElevenLabs,
   escapeXml,
 } from "@/lib/tts";
 import type { TTSLanguage, TTSRate } from "@/lib/tts";
@@ -163,19 +164,25 @@ export async function POST(request: NextRequest) {
     // Priority:
     // 1) Explicit TTS_PROVIDER env ("openai" | "azure")
     // 2) Default to OpenAI if available, otherwise Azure
-    let provider: "openai" | "azure" =
+    let provider: "openai" | "azure" | "elevenlabs" =
       TTS_PROVIDER === "azure" ? "azure" : "openai";
 
     if (!TTS_PROVIDER) {
       provider = hasOpenAI ? "openai" : "azure";
     }
 
-    // Force Azure for Cantonese — OpenAI TTS doesn't reliably produce
-    // Cantonese pronunciation (e.g. 可 as "ho" not "kě"), while Azure has
-    // a dedicated zh-HK-HiuMaanNeural voice.
+    // For Cantonese: prefer ElevenLabs > Azure > OpenAI
+    // OpenAI doesn't reliably produce Cantonese pronunciation.
     const isCantonese = language === "zh-HK" || language === "cantonese";
-    if (isCantonese && hasAzure) {
-      provider = "azure";
+    const hasElevenLabs = Boolean(
+      process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_CANTONESE_VOICE_ID
+    );
+    if (isCantonese) {
+      if (hasElevenLabs) {
+        provider = "elevenlabs" as typeof provider;
+      } else if (hasAzure) {
+        provider = "azure";
+      }
     }
 
     if (provider === "openai" && !hasOpenAI && hasAzure) {
@@ -184,7 +191,7 @@ export async function POST(request: NextRequest) {
       provider = "openai";
     }
 
-    if (!hasOpenAI && !hasAzure) {
+    if (!hasOpenAI && !hasAzure && !hasElevenLabs) {
       return NextResponse.json(
         { error: "TTS service not configured" },
         { status: 503 }
@@ -192,9 +199,11 @@ export async function POST(request: NextRequest) {
     }
 
     const voice =
-      provider === "azure"
-        ? resolveVoice(language)
-        : { voiceName: `openai-${OPENAI_TTS_VOICE}`, lang: language as string };
+      provider === "elevenlabs"
+        ? { voiceName: `elevenlabs-${process.env.ELEVENLABS_CANTONESE_VOICE_ID}`, lang: "zh-HK" }
+        : provider === "azure"
+          ? resolveVoice(language)
+          : { voiceName: `openai-${OPENAI_TTS_VOICE}`, lang: language as string };
 
     // 5. Build cache key (includes provider-specific voice identifier)
     const cacheKey = buildCacheKey(text, voice.lang, voice.voiceName, rate);
@@ -224,13 +233,18 @@ export async function POST(request: NextRequest) {
 
     // 8. Synthesize via selected provider only (no per-request provider mixing)
     let audioBuffer: Buffer;
-    if (provider === "openai") {
+    if (provider === "elevenlabs") {
+      // ElevenLabs: strip brackets for spoken text (no SSML support)
+      const elText = hasBracketedPlaceholders
+        ? text.replace(/\[[^\]]+\]/g, "，……，")
+        : text;
+      audioBuffer = await synthesizeSpeechElevenLabs(elText, rate);
+    } else if (provider === "openai") {
       audioBuffer = await synthesizeSpeechOpenAI(spokenText, language, rate);
     } else {
       let ssml: string;
       if (hasBracketedPlaceholders && !phoneme) {
         // Azure: build SSML with <break> elements replacing placeholders.
-        // Split text at brackets, escape each text segment, rejoin with breaks.
         const parts = text.split(/\[[^\]]+\]/);
         const ssmlText = parts.map((p) => escapeXml(p)).join('<break time="1500ms"/>');
         const ssmlRate = rate === "x-slow" ? "x-slow" : rate === "slow" ? "slow" : rate === "fast" ? "fast" : "medium";

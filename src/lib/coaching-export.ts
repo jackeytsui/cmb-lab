@@ -16,6 +16,7 @@ type ExportSession = {
   title: string;
   studentEmail?: string | null;
   fathomLink?: string | null;
+  recordingUrl?: string | null;
   notes: ExportNote[];
 };
 
@@ -83,21 +84,21 @@ export async function exportCoachingNotes(
       ]
     : [];
 
-  // Collect unique fathom links for header row
-  const fathomLinks = [...new Set(sessions.map((s) => s.fathomLink).filter(Boolean))];
+  // Collect unique recording links for header row
+  const recordingLinks = [...new Set(sessions.map((s) => s.recordingUrl ?? s.fathomLink).filter(Boolean))];
 
-  // Helper: add fathom link as a header row above the data table
-  function addFathomHeader(sheet: ExcelJS.Worksheet) {
-    if (fathomLinks.length > 0) {
-      const fathomRow = sheet.addRow([`Fathom: ${fathomLinks.join(", ")}`]);
-      fathomRow.font = { italic: true, color: { argb: "FF666666" } };
+  // Helper: add recording link as a header row above the data table
+  function addRecordingHeader(sheet: ExcelJS.Worksheet) {
+    if (recordingLinks.length > 0) {
+      const linkRow = sheet.addRow([`Recording: ${recordingLinks.join(", ")}`]);
+      linkRow.font = { italic: true, color: { argb: "FF666666" } };
       sheet.addRow([]); // blank separator
     }
   }
 
   // Mandarin tab
   const mandarinSheet = wb.addWorksheet("Mandarin");
-  addFathomHeader(mandarinSheet);
+  addRecordingHeader(mandarinSheet);
   mandarinSheet.columns = [
     ...contextColumns,
     { header: "Traditional Chinese", key: "traditional", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
@@ -107,7 +108,7 @@ export async function exportCoachingNotes(
     { header: "Notes", key: "explanation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
   ];
   // Bold the header row (which is after fathom rows)
-  const mandoHeaderRow = fathomLinks.length > 0 ? 3 : 1;
+  const mandoHeaderRow = recordingLinks.length > 0 ? 3 : 1;
   mandarinSheet.getRow(mandoHeaderRow).font = { bold: true };
 
   for (const note of mandarinNotes) {
@@ -127,7 +128,7 @@ export async function exportCoachingNotes(
 
   // Cantonese tab
   const cantoneseSheet = wb.addWorksheet("Cantonese");
-  addFathomHeader(cantoneseSheet);
+  addRecordingHeader(cantoneseSheet);
   cantoneseSheet.columns = [
     ...contextColumns,
     { header: "Traditional Chinese", key: "traditional", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
@@ -136,7 +137,7 @@ export async function exportCoachingNotes(
     { header: "English Meaning", key: "translation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
     { header: "Notes", key: "explanation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
   ];
-  const cantoHeaderRow = fathomLinks.length > 0 ? 3 : 1;
+  const cantoHeaderRow = recordingLinks.length > 0 ? 3 : 1;
   cantoneseSheet.getRow(cantoHeaderRow).font = { bold: true };
 
   for (const note of cantoneseNotes) {

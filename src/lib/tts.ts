@@ -163,6 +163,68 @@ export function getCacheTTL(textLength: number): number {
   return 86400; // 24 hours
 }
 
+// --- ElevenLabs TTS REST API ---
+
+/**
+ * Call ElevenLabs TTS API to synthesize speech.
+ * Uses the voice ID configured in ELEVENLABS_CANTONESE_VOICE_ID.
+ * Returns raw MP3 audio as a Buffer.
+ */
+export async function synthesizeSpeechElevenLabs(
+  text: string,
+  rate: TTSRate = "medium"
+): Promise<Buffer> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const voiceId = process.env.ELEVENLABS_CANTONESE_VOICE_ID;
+  if (!apiKey || !voiceId) {
+    throw new Error("ElevenLabs credentials not configured");
+  }
+
+  const stability = 0.5;
+  const similarityBoost = 0.75;
+  const speed = rate === "x-slow" ? 0.6 : rate === "slow" ? 0.8 : rate === "fast" ? 1.3 : 1.0;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: "eleven_multilingual_v2",
+          language_code: "zh",
+          voice_settings: { stability, similarity_boost: similarityBoost, speed },
+        }),
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`ElevenLabs TTS: API error ${response.status}:`, errorText);
+      throw new Error(`ElevenLabs TTS error: ${response.status}`);
+    }
+
+    return Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("ElevenLabs TTS request timed out");
+    }
+    throw error;
+  }
+}
+
 // --- Azure TTS REST API ---
 
 /**

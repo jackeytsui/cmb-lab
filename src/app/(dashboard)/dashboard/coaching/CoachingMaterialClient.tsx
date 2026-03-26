@@ -1685,10 +1685,11 @@ function CoachingPanel({
         }
         const data = await res.json();
         const exportSessions = (data.sessions ?? []).map(
-          (s: { title: string; studentEmail?: string; fathomLink?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string; explanation?: string | null }> }) => ({
+          (s: { title: string; studentEmail?: string; fathomLink?: string; recordingUrl?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string; explanation?: string | null }> }) => ({
             title: s.title,
             studentEmail: s.studentEmail,
             fathomLink: s.fathomLink,
+            recordingUrl: s.recordingUrl,
             notes: s.notes.map((n) => ({
               text: n.text,
               pane: n.pane as "mandarin" | "cantonese",
@@ -1813,11 +1814,7 @@ function CoachingPanel({
                   <div className="space-y-2">
                     <select
                       value={studentLevel ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value || null;
-                        setStudentLevel(val);
-                        handleSaveLevel(val, studentLessonNumber);
-                      }}
+                      onChange={(e) => setStudentLevel(e.target.value || null)}
                       disabled={isSavingLevel}
                       className="w-full h-7 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
                     >
@@ -1829,12 +1826,19 @@ function CoachingPanel({
                     <input
                       value={studentLessonNumber ?? ""}
                       onChange={(e) => setStudentLessonNumber(e.target.value || null)}
-                      onBlur={() => handleSaveLevel(studentLevel, studentLessonNumber)}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSaveLevel(studentLevel, studentLessonNumber); } }}
                       placeholder="Lesson / Chapter number"
                       disabled={isSavingLevel}
                       className="w-full h-7 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
                     />
+                    <button
+                      type="button"
+                      onClick={() => handleSaveLevel(studentLevel, studentLessonNumber)}
+                      disabled={isSavingLevel}
+                      className="rounded-md bg-indigo-500/15 border border-indigo-500/25 px-2.5 py-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/25 transition-colors disabled:opacity-50"
+                    >
+                      {isSavingLevel ? "Saving..." : "Save"}
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-1">
@@ -2165,90 +2169,44 @@ function CoachingPanel({
         )}
       </div>
 
-      {/* Recording + Fathom Links — single row */}
+      {/* Recording Link */}
       {activeSession && (
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Recording Link */}
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <div className="flex items-center gap-1.5">
-                  <LinkIcon className="size-3.5 text-muted-foreground" />
-                  <span className="text-xs font-semibold text-foreground">Recording</span>
-                </div>
-                {canWrite && !isEditingRecordingUrl && (
-                  <button type="button" onClick={() => { setRecordingUrlDraft(activeSession.recordingUrl ?? ""); setIsEditingRecordingUrl(true); }}
-                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                    <Pencil className="size-3" />
-                  </button>
-                )}
-              </div>
-              {isEditingRecordingUrl ? (
-                <div className="flex gap-1.5">
-                  <input value={recordingUrlDraft} onChange={(e) => setRecordingUrlDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSaveRecordingUrl(); } }}
-                    placeholder="https://..." className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30" />
-                  <button type="button" onClick={handleSaveRecordingUrl} disabled={isSavingRecordingUrl}
-                    className="rounded-md border border-input bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50">
-                    {isSavingRecordingUrl ? "..." : "Save"}
-                  </button>
-                  <button type="button" onClick={() => setIsEditingRecordingUrl(false)}
-                    className="rounded-md border border-input bg-background px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                    Cancel
-                  </button>
-                </div>
-              ) : activeSession.recordingUrl ? (
-                <a href={activeSession.recordingUrl} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all">
-                  <ExternalLink className="size-3 shrink-0" />
-                  <span className="truncate">{activeSession.recordingUrl}</span>
-                </a>
-              ) : (
-                <p className="text-[10px] text-muted-foreground">No link added</p>
-              )}
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <LinkIcon className="size-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-foreground">Recording Link</span>
             </div>
-
-            {/* Fathom Link */}
-            {canWrite && (
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <LinkIcon className="size-3.5 text-muted-foreground" />
-                    <span className="text-xs font-semibold text-foreground">Fathom</span>
-                  </div>
-                  {!isEditingFathomLink && (
-                    <button type="button" onClick={() => { setFathomLinkDraft(activeSession.fathomLink ?? ""); setIsEditingFathomLink(true); }}
-                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                      <Pencil className="size-3" />
-                    </button>
-                  )}
-                </div>
-                {isEditingFathomLink ? (
-                  <div className="flex gap-1.5">
-                    <input value={fathomLinkDraft} onChange={(e) => setFathomLinkDraft(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSaveFathomLink(); } }}
-                      placeholder="https://fathom.video/..." className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30" />
-                    <button type="button" onClick={handleSaveFathomLink} disabled={isSavingFathomLink}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50">
-                      {isSavingFathomLink ? "..." : "Save"}
-                    </button>
-                    <button type="button" onClick={() => setIsEditingFathomLink(false)}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                      Cancel
-                    </button>
-                  </div>
-                ) : activeSession.fathomLink ? (
-                  <a href={activeSession.fathomLink} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all">
-                    <ExternalLink className="size-3 shrink-0" />
-                    <span className="truncate">{activeSession.fathomLink}</span>
-                  </a>
-                ) : (
-                  <p className="text-[10px] text-muted-foreground">No link added</p>
-                )}
-              </div>
+            {canWrite && !isEditingRecordingUrl && (
+              <button type="button" onClick={() => { setRecordingUrlDraft(activeSession.recordingUrl ?? ""); setIsEditingRecordingUrl(true); }}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                <Pencil className="size-3" />
+              </button>
             )}
           </div>
+          {isEditingRecordingUrl ? (
+            <div className="flex gap-1.5">
+              <input value={recordingUrlDraft} onChange={(e) => setRecordingUrlDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSaveRecordingUrl(); } }}
+                placeholder="https://..." className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30" />
+              <button type="button" onClick={handleSaveRecordingUrl} disabled={isSavingRecordingUrl}
+                className="rounded-md border border-input bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50">
+                {isSavingRecordingUrl ? "..." : "Save"}
+              </button>
+              <button type="button" onClick={() => setIsEditingRecordingUrl(false)}
+                className="rounded-md border border-input bg-background px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                Cancel
+              </button>
+            </div>
+          ) : activeSession.recordingUrl ? (
+            <a href={activeSession.recordingUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all">
+              <ExternalLink className="size-3 shrink-0" />
+              <span className="truncate">{activeSession.recordingUrl}</span>
+            </a>
+          ) : (
+            <p className="text-[10px] text-muted-foreground">No link added</p>
+          )}
         </div>
       )}
 
