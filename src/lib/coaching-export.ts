@@ -130,30 +130,32 @@ export async function exportCoachingNotes(
     cantoneseSheet.addRow(cells);
   }
 
-  // Info tab — recording links and session metadata
-  const infoSheet = wb.addWorksheet("Info");
-  infoSheet.getColumn(1).width = 20;
-  infoSheet.getColumn(2).width = 60;
+  // Recording Link tab
+  const linkSheet = wb.addWorksheet("Recording Link");
+  linkSheet.getColumn(1).width = 20;
+  linkSheet.getColumn(2).width = 80;
 
-  const infoHeader = infoSheet.addRow(["Field", "Value"]);
-  infoHeader.font = { bold: true };
-
-  for (const session of sessions) {
-    if (isMultiSession) {
-      infoSheet.addRow(["Session", session.title]);
-      if (session.studentEmail) infoSheet.addRow(["Student", session.studentEmail]);
-    }
-    if (session.recordingUrl) {
-      infoSheet.addRow(["Recording Link", session.recordingUrl]);
-    }
-    if (session.fathomLink && session.fathomLink !== session.recordingUrl) {
-      infoSheet.addRow(["Fathom Link", session.fathomLink]);
-    }
-    if (isMultiSession) infoSheet.addRow([]); // separator between sessions
+  if (isMultiSession) {
+    const hdr = linkSheet.addRow(["Session", "Recording Link"]);
+    hdr.font = { bold: true };
   }
 
-  if (!sessions.some((s) => s.recordingUrl || s.fathomLink)) {
-    infoSheet.addRow(["Recording Link", "Not added yet"]);
+  for (const session of sessions) {
+    const url = session.recordingUrl || session.fathomLink || null;
+    const label = isMultiSession ? session.title : "Recording Link";
+    const row = isMultiSession
+      ? linkSheet.addRow([session.title, url ?? "Not added yet"])
+      : linkSheet.addRow([label, url ?? "Not added yet"]);
+    // Make the URL a clickable hyperlink
+    if (url) {
+      const cell = row.getCell(isMultiSession ? 2 : 2);
+      cell.value = { text: url, hyperlink: url } as ExcelJS.CellHyperlinkValue;
+      cell.font = { color: { argb: "FF0563C1" }, underline: true };
+    }
+  }
+
+  if (sessions.length === 0) {
+    linkSheet.addRow(["Recording Link", "Not added yet"]);
   }
 
   // Generate filename
