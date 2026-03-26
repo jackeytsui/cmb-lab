@@ -1,4 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -69,16 +70,33 @@ export async function FeatureGate({
     return fallback ? <>{fallback}</> : null;
   }
 
-  // Look up internal user
-  const user = await db.query.users.findFirst({
+  // Look up internal user (real Clerk user)
+  const realUser = await db.query.users.findFirst({
     where: eq(users.clerkId, clerkId),
-    columns: { id: true },
+    columns: { id: true, role: true },
   });
-  if (!user) {
+  if (!realUser) {
     return fallback ? <>{fallback}</> : null;
   }
 
-  const featureTagOverrides = await getUserFeatureTagOverrides(user.id);
+  // Respect "View As" impersonation: when an admin is viewing as another user,
+  // evaluate feature access from the impersonated user's perspective
+  let effectiveUser = realUser;
+  if (realUser.role === "admin") {
+    const cookieStore = await cookies();
+    const viewAsUserId = cookieStore.get("view_as_user_id")?.value;
+    if (viewAsUserId) {
+      const impersonated = await db.query.users.findFirst({
+        where: eq(users.id, viewAsUserId),
+        columns: { id: true, role: true },
+      });
+      if (impersonated) {
+        effectiveUser = impersonated;
+      }
+    }
+  }
+
+  const featureTagOverrides = await getUserFeatureTagOverrides(effectiveUser.id);
   const forcedStudent = process.env.FORCE_STUDENT_MODE === "true";
   let baseAllowed = false;
 
@@ -92,15 +110,14 @@ export async function FeatureGate({
   }
 
   if (!baseAllowed) {
-    // Bypass feature gating for coaches and admins at role level
-    const isCoachOrAbove = await hasMinimumRole("coach");
-    if (isCoachOrAbove) {
+    // Bypass feature gating for coaches and admins (based on effective user role)
+    if (effectiveUser.role === "coach" || effectiveUser.role === "admin") {
       baseAllowed = true;
     }
   }
 
   if (!baseAllowed) {
-    const permissions = await resolvePermissions(user.id);
+    const permissions = await resolvePermissions(effectiveUser.id);
     baseAllowed = permissions.canUseFeature(feature);
   }
 

@@ -172,11 +172,13 @@ export default async function DashboardLayout({
 
   if (role === "student") {
     if (dbUser) {
+      // Ensure default role is assigned BEFORE resolving permissions
+      // so the first request for a new student picks up features correctly
+      await ensureDefaultStudentRoleAssignment(dbUser.id);
       const permissions = await resolvePermissions(dbUser.id);
       enabledFeatures = forcedStudent
         ? [...DEFAULT_STUDENT_FEATURES]
         : Array.from(permissions.features);
-      await ensureDefaultStudentRoleAssignment(dbUser.id);
     } else {
       enabledFeatures = [...DEFAULT_STUDENT_FEATURES];
     }
