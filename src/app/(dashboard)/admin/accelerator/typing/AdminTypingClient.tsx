@@ -271,7 +271,7 @@ export default function AdminTypingClient() {
       {/* Sentences table */}
       <div className="rounded-lg border border-zinc-800 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-zinc-900/60 text-zinc-400 text-xs uppercase tracking-wider">
+          <thead className="bg-muted/60 text-muted-foreground text-xs uppercase tracking-wider">
             <tr>
               <th className="px-4 py-3 text-left">Language</th>
               <th className="px-4 py-3 text-left">Chinese Text</th>
@@ -337,7 +337,7 @@ export default function AdminTypingClient() {
 
       {/* Add / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {editingId ? "Edit Sentence" : "Add Sentence"}
@@ -425,7 +425,7 @@ export default function AdminTypingClient() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Delete Sentence</DialogTitle>
           </DialogHeader>
