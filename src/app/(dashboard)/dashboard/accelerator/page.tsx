@@ -41,7 +41,7 @@ function ProgressCard({ section }: { section: SectionProgress }) {
   return (
     <Link
       href={section.href}
-      className="group rounded-xl border border-border bg-card p-5 hover:border-cyan-500/30 hover:bg-accent/50 transition-all"
+      className="block group rounded-xl border border-border bg-card p-5 hover:border-cyan-500/30 hover:bg-accent/50 transition-all"
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
