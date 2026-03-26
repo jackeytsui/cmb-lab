@@ -16,8 +16,9 @@ const FEATURE_KEY_SET = new Set<string>(FEATURE_KEYS);
  * they get ONLY the listed features (all others are denied).
  * This replaces the student's default feature set entirely.
  */
+// Keys are stored lowercase for case-insensitive matching
 const EXCLUSIVE_TAG_MAP: Record<string, FeatureKey[]> = {
-  LTO_student: ["mandarin_accelerator"],
+  lto_student: ["mandarin_accelerator"],
 };
 
 function parseFeatureTag(tagName: string): { mode: "allow" | "deny"; feature: FeatureKey } | null {
@@ -43,8 +44,8 @@ export async function getUserFeatureTagOverrides(userId: string): Promise<Featur
   const deny = new Set<FeatureKey>();
 
   for (const row of rows) {
-    // Check exclusive tag mappings first
-    const exclusiveFeatures = EXCLUSIVE_TAG_MAP[row.name];
+    // Check exclusive tag mappings first (case-insensitive)
+    const exclusiveFeatures = EXCLUSIVE_TAG_MAP[row.name.trim().toLowerCase()];
     if (exclusiveFeatures) {
       // Deny all features, then allow only the mapped ones
       for (const key of FEATURE_KEYS) {
