@@ -1,1 +1,1 @@
-ALTER TABLE "curated_passages" ADD COLUMN "description" text;
+ALTER TABLE "curated_passages" ADD COLUMN IF NOT EXISTS "description" text;
