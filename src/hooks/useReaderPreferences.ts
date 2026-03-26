@@ -23,7 +23,7 @@ const DEFAULT_PREFERENCES: ReaderPreferences = {
   scriptMode: "original",
   fontSize: 18,
   ttsLanguage: "zh-CN",
-  toneColorsEnabled: false,
+  toneColorsEnabled: true,
 };
 
 export interface UseReaderPreferencesReturn extends ReaderPreferences {

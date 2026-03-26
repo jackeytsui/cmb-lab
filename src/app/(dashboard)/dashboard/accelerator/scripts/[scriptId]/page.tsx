@@ -7,7 +7,7 @@ import {
   scriptLines,
   scriptLineProgress,
 } from "@/db/schema/accelerator";
-import { eq, asc, and, gt } from "drizzle-orm";
+import { eq, asc, and, gt, lt, desc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import ScriptPracticeClient from "./ScriptPracticeClient";
 
@@ -70,12 +70,19 @@ async function ScriptPracticeContent({ scriptId }: { scriptId: string }) {
     }
   }
 
-  // Find next script
-  const nextScript = await db.query.conversationScripts.findFirst({
-    where: gt(conversationScripts.sortOrder, script.sortOrder),
-    orderBy: [asc(conversationScripts.sortOrder)],
-    columns: { id: true, title: true },
-  });
+  // Find previous and next scripts
+  const [prevScript, nextScript] = await Promise.all([
+    db.query.conversationScripts.findFirst({
+      where: lt(conversationScripts.sortOrder, script.sortOrder),
+      orderBy: [desc(conversationScripts.sortOrder)],
+      columns: { id: true },
+    }),
+    db.query.conversationScripts.findFirst({
+      where: gt(conversationScripts.sortOrder, script.sortOrder),
+      orderBy: [asc(conversationScripts.sortOrder)],
+      columns: { id: true },
+    }),
+  ]);
 
   return (
     <ScriptPracticeClient
@@ -86,8 +93,9 @@ async function ScriptPracticeContent({ scriptId }: { scriptId: string }) {
         speakerRole: script.speakerRole,
         responderRole: script.responderRole,
       }}
+      prevScriptId={prevScript?.id ?? null}
       nextScriptId={nextScript?.id ?? null}
-      nextScriptTitle={nextScript?.title ?? null}
+      nextScriptTitle={null}
       lines={script.lines.map((l) => ({
         id: l.id,
         sortOrder: l.sortOrder,
