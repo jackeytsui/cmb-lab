@@ -85,7 +85,12 @@ export async function GET() {
     pinyin: row.pinyin || "",
     jyutping: row.jyutping || "",
     romanization: [row.pinyin, row.jyutping].filter(Boolean).join(" / "),
-    english: (row.definitions ?? []).filter((d) => !d.startsWith("CL:")).join("; "),
+    english: (row.definitions ?? [])
+      .filter((d) => !d.startsWith("CL:") && !/^\((?:Tw|tw|Taiwan|dialect|archaic|old)\)/.test(d))
+      .map((d) => d.replace(/\s*\(Tw\)\s*/gi, "").trim())
+      .filter(Boolean)
+      .slice(0, 3)
+      .join("; "),
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
     vocabId: row.id,
   }));

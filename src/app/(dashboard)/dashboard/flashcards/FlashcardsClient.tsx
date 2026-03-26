@@ -44,38 +44,25 @@ function SpeakButton({
   isLoading: boolean;
   isPlaying: boolean;
 }) {
-  const [rate, setRate] = useState<NonNullable<TTSRate>>("medium");
-
   return (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => speak(text, { language: lang, rate })}
-        disabled={isLoading}
-        className={cn(
-          "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border transition-colors",
-          isPlaying
-            ? "border-primary/40 bg-primary/10 text-primary"
-            : "border-input bg-background text-muted-foreground hover:text-foreground",
-          isLoading && "opacity-50",
-        )}
-        title={`Play (${lang === "zh-CN" ? "Mandarin" : "Cantonese"})`}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="5 3 19 12 5 21 5 3" />
-        </svg>
-        {isLoading ? "..." : RATE_OPTIONS.find((r) => r.value === rate)?.label ?? "1x"}
-      </button>
-      <select
-        value={rate}
-        onChange={(e) => setRate(e.target.value as NonNullable<TTSRate>)}
-        className="rounded border border-input bg-background px-1 py-0.5 text-[10px] text-muted-foreground"
-      >
-        {RATE_OPTIONS.map((r) => (
-          <option key={r.value} value={r.value}>{r.label}</option>
-        ))}
-      </select>
-    </div>
+    <button
+      type="button"
+      onClick={() => speak(text, { language: lang })}
+      disabled={isLoading}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all",
+        isPlaying
+          ? "bg-blue-500/15 text-blue-500 border border-blue-500/30"
+          : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground border border-border",
+        isLoading && "opacity-50",
+      )}
+      title={`Play (${lang === "zh-CN" ? "Mandarin" : "Cantonese"})`}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3" />
+      </svg>
+      {isLoading ? "Loading..." : isPlaying ? "Playing..." : "Play"}
+    </button>
   );
 }
 
