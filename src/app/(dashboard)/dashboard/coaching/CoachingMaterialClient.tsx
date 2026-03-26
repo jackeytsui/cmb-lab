@@ -1002,7 +1002,9 @@ function CoachingPanel({
   // Student level tracking
   const [studentLevel, setStudentLevel] = useState<string | null>(null);
   const [studentLessonNumber, setStudentLessonNumber] = useState<string | null>(null);
-  const [levelSaveState, setLevelSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [levelSaveState, setLevelSaveState] = useState<"idle" | "editing" | "saving" | "saved" | "error">("idle");
+  const [levelDraftLevel, setLevelDraftLevel] = useState("");
+  const [levelDraftLesson, setLevelDraftLesson] = useState("");
 
   // Sync recording URL and fathom link when active session changes
   useEffect(() => {
@@ -1036,10 +1038,7 @@ function CoachingPanel({
   }, [goalsStudentEmail, canWrite]);
 
   const handleSaveLevel = useCallback(async () => {
-    if (!goalsStudentEmail) {
-      setLevelSaveState("error");
-      return;
-    }
+    if (!goalsStudentEmail) return;
     setLevelSaveState("saving");
     try {
       const res = await fetch("/api/coaching/student-level", {
@@ -1047,22 +1046,22 @@ function CoachingPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentEmail: goalsStudentEmail,
-          level: studentLevel,
-          lessonNumber: studentLessonNumber,
+          level: levelDraftLevel || null,
+          lessonNumber: levelDraftLesson || null,
         }),
       });
       if (res.ok) {
-        setLevelSaveState("saved");
-        setTimeout(() => setLevelSaveState("idle"), 2000);
+        const data = await res.json();
+        setStudentLevel(data.level ?? null);
+        setStudentLessonNumber(data.lessonNumber ?? null);
+        setLevelSaveState("idle");
       } else {
-        setLevelSaveState("error");
-        setTimeout(() => setLevelSaveState("idle"), 2000);
+        setLevelSaveState("editing");
       }
     } catch {
-      setLevelSaveState("error");
-      setTimeout(() => setLevelSaveState("idle"), 2000);
+      setLevelSaveState("editing");
     }
-  }, [goalsStudentEmail, studentLevel, studentLessonNumber]);
+  }, [goalsStudentEmail, levelDraftLevel, levelDraftLesson]);
 
   const handleSaveRecordingUrl = useCallback(async () => {
     if (!activeSessionId) return;
@@ -1822,18 +1821,32 @@ function CoachingPanel({
                 )}
               </div>
 
-              {/* Level + Lesson card */}
+              {/* Current Progress card — mirrors goals pattern: view → edit → save/cancel */}
               <div className="rounded-lg border border-indigo-500/25 bg-gradient-to-br from-indigo-500/10 to-violet-500/10 dark:from-indigo-500/[0.07] dark:to-violet-500/[0.07] p-3.5">
-                <h3 className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-2">
-                  Current Progress
-                </h3>
-                {canWrite ? (
-                  <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                    Current Progress
+                  </h3>
+                  {canWrite && levelSaveState !== "editing" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLevelDraftLevel(studentLevel ?? "");
+                        setLevelDraftLesson(studentLessonNumber ?? "");
+                        setLevelSaveState("editing");
+                      }}
+                      className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                  )}
+                </div>
+                {levelSaveState === "editing" ? (
+                  <div className="mt-2 flex flex-col gap-2">
                     <select
-                      value={studentLevel ?? ""}
-                      onChange={(e) => setStudentLevel(e.target.value || null)}
-                      disabled={isSavingLevel}
-                      className="w-full h-7 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+                      value={levelDraftLevel}
+                      onChange={(e) => setLevelDraftLevel(e.target.value)}
+                      className="w-full h-8 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                     >
                       <option value="">Select level...</option>
                       <option value="CMB Foundation">CMB Foundation</option>
@@ -1841,37 +1854,33 @@ function CoachingPanel({
                       <option value="CMB Advanced">CMB Advanced</option>
                     </select>
                     <input
-                      value={studentLessonNumber ?? ""}
-                      onChange={(e) => setStudentLessonNumber(e.target.value || null)}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSaveLevel(studentLevel, studentLessonNumber); } }}
+                      value={levelDraftLesson}
+                      onChange={(e) => setLevelDraftLesson(e.target.value)}
                       placeholder="Lesson / Chapter number"
-                      disabled={isSavingLevel}
-                      className="w-full h-7 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+                      className="w-full h-8 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                     />
-                    <button
-                      type="button"
-                      onClick={handleSaveLevel}
-                      disabled={levelSaveState === "saving"}
-                      className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition-colors disabled:opacity-50 ${
-                        levelSaveState === "saved"
-                          ? "bg-emerald-500/15 border-emerald-500/25 text-emerald-600 dark:text-emerald-400"
-                          : levelSaveState === "error"
-                            ? "bg-red-500/15 border-red-500/25 text-red-600 dark:text-red-400"
-                            : "bg-indigo-500/15 border-indigo-500/25 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/25"
-                      }`}
-                    >
-                      {levelSaveState === "saving" ? "Saving..." : levelSaveState === "saved" ? "Saved!" : levelSaveState === "error" ? "Error" : "Save"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={handleSaveLevel} disabled={levelSaveState === "saving"}
+                        className="rounded-md bg-indigo-500 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-indigo-600 transition-colors disabled:opacity-50">
+                        {levelSaveState === "saving" ? "Saving..." : "Save"}
+                      </button>
+                      <button type="button" onClick={() => setLevelSaveState("idle")}
+                        className="rounded-md border border-input bg-background px-2.5 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                ) : (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">
-                      {studentLevel || "Not set"}
-                    </p>
+                ) : (studentLevel || studentLessonNumber) ? (
+                  <div className="mt-1.5 space-y-0.5">
+                    <p className="text-xs font-medium text-foreground">{studentLevel || ""}</p>
                     {studentLessonNumber && (
                       <p className="text-xs text-muted-foreground">{studentLessonNumber}</p>
                     )}
                   </div>
+                ) : (
+                  <p className="mt-1.5 text-[10px] text-indigo-600/60 dark:text-indigo-400/50">
+                    {canWrite ? "Click edit to set progress." : "Not set yet."}
+                  </p>
                 )}
               </div>
             </div>
