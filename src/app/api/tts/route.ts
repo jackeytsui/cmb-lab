@@ -176,8 +176,9 @@ export async function POST(request: NextRequest) {
     }
 
     const provider: "openai" | "azure" | "elevenlabs" = (() => {
+      // Cantonese: Azure has a dedicated zh-HK-HiuMaanNeural voice.
+      // ElevenLabs multilingual_v2 only supports generic "zh" (Mandarin).
       if (isCantonese) {
-        if (hasElevenLabs) return "elevenlabs" as const;
         if (hasAzure) return "azure" as const;
         return "openai" as const;
       }
