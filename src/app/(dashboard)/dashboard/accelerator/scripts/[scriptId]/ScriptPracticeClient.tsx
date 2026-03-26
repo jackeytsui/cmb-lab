@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Play,
@@ -127,6 +127,15 @@ export default function ScriptPracticeClient({
   const [playingAllLang, setPlayingAllLang] = useState<"cantonese" | "mandarin" | null>(null);
   const [playingAllIndex, setPlayingAllIndex] = useState(-1);
   const playAllAbortRef = useRef(false);
+  const lineRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  // Auto-scroll to currently playing line
+  useEffect(() => {
+    if (playingAllIndex >= 0) {
+      const el = lineRefs.current.get(playingAllIndex);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [playingAllIndex]);
 
   const ratedCount = ratings.size;
   const progressPercent = lines.length > 0 ? Math.round((ratedCount / lines.length) * 100) : 0;
@@ -181,11 +190,21 @@ export default function ScriptPracticeClient({
       for (let i = 0; i < lines.length; i++) {
         if (playAllAbortRef.current) break;
         setPlayingAllIndex(i);
-        const text = lang === "cantonese" ? lines[i].cantoneseText : lines[i].mandarinText;
+        const lineText = lang === "cantonese" ? lines[i].cantoneseText : lines[i].mandarinText;
+
+        // Play with a 15s safety timeout to prevent hanging on TTS errors
         await new Promise<void>((resolve) => {
-          speak(text, { language: ttsLang })
-            .then(() => setTimeout(resolve, 500))
-            .catch(() => resolve());
+          const timeout = setTimeout(resolve, 15000);
+          speak(lineText, { language: ttsLang })
+            .then(() => {
+              clearTimeout(timeout);
+              // Pause between lines for natural pacing
+              setTimeout(resolve, 600);
+            })
+            .catch(() => {
+              clearTimeout(timeout);
+              resolve();
+            });
         });
       }
 
@@ -292,6 +311,7 @@ export default function ScriptPracticeClient({
           return (
             <div
               key={line.id}
+              ref={(el) => { if (el) lineRefs.current.set(idx, el); }}
               className={cn(
                 "space-y-2 max-w-[92%] sm:max-w-[85%]",
                 isSpeaker ? "mr-auto" : "ml-auto"
@@ -318,7 +338,7 @@ export default function ScriptPracticeClient({
               <div className={cn(
                 "rounded-xl border-2 overflow-hidden grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border",
                 isSpeaker ? "border-amber-500/30 bg-amber-500/[0.02]" : "border-sky-500/30 bg-sky-500/[0.02]",
-                (isCantoHighlighted || isMandoHighlighted) && "ring-2 ring-cyan-500/40"
+                (isCantoHighlighted || isMandoHighlighted) && "ring-2 ring-cyan-400 border-cyan-400 bg-cyan-500/10 shadow-lg shadow-cyan-500/20 transition-all"
               )}>
                 <LangBubble
                   label="Cantonese"

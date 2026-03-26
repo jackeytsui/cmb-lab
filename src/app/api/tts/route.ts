@@ -14,6 +14,7 @@ import {
   buildCacheKey,
   getCacheTTL,
   synthesizeSpeech,
+  escapeXml,
 } from "@/lib/tts";
 import type { TTSLanguage, TTSRate } from "@/lib/tts";
 
@@ -228,11 +229,10 @@ export async function POST(request: NextRequest) {
     } else {
       let ssml: string;
       if (hasBracketedPlaceholders && !phoneme) {
-        // Azure: build SSML with <break> elements replacing placeholders
-        const ssmlText = text.replace(
-          /\[[^\]]+\]/g,
-          '<break time="1500ms"/>'
-        );
+        // Azure: build SSML with <break> elements replacing placeholders.
+        // Split text at brackets, escape each text segment, rejoin with breaks.
+        const parts = text.split(/\[[^\]]+\]/);
+        const ssmlText = parts.map((p) => escapeXml(p)).join('<break time="1500ms"/>');
         const ssmlRate = rate === "x-slow" ? "x-slow" : rate === "slow" ? "slow" : rate === "fast" ? "fast" : "medium";
         ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${voice.lang}">
   <voice name="${voice.voiceName}">
