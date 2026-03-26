@@ -1860,9 +1860,9 @@ function CoachingPanel({
                       className="w-full h-8 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                     />
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={handleSaveLevel} disabled={levelSaveState === "saving"}
+                      <button type="button" onClick={handleSaveLevel}
                         className="rounded-md bg-indigo-500 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-indigo-600 transition-colors disabled:opacity-50">
-                        {levelSaveState === "saving" ? "Saving..." : "Save"}
+                        Save
                       </button>
                       <button type="button" onClick={() => setLevelSaveState("idle")}
                         className="rounded-md border border-input bg-background px-2.5 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
