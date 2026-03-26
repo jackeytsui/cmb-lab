@@ -1,10 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
-import { cookies } from "next/headers";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { resolvePermissions, type FeatureKey } from "@/lib/permissions";
-import { hasMinimumRole } from "@/lib/auth";
 import { Lock } from "lucide-react";
 import {
   getUserFeatureTagOverrides,
@@ -79,24 +77,15 @@ export async function FeatureGate({
     return fallback ? <>{fallback}</> : null;
   }
 
-  // Respect "View As" impersonation: when an admin is viewing as another user,
-  // evaluate feature access from the impersonated user's perspective
-  let effectiveUser = realUser;
-  if (realUser.role === "admin") {
-    const cookieStore = await cookies();
-    const viewAsUserId = cookieStore.get("view_as_user_id")?.value;
-    if (viewAsUserId) {
-      const impersonated = await db.query.users.findFirst({
-        where: eq(users.id, viewAsUserId),
-        columns: { id: true, role: true },
-      });
-      if (impersonated) {
-        effectiveUser = impersonated;
-      }
-    }
+  // Coaches and admins always bypass feature gating (based on REAL user role,
+  // not impersonated). This ensures admin tools like coaching remain accessible
+  // even when "View As" is active.
+  if (realUser.role === "coach" || realUser.role === "admin") {
+    return <>{children}</>;
   }
 
-  const featureTagOverrides = await getUserFeatureTagOverrides(effectiveUser.id);
+  // For students: check permissions with tag overrides
+  const featureTagOverrides = await getUserFeatureTagOverrides(realUser.id);
   const forcedStudent = process.env.FORCE_STUDENT_MODE === "true";
   let baseAllowed = false;
 
@@ -110,14 +99,7 @@ export async function FeatureGate({
   }
 
   if (!baseAllowed) {
-    // Bypass feature gating for coaches and admins (based on effective user role)
-    if (effectiveUser.role === "coach" || effectiveUser.role === "admin") {
-      baseAllowed = true;
-    }
-  }
-
-  if (!baseAllowed) {
-    const permissions = await resolvePermissions(effectiveUser.id);
+    const permissions = await resolvePermissions(realUser.id);
     baseAllowed = permissions.canUseFeature(feature);
   }
 
