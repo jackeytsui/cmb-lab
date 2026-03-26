@@ -12,7 +12,8 @@ import {
   curatedPassages,
   passageReadStatus,
 } from "@/db/schema";
-import { eq, count, sql } from "drizzle-orm";
+import { eq, count, sql, and } from "drizzle-orm";
+import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
 
 export async function GET() {
   const hasAccess = await hasMinimumRole("coach");
@@ -34,7 +35,7 @@ export async function GET() {
       });
     }
 
-    // Get all LTO student user IDs with their info
+    // Get all LTO student user IDs with their info (excluding whitelisted)
     const ltoStudents = await db
       .select({
         id: users.id,
@@ -43,7 +44,10 @@ export async function GET() {
       })
       .from(studentTags)
       .innerJoin(users, eq(studentTags.userId, users.id))
-      .where(eq(studentTags.tagId, ltoTag.id));
+      .where(and(
+        eq(studentTags.tagId, ltoTag.id),
+        excludeWhitelistedUsersSql(users.id),
+      ));
 
     // Get content totals
     const [typingTotal] = await db.select({ count: count() }).from(typingSentences);

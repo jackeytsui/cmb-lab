@@ -10,6 +10,7 @@ import { DifficultyTable } from "./components/DifficultyTable";
 import { AtRiskTable } from "./components/AtRiskTable";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { cn } from "@/lib/utils";
+import LtoReportClient from "@/app/(dashboard)/admin/accelerator/reports/LtoReportClient";
 
 interface DateRange {
   from: string;
@@ -167,7 +168,10 @@ const EMPTY_ENGAGEMENT: EngagementOverview = {
   topFeature: null,
 };
 
+type AnalyticsTab = "engagement" | "lto_progress";
+
 export function AnalyticsDashboard() {
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>("engagement");
   const [dateRange, setDateRange] = useState<DateRange>(() => {
     const to = new Date();
     const from = new Date();
@@ -290,6 +294,36 @@ export function AnalyticsDashboard() {
 
   return (
     <div className="space-y-8">
+      {/* Tab bar */}
+      <div className="flex gap-1 rounded-lg border border-border bg-card p-1 w-fit">
+        {([
+          { key: "engagement", label: "Engagement" },
+          { key: "lto_progress", label: "LTO Progress" },
+        ] as const).map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+              activeTab === tab.key
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* LTO Progress tab */}
+      {activeTab === "lto_progress" && (
+        <LtoReportClient />
+      )}
+
+      {/* Engagement tab — existing analytics content */}
+      {activeTab !== "lto_progress" && (
+      <>
       <DateRangeFilter onChange={setDateRange} />
 
       {error && <ErrorAlert message={error} onRetry={() => fetchData(dateRange)} />}
@@ -671,6 +705,8 @@ export function AnalyticsDashboard() {
           </table>
         </div>
       </section>
+      </>
+      )}
     </div>
   );
 }
