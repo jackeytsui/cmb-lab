@@ -1840,7 +1840,12 @@ function CoachingPanel({
                     />
                     <button
                       type="button"
-                      onClick={() => handleSaveLevel(studentLevel, studentLessonNumber)}
+                      onClick={async (e) => {
+                        const btn = e.currentTarget;
+                        await handleSaveLevel(studentLevel, studentLessonNumber);
+                        btn.textContent = "Saved!";
+                        setTimeout(() => { btn.textContent = "Save"; }, 1500);
+                      }}
                       disabled={isSavingLevel}
                       className="rounded-md bg-indigo-500/15 border border-indigo-500/25 px-2.5 py-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/25 transition-colors disabled:opacity-50"
                     >

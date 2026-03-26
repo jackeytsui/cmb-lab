@@ -76,33 +76,49 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  const updates: Partial<{
-    coachingGoals: string | null;
-    coachingLevel: string | null;
-    coachingLessonNumber: string | null;
-  }> = {};
-  if ("goals" in body) updates.coachingGoals = body.goals?.trim() || null;
-  if ("level" in body) updates.coachingLevel = body.level?.trim() || null;
-  if ("lessonNumber" in body) updates.coachingLessonNumber = body.lessonNumber?.trim() || null;
+  // Always update all three fields (null = no change from client means keep existing)
+  const goalsValue = "goals" in body ? (body.goals?.trim() || null) : undefined;
+  const levelValue = "level" in body ? (body.level?.trim() || null) : undefined;
+  const lessonValue = "lessonNumber" in body ? (body.lessonNumber?.trim() || null) : undefined;
 
-  if (Object.keys(updates).length === 0) {
+  if (goalsValue === undefined && levelValue === undefined && lessonValue === undefined) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  const [updated] = await db
-    .update(users)
-    .set(updates)
-    .where(eq(users.email, body.studentEmail))
-    .returning({ id: users.id, coachingGoals: users.coachingGoals, coachingLevel: users.coachingLevel, coachingLessonNumber: users.coachingLessonNumber });
+  // Build SET clause with explicit column references
+  const setClause: {
+    coachingGoals?: string | null;
+    coachingLevel?: string | null;
+    coachingLessonNumber?: string | null;
+  } = {};
+  if (goalsValue !== undefined) setClause.coachingGoals = goalsValue;
+  if (levelValue !== undefined) setClause.coachingLevel = levelValue;
+  if (lessonValue !== undefined) setClause.coachingLessonNumber = lessonValue;
 
-  if (!updated) {
-    return NextResponse.json({ error: "Student not found" }, { status: 404 });
+  try {
+    const [updated] = await db
+      .update(users)
+      .set(setClause)
+      .where(eq(users.email, body.studentEmail))
+      .returning({
+        id: users.id,
+        coachingGoals: users.coachingGoals,
+        coachingLevel: users.coachingLevel,
+        coachingLessonNumber: users.coachingLessonNumber,
+      });
+
+    if (!updated) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      goals: updated.coachingGoals,
+      level: updated.coachingLevel,
+      lessonNumber: updated.coachingLessonNumber,
+    });
+  } catch (err) {
+    console.error("Failed to update coaching goals:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  return NextResponse.json({
-    success: true,
-    goals: updated.coachingGoals,
-    level: updated.coachingLevel,
-    lessonNumber: updated.coachingLessonNumber,
-  });
 }
