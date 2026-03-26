@@ -139,6 +139,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Strip bracketed placeholders like [your name], [location], etc.
+    // These are template markers in conversation scripts that shouldn't be spoken.
+    const hasBracketedPlaceholders = /\[[^\]]+\]/.test(text);
+
     // Default and validate language
     if (!language || !VALID_LANGUAGES.includes(language)) {
       language = "zh-CN";
@@ -207,14 +211,39 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 7. Synthesize via selected provider only (no per-request provider mixing)
+    // 7. Preprocess text — replace bracketed placeholders with pauses
+    let spokenText = text;
+    if (hasBracketedPlaceholders) {
+      if (provider === "openai") {
+        // OpenAI: replace with ellipsis which creates a natural ~1.5s pause
+        spokenText = text.replace(/\[[^\]]+\]/g, "，……，");
+      }
+      // Azure: handled via SSML break element below
+    }
+
+    // 8. Synthesize via selected provider only (no per-request provider mixing)
     let audioBuffer: Buffer;
     if (provider === "openai") {
-      audioBuffer = await synthesizeSpeechOpenAI(text, language, rate);
+      audioBuffer = await synthesizeSpeechOpenAI(spokenText, language, rate);
     } else {
-      const ssml = phoneme
-        ? buildPhonemeSSML(text, phoneme, voice.voiceName, voice.lang, rate)
-        : buildSSML(text, voice.voiceName, voice.lang, rate);
+      let ssml: string;
+      if (hasBracketedPlaceholders && !phoneme) {
+        // Azure: build SSML with <break> elements replacing placeholders
+        const ssmlText = text.replace(
+          /\[[^\]]+\]/g,
+          '<break time="1500ms"/>'
+        );
+        const ssmlRate = rate === "x-slow" ? "x-slow" : rate === "slow" ? "slow" : rate === "fast" ? "fast" : "medium";
+        ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${voice.lang}">
+  <voice name="${voice.voiceName}">
+    <prosody rate="${ssmlRate}">${ssmlText}</prosody>
+  </voice>
+</speak>`;
+      } else {
+        ssml = phoneme
+          ? buildPhonemeSSML(spokenText, phoneme, voice.voiceName, voice.lang, rate)
+          : buildSSML(spokenText, voice.voiceName, voice.lang, rate);
+      }
       audioBuffer = await synthesizeSpeech(ssml);
     }
 
