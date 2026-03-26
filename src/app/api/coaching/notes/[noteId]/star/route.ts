@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { coachingNoteStars } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { getCurrentUser } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ noteId: string }> },
 ) {
   const { noteId } = await params;
-  const dbUser = await getCurrentUser();
+  const dbUser = await getRealUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -27,7 +27,7 @@ export async function DELETE(
   { params }: { params: Promise<{ noteId: string }> },
 ) {
   const { noteId } = await params;
-  const dbUser = await getCurrentUser();
+  const dbUser = await getRealUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

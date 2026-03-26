@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, studentTags, tags } from "@/db/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasMinimumRole, getRealUser } from "@/lib/auth";
 import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
 
 /**
@@ -16,7 +16,7 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const currentUser = await getCurrentUser();
+  const currentUser = await getRealUser();
   if (!currentUser) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }

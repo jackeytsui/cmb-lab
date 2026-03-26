@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { coachingSessions, coachingNotes, coachingNoteStars, users } from "@/db/schema";
 import { eq, and, desc, inArray, ilike } from "drizzle-orm";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasMinimumRole, getRealUser } from "@/lib/auth";
 
 function getNextSessionTitle(existingTitles: string[]) {
   let maxSessionNumber = 0;
@@ -18,7 +18,7 @@ function getNextSessionTitle(existingTitles: string[]) {
 }
 
 export async function GET(request: Request) {
-  const dbUser = await getCurrentUser();
+  const dbUser = await getRealUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const dbUser = await getCurrentUser();
+  const dbUser = await getRealUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

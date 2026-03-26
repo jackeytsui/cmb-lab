@@ -93,18 +93,27 @@ export async function hasMinimumRole(minimumRole: Roles): Promise<boolean> {
 }
 
 /**
- * Get the current user from the database.
- * When an admin is impersonating via "View As", returns the impersonated user instead.
- * Returns null if not authenticated or user not found.
+ * Get the real authenticated user from the database.
+ * Always returns the actual Clerk user, ignoring View As impersonation.
+ * Use this in API routes where authorization depends on the real user's role.
  */
-export async function getCurrentUser() {
+export async function getRealUser() {
   const { userId } = await auth();
   if (!userId) return null;
 
-  const realUser = await db.query.users.findFirst({
+  return db.query.users.findFirst({
     where: eq(users.clerkId, userId),
-  });
+  }) ?? null;
+}
 
+/**
+ * Get the current user from the database.
+ * When an admin is impersonating via "View As", returns the impersonated user instead.
+ * Use this in page components where you want to show the impersonated perspective.
+ * For API routes, prefer getRealUser() to ensure correct authorization.
+ */
+export async function getCurrentUser() {
+  const realUser = await getRealUser();
   if (!realUser) return null;
 
   // If admin is impersonating another user via "View As", return that user
