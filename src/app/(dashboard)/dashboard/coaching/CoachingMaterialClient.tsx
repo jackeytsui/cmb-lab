@@ -1002,7 +1002,7 @@ function CoachingPanel({
   // Student level tracking
   const [studentLevel, setStudentLevel] = useState<string | null>(null);
   const [studentLessonNumber, setStudentLessonNumber] = useState<string | null>(null);
-  const [isSavingLevel, setIsSavingLevel] = useState(false);
+  const [levelSaveState, setLevelSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   // Sync recording URL and fathom link when active session changes
   useEffect(() => {
@@ -1035,26 +1035,34 @@ function CoachingPanel({
     }).catch(() => {});
   }, [goalsStudentEmail, canWrite]);
 
-  const handleSaveLevel = useCallback(async (level: string | null, lessonNumber: string | null) => {
-    if (!goalsStudentEmail) return;
-    setIsSavingLevel(true);
+  const handleSaveLevel = useCallback(async () => {
+    if (!goalsStudentEmail) {
+      setLevelSaveState("error");
+      return;
+    }
+    setLevelSaveState("saving");
     try {
       const res = await fetch("/api/coaching/student-level", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentEmail: goalsStudentEmail, level, lessonNumber }),
+        body: JSON.stringify({
+          studentEmail: goalsStudentEmail,
+          level: studentLevel,
+          lessonNumber: studentLessonNumber,
+        }),
       });
       if (res.ok) {
-        const data = await res.json();
-        setStudentLevel(data.level ?? level);
-        setStudentLessonNumber(data.lessonNumber ?? lessonNumber);
+        setLevelSaveState("saved");
+        setTimeout(() => setLevelSaveState("idle"), 2000);
+      } else {
+        setLevelSaveState("error");
+        setTimeout(() => setLevelSaveState("idle"), 2000);
       }
     } catch {
-      // ignore
-    } finally {
-      setIsSavingLevel(false);
+      setLevelSaveState("error");
+      setTimeout(() => setLevelSaveState("idle"), 2000);
     }
-  }, [goalsStudentEmail]);
+  }, [goalsStudentEmail, studentLevel, studentLessonNumber]);
 
   const handleSaveRecordingUrl = useCallback(async () => {
     if (!activeSessionId) return;
@@ -1842,16 +1850,17 @@ function CoachingPanel({
                     />
                     <button
                       type="button"
-                      onClick={async (e) => {
-                        const btn = e.currentTarget;
-                        await handleSaveLevel(studentLevel, studentLessonNumber);
-                        btn.textContent = "Saved!";
-                        setTimeout(() => { btn.textContent = "Save"; }, 1500);
-                      }}
-                      disabled={isSavingLevel}
-                      className="rounded-md bg-indigo-500/15 border border-indigo-500/25 px-2.5 py-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/25 transition-colors disabled:opacity-50"
+                      onClick={handleSaveLevel}
+                      disabled={levelSaveState === "saving"}
+                      className={`rounded-md border px-2.5 py-1 text-[10px] font-medium transition-colors disabled:opacity-50 ${
+                        levelSaveState === "saved"
+                          ? "bg-emerald-500/15 border-emerald-500/25 text-emerald-600 dark:text-emerald-400"
+                          : levelSaveState === "error"
+                            ? "bg-red-500/15 border-red-500/25 text-red-600 dark:text-red-400"
+                            : "bg-indigo-500/15 border-indigo-500/25 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/25"
+                      }`}
                     >
-                      {isSavingLevel ? "Saving..." : "Save"}
+                      {levelSaveState === "saving" ? "Saving..." : levelSaveState === "saved" ? "Saved!" : levelSaveState === "error" ? "Error" : "Save"}
                     </button>
                   </div>
                 ) : (
