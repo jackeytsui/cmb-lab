@@ -1874,7 +1874,7 @@ function CoachingPanel({
                   <div className="mt-1.5 space-y-0.5">
                     <p className="text-xs font-medium text-foreground">{studentLevel || ""}</p>
                     {studentLessonNumber && (
-                      <p className="text-xs text-muted-foreground">{studentLessonNumber}</p>
+                      <p className="text-xs text-muted-foreground">Chapter / Lesson: {studentLessonNumber}</p>
                     )}
                   </div>
                 ) : (
