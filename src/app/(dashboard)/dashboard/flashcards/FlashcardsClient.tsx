@@ -130,11 +130,14 @@ function FlashCard({
           )}
           style={{ transformStyle: "preserve-3d" }}
         >
-          {/* Front */}
+          {/* Front — pinyin + Chinese characters */}
           <div
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg p-4"
             style={{ backfaceVisibility: "hidden" }}
           >
+            {romanLabel && (
+              <span className="text-sm font-medium text-muted-foreground">{romanLabel}</span>
+            )}
             <ToneColoredText
               text={displayChinese}
               lang={card.pane === "cantonese" ? "cantonese" : "mandarin"}
@@ -142,18 +145,16 @@ function FlashCard({
               pinyinStr={card.pane !== "cantonese" ? card.pinyin : undefined}
               className="text-2xl font-bold"
             />
+            <span className="mt-2 text-[10px] text-muted-foreground/50">Tap to reveal</span>
           </div>
 
-          {/* Back */}
+          {/* Back — English translation + play button */}
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg p-4 [transform:rotateY(180deg)]"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-lg p-4 [transform:rotateY(180deg)]"
             style={{ backfaceVisibility: "hidden" }}
           >
-            {romanLabel && (
-              <span className="text-xl font-bold text-blue-600 dark:text-blue-400">{romanLabel}</span>
-            )}
             {card.english && (
-              <span className="text-center text-sm text-muted-foreground">
+              <span className="text-center text-lg font-semibold text-foreground">
                 {card.english}
               </span>
             )}
@@ -162,7 +163,7 @@ function FlashCard({
               lang={card.pane === "cantonese" ? "cantonese" : "mandarin"}
               jyutping={card.pane === "cantonese" ? card.jyutping : undefined}
               pinyinStr={card.pane !== "cantonese" ? card.pinyin : undefined}
-              className="text-xs opacity-60"
+              className="text-sm opacity-60"
             />
             <div className="mt-1" onClick={(e) => e.stopPropagation()}>
               <SpeakButton text={displayChinese} lang={lang} speak={speak} isLoading={ttsLoading} isPlaying={ttsPlaying} />
@@ -383,11 +384,14 @@ export function FlashcardsClient() {
             )}
             style={{ transformStyle: "preserve-3d" }}
           >
-            {/* Front */}
+            {/* Front — pinyin + Chinese */}
             <div
               className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl p-6"
               style={{ backfaceVisibility: "hidden" }}
             >
+              {studyRoman && (
+                <span className="text-lg font-medium text-muted-foreground">{studyRoman}</span>
+              )}
               <ToneColoredText
                 text={studyDisplayChinese}
                 lang={studyCard.pane === "cantonese" ? "cantonese" : "mandarin"}
@@ -400,16 +404,13 @@ export function FlashcardsClient() {
               </span>
             </div>
 
-            {/* Back */}
+            {/* Back — English + Chinese small + play */}
             <div
               className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl p-6 [transform:rotateY(180deg)]"
               style={{ backfaceVisibility: "hidden" }}
             >
-              {studyRoman && (
-                <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">{studyRoman}</span>
-              )}
               {studyCard.english && (
-                <span className="mt-1 text-center text-lg text-muted-foreground">
+                <span className="text-center text-2xl font-bold text-foreground">
                   {studyCard.english}
                 </span>
               )}
@@ -418,7 +419,7 @@ export function FlashcardsClient() {
                 lang={studyCard.pane === "cantonese" ? "cantonese" : "mandarin"}
                 jyutping={studyCard.pane === "cantonese" ? studyCard.jyutping : undefined}
                 pinyinStr={studyCard.pane !== "cantonese" ? studyCard.pinyin : undefined}
-                className="mt-2 text-sm opacity-60"
+                className="mt-2 text-lg opacity-60"
               />
             </div>
           </div>
