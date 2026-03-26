@@ -57,11 +57,35 @@ interface ScriptPracticeClientProps {
 // Single language bubble (used inside the split line)
 // ---------------------------------------------------------------------------
 
+// Tone color for Mandarin pinyin (by tone number in diacritical form)
+function getToneColor(syllable: string, lang: "cantonese" | "mandarin"): string {
+  if (lang === "cantonese") {
+    // Jyutping tone colors by number suffix
+    const match = syllable.match(/(\d)$/);
+    if (!match) return "text-foreground";
+    const tone = match[1];
+    if (tone === "1") return "text-red-500";
+    if (tone === "2") return "text-orange-500";
+    if (tone === "3") return "text-green-600";
+    if (tone === "4") return "text-blue-500";
+    if (tone === "5") return "text-purple-500";
+    if (tone === "6") return "text-amber-700 dark:text-amber-400";
+    return "text-foreground";
+  }
+  // Mandarin: detect by diacritical marks
+  if (/[āēīōūǖ]/.test(syllable)) return "text-red-500";       // tone 1
+  if (/[áéíóúǘ]/.test(syllable)) return "text-orange-500";     // tone 2
+  if (/[ǎěǐǒǔǚ]/.test(syllable)) return "text-green-600";    // tone 3
+  if (/[àèìòùǜ]/.test(syllable)) return "text-blue-500";       // tone 4
+  return "text-foreground"; // neutral
+}
+
 function LangBubble({
   label,
   text,
   romanisation,
   labelColor,
+  lang,
   onPlay,
   isPlaying,
 }: {
@@ -69,18 +93,51 @@ function LangBubble({
   text: string;
   romanisation: string;
   labelColor: string;
+  lang: "cantonese" | "mandarin";
   onPlay: () => void;
   isPlaying: boolean;
 }) {
+  // Split romanisation into syllables and align with Han characters
+  const syllables = romanisation.split(/[\s,]+/).filter(Boolean);
+  const chars = [...text];
+  const hanRegex = /\p{Script=Han}/u;
+
+  // Build aligned pairs: each Han character gets a syllable
+  let syllableIdx = 0;
+  const aligned: Array<{ char: string; syllable: string | null; isHan: boolean }> = [];
+  for (const char of chars) {
+    if (hanRegex.test(char) && syllableIdx < syllables.length) {
+      // Skip bracket content in syllables (e.g. "[your", "name]")
+      while (syllableIdx < syllables.length && /^\[|]$/.test(syllables[syllableIdx])) {
+        syllableIdx++;
+      }
+      aligned.push({ char, syllable: syllables[syllableIdx] ?? null, isHan: true });
+      syllableIdx++;
+    } else {
+      aligned.push({ char, syllable: null, isHan: false });
+    }
+  }
+
   return (
     <div className="flex-1 p-4 space-y-2">
       <span className={cn("text-[10px] uppercase tracking-wider font-bold", labelColor)}>
         {label}
       </span>
-      <p className={cn("text-xs font-medium tracking-wide text-muted-foreground")}>
-        {romanisation}
-      </p>
-      <p className="text-lg font-medium text-foreground">{text}</p>
+      {/* Per-character aligned romanization + Chinese */}
+      <div className="flex items-end flex-wrap gap-y-1">
+        {aligned.map((item, i) => (
+          item.isHan && item.syllable ? (
+            <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.4em" }}>
+              <span className={cn("text-[11px] leading-tight whitespace-nowrap", getToneColor(item.syllable, lang))}>
+                {item.syllable}
+              </span>
+              <span className="text-lg font-medium text-foreground">{item.char}</span>
+            </span>
+          ) : (
+            <span key={i} className="text-lg font-medium text-foreground">{item.char}</span>
+          )
+        ))}
+      </div>
       <button
         type="button"
         onClick={onPlay}
@@ -345,6 +402,7 @@ export default function ScriptPracticeClient({
                   text={line.cantoneseText}
                   romanisation={line.cantoneseRomanisation}
                   labelColor="text-cyan-500"
+                  lang="cantonese"
                   onPlay={() => handlePlayLine(line.cantoneseText, "cantonese", line.id)}
                   isPlaying={playingLineKey === `${line.id}-cantonese` && ttsPlaying}
                 />
@@ -353,6 +411,7 @@ export default function ScriptPracticeClient({
                   text={line.mandarinText}
                   romanisation={line.mandarinRomanisation}
                   labelColor="text-red-500"
+                  lang="mandarin"
                   onPlay={() => handlePlayLine(line.mandarinText, "mandarin", line.id)}
                   isPlaying={playingLineKey === `${line.id}-mandarin` && ttsPlaying}
                 />
