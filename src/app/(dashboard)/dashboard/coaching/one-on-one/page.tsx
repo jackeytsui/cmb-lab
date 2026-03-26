@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { CoachingMaterialClient } from "../CoachingMaterialClient";
-import { getCurrentUser } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 
 export default async function OneOnOneCoachingPage({
   searchParams,
@@ -13,7 +13,7 @@ export default async function OneOnOneCoachingPage({
   if (!userId) {
     redirect("/sign-in");
   }
-  const currentUser = await getCurrentUser();
+  const currentUser = await getRealUser();
   const params = await searchParams;
   const initialStudentEmail = (params.student as string) || undefined;
 
