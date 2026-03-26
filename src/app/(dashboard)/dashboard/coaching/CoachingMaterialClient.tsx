@@ -1024,28 +1024,30 @@ function CoachingPanel({
       return;
     }
     const params = new URLSearchParams({ studentEmail: goalsStudentEmail });
-    fetch(`/api/coaching/goals?${params}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setStudentGoals(d.goals ?? null);
-        setStudentLevel(d.level ?? null);
-        setStudentLessonNumber(d.lessonNumber ?? null);
-      })
-      .catch(() => {});
+    // Fetch goals and level in parallel from separate endpoints
+    Promise.all([
+      fetch(`/api/coaching/goals?${params}`).then((r) => r.ok ? r.json() : null),
+      fetch(`/api/coaching/student-level?${params}`).then((r) => r.ok ? r.json() : null),
+    ]).then(([goalsData, levelData]) => {
+      setStudentGoals(goalsData?.goals ?? null);
+      setStudentLevel(levelData?.level ?? null);
+      setStudentLessonNumber(levelData?.lessonNumber ?? null);
+    }).catch(() => {});
   }, [goalsStudentEmail, canWrite]);
 
   const handleSaveLevel = useCallback(async (level: string | null, lessonNumber: string | null) => {
     if (!goalsStudentEmail) return;
     setIsSavingLevel(true);
     try {
-      const res = await fetch("/api/coaching/goals", {
+      const res = await fetch("/api/coaching/student-level", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ studentEmail: goalsStudentEmail, level, lessonNumber }),
       });
       if (res.ok) {
-        setStudentLevel(level);
-        setStudentLessonNumber(lessonNumber);
+        const data = await res.json();
+        setStudentLevel(data.level ?? level);
+        setStudentLessonNumber(data.lessonNumber ?? lessonNumber);
       }
     } catch {
       // ignore
