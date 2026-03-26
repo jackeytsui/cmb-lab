@@ -84,62 +84,53 @@ export async function exportCoachingNotes(
       ]
     : [];
 
-  // Collect unique recording links for header row
-  const recordingLinks = [...new Set(sessions.map((s) => s.recordingUrl ?? s.fathomLink).filter(Boolean))];
+  // Collect unique recording links
+  const recordingLinks = [...new Set(
+    sessions.map((s) => s.recordingUrl ?? s.fathomLink).filter(Boolean)
+  )];
+  const recordingLine = recordingLinks.length > 0
+    ? `Recording: ${recordingLinks.join(", ")}`
+    : null;
 
-  // Helper: add recording link as a header row above the data table
-  function addRecordingHeader(sheet: ExcelJS.Worksheet) {
-    if (recordingLinks.length > 0) {
-      const linkRow = sheet.addRow([`Recording: ${recordingLinks.join(", ")}`]);
+  // Column definitions (without ExcelJS auto-headers — we build rows manually)
+  const contextHeaders = isMultiSession ? ["Session", "Student Email"] : [];
+  const mandarinHeaders = [...contextHeaders, "Traditional Chinese", "Simplified Chinese", "Pinyin", "English Meaning", "Notes"];
+  const cantoneseHeaders = [...contextHeaders, "Traditional Chinese", "Simplified Chinese", "Jyutping", "English Meaning", "Notes"];
+  const colWidths = isMultiSession ? [20, 28, 30, 30, 40, 40, 40] : [30, 30, 40, 40, 40];
+
+  function setupSheet(sheet: ExcelJS.Worksheet, headers: string[]) {
+    // Row 1: Recording link (if any)
+    if (recordingLine) {
+      const linkRow = sheet.addRow([recordingLine]);
       linkRow.font = { italic: true, color: { argb: "FF666666" } };
-      sheet.addRow([]); // blank separator
     }
+    // Header row
+    const headerRow = sheet.addRow(headers);
+    headerRow.font = { bold: true };
+    // Set column widths
+    colWidths.forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
   }
 
   // Mandarin tab
   const mandarinSheet = wb.addWorksheet("Mandarin");
-  addRecordingHeader(mandarinSheet);
-  mandarinSheet.columns = [
-    ...contextColumns,
-    { header: "Traditional Chinese", key: "traditional", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-    { header: "Simplified Chinese", key: "simplified", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-    { header: "Pinyin", key: "romanization", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-    { header: "English Meaning", key: "translation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-    { header: "Notes", key: "explanation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-  ];
-  // Bold the header row (which is after fathom rows)
-  const mandoHeaderRow = recordingLinks.length > 0 ? 3 : 1;
-  mandarinSheet.getRow(mandoHeaderRow).font = { bold: true };
+  setupSheet(mandarinSheet, mandarinHeaders);
 
   for (const note of mandarinNotes) {
     const traditional = note.textOverride || note.text;
     const simplified = simplifiedMap.get(traditional) ?? traditional;
-    // Use simplified text for pinyin generation — traditional chars can give wrong readings
     const romanization =
       note.romanizationOverride || pinyin(simplified, { toneType: "symbol" });
     const translation = note.translationOverride || "";
     const explanation = note.explanation || "";
-    const row: Record<string, string> = { traditional, simplified, romanization, translation, explanation };
-    if (isMultiSession) {
-      row.session = note.sessionTitle;
-      row.studentEmail = note.studentEmail;
-    }
-    mandarinSheet.addRow(row);
+    const cells = isMultiSession
+      ? [note.sessionTitle, note.studentEmail, traditional, simplified, romanization, translation, explanation]
+      : [traditional, simplified, romanization, translation, explanation];
+    mandarinSheet.addRow(cells);
   }
 
   // Cantonese tab
   const cantoneseSheet = wb.addWorksheet("Cantonese");
-  addRecordingHeader(cantoneseSheet);
-  cantoneseSheet.columns = [
-    ...contextColumns,
-    { header: "Traditional Chinese", key: "traditional", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-    { header: "Simplified Chinese", key: "simplified", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-    { header: "Jyutping", key: "romanization", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-    { header: "English Meaning", key: "translation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-    { header: "Notes", key: "explanation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-  ];
-  const cantoHeaderRow = recordingLinks.length > 0 ? 3 : 1;
-  cantoneseSheet.getRow(cantoHeaderRow).font = { bold: true };
+  setupSheet(cantoneseSheet, cantoneseHeaders);
 
   for (const note of cantoneseNotes) {
     const traditional = note.textOverride || note.text;
@@ -148,12 +139,10 @@ export async function exportCoachingNotes(
       note.romanizationOverride || toJyutpingString(traditional);
     const translation = note.translationOverride || "";
     const explanation = note.explanation || "";
-    const row: Record<string, string> = { traditional, simplified, romanization, translation, explanation };
-    if (isMultiSession) {
-      row.session = note.sessionTitle;
-      row.studentEmail = note.studentEmail;
-    }
-    cantoneseSheet.addRow(row);
+    const cells = isMultiSession
+      ? [note.sessionTitle, note.studentEmail, traditional, simplified, romanization, translation, explanation]
+      : [traditional, simplified, romanization, translation, explanation];
+    cantoneseSheet.addRow(cells);
   }
 
   // Generate filename
