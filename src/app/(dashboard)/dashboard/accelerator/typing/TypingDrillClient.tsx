@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Volume2, Check, X } from "lucide-react";
+import { Play, Check, X, Pause } from "lucide-react";
 import { useTTS } from "@/hooks/useTTS";
 
 // ---------------------------------------------------------------------------
@@ -146,22 +146,29 @@ function DrillSide({
         {side.romanisation}
       </p>
 
-      {/* Chinese characters + TTS */}
-      <div className="flex items-center gap-2">
-        <span className="text-2xl font-bold text-foreground">
-          {side.chineseText}
-        </span>
-        <button
-          type="button"
-          onClick={handleSpeak}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-          aria-label={`Listen in ${labelText}`}
-        >
-          <Volume2
-            className={`w-5 h-5 ${isPlaying ? "text-blue-500 animate-pulse" : ""}`}
-          />
-        </button>
-      </div>
+      {/* Chinese characters */}
+      <span className="text-2xl font-bold text-foreground">
+        {side.chineseText}
+      </span>
+
+      {/* Play audio button */}
+      <button
+        type="button"
+        onClick={handleSpeak}
+        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+          isPlaying
+            ? "bg-blue-500/15 text-blue-500 border border-blue-500/30"
+            : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground border border-border"
+        }`}
+        aria-label={`Listen in ${labelText}`}
+      >
+        {isPlaying ? (
+          <Pause className="w-3 h-3" />
+        ) : (
+          <Play className="w-3 h-3" />
+        )}
+        {isPlaying ? "Playing..." : "Play"}
+      </button>
 
       {/* Input */}
       <Input
@@ -327,36 +334,40 @@ export default function TypingDrillClient({
       </div>
 
       {/* Phrase pair cards */}
-      <div className="space-y-4">
-        {pairs.map((pair) => (
-          <div
-            key={pair.sortOrder}
-            className="rounded-xl border border-border bg-card overflow-hidden"
-          >
-            {/* English header */}
-            <div className="px-4 py-3 border-b border-border bg-muted/30">
-              <p className="text-center font-semibold text-foreground">
+      <div className="space-y-8">
+        {pairs.map((pair, idx) => (
+          <div key={pair.sortOrder} className="space-y-3">
+            {/* English phrase heading */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-muted-foreground/50 tabular-nums">
+                {idx + 1}
+              </span>
+              <h3 className="text-base font-semibold text-foreground">
                 {pair.english}
-              </p>
+              </h3>
             </div>
 
-            {/* Side-by-side columns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border">
+            {/* Cantonese + Mandarin cards side by side */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {pair.cantonese && (
-                <DrillSide
-                  side={pair.cantonese}
-                  language="cantonese"
-                  isCompleted={completedIds.has(pair.cantonese.id)}
-                  onComplete={handleComplete}
-                />
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                  <DrillSide
+                    side={pair.cantonese}
+                    language="cantonese"
+                    isCompleted={completedIds.has(pair.cantonese.id)}
+                    onComplete={handleComplete}
+                  />
+                </div>
               )}
               {pair.mandarin && (
-                <DrillSide
-                  side={pair.mandarin}
-                  language="mandarin"
-                  isCompleted={completedIds.has(pair.mandarin.id)}
-                  onComplete={handleComplete}
-                />
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                  <DrillSide
+                    side={pair.mandarin}
+                    language="mandarin"
+                    isCompleted={completedIds.has(pair.mandarin.id)}
+                    onComplete={handleComplete}
+                  />
+                </div>
               )}
             </div>
           </div>
