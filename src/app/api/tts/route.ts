@@ -160,36 +160,13 @@ export async function POST(request: NextRequest) {
       process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION,
     );
 
-    // 4. Resolve deterministic provider to avoid mixed voices across sentences.
-    // Priority:
-    // 1) Explicit TTS_PROVIDER env ("openai" | "azure")
-    // 2) Default to OpenAI if available, otherwise Azure
-    let provider: "openai" | "azure" | "elevenlabs" =
-      TTS_PROVIDER === "azure" ? "azure" : "openai";
-
-    if (!TTS_PROVIDER) {
-      provider = hasOpenAI ? "openai" : "azure";
-    }
-
-    // For Cantonese: prefer ElevenLabs > Azure > OpenAI
-    // OpenAI doesn't reliably produce Cantonese pronunciation.
+    // 4. Resolve provider.
+    // Cantonese: ElevenLabs > Azure > OpenAI
+    // Mandarin: TTS_PROVIDER env > OpenAI > Azure
     const isCantonese = language === "zh-HK" || language === "cantonese";
     const hasElevenLabs = Boolean(
       process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_CANTONESE_VOICE_ID
     );
-    if (isCantonese) {
-      if (hasElevenLabs) {
-        provider = "elevenlabs";
-      } else if (hasAzure) {
-        provider = "azure";
-      }
-    }
-
-    if (provider === "openai" && !hasOpenAI && hasAzure) {
-      provider = "azure";
-    } else if (provider === "azure" && !hasAzure && hasOpenAI) {
-      provider = "openai";
-    }
 
     if (!hasOpenAI && !hasAzure && !hasElevenLabs) {
       return NextResponse.json(
@@ -197,6 +174,17 @@ export async function POST(request: NextRequest) {
         { status: 503 }
       );
     }
+
+    const provider: "openai" | "azure" | "elevenlabs" = (() => {
+      if (isCantonese) {
+        if (hasElevenLabs) return "elevenlabs" as const;
+        if (hasAzure) return "azure" as const;
+        return "openai" as const;
+      }
+      if (TTS_PROVIDER === "azure" && hasAzure) return "azure" as const;
+      if (hasOpenAI) return "openai" as const;
+      return "azure" as const;
+    })();
 
     const voice =
       provider === "elevenlabs"
