@@ -84,30 +84,15 @@ export async function exportCoachingNotes(
       ]
     : [];
 
-  // Collect unique recording links
-  const recordingLinks = [...new Set(
-    sessions.map((s) => s.recordingUrl ?? s.fathomLink).filter(Boolean)
-  )];
-  const recordingLine = recordingLinks.length > 0
-    ? `Recording: ${recordingLinks.join(", ")}`
-    : null;
-
-  // Column definitions (without ExcelJS auto-headers — we build rows manually)
+  // Column definitions (manual row building — no sheet.columns to avoid blank rows)
   const contextHeaders = isMultiSession ? ["Session", "Student Email"] : [];
   const mandarinHeaders = [...contextHeaders, "Traditional Chinese", "Simplified Chinese", "Pinyin", "English Meaning", "Notes"];
   const cantoneseHeaders = [...contextHeaders, "Traditional Chinese", "Simplified Chinese", "Jyutping", "English Meaning", "Notes"];
   const colWidths = isMultiSession ? [20, 28, 30, 30, 40, 40, 40] : [30, 30, 40, 40, 40];
 
   function setupSheet(sheet: ExcelJS.Worksheet, headers: string[]) {
-    // Row 1: Recording link (if any)
-    if (recordingLine) {
-      const linkRow = sheet.addRow([recordingLine]);
-      linkRow.font = { italic: true, color: { argb: "FF666666" } };
-    }
-    // Header row
     const headerRow = sheet.addRow(headers);
     headerRow.font = { bold: true };
-    // Set column widths
     colWidths.forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
   }
 
@@ -143,6 +128,32 @@ export async function exportCoachingNotes(
       ? [note.sessionTitle, note.studentEmail, traditional, simplified, romanization, translation, explanation]
       : [traditional, simplified, romanization, translation, explanation];
     cantoneseSheet.addRow(cells);
+  }
+
+  // Info tab — recording links and session metadata
+  const infoSheet = wb.addWorksheet("Info");
+  infoSheet.getColumn(1).width = 20;
+  infoSheet.getColumn(2).width = 60;
+
+  const infoHeader = infoSheet.addRow(["Field", "Value"]);
+  infoHeader.font = { bold: true };
+
+  for (const session of sessions) {
+    if (isMultiSession) {
+      infoSheet.addRow(["Session", session.title]);
+      if (session.studentEmail) infoSheet.addRow(["Student", session.studentEmail]);
+    }
+    if (session.recordingUrl) {
+      infoSheet.addRow(["Recording Link", session.recordingUrl]);
+    }
+    if (session.fathomLink && session.fathomLink !== session.recordingUrl) {
+      infoSheet.addRow(["Fathom Link", session.fathomLink]);
+    }
+    if (isMultiSession) infoSheet.addRow([]); // separator between sessions
+  }
+
+  if (!sessions.some((s) => s.recordingUrl || s.fathomLink)) {
+    infoSheet.addRow(["Recording Link", "Not added yet"]);
   }
 
   // Generate filename
