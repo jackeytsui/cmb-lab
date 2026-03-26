@@ -9,6 +9,7 @@ type ExportNote = {
   textOverride?: string | null;
   romanizationOverride?: string | null;
   translationOverride?: string | null;
+  explanation?: string | null;
 };
 
 type ExportSession = {
@@ -79,22 +80,35 @@ export async function exportCoachingNotes(
     ? [
         { header: "Session", key: "session", width: 20 } as Partial<ExcelJS.Column> as ExcelJS.Column,
         { header: "Student Email", key: "studentEmail", width: 28 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-        { header: "Fathom Link", key: "fathomLink", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
       ]
-    : [
-        { header: "Fathom Link", key: "fathomLink", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
-      ];
+    : [];
+
+  // Collect unique fathom links for header row
+  const fathomLinks = [...new Set(sessions.map((s) => s.fathomLink).filter(Boolean))];
+
+  // Helper: add fathom link as a header row above the data table
+  function addFathomHeader(sheet: ExcelJS.Worksheet) {
+    if (fathomLinks.length > 0) {
+      const fathomRow = sheet.addRow([`Fathom: ${fathomLinks.join(", ")}`]);
+      fathomRow.font = { italic: true, color: { argb: "FF666666" } };
+      sheet.addRow([]); // blank separator
+    }
+  }
 
   // Mandarin tab
   const mandarinSheet = wb.addWorksheet("Mandarin");
+  addFathomHeader(mandarinSheet);
   mandarinSheet.columns = [
     ...contextColumns,
     { header: "Traditional Chinese", key: "traditional", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
     { header: "Simplified Chinese", key: "simplified", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
     { header: "Pinyin", key: "romanization", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
     { header: "English Meaning", key: "translation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+    { header: "Notes", key: "explanation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
   ];
-  mandarinSheet.getRow(1).font = { bold: true };
+  // Bold the header row (which is after fathom rows)
+  const mandoHeaderRow = fathomLinks.length > 0 ? 3 : 1;
+  mandarinSheet.getRow(mandoHeaderRow).font = { bold: true };
 
   for (const note of mandarinNotes) {
     const traditional = note.textOverride || note.text;
@@ -102,7 +116,8 @@ export async function exportCoachingNotes(
     const romanization =
       note.romanizationOverride || pinyin(traditional, { toneType: "symbol" });
     const translation = note.translationOverride || "";
-    const row: Record<string, string> = { traditional, simplified, romanization, translation, fathomLink: note.fathomLink };
+    const explanation = note.explanation || "";
+    const row: Record<string, string> = { traditional, simplified, romanization, translation, explanation };
     if (isMultiSession) {
       row.session = note.sessionTitle;
       row.studentEmail = note.studentEmail;
@@ -112,14 +127,17 @@ export async function exportCoachingNotes(
 
   // Cantonese tab
   const cantoneseSheet = wb.addWorksheet("Cantonese");
+  addFathomHeader(cantoneseSheet);
   cantoneseSheet.columns = [
     ...contextColumns,
     { header: "Traditional Chinese", key: "traditional", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
     { header: "Simplified Chinese", key: "simplified", width: 30 } as Partial<ExcelJS.Column> as ExcelJS.Column,
     { header: "Jyutping", key: "romanization", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
     { header: "English Meaning", key: "translation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
+    { header: "Notes", key: "explanation", width: 40 } as Partial<ExcelJS.Column> as ExcelJS.Column,
   ];
-  cantoneseSheet.getRow(1).font = { bold: true };
+  const cantoHeaderRow = fathomLinks.length > 0 ? 3 : 1;
+  cantoneseSheet.getRow(cantoHeaderRow).font = { bold: true };
 
   for (const note of cantoneseNotes) {
     const traditional = note.textOverride || note.text;
@@ -127,7 +145,8 @@ export async function exportCoachingNotes(
     const romanization =
       note.romanizationOverride || toJyutpingString(traditional);
     const translation = note.translationOverride || "";
-    const row: Record<string, string> = { traditional, simplified, romanization, translation, fathomLink: note.fathomLink };
+    const explanation = note.explanation || "";
+    const row: Record<string, string> = { traditional, simplified, romanization, translation, explanation };
     if (isMultiSession) {
       row.session = note.sessionTitle;
       row.studentEmail = note.studentEmail;

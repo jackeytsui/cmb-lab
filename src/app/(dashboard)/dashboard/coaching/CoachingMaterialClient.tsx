@@ -465,6 +465,11 @@ function NoteCard({
   const handleRomanizationChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const el = e.target;
     const raw = el.value;
+    // Only apply pinyin tone conversion for Mandarin — jyutping uses number tones as-is
+    if (noteLanguage === "zh-HK") {
+      setDraftRomanization(raw);
+      return;
+    }
     const converted = applyInlineTones(raw);
     setDraftRomanization(converted);
     // Adjust cursor if conversion shortened the string (e.g. "a1" → "ā")
@@ -474,7 +479,7 @@ function NoteCard({
         el.setSelectionRange(cursor, cursor);
       });
     }
-  }, []);
+  }, [noteLanguage]);
 
   const handleFetchTranslation = useCallback(async () => {
     const text = processed.displayText || baseText;
@@ -845,14 +850,23 @@ function NoteCard({
           {(showExplanation || (note.explanation && !canEdit)) && (
             <div className="mt-2 border-t border-border/50 pt-2">
               {canEdit && onSaveExplanation ? (
-                <textarea
-                  value={explanationDraft}
-                  onChange={(e) => handleExplanationChange(e.target.value)}
-                  onBlur={handleExplanationBlur}
-                  rows={2}
-                  className="w-full rounded-md border border-violet-500/25 bg-violet-500/5 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-y"
-                  placeholder="Add notes or explanation for this entry..."
-                />
+                <div className="space-y-1.5">
+                  <textarea
+                    value={explanationDraft}
+                    onChange={(e) => handleExplanationChange(e.target.value)}
+                    onBlur={handleExplanationBlur}
+                    rows={2}
+                    className="w-full rounded-md border border-violet-500/25 bg-violet-500/5 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-y"
+                    placeholder="Add notes or explanation for this entry..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onSaveExplanation(explanationDraft)}
+                    className="rounded-md bg-violet-500/15 border border-violet-500/25 px-2.5 py-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 transition-colors"
+                  >
+                    Save Note
+                  </button>
+                </div>
               ) : note.explanation ? (
                 <p className="text-xs text-violet-400/80 whitespace-pre-wrap leading-relaxed">
                   {note.explanation}
@@ -1642,7 +1656,7 @@ function CoachingPanel({
         }
         const data = await res.json();
         const exportSessions = (data.sessions ?? []).map(
-          (s: { title: string; studentEmail?: string; fathomLink?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string }> }) => ({
+          (s: { title: string; studentEmail?: string; fathomLink?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string; explanation?: string | null }> }) => ({
             title: s.title,
             studentEmail: s.studentEmail,
             fathomLink: s.fathomLink,
@@ -1652,6 +1666,7 @@ function CoachingPanel({
               textOverride: n.textOverride,
               romanizationOverride: n.romanizationOverride,
               translationOverride: n.translationOverride,
+              explanation: n.explanation,
             })),
           }),
         );
@@ -1785,25 +1800,7 @@ function CoachingPanel({
         </div>
       </div>
 
-      {/* GHL Session Tracking Form — coaches only, 1:1 sessions */}
-      {canWrite && sessionType === "one-on-one" && (
-        <details className="group rounded-lg border border-border bg-card">
-          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold text-foreground select-none list-none [&::-webkit-details-marker]:hidden">
-            <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-            Session Tracking Form
-          </summary>
-          <div className="px-4 pb-4">
-            <iframe
-              src="https://api.leadconnectorhq.com/widget/form/Vy75BI6BJuB4ibQlYA8P?notrack=true"
-              width="100%"
-              height="600"
-              frameBorder="0"
-              className="rounded-md border border-border"
-              title="GHL Session Tracking Form"
-            />
-          </div>
-        </details>
-      )}
+      {/* Session Tracking Form removed — was GHL iframe */}
 
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2116,147 +2113,90 @@ function CoachingPanel({
         )}
       </div>
 
-      {/* Recording Link Section */}
+      {/* Recording + Fathom Links — single row */}
       {activeSession && (
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold text-foreground">Recording Link</h3>
-            </div>
-            {canWrite && !isEditingRecordingUrl && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRecordingUrlDraft(activeSession.recordingUrl ?? "");
-                  setIsEditingRecordingUrl(true);
-                }}
-                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-              >
-                <Pencil className="size-3 mr-1" />
-                {activeSession.recordingUrl ? "Edit" : "Add Link"}
-              </button>
-            )}
-          </div>
-          {isEditingRecordingUrl ? (
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
-                value={recordingUrlDraft}
-                onChange={(e) => setRecordingUrlDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSaveRecordingUrl();
-                  }
-                }}
-                placeholder="https://..."
-                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveRecordingUrl}
-                  disabled={isSavingRecordingUrl}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
-                >
-                  {isSavingRecordingUrl ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingRecordingUrl(false)}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Cancel
-                </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Recording Link */}
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <LinkIcon className="size-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold text-foreground">Recording</span>
+                </div>
+                {canWrite && !isEditingRecordingUrl && (
+                  <button type="button" onClick={() => { setRecordingUrlDraft(activeSession.recordingUrl ?? ""); setIsEditingRecordingUrl(true); }}
+                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                    <Pencil className="size-3" />
+                  </button>
+                )}
               </div>
+              {isEditingRecordingUrl ? (
+                <div className="flex gap-1.5">
+                  <input value={recordingUrlDraft} onChange={(e) => setRecordingUrlDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSaveRecordingUrl(); } }}
+                    placeholder="https://..." className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30" />
+                  <button type="button" onClick={handleSaveRecordingUrl} disabled={isSavingRecordingUrl}
+                    className="rounded-md border border-input bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50">
+                    {isSavingRecordingUrl ? "..." : "Save"}
+                  </button>
+                  <button type="button" onClick={() => setIsEditingRecordingUrl(false)}
+                    className="rounded-md border border-input bg-background px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              ) : activeSession.recordingUrl ? (
+                <a href={activeSession.recordingUrl} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all">
+                  <ExternalLink className="size-3 shrink-0" />
+                  <span className="truncate">{activeSession.recordingUrl}</span>
+                </a>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">No link added</p>
+              )}
             </div>
-          ) : activeSession.recordingUrl ? (
-            <a
-              href={activeSession.recordingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
-            >
-              <ExternalLink className="size-3.5 shrink-0" />
-              {activeSession.recordingUrl}
-            </a>
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground">
-              No recording link added yet.
-            </p>
-          )}
-        </div>
-      )}
 
-      {/* Fathom Link Section */}
-      {activeSession && canWrite && (
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold text-foreground">Fathom Link</h3>
-            </div>
-            {!isEditingFathomLink && (
-              <button
-                type="button"
-                onClick={() => {
-                  setFathomLinkDraft(activeSession.fathomLink ?? "");
-                  setIsEditingFathomLink(true);
-                }}
-                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-              >
-                <Pencil className="size-3 mr-1" />
-                {activeSession.fathomLink ? "Edit" : "Add Link"}
-              </button>
+            {/* Fathom Link */}
+            {canWrite && (
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <LinkIcon className="size-3.5 text-muted-foreground" />
+                    <span className="text-xs font-semibold text-foreground">Fathom</span>
+                  </div>
+                  {!isEditingFathomLink && (
+                    <button type="button" onClick={() => { setFathomLinkDraft(activeSession.fathomLink ?? ""); setIsEditingFathomLink(true); }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                      <Pencil className="size-3" />
+                    </button>
+                  )}
+                </div>
+                {isEditingFathomLink ? (
+                  <div className="flex gap-1.5">
+                    <input value={fathomLinkDraft} onChange={(e) => setFathomLinkDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSaveFathomLink(); } }}
+                      placeholder="https://fathom.video/..." className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30" />
+                    <button type="button" onClick={handleSaveFathomLink} disabled={isSavingFathomLink}
+                      className="rounded-md border border-input bg-background px-2 py-1 text-[10px] font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50">
+                      {isSavingFathomLink ? "..." : "Save"}
+                    </button>
+                    <button type="button" onClick={() => setIsEditingFathomLink(false)}
+                      className="rounded-md border border-input bg-background px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                      Cancel
+                    </button>
+                  </div>
+                ) : activeSession.fathomLink ? (
+                  <a href={activeSession.fathomLink} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all">
+                    <ExternalLink className="size-3 shrink-0" />
+                    <span className="truncate">{activeSession.fathomLink}</span>
+                  </a>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground">No link added</p>
+                )}
+              </div>
             )}
           </div>
-          {isEditingFathomLink ? (
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
-                value={fathomLinkDraft}
-                onChange={(e) => setFathomLinkDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSaveFathomLink();
-                  }
-                }}
-                placeholder="https://fathom.video/..."
-                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveFathomLink}
-                  disabled={isSavingFathomLink}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
-                >
-                  {isSavingFathomLink ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingFathomLink(false)}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : activeSession.fathomLink ? (
-            <a
-              href={activeSession.fathomLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
-            >
-              <ExternalLink className="size-3.5 shrink-0" />
-              {activeSession.fathomLink}
-            </a>
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground">
-              No fathom link added yet.
-            </p>
-          )}
         </div>
       )}
 
@@ -2397,9 +2337,9 @@ function CoachingPanel({
                 }
               }}
               disabled={!activeSession || !canWrite}
-              rows={5}
+              rows={1}
               placeholder="Paste or type Traditional Chinese here..."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 pr-16 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 pr-16 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
               />
               {canWrite && (
                 <button
@@ -2682,9 +2622,9 @@ function CoachingPanel({
                 }
               }}
               disabled={!activeSession || !canWrite}
-              rows={5}
+              rows={1}
               placeholder="Paste or type Traditional Chinese here..."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 pr-16 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 pr-16 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
               />
               {canWrite && (
                 <button
