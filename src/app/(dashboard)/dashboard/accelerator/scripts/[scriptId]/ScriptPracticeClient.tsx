@@ -196,7 +196,7 @@ export default function ScriptPracticeClient({
   );
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-3xl space-y-6 pb-28">
+    <div className="container mx-auto px-4 py-8 max-w-3xl space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <Link
@@ -279,8 +279,8 @@ export default function ScriptPracticeClient({
         </button>
       </div>
 
-      {/* Conversation lines — split Cantonese | Mandarin */}
-      <div className="space-y-4">
+      {/* Conversation lines — chat-style alignment */}
+      <div className="space-y-5">
         {lines.map((line, idx) => {
           const isSpeaker = line.role === "speaker";
           const roleName = isSpeaker ? script.speakerRole : script.responderRole;
@@ -290,9 +290,18 @@ export default function ScriptPracticeClient({
           const isMandoHighlighted = playingAllLang === "mandarin" && playingAllIndex === idx;
 
           return (
-            <div key={line.id} className="space-y-2">
-              {/* English + role label */}
-              <div className="flex items-center gap-2 px-1">
+            <div
+              key={line.id}
+              className={cn(
+                "space-y-2 max-w-[92%] sm:max-w-[85%]",
+                isSpeaker ? "mr-auto" : "ml-auto"
+              )}
+            >
+              {/* Role label + English */}
+              <div className={cn(
+                "flex items-center gap-2 px-1",
+                !isSpeaker && "justify-end"
+              )}>
                 <span className={cn(
                   "text-[10px] uppercase tracking-wider font-bold",
                   isSpeaker ? "text-amber-500" : "text-sky-500"
@@ -308,7 +317,7 @@ export default function ScriptPracticeClient({
               {/* Split card: Cantonese | Mandarin */}
               <div className={cn(
                 "rounded-xl border-2 overflow-hidden grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border",
-                isSpeaker ? "border-amber-500/30" : "border-border",
+                isSpeaker ? "border-amber-500/30 bg-amber-500/[0.02]" : "border-sky-500/30 bg-sky-500/[0.02]",
                 (isCantoHighlighted || isMandoHighlighted) && "ring-2 ring-cyan-500/40"
               )}>
                 <LangBubble
@@ -330,7 +339,10 @@ export default function ScriptPracticeClient({
               </div>
 
               {/* Self-check */}
-              <div className="flex items-center gap-3 px-1">
+              <div className={cn(
+                "flex items-center gap-3 px-1",
+                !isSpeaker && "justify-end"
+              )}>
                 {lineRating ? (
                   <span className={cn(
                     "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full",
@@ -369,8 +381,9 @@ export default function ScriptPracticeClient({
       </div>
 
       {/* Sticky bottom bar — Previous / progress / Next */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="container mx-auto max-w-3xl flex items-center justify-between px-4 py-3">
+      {/* Uses sticky instead of fixed because <main> has overflow-auto creating its own scroll context */}
+      <div className="sticky bottom-0 z-40 -mx-4 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="max-w-3xl mx-auto flex items-center justify-between px-4 py-3">
           {prevScriptId ? (
             <Link href={`/dashboard/accelerator/scripts/${prevScriptId}`}>
               <Button variant="outline" className="gap-2">
