@@ -200,7 +200,7 @@ export async function synthesizeSpeechElevenLabs(
         body: JSON.stringify({
           text,
           model_id: "eleven_multilingual_v2",
-          language_code: "zh",
+          language_code: "yue",
           voice_settings: { stability, similarity_boost: similarityBoost, speed },
         }),
         signal: controller.signal,
