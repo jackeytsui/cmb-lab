@@ -114,8 +114,9 @@ export async function exportCoachingNotes(
   for (const note of mandarinNotes) {
     const traditional = note.textOverride || note.text;
     const simplified = simplifiedMap.get(traditional) ?? traditional;
+    // Use simplified text for pinyin generation — traditional chars can give wrong readings
     const romanization =
-      note.romanizationOverride || pinyin(traditional, { toneType: "symbol" });
+      note.romanizationOverride || pinyin(simplified, { toneType: "symbol" });
     const translation = note.translationOverride || "";
     const explanation = note.explanation || "";
     const row: Record<string, string> = { traditional, simplified, romanization, translation, explanation };

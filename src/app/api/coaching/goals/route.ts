@@ -76,7 +76,11 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  const updates: Record<string, string | null> = {};
+  const updates: Partial<{
+    coachingGoals: string | null;
+    coachingLevel: string | null;
+    coachingLessonNumber: string | null;
+  }> = {};
   if ("goals" in body) updates.coachingGoals = body.goals?.trim() || null;
   if ("level" in body) updates.coachingLevel = body.level?.trim() || null;
   if ("lessonNumber" in body) updates.coachingLessonNumber = body.lessonNumber?.trim() || null;

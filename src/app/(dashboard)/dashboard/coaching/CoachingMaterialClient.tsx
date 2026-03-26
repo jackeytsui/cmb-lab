@@ -861,7 +861,12 @@ function NoteCard({
                   />
                   <button
                     type="button"
-                    onClick={() => onSaveExplanation(explanationDraft)}
+                    onClick={(e) => {
+                      onSaveExplanation(explanationDraft);
+                      const btn = e.currentTarget;
+                      btn.textContent = "Saved!";
+                      setTimeout(() => { btn.textContent = "Save Note"; }, 1500);
+                    }}
                     className="rounded-md bg-violet-500/15 border border-violet-500/25 px-2.5 py-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 transition-colors"
                   >
                     Save Note
@@ -1033,13 +1038,15 @@ function CoachingPanel({
     if (!goalsStudentEmail) return;
     setIsSavingLevel(true);
     try {
-      await fetch("/api/coaching/goals", {
+      const res = await fetch("/api/coaching/goals", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ studentEmail: goalsStudentEmail, level, lessonNumber }),
       });
-      setStudentLevel(level);
-      setStudentLessonNumber(lessonNumber);
+      if (res.ok) {
+        setStudentLevel(level);
+        setStudentLessonNumber(lessonNumber);
+      }
     } catch {
       // ignore
     } finally {
@@ -1808,7 +1815,7 @@ function CoachingPanel({
               {/* Level + Lesson card */}
               <div className="rounded-lg border border-indigo-500/25 bg-gradient-to-br from-indigo-500/10 to-violet-500/10 dark:from-indigo-500/[0.07] dark:to-violet-500/[0.07] p-3.5">
                 <h3 className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-2">
-                  Current Level
+                  Current Progress
                 </h3>
                 {canWrite ? (
                   <div className="space-y-2">
