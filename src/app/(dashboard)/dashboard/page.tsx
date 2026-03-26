@@ -24,6 +24,7 @@ import { hasMinimumRole } from "@/lib/auth";
 import { StudyTodayCard } from "@/components/dashboard/StudyTodayCard";
 import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
+import { getUserFeatureTagOverrides, applyFeatureTagOverrides } from "@/lib/tag-feature-access";
 
 /**
  * Dashboard page - shows courses the authenticated user has access to.
@@ -87,6 +88,13 @@ export default async function DashboardPage() {
 
     if (dbUser.role === "student") {
       await ensureDefaultStudentRoleAssignment(dbUser.id);
+      // Resolve features with tag overrides to pick the right landing page
+      const perms = await resolvePermissions(dbUser.id);
+      const overrides = await getUserFeatureTagOverrides(dbUser.id);
+      const features = applyFeatureTagOverrides(perms.features, overrides);
+      if (features.has("mandarin_accelerator") && !features.has("dictionary_reader")) {
+        redirect("/dashboard/accelerator");
+      }
       redirect("/dashboard/reader");
     }
 
