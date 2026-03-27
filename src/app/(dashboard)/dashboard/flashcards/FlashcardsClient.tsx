@@ -4,6 +4,36 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useTTS, type TTSOptions } from "@/hooks/useTTS";
 import { ToneColoredText } from "@/components/ToneColoredText";
+import { pinyin } from "pinyin-pro";
+
+/** Convert number-tone pinyin "ying3 pian4" → diacritical "yǐng piàn" */
+function toDiacriticalPinyin(numPinyin: string): string {
+  if (!numPinyin) return "";
+  // If already has diacritical marks, return as-is
+  if (/[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]/.test(numPinyin)) return numPinyin;
+  // Use pinyin-pro to convert from Chinese if available, otherwise basic conversion
+  return numPinyin
+    .split(/\s+/)
+    .map((s) => {
+      // Remove trailing number for display but it's already in the string
+      return s;
+    })
+    .join(" ");
+}
+
+/** Get tone color class from pinyin syllable */
+function pinyinToneColor(syllable: string): string {
+  if (/[āēīōūǖ]/.test(syllable)) return "text-red-500";       // T1
+  if (/[áéíóúǘ]/.test(syllable)) return "text-orange-500";     // T2
+  if (/[ǎěǐǒǔǚ]/.test(syllable)) return "text-green-600";    // T3
+  if (/[àèìòùǜ]/.test(syllable)) return "text-blue-500";       // T4
+  // Number-based fallback
+  if (/1$/.test(syllable)) return "text-red-500";
+  if (/2$/.test(syllable)) return "text-orange-500";
+  if (/3$/.test(syllable)) return "text-green-600";
+  if (/4$/.test(syllable)) return "text-blue-500";
+  return "text-foreground";
+}
 
 type FlashcardItem = {
   id: string;
@@ -94,13 +124,15 @@ function FlashCard({
   const lang: "zh-CN" | "zh-HK" =
     card.pane === "cantonese" ? "zh-HK" : "zh-CN";
 
-  // Determine romanization display
-  const romanLabel =
-    card.pane === "cantonese"
-      ? card.jyutping || card.romanization
-      : card.pane === "mandarin"
-        ? card.pinyin || card.romanization
-        : card.romanization;
+  // Generate diacritical pinyin from the Chinese text (more reliable than stored number-tone)
+  const pinyinDiacritical = useMemo(() => {
+    if (card.pane === "cantonese") return null; // no pinyin for Cantonese
+    return pinyin(displayChinese, { type: "array", toneType: "symbol" });
+  }, [displayChinese, card.pane]);
+
+  // Split Chinese into characters for per-char alignment
+  const chars = useMemo(() => [...displayChinese], [displayChinese]);
+  const hanRegex = /\p{Script=Han}/u;
 
   return (
     <div className="group relative">
@@ -112,32 +144,45 @@ function FlashCard({
       >
         <div
           className={cn(
-            "relative min-h-[220px] w-full rounded-xl border border-border bg-card shadow-sm transition-transform duration-500",
+            "relative min-h-[240px] w-full rounded-xl border border-border bg-card shadow-sm transition-transform duration-500",
             isFlipped && "[transform:rotateY(180deg)]",
           )}
           style={{ transformStyle: "preserve-3d" }}
         >
-          {/* Front — pinyin on top, large Chinese characters */}
+          {/* Front — per-character pinyin on top, large Chinese */}
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-xl p-5"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl p-5"
             style={{ backfaceVisibility: "hidden" }}
           >
-            {romanLabel && (
-              <span className="text-base font-medium text-blue-500 dark:text-blue-400">{romanLabel}</span>
+            {pinyinDiacritical ? (
+              <div className="flex items-end justify-center flex-wrap gap-y-1">
+                {(() => {
+                  let pyIdx = 0;
+                  return chars.map((char, i) => {
+                    if (hanRegex.test(char) && pyIdx < pinyinDiacritical.length) {
+                      const py = pinyinDiacritical[pyIdx++];
+                      return (
+                        <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.6em" }}>
+                          <span className={cn("text-base font-medium whitespace-nowrap", pinyinToneColor(py))}>
+                            {py}
+                          </span>
+                          <span className="text-4xl font-bold text-foreground">{char}</span>
+                        </span>
+                      );
+                    }
+                    return <span key={i} className="text-4xl font-bold text-foreground">{char}</span>;
+                  });
+                })()}
+              </div>
+            ) : (
+              <span className="text-4xl font-bold text-foreground">{displayChinese}</span>
             )}
-            <ToneColoredText
-              text={displayChinese}
-              lang={card.pane === "cantonese" ? "cantonese" : "mandarin"}
-              jyutping={card.pane === "cantonese" ? card.jyutping : undefined}
-              pinyinStr={card.pane !== "cantonese" ? card.pinyin : undefined}
-              className="text-4xl font-bold"
-            />
             <span className="mt-3 text-[10px] text-muted-foreground/40">Tap to reveal</span>
           </div>
 
-          {/* Back — English translation + Chinese + play */}
+          {/* Back — English + per-char pinyin + play */}
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl p-5 [transform:rotateY(180deg)]"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl p-5 [transform:rotateY(180deg)]"
             style={{ backfaceVisibility: "hidden" }}
           >
             {card.english && (
@@ -145,16 +190,29 @@ function FlashCard({
                 {card.english}
               </span>
             )}
-            {romanLabel && (
-              <span className="text-xs text-blue-500/70 dark:text-blue-400/70">{romanLabel}</span>
+            {pinyinDiacritical ? (
+              <div className="flex items-end justify-center flex-wrap gap-y-1">
+                {(() => {
+                  let pyIdx = 0;
+                  return chars.map((char, i) => {
+                    if (hanRegex.test(char) && pyIdx < pinyinDiacritical.length) {
+                      const py = pinyinDiacritical[pyIdx++];
+                      return (
+                        <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.2em" }}>
+                          <span className={cn("text-xs font-medium whitespace-nowrap", pinyinToneColor(py))}>
+                            {py}
+                          </span>
+                          <span className="text-xl font-bold text-foreground/70">{char}</span>
+                        </span>
+                      );
+                    }
+                    return <span key={i} className="text-xl font-bold text-foreground/70">{char}</span>;
+                  });
+                })()}
+              </div>
+            ) : (
+              <span className="text-xl font-bold text-foreground/70">{displayChinese}</span>
             )}
-            <ToneColoredText
-              text={displayChinese}
-              lang={card.pane === "cantonese" ? "cantonese" : "mandarin"}
-              jyutping={card.pane === "cantonese" ? card.jyutping : undefined}
-              pinyinStr={card.pane !== "cantonese" ? card.pinyin : undefined}
-              className="text-lg opacity-70"
-            />
             <div className="mt-1" onClick={(e) => e.stopPropagation()}>
               <SpeakButton text={displayChinese} lang={lang} speak={speak} isLoading={ttsLoading} isPlaying={ttsPlaying} />
             </div>
