@@ -97,26 +97,36 @@ function LangBubble({
   onPlay: () => void;
   isPlaying: boolean;
 }) {
-  // Split romanisation into syllables and align with Han characters
-  const syllables = romanisation.split(/[\s,]+/).filter(Boolean);
-  const chars = [...text];
+  // Split text into segments: Han characters get romanization, [brackets] stay as blocks
   const hanRegex = /\p{Script=Han}/u;
+  const bracketRegex = /\[[^\]]+\]/g;
 
-  // Build aligned pairs: each Han character gets a syllable
-  let syllableIdx = 0;
-  const aligned: Array<{ char: string; syllable: string | null; isHan: boolean }> = [];
-  for (const char of chars) {
-    if (hanRegex.test(char) && syllableIdx < syllables.length) {
-      // Skip bracket content in syllables (e.g. "[your", "name]")
-      while (syllableIdx < syllables.length && /^\[|]$/.test(syllables[syllableIdx])) {
-        syllableIdx++;
-      }
-      aligned.push({ char, syllable: syllables[syllableIdx] ?? null, isHan: true });
-      syllableIdx++;
-    } else {
-      aligned.push({ char, syllable: null, isHan: false });
+  // Split romanisation syllables, filtering out bracket content
+  const syllables = romanisation
+    .replace(bracketRegex, " ")
+    .split(/[\s,]+/)
+    .filter(Boolean);
+
+  // Split text into tokens: bracketed placeholders as whole units, everything else char-by-char
+  const tokens: Array<{ text: string; type: "han" | "bracket" | "other" }> = [];
+  let lastIdx = 0;
+  for (const match of text.matchAll(bracketRegex)) {
+    // Characters before the bracket
+    const before = text.slice(lastIdx, match.index);
+    for (const char of [...before]) {
+      tokens.push({ text: char, type: hanRegex.test(char) ? "han" : "other" });
     }
+    // The bracket as a single token
+    tokens.push({ text: match[0], type: "bracket" });
+    lastIdx = match.index! + match[0].length;
   }
+  // Remaining characters after last bracket
+  for (const char of [...text.slice(lastIdx)]) {
+    tokens.push({ text: char, type: hanRegex.test(char) ? "han" : "other" });
+  }
+
+  // Assign syllables to Han tokens
+  let syllableIdx = 0;
 
   return (
     <div className="flex-1 p-4 space-y-2">
@@ -125,18 +135,31 @@ function LangBubble({
       </span>
       {/* Per-character aligned romanization + Chinese */}
       <div className="flex items-end flex-wrap gap-y-1">
-        {aligned.map((item, i) => (
-          item.isHan && item.syllable ? (
-            <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.4em" }}>
-              <span className={cn("text-[11px] leading-tight whitespace-nowrap", getToneColor(item.syllable, lang))}>
-                {item.syllable}
+        {tokens.map((token, i) => {
+          if (token.type === "han" && syllableIdx < syllables.length) {
+            const syllable = syllables[syllableIdx++];
+            return (
+              <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.4em" }}>
+                <span className={cn("text-[11px] leading-tight whitespace-nowrap", getToneColor(syllable, lang))}>
+                  {syllable}
+                </span>
+                <span className="text-lg font-medium text-foreground">{token.text}</span>
               </span>
-              <span className="text-lg font-medium text-foreground">{item.char}</span>
-            </span>
-          ) : (
-            <span key={i} className="text-lg font-medium text-foreground">{item.char}</span>
-          )
-        ))}
+            );
+          }
+          if (token.type === "bracket") {
+            // Render placeholder as a styled inline block with proper spacing
+            return (
+              <span key={i} className="inline-flex flex-col items-center mx-0.5">
+                <span className="text-[11px] leading-tight text-transparent">.</span>
+                <span className="text-sm font-medium text-muted-foreground/50 italic">{token.text}</span>
+              </span>
+            );
+          }
+          return (
+            <span key={i} className="text-lg font-medium text-foreground">{token.text}</span>
+          );
+        })}
       </div>
       <button
         type="button"

@@ -849,28 +849,37 @@ function NoteCard({
           {/* Explanation / notes section */}
           {(showExplanation || (note.explanation && !canEdit)) && (
             <div className="mt-2 border-t border-border/50 pt-2">
-              {canEdit && onSaveExplanation ? (
+              {canEdit && onSaveExplanation && showExplanation ? (
                 <div className="space-y-1.5">
                   <textarea
                     value={explanationDraft}
-                    onChange={(e) => handleExplanationChange(e.target.value)}
-                    onBlur={handleExplanationBlur}
+                    onChange={(e) => setExplanationDraft(e.target.value)}
                     rows={2}
                     className="w-full rounded-md border border-violet-500/25 bg-violet-500/5 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-y"
                     placeholder="Add notes or explanation for this entry..."
                   />
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      onSaveExplanation(explanationDraft);
-                      const btn = e.currentTarget;
-                      btn.textContent = "Saved!";
-                      setTimeout(() => { btn.textContent = "Save Note"; }, 1500);
-                    }}
-                    className="rounded-md bg-violet-500/15 border border-violet-500/25 px-2.5 py-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 transition-colors"
-                  >
-                    Save Note
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSaveExplanation(explanationDraft);
+                        setShowExplanation(false);
+                      }}
+                      className="rounded-md bg-violet-500 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-violet-600 transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExplanationDraft(note.explanation ?? "");
+                        setShowExplanation(false);
+                      }}
+                      className="rounded-md border border-input bg-background px-2.5 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               ) : note.explanation ? (
                 <p className="text-xs text-violet-400/80 whitespace-pre-wrap leading-relaxed">
