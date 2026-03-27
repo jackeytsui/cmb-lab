@@ -112,45 +112,48 @@ function FlashCard({
       >
         <div
           className={cn(
-            "relative min-h-[150px] w-full rounded-lg border border-border bg-card shadow-sm transition-transform duration-500",
+            "relative min-h-[220px] w-full rounded-xl border border-border bg-card shadow-sm transition-transform duration-500",
             isFlipped && "[transform:rotateY(180deg)]",
           )}
           style={{ transformStyle: "preserve-3d" }}
         >
-          {/* Front — pinyin + Chinese characters */}
+          {/* Front — pinyin on top, large Chinese characters */}
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg p-4"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-xl p-5"
             style={{ backfaceVisibility: "hidden" }}
           >
             {romanLabel && (
-              <span className="text-sm font-medium text-muted-foreground">{romanLabel}</span>
+              <span className="text-base font-medium text-blue-500 dark:text-blue-400">{romanLabel}</span>
             )}
             <ToneColoredText
               text={displayChinese}
               lang={card.pane === "cantonese" ? "cantonese" : "mandarin"}
               jyutping={card.pane === "cantonese" ? card.jyutping : undefined}
               pinyinStr={card.pane !== "cantonese" ? card.pinyin : undefined}
-              className="text-2xl font-bold"
+              className="text-4xl font-bold"
             />
-            <span className="mt-2 text-[10px] text-muted-foreground/50">Tap to reveal</span>
+            <span className="mt-3 text-[10px] text-muted-foreground/40">Tap to reveal</span>
           </div>
 
-          {/* Back — English translation + play button */}
+          {/* Back — English translation + Chinese + play */}
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-lg p-4 [transform:rotateY(180deg)]"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl p-5 [transform:rotateY(180deg)]"
             style={{ backfaceVisibility: "hidden" }}
           >
             {card.english && (
-              <span className="text-center text-lg font-semibold text-foreground">
+              <span className="text-center text-xl font-bold text-foreground">
                 {card.english}
               </span>
+            )}
+            {romanLabel && (
+              <span className="text-xs text-blue-500/70 dark:text-blue-400/70">{romanLabel}</span>
             )}
             <ToneColoredText
               text={displayChinese}
               lang={card.pane === "cantonese" ? "cantonese" : "mandarin"}
               jyutping={card.pane === "cantonese" ? card.jyutping : undefined}
               pinyinStr={card.pane !== "cantonese" ? card.pinyin : undefined}
-              className="text-sm opacity-60"
+              className="text-lg opacity-70"
             />
             <div className="mt-1" onClick={(e) => e.stopPropagation()}>
               <SpeakButton text={displayChinese} lang={lang} speak={speak} isLoading={ttsLoading} isPlaying={ttsPlaying} />
