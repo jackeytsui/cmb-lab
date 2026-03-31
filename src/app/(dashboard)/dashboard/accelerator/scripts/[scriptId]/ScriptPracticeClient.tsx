@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Play,
@@ -13,6 +13,8 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTTS, type TTSOptions } from "@/hooks/useTTS";
+import { pinyin } from "pinyin-pro";
+import ToJyutping from "to-jyutping";
 import {
   extractToneFromPinyin,
   extractToneFromJyutping,
@@ -89,12 +91,23 @@ function LangBubble({
   onPlay: () => void;
   isPlaying: boolean;
 }) {
+  // Auto-generate romanisation if DB value is empty
+  const effectiveRomanisation = useMemo(() => {
+    if (romanisation) return romanisation;
+    if (!text) return "";
+    if (lang === "cantonese") {
+      const list = ToJyutping.getJyutpingList(text);
+      return list?.map(([, jp]) => jp ?? "").join(" ").trim() || "";
+    }
+    return pinyin(text, { toneType: "symbol" });
+  }, [romanisation, text, lang]);
+
   // Split text into segments: Han characters get romanization, [brackets] stay as blocks
   const hanRegex = /\p{Script=Han}/u;
   const bracketRegex = /\[[^\]]+\]/g;
 
   // Split romanisation syllables, filtering out bracket content
-  const syllables = romanisation
+  const syllables = effectiveRomanisation
     .replace(bracketRegex, " ")
     .split(/[\s,]+/)
     .filter(Boolean);

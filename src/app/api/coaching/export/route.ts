@@ -1,24 +1,13 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { coachingSessions, coachingNotes, users } from "@/db/schema";
+import { coachingSessions, coachingNotes } from "@/db/schema";
 import { eq, desc, inArray, ilike, and } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 
 // Allow up to 60s for translation (Vercel serverless default is 10s)
 export const maxDuration = 60;
-
-async function getCurrentDbUser() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, role: true, email: true },
-  });
-  return dbUser ?? null;
-}
 
 // ---------------------------------------------------------------------------
 // Server-side batch translation
@@ -102,12 +91,12 @@ async function translateTexts(
 // ---------------------------------------------------------------------------
 
 export async function GET(request: Request) {
-  const dbUser = await getCurrentDbUser();
+  const dbUser = await getRealUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const isCoachOrAdmin = await hasMinimumRole("coach");
+  const isCoachOrAdmin = dbUser.role === "coach" || dbUser.role === "admin";
   const isStudent = !isCoachOrAdmin;
 
   // Students can only export their own sessions; coaches/admins can export any

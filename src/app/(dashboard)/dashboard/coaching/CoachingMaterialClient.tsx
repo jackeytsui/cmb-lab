@@ -15,6 +15,11 @@ import ToJyutping from "to-jyutping";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
 import { exportCoachingNotes } from "@/lib/coaching-export";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
+import {
+  extractToneFromPinyin,
+  extractToneFromJyutping,
+  getToneColorClass,
+} from "@/lib/tone-colors";
 
 async function fetchJiebaSegments(
   sentences: string[],
@@ -706,6 +711,28 @@ function NoteCard({
 
                         const hasAnySyllable = segChars.some((_, ci) => overrideMap!.has(startOffset + ci));
                         if (!hasAnySyllable) {
+                          if (toneColorsEnabled) {
+                            const chars = [...seg.text];
+                            const isCantonese = note.pane === "cantonese";
+                            return (
+                              <span key={i} data-word={seg.text} data-index={i}
+                                className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20">
+                                {chars.map((c, ci) => {
+                                  if (!/\p{Script=Han}/u.test(c)) return <span key={ci}>{c}</span>;
+                                  let toneClass = "";
+                                  if (isCantonese) {
+                                    const jp = ToJyutping.getJyutpingList(c);
+                                    const syl = jp?.[0]?.[1];
+                                    if (syl) toneClass = getToneColorClass(extractToneFromJyutping(syl), "cantonese");
+                                  } else {
+                                    const py = pinyin(c, { toneType: "num", type: "array" })[0];
+                                    if (py) toneClass = getToneColorClass(extractToneFromPinyin(py), "mandarin");
+                                  }
+                                  return <span key={ci} className={toneClass || undefined}>{c}</span>;
+                                })}
+                              </span>
+                            );
+                          }
                           return (
                             <span key={i} data-word={seg.text} data-index={i}
                               className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20">
@@ -722,6 +749,11 @@ function NoteCard({
                               {segChars.map((char, ci) => {
                                 const syllable = overrideMap!.get(startOffset + ci);
                                 if (syllable) {
+                                  const toneClass = toneColorsEnabled
+                                    ? (showJyutping
+                                        ? getToneColorClass(extractToneFromJyutping(syllable), "cantonese")
+                                        : getToneColorClass(extractToneFromPinyin(syllable), "mandarin"))
+                                    : "";
                                   return (
                                     <span key={ci} className="inline-flex flex-col items-center" style={{ minWidth: "1.1em" }}>
                                       <span
@@ -730,7 +762,7 @@ function NoteCard({
                                       >
                                         {syllable}
                                       </span>
-                                      <span>{char}</span>
+                                      <span className={toneClass || undefined}>{char}</span>
                                     </span>
                                   );
                                 }
@@ -753,6 +785,7 @@ function NoteCard({
                           showJyutping={!note.romanizationOverride && showJyutping}
                           showEnglish={false}
                           fontSize={fontSize}
+                          toneColorsEnabled={toneColorsEnabled}
                         />
                       );
                     })}
