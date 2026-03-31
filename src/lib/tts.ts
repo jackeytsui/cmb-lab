@@ -140,9 +140,9 @@ export function buildCacheKey(
   voice: string,
   rate: string
 ): string {
-  // v2: bust cache after placeholder pause fix
+  // v3: bust cache for placeholder + tone fixes
   const hash = createHash("md5").update(text).digest("hex");
-  return `tts:v2:${language}:${voice}:${rate}:${hash}`;
+  return `tts:v3:${language}:${voice}:${rate}:${hash}`;
 }
 
 /**
