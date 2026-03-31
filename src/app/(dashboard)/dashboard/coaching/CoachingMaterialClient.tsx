@@ -422,6 +422,7 @@ function NoteCard({
   const [isCopyingOver, setIsCopyingOver] = useState(false);
   const [showExplanation, setShowExplanation] = useState(!!note.explanation);
   const [explanationDraft, setExplanationDraft] = useState(note.explanation ?? "");
+  const [savedExplanation, setSavedExplanation] = useState<string | null>(note.explanation ?? null);
   const explanationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const defaultRomanization = useMemo(() => {
@@ -847,7 +848,7 @@ function NoteCard({
             />
           )}
           {/* Explanation / notes section */}
-          {(showExplanation || (note.explanation && !canEdit)) && (
+          {(showExplanation || ((savedExplanation || note.explanation) && !canEdit) || (savedExplanation && !showExplanation)) && (
             <div className="mt-2 border-t border-border/50 pt-2">
               {canEdit && onSaveExplanation && showExplanation ? (
                 <div className="space-y-1.5">
@@ -863,6 +864,7 @@ function NoteCard({
                       type="button"
                       onClick={() => {
                         onSaveExplanation(explanationDraft);
+                        setSavedExplanation(explanationDraft.trim() || null);
                         setShowExplanation(false);
                       }}
                       className="rounded-md bg-violet-500 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-violet-600 transition-colors"
@@ -872,7 +874,7 @@ function NoteCard({
                     <button
                       type="button"
                       onClick={() => {
-                        setExplanationDraft(note.explanation ?? "");
+                        setExplanationDraft(savedExplanation ?? note.explanation ?? "");
                         setShowExplanation(false);
                       }}
                       className="rounded-md border border-input bg-background px-2.5 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
@@ -881,9 +883,9 @@ function NoteCard({
                     </button>
                   </div>
                 </div>
-              ) : note.explanation ? (
+              ) : (savedExplanation || note.explanation) ? (
                 <p className="text-xs text-violet-400/80 whitespace-pre-wrap leading-relaxed">
-                  {note.explanation}
+                  {savedExplanation || note.explanation}
                 </p>
               ) : null}
             </div>
@@ -1411,6 +1413,9 @@ function CoachingPanel({
   useEffect(() => {
     if (!user) return;
     fetchSessions();
+    // Auto-refresh sessions every 15 seconds for near-real-time sync
+    const interval = setInterval(fetchSessions, 15000);
+    return () => clearInterval(interval);
   }, [fetchSessions, user]);
 
   const updateSession = useCallback(
@@ -1438,8 +1443,13 @@ function CoachingPanel({
       }),
     });
     if (!res.ok) return;
+    const data = await res.json();
     trackAction("create_session");
     await fetchSessions();
+    // Auto-navigate to the newly created session
+    if (data.session?.id) {
+      setActiveSessionId(data.session.id);
+    }
   }, [canAddSession, sessionType, studentEmailFilter, fetchSessions, trackAction]);
 
   const handleLinkStudentEmail = useCallback(async () => {
