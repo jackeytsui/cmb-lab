@@ -1871,6 +1871,9 @@ function CoachingPanel({
                       <option value="CMB Foundation">CMB Foundation</option>
                       <option value="CMB Intermediate">CMB Intermediate</option>
                       <option value="CMB Advanced">CMB Advanced</option>
+                      <option value="Completed CMB">Completed CMB</option>
+                      <option value="Canto Kickstarter">Canto Kickstarter</option>
+                      <option value="Completed Canto Kickstarter">Completed Canto Kickstarter</option>
                     </select>
                     <input
                       value={levelDraftLesson}
