@@ -5,34 +5,12 @@ import { cn } from "@/lib/utils";
 import { useTTS, type TTSOptions } from "@/hooks/useTTS";
 import { ToneColoredText } from "@/components/ToneColoredText";
 import { pinyin } from "pinyin-pro";
+import { extractToneFromPinyin, getToneColorClass } from "@/lib/tone-colors";
 
-/** Convert number-tone pinyin "ying3 pian4" → diacritical "yǐng piàn" */
-function toDiacriticalPinyin(numPinyin: string): string {
-  if (!numPinyin) return "";
-  // If already has diacritical marks, return as-is
-  if (/[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]/.test(numPinyin)) return numPinyin;
-  // Use pinyin-pro to convert from Chinese if available, otherwise basic conversion
-  return numPinyin
-    .split(/\s+/)
-    .map((s) => {
-      // Remove trailing number for display but it's already in the string
-      return s;
-    })
-    .join(" ");
-}
-
-/** Get tone color class from pinyin syllable */
+/** Get Pleco-style tone color from pinyin syllable */
 function pinyinToneColor(syllable: string): string {
-  if (/[āēīōūǖ]/.test(syllable)) return "text-red-500";       // T1
-  if (/[áéíóúǘ]/.test(syllable)) return "text-orange-500";     // T2
-  if (/[ǎěǐǒǔǚ]/.test(syllable)) return "text-green-600";    // T3
-  if (/[àèìòùǜ]/.test(syllable)) return "text-blue-500";       // T4
-  // Number-based fallback
-  if (/1$/.test(syllable)) return "text-red-500";
-  if (/2$/.test(syllable)) return "text-orange-500";
-  if (/3$/.test(syllable)) return "text-green-600";
-  if (/4$/.test(syllable)) return "text-blue-500";
-  return "text-foreground";
+  const tone = extractToneFromPinyin(syllable);
+  return tone > 0 ? getToneColorClass(tone, "mandarin") : "text-foreground";
 }
 
 type FlashcardItem = {

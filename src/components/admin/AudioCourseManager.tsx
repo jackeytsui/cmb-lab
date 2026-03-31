@@ -20,6 +20,8 @@ import {
   EyeOff,
   Shield,
   ListChecks,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExerciseForm } from "@/components/admin/exercises/ExerciseForm";
@@ -704,29 +706,69 @@ export function AudioCourseManager() {
             Series
           </p>
           <div className="space-y-2">
-            {series.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => { setActiveSeriesId(item.id); setSelectedLessonIds([]); }}
-                className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                  item.id === activeSeriesId
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:border-primary/40"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <p className="font-medium text-foreground">{item.title}</p>
-                  {item.isPublished ? (
-                    <span className="text-[10px] font-medium text-green-400">LIVE</span>
-                  ) : (
-                    <span className="text-[10px] font-medium text-zinc-500">DRAFT</span>
-                  )}
+            {series.map((item, idx) => (
+              <div key={item.id} className="flex items-center gap-1">
+                {/* Move up/down */}
+                <div className="flex flex-col gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    disabled={idx === 0}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const newOrder = [...series];
+                      [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+                      setSeries(newOrder);
+                      await fetch("/api/admin/audio-course", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ order: newOrder.map((s, i) => ({ id: s.id, sortOrder: i })) }),
+                      });
+                    }}
+                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                  >
+                    <ArrowUp className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={idx === series.length - 1}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const newOrder = [...series];
+                      [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+                      setSeries(newOrder);
+                      await fetch("/api/admin/audio-course", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ order: newOrder.map((s, i) => ({ id: s.id, sortOrder: i })) }),
+                      });
+                    }}
+                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors"
+                  >
+                    <ArrowDown className="w-3 h-3" />
+                  </button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {item.lessons.length} lesson{item.lessons.length !== 1 ? "s" : ""}
-                </p>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => { setActiveSeriesId(item.id); setSelectedLessonIds([]); }}
+                  className={`flex-1 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                    item.id === activeSeriesId
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary/40"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-foreground">{item.title}</p>
+                    {item.isPublished ? (
+                      <span className="text-[10px] font-medium text-green-400">LIVE</span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-zinc-500">DRAFT</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {item.lessons.length} lesson{item.lessons.length !== 1 ? "s" : ""}
+                  </p>
+                </button>
+              </div>
             ))}
             {series.length === 0 && (
               <p className="text-xs text-muted-foreground">No audio series yet.</p>

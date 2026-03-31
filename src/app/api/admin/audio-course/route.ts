@@ -227,3 +227,33 @@ export async function POST(request: NextRequest) {
     },
   });
 }
+
+/**
+ * PATCH /api/admin/audio-course
+ * Reorder audio series. Body: { order: [{ id: string, sortOrder: number }] }
+ */
+export async function PATCH(request: Request) {
+  const hasAccess = await hasMinimumRole("admin");
+  if (!hasAccess) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const { order } = body as { order?: Array<{ id: string; sortOrder: number }> };
+
+  if (!order || !Array.isArray(order) || order.length === 0) {
+    return NextResponse.json({ error: "order array required" }, { status: 400 });
+  }
+
+  try {
+    await Promise.all(
+      order.map((item) =>
+        db.update(courses).set({ sortOrder: item.sortOrder }).where(eq(courses.id, item.id))
+      )
+    );
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to reorder series:", error);
+    return NextResponse.json({ error: "Failed to reorder" }, { status: 500 });
+  }
+}

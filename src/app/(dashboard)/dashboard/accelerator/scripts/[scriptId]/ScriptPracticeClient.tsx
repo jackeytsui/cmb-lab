@@ -13,6 +13,11 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTTS, type TTSOptions } from "@/hooks/useTTS";
+import {
+  extractToneFromPinyin,
+  extractToneFromJyutping,
+  getToneColorClass,
+} from "@/lib/tone-colors";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,27 +62,14 @@ interface ScriptPracticeClientProps {
 // Single language bubble (used inside the split line)
 // ---------------------------------------------------------------------------
 
-// Tone color for Mandarin pinyin (by tone number in diacritical form)
+// Use central Pleco-style tone colors from @/lib/tone-colors
 function getToneColor(syllable: string, lang: "cantonese" | "mandarin"): string {
   if (lang === "cantonese") {
-    // Jyutping tone colors by number suffix
-    const match = syllable.match(/(\d)$/);
-    if (!match) return "text-foreground";
-    const tone = match[1];
-    if (tone === "1") return "text-red-500";
-    if (tone === "2") return "text-orange-500";
-    if (tone === "3") return "text-green-600";
-    if (tone === "4") return "text-blue-500";
-    if (tone === "5") return "text-purple-500";
-    if (tone === "6") return "text-amber-700 dark:text-amber-400";
-    return "text-foreground";
+    const tone = extractToneFromJyutping(syllable);
+    return tone > 0 ? getToneColorClass(tone, "cantonese") : "text-foreground";
   }
-  // Mandarin: detect by diacritical marks
-  if (/[āēīōūǖ]/.test(syllable)) return "text-red-500";       // tone 1
-  if (/[áéíóúǘ]/.test(syllable)) return "text-orange-500";     // tone 2
-  if (/[ǎěǐǒǔǚ]/.test(syllable)) return "text-green-600";    // tone 3
-  if (/[àèìòùǜ]/.test(syllable)) return "text-blue-500";       // tone 4
-  return "text-foreground"; // neutral
+  const tone = extractToneFromPinyin(syllable);
+  return tone > 0 ? getToneColorClass(tone, "mandarin") : "text-foreground";
 }
 
 function LangBubble({
