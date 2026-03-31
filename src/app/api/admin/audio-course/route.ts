@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, asc, desc, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { courses, lessons, modules } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
