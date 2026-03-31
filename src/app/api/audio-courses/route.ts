@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { courses, lessons, modules, users, studentTags } from "@/db/schema";
+import { courses, lessons, modules, users } from "@/db/schema";
 import { and, asc, inArray, isNull, eq } from "drizzle-orm";
+import { getUserContentGrants, getRestrictedContentIds } from "@/lib/tag-feature-access";
 
 /**
  * GET /api/audio-courses
@@ -24,12 +25,6 @@ export async function GET() {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const userTagRows = await db
-    .select({ tagId: studentTags.tagId })
-    .from(studentTags)
-    .where(eq(studentTags.userId, dbUser.id));
-  const userTagIds = new Set(userTagRows.map((r) => r.tagId));
-
   const courseRows = await db
     .select()
     .from(courses)
@@ -46,26 +41,31 @@ export async function GET() {
     }
   });
 
-  // Filter by visibility — admins/coaches see everything
+  // Filter by visibility using tag_content_grants
   const isStaff = dbUser.role === "admin" || dbUser.role === "coach";
-  const visibleCourses = isStaff
-    ? audioCourses
-    : audioCourses.filter((course) => {
-        try {
-          const meta = JSON.parse(course.description ?? "{}");
-          const tagIds: string[] = Array.isArray(meta.allowedTagIds) ? meta.allowedTagIds : [];
-          const userIds: string[] = Array.isArray(meta.allowedUserIds) ? meta.allowedUserIds : [];
-          // Empty lists = visible to all
-          if (tagIds.length === 0 && userIds.length === 0) return true;
-          // Check if user is in allowed users
-          if (userIds.includes(dbUser.id)) return true;
-          // Check if user has any of the allowed tags
-          if (tagIds.some((tid) => userTagIds.has(tid))) return true;
-          return false;
-        } catch {
-          return true;
-        }
-      });
+  let visibleCourses = audioCourses;
+
+  if (!isStaff) {
+    // Get which series this student has tag-based access to
+    const [grantedIds, restrictedIds] = await Promise.all([
+      getUserContentGrants(dbUser.id, "audio_series"),
+      getRestrictedContentIds("audio_series"),
+    ]);
+
+    visibleCourses = audioCourses.filter((course) => {
+      // If this course has no tag restrictions, it's visible to all
+      if (!restrictedIds.has(course.id)) return true;
+      // Otherwise, student needs a tag grant
+      if (grantedIds.has(course.id)) return true;
+      // Fallback: check legacy allowedUserIds in JSON (backward compat)
+      try {
+        const meta = JSON.parse(course.description ?? "{}");
+        const userIds: string[] = Array.isArray(meta.allowedUserIds) ? meta.allowedUserIds : [];
+        if (userIds.includes(dbUser.id)) return true;
+      } catch { /* ignore */ }
+      return false;
+    });
+  }
 
   if (visibleCourses.length === 0) {
     return NextResponse.json({ courses: [] });
