@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { studentTags, tags } from "@/db/schema";
+import { studentTags, tagFeatureGrants, tagContentGrants } from "@/db/schema";
 import { FEATURE_KEYS, type FeatureKey } from "@/lib/permissions";
 
 type FeatureOverrideState = {
@@ -12,67 +12,54 @@ type FeatureOverrideState = {
 const FEATURE_KEY_SET = new Set<string>(FEATURE_KEYS);
 
 /**
- * Exclusive tag mappings: when a student has one of these tags,
- * they get ONLY the listed features (all others are denied).
- * This replaces the student's default feature set entirely.
+ * Get feature overrides for a user based on their tags.
+ *
+ * Queries tag_feature_grants table (DB-driven).
+ * Each tag can ADD or DENY features. Results are unioned across all user tags.
+ * Deny wins if the same feature appears in both allow and deny (from different tags).
  */
-// Keys are stored lowercase for case-insensitive matching
-const EXCLUSIVE_TAG_MAP: Record<string, FeatureKey[]> = {
-  lto_student: ["mandarin_accelerator"],
-};
-
-function parseFeatureTag(tagName: string): { mode: "allow" | "deny"; feature: FeatureKey } | null {
-  const normalized = tagName.trim().toLowerCase();
-  const match = normalized.match(/^feature:(enable|disable):([a-z_]+)$/);
-  if (!match) return null;
-
-  const mode = match[1] === "enable" ? "allow" : "deny";
-  const feature = match[2];
-  if (!FEATURE_KEY_SET.has(feature)) return null;
-
-  return { mode, feature: feature as FeatureKey };
-}
-
 export async function getUserFeatureTagOverrides(userId: string): Promise<FeatureOverrideState> {
-  const rows = await db
-    .select({ name: tags.name })
+  const userTagRows = await db
+    .select({ tagId: studentTags.tagId })
     .from(studentTags)
-    .innerJoin(tags, eq(studentTags.tagId, tags.id))
-    .where(and(eq(studentTags.userId, userId)));
+    .where(eq(studentTags.userId, userId));
 
   const allow = new Set<FeatureKey>();
   const deny = new Set<FeatureKey>();
 
-  for (const row of rows) {
-    // Check exclusive tag mappings first (case-insensitive)
-    const exclusiveFeatures = EXCLUSIVE_TAG_MAP[row.name.trim().toLowerCase()];
-    if (exclusiveFeatures) {
-      // Deny all features, then allow only the mapped ones
-      for (const key of FEATURE_KEYS) {
-        if (!exclusiveFeatures.includes(key)) {
-          deny.add(key);
-        }
-      }
-      for (const feature of exclusiveFeatures) {
-        allow.add(feature);
-      }
-      continue;
-    }
+  if (userTagRows.length === 0) return { allow, deny };
 
-    // Standard feature:enable/disable convention
-    const parsed = parseFeatureTag(row.name);
-    if (!parsed) continue;
-    if (parsed.mode === "allow") {
-      allow.add(parsed.feature);
+  const tagIds = userTagRows.map((r) => r.tagId);
+
+  const grants = await db
+    .select({
+      featureKey: tagFeatureGrants.featureKey,
+      grantType: tagFeatureGrants.grantType,
+    })
+    .from(tagFeatureGrants)
+    .where(inArray(tagFeatureGrants.tagId, tagIds));
+
+  for (const grant of grants) {
+    if (!FEATURE_KEY_SET.has(grant.featureKey)) continue;
+    const feature = grant.featureKey as FeatureKey;
+    if (grant.grantType === "additive") {
+      allow.add(feature);
     } else {
-      deny.add(parsed.feature);
+      deny.add(feature);
     }
   }
 
   return { allow, deny };
 }
 
-export function applyFeatureTagOverrides(baseFeatures: Iterable<string>, overrides: FeatureOverrideState): Set<string> {
+/**
+ * Apply feature tag overrides to a base feature set.
+ * Removes denied features, adds allowed features.
+ */
+export function applyFeatureTagOverrides(
+  baseFeatures: Iterable<string>,
+  overrides: FeatureOverrideState
+): Set<string> {
   const next = new Set<string>(baseFeatures);
 
   for (const denied of overrides.deny) {
@@ -86,6 +73,10 @@ export function applyFeatureTagOverrides(baseFeatures: Iterable<string>, overrid
   return next;
 }
 
+/**
+ * Check if a specific feature is allowed given base permission and tag overrides.
+ * Deny takes precedence over allow.
+ */
 export function hasFeatureWithTagOverrides(
   feature: FeatureKey,
   baseAllowed: boolean,
@@ -94,4 +85,41 @@ export function hasFeatureWithTagOverrides(
   if (overrides.deny.has(feature)) return false;
   if (overrides.allow.has(feature)) return true;
   return baseAllowed;
+}
+
+/**
+ * Get content IDs that a user has access to via tags.
+ * Used for audio course series visibility, etc.
+ */
+export async function getUserContentGrants(
+  userId: string,
+  contentType: string
+): Promise<Set<string>> {
+  const rows = await db
+    .select({ contentId: tagContentGrants.contentId })
+    .from(tagContentGrants)
+    .innerJoin(studentTags, eq(tagContentGrants.tagId, studentTags.tagId))
+    .where(
+      and(
+        eq(studentTags.userId, userId),
+        eq(tagContentGrants.contentType, contentType)
+      )
+    );
+
+  return new Set(rows.map((r) => r.contentId));
+}
+
+/**
+ * Check which content items have ANY tag restrictions.
+ * If no rows exist for a content ID, it's unrestricted (visible to all).
+ */
+export async function getRestrictedContentIds(
+  contentType: string
+): Promise<Set<string>> {
+  const rows = await db
+    .selectDistinct({ contentId: tagContentGrants.contentId })
+    .from(tagContentGrants)
+    .where(eq(tagContentGrants.contentType, contentType));
+
+  return new Set(rows.map((r) => r.contentId));
 }

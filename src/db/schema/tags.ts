@@ -70,11 +70,53 @@ export const autoTagRules = pgTable("auto_tag_rules", {
   index("auto_tag_rules_created_by_idx").on(table.createdBy),
 ]);
 
+// Tag Feature Grants: tag → feature access mapping (replaces hardcoded EXCLUSIVE_TAG_MAP)
+export const grantTypeEnum = pgEnum("grant_type", ["additive", "deny"]);
+
+export const tagFeatureGrants = pgTable(
+  "tag_feature_grants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    featureKey: text("feature_key").notNull(),
+    grantType: grantTypeEnum("grant_type").notNull().default("additive"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("tag_feature_grants_tag_feature_unique").on(table.tagId, table.featureKey),
+    index("tag_feature_grants_tag_id_idx").on(table.tagId),
+    index("tag_feature_grants_feature_key_idx").on(table.featureKey),
+  ]
+);
+
+// Tag Content Grants: tag → specific content access (audio series, courses, etc.)
+export const tagContentGrants = pgTable(
+  "tag_content_grants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    contentType: text("content_type").notNull(), // "audio_series" | "course" | future types
+    contentId: uuid("content_id").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("tag_content_grants_unique").on(table.tagId, table.contentType, table.contentId),
+    index("tag_content_grants_tag_id_idx").on(table.tagId),
+    index("tag_content_grants_content_idx").on(table.contentType, table.contentId),
+  ]
+);
+
 // --- Relations ---
 
 export const tagsRelations = relations(tags, ({ many }) => ({
   studentTags: many(studentTags),
   autoTagRules: many(autoTagRules),
+  featureGrants: many(tagFeatureGrants),
+  contentGrants: many(tagContentGrants),
 }));
 
 export const studentTagsRelations = relations(studentTags, ({ one }) => ({
@@ -105,6 +147,14 @@ export const autoTagRulesRelations = relations(autoTagRules, ({ one }) => ({
   }),
 }));
 
+export const tagFeatureGrantsRelations = relations(tagFeatureGrants, ({ one }) => ({
+  tag: one(tags, { fields: [tagFeatureGrants.tagId], references: [tags.id] }),
+}));
+
+export const tagContentGrantsRelations = relations(tagContentGrants, ({ one }) => ({
+  tag: one(tags, { fields: [tagContentGrants.tagId], references: [tags.id] }),
+}));
+
 // --- Type Inference ---
 
 export type Tag = typeof tags.$inferSelect;
@@ -115,3 +165,9 @@ export type NewStudentTag = typeof studentTags.$inferInsert;
 
 export type AutoTagRule = typeof autoTagRules.$inferSelect;
 export type NewAutoTagRule = typeof autoTagRules.$inferInsert;
+
+export type TagFeatureGrant = typeof tagFeatureGrants.$inferSelect;
+export type NewTagFeatureGrant = typeof tagFeatureGrants.$inferInsert;
+
+export type TagContentGrant = typeof tagContentGrants.$inferSelect;
+export type NewTagContentGrant = typeof tagContentGrants.$inferInsert;
