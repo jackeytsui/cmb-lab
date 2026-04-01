@@ -1,3 +1,5 @@
+import type React from "react";
+
 /**
  * Pleco-style tone coloring for Chinese characters.
  *
@@ -118,4 +120,34 @@ export function getToneColorClass(
   const colors =
     lang === "mandarin" ? MANDARIN_TONE_COLORS : CANTONESE_TONE_COLORS;
   return colors[tone] ?? colors[0];
+}
+
+// Inline style hex values (Tailwind 500-level equivalents)
+const MANDARIN_TONE_HEX: Record<number, string> = {
+  1: "#ef4444", // red-500
+  2: "#22c55e", // green-500
+  3: "#3b82f6", // blue-500
+  4: "#a855f7", // purple-500
+  0: "",        // neutral — inherit
+};
+const CANTONESE_TONE_HEX: Record<number, string> = {
+  1: "#ef4444", // red-500
+  2: "#22c55e", // green-500
+  3: "#3b82f6", // blue-500
+  4: "#f97316", // orange-500
+  5: "#a855f7", // purple-500
+  6: "#14b8a6", // teal-500
+  0: "",        // neutral — inherit
+};
+
+/**
+ * Get an inline color style for a given tone number and language.
+ * Use this instead of getToneColorClass when CSS specificity may block Tailwind classes.
+ */
+export function getToneColorStyle(
+  tone: number,
+  lang: "mandarin" | "cantonese",
+): React.CSSProperties | undefined {
+  const hex = (lang === "mandarin" ? MANDARIN_TONE_HEX : CANTONESE_TONE_HEX)[tone];
+  return hex ? { color: hex } : undefined;
 }
