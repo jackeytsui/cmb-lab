@@ -98,7 +98,7 @@ function ContentSection({
       onUpdate();
     } catch (err) {
       console.error("PDF upload failed:", err);
-      alert(`PDF upload failed: ${err instanceof Error ? err.message : "Unknown error"}`;
+      alert(`PDF upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -121,7 +121,7 @@ function ContentSection({
       onUpdate();
     } catch (err) {
       console.error("Video upload failed:", err);
-      alert(`Video upload failed: ${err instanceof Error ? err.message : "Unknown error"}`;
+      alert(`Video upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setUploadingVideo(false);
       e.target.value = "";
