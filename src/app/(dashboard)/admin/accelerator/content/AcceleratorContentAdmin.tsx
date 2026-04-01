@@ -80,6 +80,7 @@ function ContentSection({
       onUpdate();
     } catch (err) {
       console.error("Upload failed:", err);
+      alert("PDF upload failed. Please try again.");
     } finally {
       setUploading(false);
       e.target.value = "";
