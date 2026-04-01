@@ -28,15 +28,17 @@ const SECTIONS: SectionConfig[] = [
 ];
 
 /**
- * Upload a file to Vercel Blob via server-side route (avoids CORS).
+ * Upload a file to Vercel Blob via server-side streaming (avoids CORS + 4.5MB limit).
+ * Sends raw file body instead of FormData so the server can stream it directly.
  */
 async function uploadFile(file: File): Promise<string> {
-  const formData = new FormData();
-  formData.append("file", file);
-
   const res = await fetch("/api/admin/accelerator/settings/upload", {
     method: "POST",
-    body: formData,
+    headers: {
+      "content-type": file.type || "application/octet-stream",
+      "x-filename": file.name,
+    },
+    body: file,
   });
 
   if (!res.ok) {
