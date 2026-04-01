@@ -70,7 +70,9 @@ function ContentSection({
     try {
       const blob = await upload(file.name, file, {
         access: "public",
+        contentType: file.type || "application/pdf",
         handleUploadUrl: "/api/admin/accelerator/settings/upload",
+        multipart: file.size > 5 * 1024 * 1024,
       });
 
       await fetch("/api/admin/accelerator/settings", {
@@ -95,7 +97,9 @@ function ContentSection({
     try {
       const blob = await upload(file.name, file, {
         access: "public",
+        contentType: file.type || "video/mp4",
         handleUploadUrl: "/api/admin/accelerator/settings/upload",
+        multipart: file.size > 5 * 1024 * 1024,
       });
 
       await fetch("/api/admin/accelerator/settings", {
