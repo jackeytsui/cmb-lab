@@ -67,6 +67,16 @@ export function AddUserQuickDialog() {
               portalAccessStatus: form.accessStatus,
             },
           ],
+          // When inviting, pass email config so the API sends via GHL webhook
+          // instead of Clerk's default email
+          ...(action === "upload_and_invite"
+            ? {
+                invitationEmail: {
+                  subject: "Welcome to Canto to Mando Lab \u2014 Your Access Is Ready",
+                  body: `Hi {{first_name}},\n\nWelcome to Canto to Mando Lab, a new learning experience the CMB team has been creating internally to give you a smoother, smarter Chinese learning experience.\n\nThis is a beta test version, and we are inviting you to try it out for fun.\n\nHere is the link to access:\n{{portal_link}}\n\nSimply use your email address to log in. You can continue with Google or receive a one-time password (OTP) by email.\n\nOn first login, you will see an onboarding walkthrough automatically.\n\nHope you enjoy it, and we would really appreciate your comments and feedback.\n\nOur team is also working on more new features on top of this, so thank you in advance.\n\nBest,\nJackey\nHead of Operations`,
+                },
+              }
+            : {}),
         }),
       });
 
