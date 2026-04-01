@@ -1,56 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
 
-export const maxDuration = 60;
+// Edge runtime has no body size limit (Node.js serverless is capped at 4.5MB)
+export const runtime = "edge";
 
-// Increase body size limit for this route (Vercel default is 4.5MB)
-export const runtime = "nodejs";
-
-async function checkAuth(): Promise<boolean> {
-  const hasRoleAccess = await hasMinimumRole("coach");
-  if (hasRoleAccess) return true;
-  const user = await getCurrentUser();
-  return !!user;
+async function checkAuth(request: NextRequest): Promise<boolean> {
+  // Forward cookies to a same-origin check endpoint
+  const res = await fetch(new URL("/api/admin/accelerator/settings/upload/auth", request.url), {
+    headers: { cookie: request.headers.get("cookie") || "" },
+  });
+  return res.ok;
 }
 
 /**
  * GET /api/admin/accelerator/settings/upload
- * Pre-flight check — verifies auth + blob token.
+ * Pre-flight check.
  */
-export async function GET() {
-  try {
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      return NextResponse.json(
-        { error: "Blob storage is not configured." },
-        { status: 500 },
-      );
-    }
-    if (!(await checkAuth())) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error("Preflight failed:", err);
-    return NextResponse.json({ error: "Preflight failed" }, { status: 500 });
+export async function GET(request: NextRequest) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return NextResponse.json({ error: "Blob storage not configured." }, { status: 500 });
   }
+  if (!(await checkAuth(request))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return NextResponse.json({ ok: true });
 }
 
 /**
  * POST /api/admin/accelerator/settings/upload
- * Server-side streaming upload to Vercel Blob.
- * Streams the request body directly to avoid the 4.5MB body limit.
+ * Edge streaming upload — no body size limit.
  */
 export async function POST(request: NextRequest) {
   try {
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return NextResponse.json({ error: "Blob storage not configured." }, { status: 500 });
     }
-    if (!(await checkAuth())) {
+    if (!(await checkAuth(request))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Get filename and content type from headers
     const filename = request.headers.get("x-filename") || "upload";
     const contentType = request.headers.get("content-type") || "application/octet-stream";
 
@@ -58,7 +46,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file body" }, { status: 400 });
     }
 
-    // Stream body directly to Vercel Blob — no buffering
     const blob = await put(`accelerator/${filename}`, request.body, {
       access: "public",
       token: process.env.BLOB_READ_WRITE_TOKEN,
