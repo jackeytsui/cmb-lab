@@ -128,8 +128,12 @@ export async function GET(request: Request) {
     if (!session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
-    // Students can only export their own sessions
-    if (isStudent && session.studentEmail?.toLowerCase() !== dbUser.email?.toLowerCase()) {
+    // Students can only export their own 1:1 sessions; ICGC sessions are shared
+    if (
+      isStudent &&
+      session.type === "one_on_one" &&
+      session.studentEmail?.toLowerCase() !== dbUser.email?.toLowerCase()
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     sessionList = [session];

@@ -44,8 +44,7 @@ export function AddUserQuickDialog() {
       .catch(() => {});
   }, [open]);
 
-  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleAdd = async (action: "upload_only" | "upload_and_invite") => {
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
       toast.error("First name, last name, and email are required.");
       return;
@@ -57,7 +56,7 @@ export function AddUserQuickDialog() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "upload_only",
+          action,
           records: [
             {
               firstName: form.firstName.trim(),
@@ -101,7 +100,11 @@ export function AddUserQuickDialog() {
         }
       }
 
-      toast.success("User added successfully.");
+      toast.success(
+        action === "upload_and_invite"
+          ? "User added and invitation sent."
+          : "User added successfully.",
+      );
       setOpen(false);
       setForm({
         firstName: "",
@@ -132,11 +135,11 @@ export function AddUserQuickDialog() {
         <DialogHeader>
           <DialogTitle>Add Contact</DialogTitle>
           <DialogDescription>
-            Create a user directly without sending an invitation email.
+            Add a new user to the system. You can optionally send an invitation email.
           </DialogDescription>
         </DialogHeader>
 
-        <form className="space-y-4" onSubmit={onSubmit}>
+        <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="quick-first-name">First Name *</Label>
@@ -232,8 +235,11 @@ export function AddUserQuickDialog() {
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add Contact"}
+            <Button type="button" variant="outline" onClick={() => handleAdd("upload_only")} disabled={submitting}>
+              {submitting ? "Adding..." : "Just Add"}
+            </Button>
+            <Button type="button" onClick={() => handleAdd("upload_and_invite")} disabled={submitting}>
+              {submitting ? "Adding..." : "Add + Send Invite"}
             </Button>
           </div>
         </form>

@@ -15,11 +15,6 @@ import { cn } from "@/lib/utils";
 import { useTTS, type TTSOptions } from "@/hooks/useTTS";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
-import {
-  extractToneFromPinyin,
-  extractToneFromJyutping,
-  getToneColorClass,
-} from "@/lib/tone-colors";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,22 +59,11 @@ interface ScriptPracticeClientProps {
 // Single language bubble (used inside the split line)
 // ---------------------------------------------------------------------------
 
-// Use central Pleco-style tone colors from @/lib/tone-colors
-function getToneColor(syllable: string, lang: "cantonese" | "mandarin"): string {
-  if (lang === "cantonese") {
-    const tone = extractToneFromJyutping(syllable);
-    return tone > 0 ? getToneColorClass(tone, "cantonese") : "text-foreground";
-  }
-  const tone = extractToneFromPinyin(syllable);
-  return tone > 0 ? getToneColorClass(tone, "mandarin") : "text-foreground";
-}
-
 function LangBubble({
   label,
   text,
   romanisation,
   labelColor,
-  lang,
   onPlay,
   isPlaying,
 }: {
@@ -87,85 +71,28 @@ function LangBubble({
   text: string;
   romanisation: string;
   labelColor: string;
-  lang: "cantonese" | "mandarin";
   onPlay: () => void;
   isPlaying: boolean;
 }) {
-  // Auto-generate romanisation if DB value is empty
-  const effectiveRomanisation = useMemo(() => {
+  const displayRomanisation = useMemo(() => {
     if (romanisation) return romanisation;
     if (!text) return "";
-    if (lang === "cantonese") {
+    if (label === "Cantonese") {
       const list = ToJyutping.getJyutpingList(text);
       return list?.map(([, jp]) => jp ?? "").join(" ").trim() || "";
     }
     return pinyin(text, { toneType: "symbol" });
-  }, [romanisation, text, lang]);
-
-  // Split text into segments: Han characters get romanization, [brackets] stay as blocks
-  const hanRegex = /\p{Script=Han}/u;
-  const bracketRegex = /\[[^\]]+\]/g;
-
-  // Split romanisation syllables, filtering out bracket content
-  const syllables = effectiveRomanisation
-    .replace(bracketRegex, " ")
-    .split(/[\s,]+/)
-    .filter(Boolean);
-
-  // Split text into tokens: bracketed placeholders as whole units, everything else char-by-char
-  const tokens: Array<{ text: string; type: "han" | "bracket" | "other" }> = [];
-  let lastIdx = 0;
-  for (const match of text.matchAll(bracketRegex)) {
-    // Characters before the bracket
-    const before = text.slice(lastIdx, match.index);
-    for (const char of [...before]) {
-      tokens.push({ text: char, type: hanRegex.test(char) ? "han" : "other" });
-    }
-    // The bracket as a single token
-    tokens.push({ text: match[0], type: "bracket" });
-    lastIdx = match.index! + match[0].length;
-  }
-  // Remaining characters after last bracket
-  for (const char of [...text.slice(lastIdx)]) {
-    tokens.push({ text: char, type: hanRegex.test(char) ? "han" : "other" });
-  }
-
-  // Assign syllables to Han tokens
-  let syllableIdx = 0;
+  }, [romanisation, text, label]);
 
   return (
     <div className="flex-1 p-4 space-y-2">
       <span className={cn("text-[10px] uppercase tracking-wider font-bold", labelColor)}>
         {label}
       </span>
-      {/* Per-character aligned romanization + Chinese */}
-      <div className="flex items-end flex-wrap gap-y-1">
-        {tokens.map((token, i) => {
-          if (token.type === "han" && syllableIdx < syllables.length) {
-            const syllable = syllables[syllableIdx++];
-            return (
-              <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.4em" }}>
-                <span className={cn("text-[11px] leading-tight whitespace-nowrap", getToneColor(syllable, lang))}>
-                  {syllable}
-                </span>
-                <span className="text-lg font-medium text-foreground">{token.text}</span>
-              </span>
-            );
-          }
-          if (token.type === "bracket") {
-            // Render placeholder as a styled inline block with proper spacing
-            return (
-              <span key={i} className="inline-flex flex-col items-center mx-0.5">
-                <span className="text-[11px] leading-tight text-transparent">.</span>
-                <span className="text-sm font-medium text-muted-foreground/50 italic">{token.text}</span>
-              </span>
-            );
-          }
-          return (
-            <span key={i} className="text-lg font-medium text-foreground">{token.text}</span>
-          );
-        })}
-      </div>
+      <p className={cn("text-xs font-medium tracking-wide text-muted-foreground")}>
+        {displayRomanisation}
+      </p>
+      <p className="text-lg font-medium text-foreground">{text}</p>
       <button
         type="button"
         onClick={onPlay}
@@ -430,7 +357,6 @@ export default function ScriptPracticeClient({
                   text={line.cantoneseText}
                   romanisation={line.cantoneseRomanisation}
                   labelColor="text-cyan-500"
-                  lang="cantonese"
                   onPlay={() => handlePlayLine(line.cantoneseText, "cantonese", line.id)}
                   isPlaying={playingLineKey === `${line.id}-cantonese` && ttsPlaying}
                 />
@@ -439,7 +365,6 @@ export default function ScriptPracticeClient({
                   text={line.mandarinText}
                   romanisation={line.mandarinRomanisation}
                   labelColor="text-red-500"
-                  lang="mandarin"
                   onPlay={() => handlePlayLine(line.mandarinText, "mandarin", line.id)}
                   isPlaying={playingLineKey === `${line.id}-mandarin` && ttsPlaying}
                 />

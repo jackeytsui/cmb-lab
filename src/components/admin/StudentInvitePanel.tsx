@@ -217,6 +217,7 @@ export function StudentInvitePanel({
   const [activeAction, setActiveAction] = useState<
     "upload_only" | "upload_and_invite" | "resend_invite" | "remove_access" | ""
   >("");
+  const [sendInviteEmails, setSendInviteEmails] = useState(false);
   const [batchRole, setBatchRole] = useState<"" | "student" | "coach" | "admin">("student");
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [previewEmail, setPreviewEmail] = useState("");
@@ -435,25 +436,28 @@ export function StudentInvitePanel({
             <option value="coach">Coach</option>
             <option value="admin">Admin</option>
           </select>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={sendInviteEmails}
+                onChange={(e) => setSendInviteEmails(e.target.checked)}
+                className="rounded border-border"
+              />
+              Send invitation emails
+            </label>
             <button
               type="button"
-              onClick={() => handleRunAction("upload_only")}
+              onClick={() => handleRunAction(sendInviteEmails ? "upload_and_invite" : "upload_only")}
               disabled={isSending || csvRecords.length === 0}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSending && activeAction === "upload_only" ? "Running..." : "Upload Only (No Email)"}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleRunAction("upload_and_invite")}
-              disabled={isSending || csvRecords.length === 0}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-              {isSending && activeAction === "upload_and_invite"
-                ? "Running..."
-                : "Upload + Send Invitation Email"}
+              {sendInviteEmails && <Send className="h-4 w-4" />}
+              {isSending && (activeAction === "upload_only" || activeAction === "upload_and_invite")
+                ? "Processing..."
+                : sendInviteEmails
+                  ? "Upload + Send Invites"
+                  : "Upload Only"}
             </button>
             <button
               type="button"
@@ -461,7 +465,7 @@ export function StudentInvitePanel({
               disabled={isSending || (csvRecords.length === 0 && parsedEmails.length === 0)}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSending && activeAction === "resend_invite" ? "Running..." : "Send/Resend Invitation Email Only"}
+              {isSending && activeAction === "resend_invite" ? "Running..." : "Resend Invite Only"}
             </button>
             <button
               type="button"
@@ -469,7 +473,7 @@ export function StudentInvitePanel({
               disabled={isSending || (csvRecords.length === 0 && parsedEmails.length === 0)}
               className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSending && activeAction === "remove_access" ? "Running..." : "Remove Portal Access"}
+              {isSending && activeAction === "remove_access" ? "Running..." : "Remove Access"}
             </button>
           </div>
           {error ? (

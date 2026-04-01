@@ -5,7 +5,6 @@ const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
 const isCoachRoute = createRouteMatcher(["/coach(.*)"]);
 const isSignUpRoute = createRouteMatcher(["/sign-up(.*)"]);
 const isStudentAllowedRoute = createRouteMatcher([
-  "/dashboard",
   "/dashboard/reader(.*)",
   "/dashboard/listening(.*)",
   "/dashboard/coaching(.*)",
