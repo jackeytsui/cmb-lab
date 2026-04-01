@@ -28,6 +28,52 @@ const SECTIONS: SectionConfig[] = [
   },
 ];
 
+const UPLOAD_TIMEOUT_MS = 120_000; // 2 minutes
+
+/**
+ * Preflight check: verify auth + blob token before starting the upload.
+ * Matches the pattern used in the working audio-course upload flow.
+ */
+async function preflightCheck(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/admin/accelerator/settings/upload", {
+      method: "GET",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      return data?.error || `Preflight failed (${res.status})`;
+    }
+    return null;
+  } catch (err) {
+    return `Preflight check failed: ${err instanceof Error ? err.message : "Network error"}`;
+  }
+}
+
+/**
+ * Upload a file to Vercel Blob with timeout and error handling.
+ */
+async function uploadFile(
+  filename: string,
+  file: File,
+  contentType: string,
+): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+  try {
+    const blob = await upload(filename, file, {
+      access: "public",
+      contentType,
+      handleUploadUrl: "/api/admin/accelerator/settings/upload",
+      multipart: file.size > 5 * 1024 * 1024,
+      abortSignal: controller.signal,
+    });
+    return blob.url;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function ContentSection({
   config,
   settings,
@@ -68,22 +114,28 @@ function ContentSection({
     if (!file) return;
     setUploading(true);
     try {
-      const blob = await upload(file.name, file, {
-        access: "public",
-        contentType: file.type || "application/pdf",
-        handleUploadUrl: "/api/admin/accelerator/settings/upload",
-        multipart: file.size > 5 * 1024 * 1024,
-      });
+      // Preflight: verify auth + blob token
+      const prefError = await preflightCheck();
+      if (prefError) {
+        alert(`Cannot upload: ${prefError}`);
+        return;
+      }
+
+      const url = await uploadFile(file.name, file, file.type || "application/pdf");
 
       await fetch("/api/admin/accelerator/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: config.pdfKey, value: blob.url }),
+        body: JSON.stringify({ key: config.pdfKey, value: url }),
       });
       onUpdate();
     } catch (err) {
-      console.error("Upload failed:", err);
-      alert("PDF upload failed. Please try again.");
+      console.error("PDF upload failed:", err);
+      if (err instanceof Error && err.name === "AbortError") {
+        alert("PDF upload timed out. The file may be too large or the connection is slow.");
+      } else {
+        alert(`PDF upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -95,23 +147,28 @@ function ContentSection({
     if (!file) return;
     setUploadingVideo(true);
     try {
-      const blob = await upload(file.name, file, {
-        access: "public",
-        contentType: file.type || "video/mp4",
-        handleUploadUrl: "/api/admin/accelerator/settings/upload",
-        multipart: file.size > 5 * 1024 * 1024,
-      });
+      const prefError = await preflightCheck();
+      if (prefError) {
+        alert(`Cannot upload: ${prefError}`);
+        return;
+      }
+
+      const url = await uploadFile(file.name, file, file.type || "video/mp4");
 
       await fetch("/api/admin/accelerator/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: config.videoKey, value: blob.url }),
+        body: JSON.stringify({ key: config.videoKey, value: url }),
       });
-      setVideoUrl(blob.url);
+      setVideoUrl(url);
       onUpdate();
     } catch (err) {
       console.error("Video upload failed:", err);
-      alert("Video upload failed. Please try again.");
+      if (err instanceof Error && err.name === "AbortError") {
+        alert("Video upload timed out. The file may be too large or the connection is slow.");
+      } else {
+        alert(`Video upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
     } finally {
       setUploadingVideo(false);
       e.target.value = "";

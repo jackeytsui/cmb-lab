@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
 
 export const maxDuration = 60;
 
@@ -26,9 +26,12 @@ export async function GET() {
       );
     }
 
-    const hasAccess = await hasMinimumRole("coach");
-    if (!hasAccess) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const hasRoleAccess = await hasMinimumRole("coach");
+    if (!hasRoleAccess) {
+      const user = await getCurrentUser();
+      if (!user) {
+        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      }
     }
 
     return NextResponse.json({ ok: true });
@@ -61,9 +64,12 @@ export async function POST(request: NextRequest) {
       request,
       token: process.env.BLOB_READ_WRITE_TOKEN,
       onBeforeGenerateToken: async () => {
-        const hasAccess = await hasMinimumRole("coach");
-        if (!hasAccess) {
-          throw new Error("Forbidden");
+        const hasRoleAccess = await hasMinimumRole("coach");
+        if (!hasRoleAccess) {
+          const user = await getCurrentUser();
+          if (!user) {
+            throw new Error("Forbidden");
+          }
         }
 
         return {
