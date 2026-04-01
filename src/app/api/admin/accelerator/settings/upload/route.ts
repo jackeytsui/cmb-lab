@@ -1,58 +1,99 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
+import {
+  createMultipartUpload,
+  uploadPart,
+  completeMultipartUpload,
+} from "@vercel/blob";
+import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
 
-// Edge runtime has no body size limit (Node.js serverless is capped at 4.5MB)
-export const runtime = "edge";
+export const maxDuration = 60;
 
-async function checkAuth(request: NextRequest): Promise<boolean> {
-  // Forward cookies to a same-origin check endpoint
-  const res = await fetch(new URL("/api/admin/accelerator/settings/upload/auth", request.url), {
-    headers: { cookie: request.headers.get("cookie") || "" },
-  });
-  return res.ok;
+async function checkAuth(): Promise<boolean> {
+  const hasRoleAccess = await hasMinimumRole("coach");
+  if (hasRoleAccess) return true;
+  const user = await getCurrentUser();
+  return !!user;
 }
 
 /**
- * GET /api/admin/accelerator/settings/upload
- * Pre-flight check.
+ * GET — preflight check
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return NextResponse.json({ error: "Blob storage not configured." }, { status: 500 });
   }
-  if (!(await checkAuth(request))) {
+  if (!(await checkAuth())) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   return NextResponse.json({ ok: true });
 }
 
 /**
- * POST /api/admin/accelerator/settings/upload
- * Edge streaming upload — no body size limit.
+ * POST — handles three actions for chunked upload:
+ *   1. action=create  → start multipart upload
+ *   2. action=part    → upload one chunk
+ *   3. action=complete → finalize upload
  */
 export async function POST(request: NextRequest) {
   try {
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return NextResponse.json({ error: "Blob storage not configured." }, { status: 500 });
     }
-    if (!(await checkAuth(request))) {
+    if (!(await checkAuth())) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const filename = request.headers.get("x-filename") || "upload";
-    const contentType = request.headers.get("content-type") || "application/octet-stream";
+    const action = request.headers.get("x-action");
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
 
-    if (!request.body) {
-      return NextResponse.json({ error: "No file body" }, { status: 400 });
+    // Step 1: Create multipart upload
+    if (action === "create") {
+      const { pathname, contentType } = await request.json();
+      const mpu = await createMultipartUpload(pathname, {
+        access: "public",
+        token,
+        contentType: contentType || "application/octet-stream",
+      });
+      return NextResponse.json({
+        uploadId: mpu.uploadId,
+        key: mpu.key,
+      });
     }
 
-    const blob = await put(`accelerator/${filename}`, request.body, {
-      access: "public",
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-      contentType,
-    });
+    // Step 2: Upload a chunk
+    if (action === "part") {
+      const uploadId = request.headers.get("x-upload-id")!;
+      const key = request.headers.get("x-key")!;
+      const partNumber = Number(request.headers.get("x-part-number"));
 
-    return NextResponse.json({ url: blob.url });
+      if (!request.body) {
+        return NextResponse.json({ error: "No body" }, { status: 400 });
+      }
+
+      // Read the chunk body (< 4MB so within limit)
+      const body = await request.arrayBuffer();
+
+      const part = await uploadPart(key, body, {
+        access: "public",
+        token,
+        uploadId,
+        partNumber,
+      });
+
+      return NextResponse.json({ etag: part.etag });
+    }
+
+    // Step 3: Complete multipart upload
+    if (action === "complete") {
+      const { key, uploadId, parts } = await request.json();
+      const blob = await completeMultipartUpload(key, uploadId, parts, {
+        access: "public",
+        token,
+      });
+      return NextResponse.json({ url: blob.url });
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (err) {
     console.error("Upload failed:", err);
     return NextResponse.json(

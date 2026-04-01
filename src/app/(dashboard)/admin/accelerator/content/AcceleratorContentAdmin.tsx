@@ -27,27 +27,68 @@ const SECTIONS: SectionConfig[] = [
   },
 ];
 
+const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks (under Vercel's 4.5MB limit)
+const UPLOAD_URL = "/api/admin/accelerator/settings/upload";
+
 /**
- * Upload a file to Vercel Blob via server-side streaming (avoids CORS + 4.5MB limit).
- * Sends raw file body instead of FormData so the server can stream it directly.
+ * Upload a file to Vercel Blob using chunked multipart upload.
+ * Splits files into 3MB chunks to stay under Vercel's 4.5MB body limit.
  */
 async function uploadFile(file: File): Promise<string> {
-  const res = await fetch("/api/admin/accelerator/settings/upload", {
+  // Step 1: Create multipart upload
+  const createRes = await fetch(UPLOAD_URL, {
     method: "POST",
-    headers: {
-      "content-type": file.type || "application/octet-stream",
-      "x-filename": file.name,
-    },
-    body: file,
+    headers: { "content-type": "application/json", "x-action": "create" },
+    body: JSON.stringify({
+      pathname: `accelerator/${file.name}`,
+      contentType: file.type || "application/octet-stream",
+    }),
   });
+  if (!createRes.ok) {
+    const d = await createRes.json().catch(() => null);
+    throw new Error(d?.error || `Create failed (${createRes.status})`);
+  }
+  const { uploadId, key } = await createRes.json();
 
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    throw new Error(data?.error || `Upload failed (${res.status})`);
+  // Step 2: Upload chunks
+  const parts: Array<{ partNumber: number; etag: string }> = [];
+  const totalParts = Math.ceil(file.size / CHUNK_SIZE);
+
+  for (let i = 0; i < totalParts; i++) {
+    const start = i * CHUNK_SIZE;
+    const chunk = file.slice(start, start + CHUNK_SIZE);
+
+    const partRes = await fetch(UPLOAD_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-action": "part",
+        "x-upload-id": uploadId,
+        "x-key": key,
+        "x-part-number": String(i + 1),
+      },
+      body: chunk,
+    });
+    if (!partRes.ok) {
+      const d = await partRes.json().catch(() => null);
+      throw new Error(d?.error || `Part ${i + 1} failed (${partRes.status})`);
+    }
+    const { etag } = await partRes.json();
+    parts.push({ partNumber: i + 1, etag });
   }
 
-  const data = await res.json();
-  return data.url;
+  // Step 3: Complete upload
+  const completeRes = await fetch(UPLOAD_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-action": "complete" },
+    body: JSON.stringify({ key, uploadId, parts }),
+  });
+  if (!completeRes.ok) {
+    const d = await completeRes.json().catch(() => null);
+    throw new Error(d?.error || `Complete failed (${completeRes.status})`);
+  }
+  const { url } = await completeRes.json();
+  return url;
 }
 
 function ContentSection({
