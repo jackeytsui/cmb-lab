@@ -28,11 +28,8 @@ const SECTIONS: SectionConfig[] = [
   },
 ];
 
-const UPLOAD_TIMEOUT_MS = 120_000; // 2 minutes
-
 /**
  * Preflight check: verify auth + blob token before starting the upload.
- * Matches the pattern used in the working audio-course upload flow.
  */
 async function preflightCheck(): Promise<string | null> {
   try {
@@ -50,28 +47,20 @@ async function preflightCheck(): Promise<string | null> {
 }
 
 /**
- * Upload a file to Vercel Blob with timeout and error handling.
+ * Upload a file to Vercel Blob.
  */
 async function uploadFile(
   filename: string,
   file: File,
   contentType: string,
 ): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
-
-  try {
-    const blob = await upload(filename, file, {
-      access: "public",
-      contentType,
-      handleUploadUrl: "/api/admin/accelerator/settings/upload",
-      multipart: file.size > 5 * 1024 * 1024,
-      abortSignal: controller.signal,
-    });
-    return blob.url;
-  } finally {
-    clearTimeout(timeout);
-  }
+  const blob = await upload(filename, file, {
+    access: "public",
+    contentType,
+    handleUploadUrl: "/api/admin/accelerator/settings/upload",
+    multipart: true,
+  });
+  return blob.url;
 }
 
 function ContentSection({
@@ -131,11 +120,7 @@ function ContentSection({
       onUpdate();
     } catch (err) {
       console.error("PDF upload failed:", err);
-      if (err instanceof Error && err.name === "AbortError") {
-        alert("PDF upload timed out. The file may be too large or the connection is slow.");
-      } else {
-        alert(`PDF upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-      }
+      alert(`PDF upload failed: ${err instanceof Error ? err.message : "Unknown error"}`;
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -164,11 +149,7 @@ function ContentSection({
       onUpdate();
     } catch (err) {
       console.error("Video upload failed:", err);
-      if (err instanceof Error && err.name === "AbortError") {
-        alert("Video upload timed out. The file may be too large or the connection is slow.");
-      } else {
-        alert(`Video upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-      }
+      alert(`Video upload failed: ${err instanceof Error ? err.message : "Unknown error"}`;
     } finally {
       setUploadingVideo(false);
       e.target.value = "";
