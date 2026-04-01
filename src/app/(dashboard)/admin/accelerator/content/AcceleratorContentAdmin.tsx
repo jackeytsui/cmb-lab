@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileText, Upload, Loader2, Check, ExternalLink } from "lucide-react";
+import { FileText, Upload, Loader2, Check, ExternalLink, Video } from "lucide-react";
 
 type SectionConfig = {
   id: string;
@@ -41,6 +41,7 @@ function ContentSection({
   const [savingVideo, setSavingVideo] = useState(false);
   const [videoSaved, setVideoSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
 
   const currentPdf = settings[config.pdfKey] ?? "";
 
@@ -87,20 +88,46 @@ function ContentSection({
     }
   };
 
+  const handleUploadVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingVideo(true);
+    try {
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/admin/accelerator/settings/upload",
+      });
+
+      await fetch("/api/admin/accelerator/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: config.videoKey, value: blob.url }),
+      });
+      setVideoUrl(blob.url);
+      onUpdate();
+    } catch (err) {
+      console.error("Video upload failed:", err);
+      alert("Video upload failed. Please try again.");
+    } finally {
+      setUploadingVideo(false);
+      e.target.value = "";
+    }
+  };
+
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-4">
       <h3 className="text-lg font-semibold text-foreground">{config.title}</h3>
 
-      {/* Video URL */}
+      {/* Video URL or Upload */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-muted-foreground">
-          Video URL (YouTube)
+          Video (YouTube URL or upload)
         </label>
         <div className="flex gap-2">
           <Input
             value={videoUrl}
             onChange={(e) => setVideoUrl(e.target.value)}
-            placeholder="https://youtube.com/watch?v=..."
+            placeholder="https://youtube.com/watch?v=... or paste a video URL"
             className="flex-1"
           />
           <Button
@@ -116,6 +143,27 @@ function ContentSection({
             ) : null}
             Save
           </Button>
+          <label className="cursor-pointer">
+            <input
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={handleUploadVideo}
+              disabled={uploadingVideo}
+            />
+            <Button
+              variant="outline"
+              className="gap-2 pointer-events-none"
+              disabled={uploadingVideo}
+            >
+              {uploadingVideo ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Video className="w-4 h-4" />
+              )}
+              {uploadingVideo ? "Uploading..." : "Upload Video"}
+            </Button>
+          </label>
         </div>
       </div>
 

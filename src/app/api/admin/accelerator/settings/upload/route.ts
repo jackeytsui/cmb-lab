@@ -22,9 +22,16 @@ export async function POST(request: NextRequest) {
       request,
       token: process.env.BLOB_READ_WRITE_TOKEN,
       onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ["application/pdf"],
-        maximumSizeInBytes: 50 * 1024 * 1024, // 50MB
-        tokenPayload: JSON.stringify({ source: "accelerator-pdf" }),
+        allowedContentTypes: [
+          "application/pdf",
+          "video/mp4",
+          "video/quicktime",
+          "video/webm",
+          "video/x-msvideo",
+          "video/x-matroska",
+        ],
+        maximumSizeInBytes: 500 * 1024 * 1024, // 500MB
+        tokenPayload: JSON.stringify({ source: "accelerator-content" }),
       }),
       onUploadCompleted: async () => {},
     });

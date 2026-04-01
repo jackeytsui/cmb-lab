@@ -70,8 +70,9 @@ export function ContentPageClient({
     );
   }
 
-  // Extract YouTube embed URL
+  // Determine video type: YouTube embed or direct video file
   const embedUrl = videoUrl ? toYouTubeEmbed(videoUrl) : null;
+  const isDirectVideo = videoUrl && !embedUrl;
 
   return (
     <div className="space-y-6">
@@ -85,6 +86,18 @@ export function ContentPageClient({
             allowFullScreen
             title={title}
           />
+        </div>
+      ) : isDirectVideo ? (
+        <div className="aspect-video w-full rounded-xl overflow-hidden border border-border bg-black">
+          <video
+            src={videoUrl}
+            className="w-full h-full"
+            controls
+            playsInline
+            preload="metadata"
+          >
+            Your browser does not support the video tag.
+          </video>
         </div>
       ) : (
         <div className="aspect-video w-full rounded-xl border border-border bg-card flex items-center justify-center">
@@ -160,8 +173,8 @@ function toYouTubeEmbed(url: string): string | null {
     if (u.pathname.includes("/embed/")) {
       return url;
     }
-    // Fallback: treat as direct embed
-    return url;
+    // Not a YouTube URL — return null so it falls through to direct video
+    return null;
   } catch {
     return null;
   }

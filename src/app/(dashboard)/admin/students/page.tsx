@@ -6,13 +6,14 @@ import { AddUserQuickDialog } from "@/components/admin/AddUserQuickDialog";
 import { getActiveStudentsPageData } from "@/lib/active-student-queries";
 import { ActiveStudentDataTable } from "@/components/admin/ActiveStudentDataTable";
 import { ErrorAlert } from "@/components/ui/error-alert";
-import { ChevronRight, Users, Globe, ExternalLink, Info } from "lucide-react";
+import { ChevronRight, Users, Globe, ExternalLink, Info, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StudentInvitePanel } from "@/components/admin/StudentInvitePanel";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { and, count, desc, eq, ilike, isNull, or, inArray } from "drizzle-orm";
 import { AssignCoachDropdown } from "@/components/admin/AssignCoachDropdown";
+import { UsersSearchInput } from "@/components/admin/UsersSearchInput";
 
 /**
  * Admin Students page - displays student data table with server-side
@@ -267,7 +268,7 @@ export default async function AdminStudentsPage({
         <ErrorAlert message={dataError} variant="block" />
       ) : tab === "users" && usersResult ? (
         <section aria-label="All users list">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
               {[
                 { key: "all", label: "All" },
@@ -289,6 +290,7 @@ export default async function AdminStudentsPage({
                 </Link>
               ))}
             </div>
+            <UsersSearchInput defaultValue={search} roleFilter={usersRoleFilter} />
           </div>
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <div className="overflow-x-auto">
