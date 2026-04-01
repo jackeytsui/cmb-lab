@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileText, Upload, Loader2, Check, ExternalLink, Video } from "lucide-react";
@@ -29,38 +28,24 @@ const SECTIONS: SectionConfig[] = [
 ];
 
 /**
- * Preflight check: verify auth + blob token before starting the upload.
+ * Upload a file to Vercel Blob via server-side route (avoids CORS).
  */
-async function preflightCheck(): Promise<string | null> {
-  try {
-    const res = await fetch("/api/admin/accelerator/settings/upload", {
-      method: "GET",
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      return data?.error || `Preflight failed (${res.status})`;
-    }
-    return null;
-  } catch (err) {
-    return `Preflight check failed: ${err instanceof Error ? err.message : "Network error"}`;
-  }
-}
+async function uploadFile(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
 
-/**
- * Upload a file to Vercel Blob.
- */
-async function uploadFile(
-  filename: string,
-  file: File,
-  contentType: string,
-): Promise<string> {
-  const blob = await upload(filename, file, {
-    access: "public",
-    contentType,
-    handleUploadUrl: "/api/admin/accelerator/settings/upload",
-    multipart: true,
+  const res = await fetch("/api/admin/accelerator/settings/upload", {
+    method: "POST",
+    body: formData,
   });
-  return blob.url;
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || `Upload failed (${res.status})`);
+  }
+
+  const data = await res.json();
+  return data.url;
 }
 
 function ContentSection({
@@ -103,14 +88,7 @@ function ContentSection({
     if (!file) return;
     setUploading(true);
     try {
-      // Preflight: verify auth + blob token
-      const prefError = await preflightCheck();
-      if (prefError) {
-        alert(`Cannot upload: ${prefError}`);
-        return;
-      }
-
-      const url = await uploadFile(file.name, file, file.type || "application/pdf");
+      const url = await uploadFile(file);
 
       await fetch("/api/admin/accelerator/settings", {
         method: "PUT",
@@ -132,13 +110,7 @@ function ContentSection({
     if (!file) return;
     setUploadingVideo(true);
     try {
-      const prefError = await preflightCheck();
-      if (prefError) {
-        alert(`Cannot upload: ${prefError}`);
-        return;
-      }
-
-      const url = await uploadFile(file.name, file, file.type || "video/mp4");
+      const url = await uploadFile(file);
 
       await fetch("/api/admin/accelerator/settings", {
         method: "PUT",
