@@ -1030,6 +1030,13 @@ function CoachingPanel({
   const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [isSavingGoals, setIsSavingGoals] = useState(false);
 
+  // Student level tracking
+  const [studentLevel, setStudentLevel] = useState<string | null>(null);
+  const [studentLessonNumber, setStudentLessonNumber] = useState<string | null>(null);
+  const [levelSaveState, setLevelSaveState] = useState<"idle" | "editing" | "saving" | "saved" | "error">("idle");
+  const [levelDraftLevel, setLevelDraftLevel] = useState("");
+  const [levelDraftLesson, setLevelDraftLesson] = useState("");
+
   // Sync recording URL and fathom link when active session changes
   useEffect(() => {
     setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
@@ -1045,14 +1052,47 @@ function CoachingPanel({
   useEffect(() => {
     if (!goalsStudentEmail) {
       setStudentGoals(null);
+      setStudentLevel(null);
+      setStudentLessonNumber(null);
       return;
     }
     const params = new URLSearchParams({ studentEmail: goalsStudentEmail });
-    fetch(`/api/coaching/goals?${params}`)
-      .then((r) => r.json())
-      .then((d) => setStudentGoals(d.goals ?? null))
-      .catch(() => {});
+    // Fetch goals and level in parallel from separate endpoints
+    Promise.all([
+      fetch(`/api/coaching/goals?${params}`).then((r) => r.ok ? r.json() : null),
+      fetch(`/api/coaching/student-level?${params}`).then((r) => r.ok ? r.json() : null),
+    ]).then(([goalsData, levelData]) => {
+      setStudentGoals(goalsData?.goals ?? null);
+      setStudentLevel(levelData?.level ?? null);
+      setStudentLessonNumber(levelData?.lessonNumber ?? null);
+    }).catch(() => {});
   }, [goalsStudentEmail, canWrite]);
+
+  const handleSaveLevel = useCallback(async () => {
+    if (!goalsStudentEmail) return;
+    setLevelSaveState("saving");
+    try {
+      const res = await fetch("/api/coaching/student-level", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentEmail: goalsStudentEmail,
+          level: levelDraftLevel || null,
+          lessonNumber: levelDraftLesson || null,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStudentLevel(data.level ?? null);
+        setStudentLessonNumber(data.lessonNumber ?? null);
+        setLevelSaveState("idle");
+      } else {
+        setLevelSaveState("editing");
+      }
+    } catch {
+      setLevelSaveState("editing");
+    }
+  }, [goalsStudentEmail, levelDraftLevel, levelDraftLesson]);
 
   const handleSaveRecordingUrl = useCallback(async () => {
     if (!activeSessionId) return;
@@ -1762,76 +1802,121 @@ function CoachingPanel({
             <p className="text-sm text-muted-foreground">{subtitle}</p>
           </div>
 
-          {/* Right: Goals widget — student-level, shown when a student is loaded */}
+          {/* Right: Goals + Level widget — student-level, shown when a student is loaded */}
           {goalsStudentEmail && sessionType === "one-on-one" && (
-            <div className="lg:max-w-[55%] w-full rounded-lg border border-teal-500/25 bg-gradient-to-br from-teal-500/10 to-cyan-500/10 dark:from-teal-500/[0.07] dark:to-cyan-500/[0.07] p-3.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">⭐</span>
-                  <h3 className="text-sm font-semibold text-teal-700 dark:text-teal-300">
-                    Your goals this week
+            <div className="lg:max-w-[60%] w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Goals card */}
+              <div className="rounded-lg border border-teal-500/25 bg-gradient-to-br from-teal-500/10 to-cyan-500/10 dark:from-teal-500/[0.07] dark:to-cyan-500/[0.07] p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold text-teal-700 dark:text-teal-300">
+                    Goals this week
                   </h3>
+                  {canWrite && !isEditingGoals && (
+                    <button
+                      type="button"
+                      onClick={() => { setGoalsDraft(studentGoals ?? ""); setIsEditingGoals(true); }}
+                      className="text-[10px] text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                  )}
                 </div>
-                {canWrite && !isEditingGoals && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGoalsDraft(studentGoals ?? "");
-                      setIsEditingGoals(true);
-                    }}
-                    className="inline-flex items-center justify-center rounded-md border border-teal-500/25 bg-teal-500/10 px-2.5 py-1 text-xs font-medium text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 transition-colors"
-                  >
-                    <Pencil className="size-3 mr-1" />
-                    {studentGoals ? "Edit" : "Add"}
-                  </button>
-                )}
-              </div>
-              {isEditingGoals ? (
-                <div className="mt-2.5 flex flex-col gap-2">
-                  <p className="text-xs text-teal-600/80 dark:text-teal-400/70">
-                    Before our next 1:1 session, please complete:
-                  </p>
-                  <textarea
-                    value={goalsDraft}
-                    onChange={(e) => setGoalsDraft(e.target.value)}
-                    placeholder="e.g. Practice tones 1-4 with the flashcard deck, complete Lesson 3 exercises..."
-                    rows={2}
-                    className="w-full rounded-md border border-teal-500/25 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-teal-500/30 resize-y"
-                  />
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleSaveGoals}
-                      disabled={isSavingGoals}
-                      className="inline-flex items-center justify-center rounded-md bg-teal-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-600 transition-colors disabled:opacity-50"
-                    >
-                      {isSavingGoals ? "Saving..." : "Save"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingGoals(false)}
-                      className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Cancel
-                    </button>
+                {isEditingGoals ? (
+                  <div className="mt-2 flex flex-col gap-2">
+                    <textarea
+                      value={goalsDraft}
+                      onChange={(e) => setGoalsDraft(e.target.value)}
+                      placeholder="e.g. Practice tones 1-4, complete Lesson 3..."
+                      rows={2}
+                      className="w-full rounded-md border border-teal-500/25 bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-teal-500/30 resize-y"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={handleSaveGoals} disabled={isSavingGoals}
+                        className="rounded-md bg-teal-500 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-teal-600 transition-colors disabled:opacity-50">
+                        {isSavingGoals ? "Saving..." : "Save"}
+                      </button>
+                      <button type="button" onClick={() => setIsEditingGoals(false)}
+                        className="rounded-md border border-input bg-background px-2.5 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : studentGoals ? (
-                <div className="mt-2">
-                  <p className="text-xs text-teal-600/80 dark:text-teal-400/70 mb-1">
-                    Before our next session, please complete:
-                  </p>
-                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                ) : studentGoals ? (
+                  <p className="mt-1.5 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
                     {studentGoals}
                   </p>
+                ) : (
+                  <p className="mt-1.5 text-[10px] text-teal-600/60 dark:text-teal-400/50">
+                    {canWrite ? "Click edit to set goals." : "No goals set yet."}
+                  </p>
+                )}
+              </div>
+
+              {/* Current Progress card */}
+              <div className="rounded-lg border border-indigo-500/25 bg-gradient-to-br from-indigo-500/10 to-violet-500/10 dark:from-indigo-500/[0.07] dark:to-violet-500/[0.07] p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                    Current Progress
+                  </h3>
+                  {canWrite && levelSaveState !== "editing" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLevelDraftLevel(studentLevel ?? "");
+                        setLevelDraftLesson(studentLessonNumber ?? "");
+                        setLevelSaveState("editing");
+                      }}
+                      className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <p className="mt-1.5 text-xs text-teal-600/70 dark:text-teal-400/60">
-                  {canWrite
-                    ? "No goals set yet — click \"Add\" to set prep work."
-                    : "No goals set yet."}
-                </p>
-              )}
+                {levelSaveState === "editing" ? (
+                  <div className="mt-2 flex flex-col gap-2">
+                    <select
+                      value={levelDraftLevel}
+                      onChange={(e) => setLevelDraftLevel(e.target.value)}
+                      className="w-full h-8 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                    >
+                      <option value="">Select level...</option>
+                      <option value="CMB Foundation">CMB Foundation</option>
+                      <option value="CMB Intermediate">CMB Intermediate</option>
+                      <option value="CMB Advanced">CMB Advanced</option>
+                      <option value="Canto Kickstarter">Canto Kickstarter</option>
+                      <option value="Completed CMB">Completed CMB</option>
+                      <option value="Completed Canto Kickstarter">Completed Canto Kickstarter</option>
+                    </select>
+                    <input
+                      value={levelDraftLesson}
+                      onChange={(e) => setLevelDraftLesson(e.target.value)}
+                      placeholder="Lesson / Chapter number"
+                      className="w-full h-8 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={handleSaveLevel}
+                        className="rounded-md bg-indigo-500 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-indigo-600 transition-colors disabled:opacity-50">
+                        Save
+                      </button>
+                      <button type="button" onClick={() => setLevelSaveState("idle")}
+                        className="rounded-md border border-input bg-background px-2.5 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (studentLevel || studentLessonNumber) ? (
+                  <div className="mt-1.5 space-y-0.5">
+                    <p className="text-xs font-medium text-foreground">{studentLevel || ""}</p>
+                    {studentLessonNumber && (
+                      <p className="text-xs text-muted-foreground">Chapter / Lesson: {studentLessonNumber}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-1.5 text-[10px] text-indigo-600/60 dark:text-indigo-400/50">
+                    {canWrite ? "Click edit to set progress." : "Not set yet."}
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -2240,77 +2325,6 @@ function CoachingPanel({
         </div>
       )}
 
-      {/* Fathom Link Section */}
-      {activeSession && canWrite && (
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold text-foreground">Fathom Link</h3>
-            </div>
-            {!isEditingFathomLink && (
-              <button
-                type="button"
-                onClick={() => {
-                  setFathomLinkDraft(activeSession.fathomLink ?? "");
-                  setIsEditingFathomLink(true);
-                }}
-                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-              >
-                <Pencil className="size-3 mr-1" />
-                {activeSession.fathomLink ? "Edit" : "Add Link"}
-              </button>
-            )}
-          </div>
-          {isEditingFathomLink ? (
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
-                value={fathomLinkDraft}
-                onChange={(e) => setFathomLinkDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSaveFathomLink();
-                  }
-                }}
-                placeholder="https://fathom.video/..."
-                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveFathomLink}
-                  disabled={isSavingFathomLink}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
-                >
-                  {isSavingFathomLink ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingFathomLink(false)}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : activeSession.fathomLink ? (
-            <a
-              href={activeSession.fathomLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
-            >
-              <ExternalLink className="size-3.5 shrink-0" />
-              {activeSession.fathomLink}
-            </a>
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground">
-              No fathom link added yet.
-            </p>
-          )}
-        </div>
-      )}
 
       <div ref={splitContainerRef} className="flex gap-0 lg:flex-row flex-col">
         {/* Mandarin Panel */}
@@ -2449,9 +2463,9 @@ function CoachingPanel({
                 }
               }}
               disabled={!activeSession || !canWrite}
-              rows={5}
+              rows={1}
               placeholder="Paste or type Traditional Chinese here..."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 pr-16 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 pr-16 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
               />
               {canWrite && (
                 <button
@@ -2734,9 +2748,9 @@ function CoachingPanel({
                 }
               }}
               disabled={!activeSession || !canWrite}
-              rows={5}
+              rows={1}
               placeholder="Paste or type Traditional Chinese here..."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 pr-16 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 pr-16 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
               />
               {canWrite && (
                 <button
