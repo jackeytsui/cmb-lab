@@ -82,7 +82,7 @@ async function uploadFile(file: File): Promise<string> {
   const completeRes = await fetch(UPLOAD_URL, {
     method: "POST",
     headers: { "content-type": "application/json", "x-action": "complete" },
-    body: JSON.stringify({ pathname, uploadId, parts }),
+    body: JSON.stringify({ pathname, uploadId, key, parts }),
   });
   if (!completeRes.ok) {
     const d = await completeRes.json().catch(() => null);

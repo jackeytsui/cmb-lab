@@ -83,10 +83,11 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Complete multipart upload
     if (action === "complete") {
-      const { pathname, uploadId, parts } = await request.json();
+      const { pathname, uploadId, key, parts } = await request.json();
       const blob = await completeMultipartUpload(pathname, parts, {
         access: "public",
         token,
+        key,
         uploadId,
       });
       return NextResponse.json({ url: blob.url });
