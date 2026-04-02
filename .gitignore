@@ -50,5 +50,9 @@ next-env.d.ts
 /blob-report/
 /e2e/playwright/.clerk/
 
+# Python virtual environments
+venv/
+.venv/
+
 # Dictionary source data (large, downloaded on demand)
 /data/

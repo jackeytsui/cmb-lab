@@ -1,0 +1,13 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks
+
+title = "CMB Lab gitleaks config"
+
+[allowlist]
+  # venv was accidentally committed and has since been removed from tracking.
+  # Python packages contain example keys/tokens that are false positives.
+  paths = [
+    '''venv/''',
+    '''.venv/''',
+    '''node_modules/''',
+  ]
