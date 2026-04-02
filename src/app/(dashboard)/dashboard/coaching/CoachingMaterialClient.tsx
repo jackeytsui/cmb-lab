@@ -487,6 +487,11 @@ function NoteCard({
   const handleRomanizationChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const el = e.target;
     const raw = el.value;
+    // Only apply pinyin tone conversion for Mandarin — jyutping uses number tones as-is
+    if (noteLanguage === "zh-HK") {
+      setDraftRomanization(raw);
+      return;
+    }
     const converted = applyInlineTones(raw);
     setDraftRomanization(converted);
     // Adjust cursor if conversion shortened the string (e.g. "a1" → "ā")
@@ -496,7 +501,7 @@ function NoteCard({
         el.setSelectionRange(cursor, cursor);
       });
     }
-  }, []);
+  }, [noteLanguage]);
 
   const handleFetchTranslation = useCallback(async () => {
     const text = processed.displayText || baseText;
@@ -1433,6 +1438,9 @@ function CoachingPanel({
   useEffect(() => {
     if (!user) return;
     fetchSessions();
+    // Auto-refresh sessions every 15 seconds for near-real-time sync
+    const interval = setInterval(fetchSessions, 15000);
+    return () => clearInterval(interval);
   }, [fetchSessions, user]);
 
   const updateSession = useCallback(
@@ -1738,16 +1746,18 @@ function CoachingPanel({
         }
         const data = await res.json();
         const exportSessions = (data.sessions ?? []).map(
-          (s: { title: string; studentEmail?: string; fathomLink?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string }> }) => ({
+          (s: { title: string; studentEmail?: string; fathomLink?: string; recordingUrl?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string; explanation?: string | null }> }) => ({
             title: s.title,
             studentEmail: s.studentEmail,
             fathomLink: s.fathomLink,
+            recordingUrl: s.recordingUrl,
             notes: s.notes.map((n) => ({
               text: n.text,
               pane: n.pane as "mandarin" | "cantonese",
               textOverride: n.textOverride,
               romanizationOverride: n.romanizationOverride,
               translationOverride: n.translationOverride,
+              explanation: n.explanation,
             })),
           }),
         );
