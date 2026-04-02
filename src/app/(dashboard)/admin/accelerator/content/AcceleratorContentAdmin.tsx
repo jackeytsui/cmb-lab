@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileText, Upload, Loader2, Check, ExternalLink, Video } from "lucide-react";
@@ -27,69 +28,19 @@ const SECTIONS: SectionConfig[] = [
   },
 ];
 
-const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB chunks (safely under Vercel's 4.5MB limit)
-const UPLOAD_URL = "/api/admin/accelerator/settings/upload";
-
 /**
- * Upload a file to Vercel Blob using chunked multipart upload.
- * Splits files into 3MB chunks to stay under Vercel's 4.5MB body limit.
+ * Upload a file via @vercel/blob/client.
+ * Uses /api/blob-proxy to avoid CORS issues with custom domains.
+ * The NEXT_PUBLIC_VERCEL_BLOB_API_URL env var redirects the SDK to our proxy.
  */
 async function uploadFile(file: File): Promise<string> {
-  // Step 1: Create multipart upload
-  const createRes = await fetch(UPLOAD_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-action": "create" },
-    body: JSON.stringify({
-      pathname: `accelerator/${file.name}`,
-      contentType: file.type || "application/octet-stream",
-    }),
+  const blob = await upload(file.name, file, {
+    access: "private",
+    contentType: file.type || "application/octet-stream",
+    handleUploadUrl: "/api/admin/accelerator/settings/upload",
+    multipart: true,
   });
-  if (!createRes.ok) {
-    const d = await createRes.json().catch(() => null);
-    throw new Error(d?.error || `Create failed (${createRes.status})`);
-  }
-  const { uploadId, key, pathname } = await createRes.json();
-
-  // Step 2: Upload chunks
-  const parts: Array<{ partNumber: number; etag: string }> = [];
-  const totalParts = Math.ceil(file.size / CHUNK_SIZE);
-
-  for (let i = 0; i < totalParts; i++) {
-    const start = i * CHUNK_SIZE;
-    const chunk = file.slice(start, start + CHUNK_SIZE);
-
-    const partRes = await fetch(UPLOAD_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/octet-stream",
-        "x-action": "part",
-        "x-pathname": pathname,
-        "x-upload-id": uploadId,
-        "x-key": key,
-        "x-part-number": String(i + 1),
-      },
-      body: chunk,
-    });
-    if (!partRes.ok) {
-      const d = await partRes.json().catch(() => null);
-      throw new Error(d?.error || `Part ${i + 1} failed (${partRes.status})`);
-    }
-    const { etag } = await partRes.json();
-    parts.push({ partNumber: i + 1, etag });
-  }
-
-  // Step 3: Complete upload
-  const completeRes = await fetch(UPLOAD_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-action": "complete" },
-    body: JSON.stringify({ pathname, uploadId, key, parts }),
-  });
-  if (!completeRes.ok) {
-    const d = await completeRes.json().catch(() => null);
-    throw new Error(d?.error || `Complete failed (${completeRes.status})`);
-  }
-  const { url } = await completeRes.json();
-  return url;
+  return blob.url;
 }
 
 function ContentSection({
