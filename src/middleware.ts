@@ -116,7 +116,7 @@ export default clerkMiddleware(async (auth, req) => {
 
   // Student routes are intentionally limited to the core learning paths.
   if (role === "student" && isProtectedRoute(req) && !isStudentAllowedRoute(req)) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(new URL("/dashboard/reader", req.url));
   }
 
   return NextResponse.next();
