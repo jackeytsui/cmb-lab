@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
   }
 
+  const filename = request.nextUrl.searchParams.get("name");
+
   // Fetch from Vercel Blob with Bearer token — same as audio stream route
   const blobResponse = await fetch(blobUrl, {
     headers: {
@@ -36,8 +38,9 @@ export async function GET(request: NextRequest) {
   const contentLength = blobResponse.headers.get("content-length");
   if (contentLength) responseHeaders.set("content-length", contentLength);
   responseHeaders.set("cache-control", "private, max-age=3600");
-  // Allow same-origin iframe embedding (overrides global DENY)
-  responseHeaders.set("x-frame-options", "SAMEORIGIN");
+  if (filename) {
+    responseHeaders.set("content-disposition", `inline; filename="${filename}"`);
+  }
 
   return new NextResponse(blobResponse.body, {
     status: 200,

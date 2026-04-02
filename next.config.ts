@@ -26,6 +26,10 @@ const cspHeader = `
   upgrade-insecure-requests;
 `.replace(/\n/g, "").replace(/\s{2,}/g, " ").trim();
 
+// CSP for embeddable routes (PDF viewer) — same as above but allows same-origin framing
+const cspHeaderEmbeddable = cspHeader
+  .replace("frame-ancestors 'none'", "frame-ancestors 'self'");
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ["jieba-wasm"],
   async headers() {
@@ -44,17 +48,18 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Allow iframing the file proxy route (for PDF viewer)
+        // Embeddable file proxy route — allows same-origin iframe
         source: "/api/accelerator/file",
         headers: [
-          {
-            key: "X-Frame-Options",
-            value: "SAMEORIGIN",
-          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: cspHeaderEmbeddable },
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
         ],
       },
       {
-        source: "/(.*)",
+        // All other routes — strict security headers
+        source: "/((?!api/accelerator/file).*)",
         headers: [
           {
             key: "X-Content-Type-Options",
