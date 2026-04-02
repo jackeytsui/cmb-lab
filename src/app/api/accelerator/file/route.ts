@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { head } from "@vercel/blob";
 
 export const maxDuration = 60;
 
 /**
  * GET /api/accelerator/file?url=<blob-url>
- * Fetches a private blob and streams it to authenticated users.
+ * Streams a private Vercel Blob file to authenticated users.
+ * Uses the same pattern as the working audio-course stream route.
  */
 export async function GET(request: NextRequest) {
   const { userId } = await auth();
@@ -19,25 +19,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
   }
 
-  try {
-    // Verify blob exists and get metadata
-    const metadata = await head(blobUrl, {
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    });
+  // Fetch from Vercel Blob with Bearer token — same as audio stream route
+  const blobResponse = await fetch(blobUrl, {
+    headers: {
+      Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
+    },
+  });
 
-    // Fetch the actual file content using the downloadUrl
-    const res = await fetch(metadata.downloadUrl);
-    if (!res.ok) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
-    }
-
-    const headers = new Headers();
-    headers.set("content-type", metadata.contentType || "application/pdf");
-    headers.set("cache-control", "private, max-age=3600");
-
-    return new NextResponse(res.body, { status: 200, headers });
-  } catch (err) {
-    console.error("File proxy error:", err);
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
+  if (!blobResponse.ok) {
+    return new NextResponse("File not found", { status: 404 });
   }
+
+  const responseHeaders = new Headers();
+  const contentType = blobResponse.headers.get("content-type");
+  if (contentType) responseHeaders.set("content-type", contentType);
+  const contentLength = blobResponse.headers.get("content-length");
+  if (contentLength) responseHeaders.set("content-length", contentLength);
+  responseHeaders.set("cache-control", "private, max-age=3600");
+  // Allow same-origin iframe embedding (overrides global DENY)
+  responseHeaders.set("x-frame-options", "SAMEORIGIN");
+
+  return new NextResponse(blobResponse.body, {
+    status: 200,
+    headers: responseHeaders,
+  });
 }
