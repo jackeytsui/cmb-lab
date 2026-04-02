@@ -18,7 +18,7 @@ import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import {
   extractToneFromPinyin,
   extractToneFromJyutping,
-  getToneColorClass,
+  getToneColorStyle,
 } from "@/lib/tone-colors";
 
 async function fetchJiebaSegments(
@@ -730,16 +730,16 @@ function NoteCard({
                                 className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20">
                                 {chars.map((c, ci) => {
                                   if (!/\p{Script=Han}/u.test(c)) return <span key={ci}>{c}</span>;
-                                  let toneClass = "";
+                                  let toneStyle: React.CSSProperties | undefined;
                                   if (isCantonese) {
                                     const jp = ToJyutping.getJyutpingList(c);
                                     const syl = jp?.[0]?.[1];
-                                    if (syl) toneClass = getToneColorClass(extractToneFromJyutping(syl), "cantonese");
+                                    if (syl) toneStyle = getToneColorStyle(extractToneFromJyutping(syl), "cantonese");
                                   } else {
                                     const py = pinyin(c, { toneType: "num", type: "array" })[0];
-                                    if (py) toneClass = getToneColorClass(extractToneFromPinyin(py), "mandarin");
+                                    if (py) toneStyle = getToneColorStyle(extractToneFromPinyin(py), "mandarin");
                                   }
-                                  return <span key={ci} className={toneClass || undefined}>{c}</span>;
+                                  return <span key={ci} style={toneStyle}>{c}</span>;
                                 })}
                               </span>
                             );
@@ -760,11 +760,11 @@ function NoteCard({
                               {segChars.map((char, ci) => {
                                 const syllable = overrideMap!.get(startOffset + ci);
                                 if (syllable) {
-                                  const toneClass = toneColorsEnabled
+                                  const toneStyle = toneColorsEnabled
                                     ? (showJyutping
-                                        ? getToneColorClass(extractToneFromJyutping(syllable), "cantonese")
-                                        : getToneColorClass(extractToneFromPinyin(syllable), "mandarin"))
-                                    : "";
+                                        ? getToneColorStyle(extractToneFromJyutping(syllable), "cantonese")
+                                        : getToneColorStyle(extractToneFromPinyin(syllable), "mandarin"))
+                                    : undefined;
                                   return (
                                     <span key={ci} className="inline-flex flex-col items-center" style={{ minWidth: "1.1em" }}>
                                       <span
@@ -773,7 +773,7 @@ function NoteCard({
                                       >
                                         {syllable}
                                       </span>
-                                      <span className={toneClass || undefined}>{char}</span>
+                                      <span style={toneStyle}>{char}</span>
                                     </span>
                                   );
                                 }
