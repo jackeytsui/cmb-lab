@@ -44,6 +44,16 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Allow iframing the file proxy route (for PDF viewer)
+        source: "/api/accelerator/file",
+        headers: [
+          {
+            key: "X-Frame-Options",
+            value: "SAMEORIGIN",
+          },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           {
