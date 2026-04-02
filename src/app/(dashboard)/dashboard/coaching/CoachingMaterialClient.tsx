@@ -1937,25 +1937,7 @@ function CoachingPanel({
         </div>
       </div>
 
-      {/* GHL Session Tracking Form — coaches only, 1:1 sessions */}
-      {canWrite && sessionType === "one-on-one" && (
-        <details className="group rounded-lg border border-border bg-card">
-          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold text-foreground select-none list-none [&::-webkit-details-marker]:hidden">
-            <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-            Session Tracking Form
-          </summary>
-          <div className="px-4 pb-4">
-            <iframe
-              src="https://api.leadconnectorhq.com/widget/form/Vy75BI6BJuB4ibQlYA8P?notrack=true"
-              width="100%"
-              height="600"
-              frameBorder="0"
-              className="rounded-md border border-border"
-              title="GHL Session Tracking Form"
-            />
-          </div>
-        </details>
-      )}
+
 
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
