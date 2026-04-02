@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { getDownloadUrl } from "@vercel/blob";
 
 /**
  * GET /api/accelerator/file?url=<blob-url>
- * Proxies private Vercel Blob files so authenticated users can view them.
+ * Generates a temporary signed download URL for private blob files.
+ * Redirects the browser to the signed URL.
  */
 export async function GET(request: NextRequest) {
   const { userId } = await auth();
@@ -16,25 +18,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing url param" }, { status: 400 });
   }
 
-  // Only allow Vercel Blob URLs
   if (!blobUrl.includes("blob.vercel-storage.com")) {
     return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
   }
 
-  const res = await fetch(blobUrl, {
-    headers: {
-      authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-    },
-  });
+  try {
+    const downloadUrl = await getDownloadUrl(blobUrl, {
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
 
-  if (!res.ok) {
+    return NextResponse.redirect(downloadUrl);
+  } catch (err) {
+    console.error("Failed to get download URL:", err);
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
-
-  const headers = new Headers();
-  const contentType = res.headers.get("content-type");
-  if (contentType) headers.set("content-type", contentType);
-  headers.set("cache-control", "private, max-age=3600");
-
-  return new NextResponse(res.body, { status: 200, headers });
 }
