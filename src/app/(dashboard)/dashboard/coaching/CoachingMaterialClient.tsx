@@ -1460,8 +1460,13 @@ function CoachingPanel({
       }),
     });
     if (!res.ok) return;
+    const data = await res.json();
     trackAction("create_session");
     await fetchSessions();
+    // Auto-navigate to the newly created session
+    if (data.session?.id) {
+      setActiveSessionId(data.session.id);
+    }
   }, [canAddSession, sessionType, studentEmailFilter, fetchSessions, trackAction]);
 
   const handleLinkStudentEmail = useCallback(async () => {
