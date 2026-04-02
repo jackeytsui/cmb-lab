@@ -27,7 +27,7 @@ const SECTIONS: SectionConfig[] = [
   },
 ];
 
-const CHUNK_SIZE = 3 * 1024 * 1024; // 3MB chunks (under Vercel's 4.5MB limit)
+const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB chunks (safely under Vercel's 4.5MB limit)
 const UPLOAD_URL = "/api/admin/accelerator/settings/upload";
 
 /**
