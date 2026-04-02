@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     if (action === "create") {
       const { pathname, contentType } = await request.json();
       const mpu = await createMultipartUpload(pathname, {
-        access: "public",
+        access: "private",
         token,
         contentType: contentType || "application/octet-stream",
       });
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       const body = await request.arrayBuffer();
 
       const part = await uploadPart(pathname, body, {
-        access: "public",
+        access: "private",
         token,
         key,
         uploadId,
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     if (action === "complete") {
       const { pathname, uploadId, key, parts } = await request.json();
       const blob = await completeMultipartUpload(pathname, parts, {
-        access: "public",
+        access: "private",
         token,
         key,
         uploadId,
