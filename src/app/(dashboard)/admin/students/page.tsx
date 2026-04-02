@@ -14,6 +14,7 @@ import { users } from "@/db/schema";
 import { and, count, desc, eq, ilike, isNull, or, inArray } from "drizzle-orm";
 import { AssignCoachDropdown } from "@/components/admin/AssignCoachDropdown";
 import { UsersSearchInput } from "@/components/admin/UsersSearchInput";
+import { DeleteUserButton } from "@/components/admin/DeleteUserButton";
 
 /**
  * Admin Students page - displays student data table with server-side
@@ -317,13 +318,15 @@ export default async function AdminStudentsPage({
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Created
                     </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {usersResult.items.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={(usersRoleFilter === "all" || usersRoleFilter === "student") ? 6 : 5}
+                        colSpan={(usersRoleFilter === "all" || usersRoleFilter === "student") ? 7 : 6}
                         className="px-4 py-8 text-center text-sm text-muted-foreground"
                       >
                         No users found.
@@ -380,6 +383,12 @@ export default async function AdminStudentsPage({
                         <td className="px-4 py-3 text-sm text-muted-foreground">
                           {new Date(user.createdAt).toLocaleDateString()}
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          <DeleteUserButton
+                            userId={user.id}
+                            userName={user.name || user.email}
+                          />
+                        </td>
                       </tr>
                     ))
                   )}
@@ -387,9 +396,42 @@ export default async function AdminStudentsPage({
               </table>
             </div>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Showing {usersResult.items.length} of {usersResult.total} users.
-          </p>
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, usersResult.total)} of {usersResult.total} users.
+            </p>
+            {usersResult.total > pageSize && (
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`?tab=users&usersRole=${usersRoleFilter}${search ? `&search=${search}` : ""}&page=${page - 1}&pageSize=${pageSize}`}
+                  className={cn(
+                    "rounded-md border border-border px-3 py-1 text-xs font-medium transition-colors",
+                    page <= 1
+                      ? "pointer-events-none opacity-40"
+                      : "hover:bg-accent hover:text-accent-foreground"
+                  )}
+                  aria-disabled={page <= 1}
+                >
+                  Previous
+                </Link>
+                <span className="text-xs text-muted-foreground">
+                  Page {page} of {Math.ceil(usersResult.total / pageSize)}
+                </span>
+                <Link
+                  href={`?tab=users&usersRole=${usersRoleFilter}${search ? `&search=${search}` : ""}&page=${page + 1}&pageSize=${pageSize}`}
+                  className={cn(
+                    "rounded-md border border-border px-3 py-1 text-xs font-medium transition-colors",
+                    page * pageSize >= usersResult.total
+                      ? "pointer-events-none opacity-40"
+                      : "hover:bg-accent hover:text-accent-foreground"
+                  )}
+                  aria-disabled={page * pageSize >= usersResult.total}
+                >
+                  Next
+                </Link>
+              </div>
+            )}
+          </div>
         </section>
       ) : tab === "ghl" && ghlResult ? (
         <section aria-label="GHL Active Student List">

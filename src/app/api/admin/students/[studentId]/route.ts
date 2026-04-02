@@ -207,3 +207,42 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   return NextResponse.json({ student: updated });
 }
+
+/**
+ * DELETE /api/admin/students/[studentId]
+ * Soft-delete a user (sets deletedAt). Requires admin role.
+ */
+export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const hasAccess = await hasMinimumRole("admin");
+  if (!hasAccess) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { studentId } = await params;
+  const student = await db.query.users.findFirst({
+    where: eq(users.id, studentId),
+  });
+  if (!student) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  await db
+    .update(users)
+    .set({ deletedAt: new Date() })
+    .where(eq(users.id, studentId));
+
+  // Lock in Clerk so they can't log in
+  try {
+    const clerk = await clerkClient();
+    await clerk.users.lockUser(student.clerkId);
+  } catch {
+    // Non-critical
+  }
+
+  return NextResponse.json({ success: true });
+}
