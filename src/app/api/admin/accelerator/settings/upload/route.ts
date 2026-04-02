@@ -29,10 +29,10 @@ export async function GET() {
 }
 
 /**
- * POST — handles three actions for chunked upload:
- *   1. action=create  → start multipart upload
- *   2. action=part    → upload one chunk
- *   3. action=complete → finalize upload
+ * POST — chunked multipart upload with three actions:
+ *   action=create   → start multipart upload, returns { uploadId, key, pathname }
+ *   action=part     → upload one chunk (< 4MB)
+ *   action=complete → finalize and return blob URL
  */
 export async function POST(request: NextRequest) {
   try {
@@ -57,45 +57,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         uploadId: mpu.uploadId,
         key: mpu.key,
+        pathname,
       });
     }
 
     // Step 2: Upload a chunk
     if (action === "part") {
+      const pathname = request.headers.get("x-pathname")!;
       const uploadId = request.headers.get("x-upload-id")!;
       const key = request.headers.get("x-key")!;
       const partNumber = Number(request.headers.get("x-part-number"));
 
-      if (!request.body) {
-        return NextResponse.json({ error: "No body" }, { status: 400 });
-      }
-
-      // Read the chunk body (< 4MB so within limit)
       const body = await request.arrayBuffer();
 
-      const part = await uploadPart(key, body, {
+      const part = await uploadPart(pathname, body, {
         access: "public",
         token,
+        key,
         uploadId,
         partNumber,
       });
 
-      return NextResponse.json({ etag: part.etag });
+      return NextResponse.json({ etag: part.etag, partNumber: part.partNumber });
     }
 
     // Step 3: Complete multipart upload
     if (action === "complete") {
-      const { key, uploadId, parts } = await request.json();
-      const blob = await completeMultipartUpload(key, uploadId, parts, {
+      const { pathname, uploadId, parts } = await request.json();
+      const blob = await completeMultipartUpload(pathname, parts, {
         access: "public",
         token,
+        uploadId,
       });
       return NextResponse.json({ url: blob.url });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (err) {
-    console.error("Upload failed:", err);
+    console.error("Upload error:", err);
     return NextResponse.json(
       { error: `Upload failed: ${err instanceof Error ? err.message : "Unknown error"}` },
       { status: 500 },

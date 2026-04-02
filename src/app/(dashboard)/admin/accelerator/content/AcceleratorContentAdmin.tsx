@@ -48,7 +48,7 @@ async function uploadFile(file: File): Promise<string> {
     const d = await createRes.json().catch(() => null);
     throw new Error(d?.error || `Create failed (${createRes.status})`);
   }
-  const { uploadId, key } = await createRes.json();
+  const { uploadId, key, pathname } = await createRes.json();
 
   // Step 2: Upload chunks
   const parts: Array<{ partNumber: number; etag: string }> = [];
@@ -63,6 +63,7 @@ async function uploadFile(file: File): Promise<string> {
       headers: {
         "content-type": "application/octet-stream",
         "x-action": "part",
+        "x-pathname": pathname,
         "x-upload-id": uploadId,
         "x-key": key,
         "x-part-number": String(i + 1),
@@ -81,7 +82,7 @@ async function uploadFile(file: File): Promise<string> {
   const completeRes = await fetch(UPLOAD_URL, {
     method: "POST",
     headers: { "content-type": "application/json", "x-action": "complete" },
-    body: JSON.stringify({ key, uploadId, parts }),
+    body: JSON.stringify({ pathname, uploadId, parts }),
   });
   if (!completeRes.ok) {
     const d = await completeRes.json().catch(() => null);
