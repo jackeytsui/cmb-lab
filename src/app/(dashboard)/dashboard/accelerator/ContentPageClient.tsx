@@ -110,7 +110,7 @@ export function ContentPageClient({
         <div className="space-y-3">
           <div className="w-full rounded-xl overflow-hidden border border-border bg-card" style={{ height: "80vh" }}>
             <iframe
-              src={pdfUrl}
+              src={`/api/accelerator/file?url=${encodeURIComponent(pdfUrl)}`}
               className="w-full h-full"
               title={`${title} PDF`}
             />
@@ -122,7 +122,7 @@ export function ContentPageClient({
               </div>
               <p className="text-sm font-medium text-foreground">{title} PDF</p>
             </div>
-            <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download>
+            <a href={`/api/accelerator/file?url=${encodeURIComponent(pdfUrl)}`} target="_blank" rel="noopener noreferrer" download>
               <Button variant="outline" size="sm" className="gap-2">
                 <Download className="w-4 h-4" />
                 Download
