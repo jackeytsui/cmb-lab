@@ -6,6 +6,7 @@ import { eq, asc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import TypingDrillClient, { type PhrasePair } from "./TypingDrillClient";
 import { AdminEditLink } from "../AdminEditLink";
+import { ContentPageClient } from "../ContentPageClient";
 
 export default async function TypingDrillPage() {
   const { userId: clerkId } = await auth();
@@ -81,6 +82,13 @@ export default async function TypingDrillPage() {
           </div>
           <AdminEditLink href="/admin/accelerator/typing" />
         </div>
+        <ContentPageClient
+          title="Typing Unlock Kit"
+          description="Watch the video and download the guide to set up Chinese typing on your device."
+          videoKey="accelerator.typing_unlock_kit.video_url"
+          pdfKey="accelerator.typing_unlock_kit.pdf_url"
+          completionKey="typing_unlock_kit"
+        />
         <TypingDrillClient pairs={pairs} initialCompletedIds={completedIds} />
       </div>
     </FeatureGate>

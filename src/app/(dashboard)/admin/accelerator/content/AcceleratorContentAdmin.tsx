@@ -26,6 +26,12 @@ const SECTIONS: SectionConfig[] = [
     videoKey: "accelerator.starter_pack.video_url",
     pdfKey: "accelerator.starter_pack.pdf_url",
   },
+  {
+    id: "typing_unlock_kit",
+    title: "Typing Unlock Kit",
+    videoKey: "accelerator.typing_unlock_kit.video_url",
+    pdfKey: "accelerator.typing_unlock_kit.pdf_url",
+  },
 ];
 
 /**
