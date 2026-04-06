@@ -8,6 +8,8 @@ const ALLOWED_KEYS = [
   "accelerator.practice_plan.pdf_url",
   "accelerator.starter_pack.video_url",
   "accelerator.starter_pack.pdf_url",
+  "accelerator.typing_unlock_kit.video_url",
+  "accelerator.typing_unlock_kit.pdf_url",
 ];
 
 /**
