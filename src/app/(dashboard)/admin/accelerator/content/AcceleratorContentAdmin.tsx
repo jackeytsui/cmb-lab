@@ -39,6 +39,7 @@ async function uploadFile(file: File): Promise<string> {
     contentType: file.type || "application/octet-stream",
     handleUploadUrl: "/api/admin/accelerator/settings/upload",
     multipart: true,
+    addRandomSuffix: true,
   });
   return blob.url;
 }

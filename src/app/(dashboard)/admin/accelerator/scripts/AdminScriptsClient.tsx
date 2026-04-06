@@ -268,6 +268,7 @@ export default function AdminScriptsClient() {
         {
           access: "public",
           handleUploadUrl: "/api/admin/accelerator/scripts/upload",
+          addRandomSuffix: true,
         }
       );
 

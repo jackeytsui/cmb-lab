@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       const blob = await put(filename, file, {
         access: 'public',
+        addRandomSuffix: true,
       });
       return NextResponse.json({ url: blob.url });
     } else {

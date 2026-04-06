@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
         access: "private",
         contentType,
         token: BLOB_TOKEN(),
+        addRandomSuffix: true,
       });
 
       return NextResponse.json({ url: blob.url });
