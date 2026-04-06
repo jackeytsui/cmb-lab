@@ -78,6 +78,35 @@ export function escapeXml(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
+// --- Mixed-language helpers ---
+
+/**
+ * Wrap English segments in SSML <lang> tags so Azure switches to an English
+ * voice instead of forcing the Chinese voice to pronounce English words.
+ * Bracketed placeholders are replaced with <break> pauses.
+ */
+function mixedLangSsml(text: string): string {
+  // Split into: bracketed placeholders, English runs, or everything else
+  const parts = text.match(
+    /\[[^\]]+\]|[a-zA-Z][a-zA-Z0-9' ]*[a-zA-Z0-9]|[a-zA-Z]|[^\[\]a-zA-Z]+/g,
+  );
+  if (!parts) return escapeXml(text);
+
+  return parts
+    .map((seg) => {
+      if (/^\[/.test(seg)) return '<break time="1500ms"/>';
+      if (/^[a-zA-Z]/.test(seg))
+        return `<lang xml:lang="en-US">${escapeXml(seg)}</lang>`;
+      return escapeXml(seg);
+    })
+    .join("");
+}
+
+/** Check if text contains English letters (names, loanwords, etc.) */
+function hasEnglish(text: string): boolean {
+  return /[a-zA-Z]/.test(text);
+}
+
 // --- SSML Builders ---
 
 /**
@@ -85,6 +114,7 @@ export function escapeXml(text: string): string {
  *
  * Uses SSML version 1.0 with the W3C synthesis namespace.
  * Wraps text in <voice> and <prosody rate="..."> elements.
+ * English words are wrapped in <lang xml:lang="en-US"> for natural pronunciation.
  */
 export function buildSSML(
   text: string,
@@ -93,9 +123,10 @@ export function buildSSML(
   rate: string = "medium"
 ): string {
   const ssmlRate = toSsmlRate(rate);
+  const body = hasEnglish(text) ? mixedLangSsml(text) : escapeXml(text);
   return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${lang}">
   <voice name="${voiceName}">
-    <prosody rate="${ssmlRate}">${escapeXml(text)}</prosody>
+    <prosody rate="${ssmlRate}">${body}</prosody>
   </voice>
 </speak>`;
 }
@@ -140,9 +171,9 @@ export function buildCacheKey(
   voice: string,
   rate: string
 ): string {
-  // v3: bust cache for placeholder + tone fixes
+  // v4: bust cache for English language-switching in SSML
   const hash = createHash("md5").update(text).digest("hex");
-  return `tts:v3:${language}:${voice}:${rate}:${hash}`;
+  return `tts:v4:${language}:${voice}:${rate}:${hash}`;
 }
 
 /**

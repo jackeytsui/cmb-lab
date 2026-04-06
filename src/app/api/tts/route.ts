@@ -58,11 +58,11 @@ function buildOpenAiInstructions(language: TTSLanguage): string | undefined {
   switch (language) {
     case "zh-HK":
     case "cantonese":
-      return "Speak in Cantonese (Hong Kong).";
+      return "Speak in Cantonese (Hong Kong). Pronounce any English words naturally in English, then continue in Cantonese.";
     case "zh-CN":
     case "mandarin":
     default:
-      return "Speak in Mandarin Chinese (Putonghua).";
+      return "Speak in Mandarin Chinese (Putonghua). Pronounce any English words naturally in English, then continue in Mandarin.";
   }
 }
 
