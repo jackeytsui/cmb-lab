@@ -171,7 +171,6 @@ async function uploadFile(
       contentType: file.type || "audio/mpeg",
       handleUploadUrl: "/api/admin/audio-course/upload",
       multipart: file.size > 5 * 1024 * 1024,
-      addRandomSuffix: true,
       onUploadProgress: ({ percentage }) => {
         onProgress(percentage);
       },

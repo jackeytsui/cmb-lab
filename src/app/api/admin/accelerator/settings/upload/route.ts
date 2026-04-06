@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
             "video/x-matroska",
           ],
           maximumSizeInBytes: 500 * 1024 * 1024,
+          addRandomSuffix: true,
         };
       },
     });

@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
         return {
           allowedContentTypes: ALLOWED_AUDIO_CONTENT_TYPES,
           maximumSizeInBytes: MAX_AUDIO_SIZE_BYTES,
+          addRandomSuffix: true,
         };
       },
     });
