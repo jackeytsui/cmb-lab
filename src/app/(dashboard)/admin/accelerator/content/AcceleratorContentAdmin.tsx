@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileText, Upload, Loader2, Check, ExternalLink, Video } from "lucide-react";
+import { FileText, Upload, Loader2, Check, ExternalLink, Video, X, Pencil } from "lucide-react";
 
 type SectionConfig = {
   id: string;
@@ -58,13 +58,22 @@ function ContentSection({
   settings: Record<string, string>;
   onUpdate: () => void;
 }) {
-  const [videoUrl, setVideoUrl] = useState(settings[config.videoKey] ?? "");
+  const savedVideoUrl = settings[config.videoKey] ?? "";
+  const [videoUrl, setVideoUrl] = useState(savedVideoUrl);
   const [savingVideo, setSavingVideo] = useState(false);
   const [videoSaved, setVideoSaved] = useState(false);
+  const [removingVideo, setRemovingVideo] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [editing, setEditing] = useState(!savedVideoUrl);
 
   const currentPdf = settings[config.pdfKey] ?? "";
+
+  // Sync local state when settings change externally
+  useEffect(() => {
+    setVideoUrl(settings[config.videoKey] ?? "");
+    setEditing(!(settings[config.videoKey] ?? ""));
+  }, [settings, config.videoKey]);
 
   const handleSaveVideo = async () => {
     setSavingVideo(true);
@@ -75,12 +84,31 @@ function ContentSection({
         body: JSON.stringify({ key: config.videoKey, value: videoUrl }),
       });
       setVideoSaved(true);
+      setEditing(false);
       setTimeout(() => setVideoSaved(false), 2000);
       onUpdate();
     } catch (e) {
       console.error(e);
     } finally {
       setSavingVideo(false);
+    }
+  };
+
+  const handleRemoveVideo = async () => {
+    setRemovingVideo(true);
+    try {
+      await fetch("/api/admin/accelerator/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: config.videoKey, value: "" }),
+      });
+      setVideoUrl("");
+      setEditing(true);
+      onUpdate();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRemovingVideo(false);
     }
   };
 
@@ -138,48 +166,83 @@ function ContentSection({
         <label className="text-sm font-medium text-muted-foreground">
           Video (YouTube URL or upload)
         </label>
-        <div className="flex gap-2">
-          <Input
-            value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
-            placeholder="https://youtube.com/watch?v=... or paste a video URL"
-            className="flex-1"
-          />
-          <Button
-            onClick={handleSaveVideo}
-            disabled={savingVideo}
-            variant="outline"
-            className="gap-2"
-          >
-            {savingVideo ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : videoSaved ? (
-              <Check className="w-4 h-4 text-emerald-500" />
-            ) : null}
-            Save
-          </Button>
-          <label className="cursor-pointer">
-            <input
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={handleUploadVideo}
-              disabled={uploadingVideo}
+        {savedVideoUrl && !editing ? (
+          /* Saved state — grayed out URL with Edit / Remove buttons */
+          <div className="flex items-center gap-2">
+            <Input
+              value={videoUrl}
+              readOnly
+              className="flex-1 bg-muted text-muted-foreground cursor-default"
             />
             <Button
+              onClick={() => setEditing(true)}
               variant="outline"
-              className="gap-2 pointer-events-none"
-              disabled={uploadingVideo}
+              size="sm"
+              className="gap-1.5"
             >
-              {uploadingVideo ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Video className="w-4 h-4" />
-              )}
-              {uploadingVideo ? "Uploading..." : "Upload Video"}
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
             </Button>
-          </label>
-        </div>
+            <Button
+              onClick={handleRemoveVideo}
+              disabled={removingVideo}
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-destructive hover:text-destructive"
+            >
+              {removingVideo ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <X className="w-3.5 h-3.5" />
+              )}
+              Remove
+            </Button>
+          </div>
+        ) : (
+          /* Editing state — input + Save + Upload */
+          <div className="flex gap-2">
+            <Input
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder="https://youtube.com/watch?v=... or paste a video URL"
+              className="flex-1"
+            />
+            <Button
+              onClick={handleSaveVideo}
+              disabled={savingVideo || !videoUrl.trim()}
+              variant="outline"
+              className="gap-2"
+            >
+              {savingVideo ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : videoSaved ? (
+                <Check className="w-4 h-4 text-emerald-500" />
+              ) : null}
+              Save
+            </Button>
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={handleUploadVideo}
+                disabled={uploadingVideo}
+              />
+              <Button
+                variant="outline"
+                className="gap-2 pointer-events-none"
+                disabled={uploadingVideo}
+              >
+                {uploadingVideo ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Video className="w-4 h-4" />
+                )}
+                {uploadingVideo ? "Uploading..." : "Upload Video"}
+              </Button>
+            </label>
+          </div>
+        )}
       </div>
 
       {/* PDF Upload */}
