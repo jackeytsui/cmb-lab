@@ -74,6 +74,9 @@ export function ContentPageClient({
   const embedUrl = videoUrl ? toYouTubeEmbed(videoUrl) : null;
   const isDirectVideo = videoUrl && !embedUrl;
 
+  // Don't render anything if no content has been uploaded
+  if (!videoUrl && !pdfUrl) return null;
+
   return (
     <div className="space-y-6">
       {/* Video */}
@@ -99,11 +102,7 @@ export function ContentPageClient({
             Your browser does not support the video tag.
           </video>
         </div>
-      ) : (
-        <div className="aspect-video w-full rounded-xl border border-border bg-card flex items-center justify-center">
-          <p className="text-muted-foreground text-sm">Video coming soon</p>
-        </div>
-      )}
+      ) : null}
 
       {/* PDF viewer + download */}
       {pdfUrl ? (
@@ -130,13 +129,7 @@ export function ContentPageClient({
             </a>
           </div>
         </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-border bg-card p-5 text-center">
-          <p className="text-sm text-muted-foreground">
-            PDF will be available soon.
-          </p>
-        </div>
-      )}
+      ) : null}
 
       {/* Mark as complete */}
       {completionKey && (
