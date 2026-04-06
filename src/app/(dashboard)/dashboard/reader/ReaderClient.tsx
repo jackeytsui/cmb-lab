@@ -928,7 +928,7 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
             }
           }}
           firstSentencePlayTourId="reader-first-sentence-play"
-          disableSentencePlayback={isPlayingAll}
+          disableSentencePlayback={isPlayingAll || isSentencePlaybackBusy}
           isSpeaking={isPlaying || ttsLoading}
           speakingText={speakingText}
           ttsError={ttsError}

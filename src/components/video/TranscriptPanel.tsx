@@ -223,6 +223,9 @@ export function TranscriptPanel({
                 onTtsPlay={onTtsPlay ? () => onTtsPlay(index) : undefined}
                 isTtsLoading={ttsLineIndex === index && isTtsLoading}
                 isTtsPlaying={ttsLineIndex === index && isTtsPlaying}
+                isTtsDisabled={
+                  (isTtsLoading || isTtsPlaying) && ttsLineIndex !== index
+                }
                 englishText={englishTexts?.[index]}
                 lineTourId={index === 0 ? firstLineTourId : undefined}
                 ttsButtonTourId={index === 0 ? firstLineTtsTourId : undefined}

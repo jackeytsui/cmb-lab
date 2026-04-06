@@ -28,6 +28,8 @@ interface TranscriptLineProps {
   isTtsLoading?: boolean;
   /** Whether TTS is currently playing audio for this line */
   isTtsPlaying?: boolean;
+  /** Whether the TTS button should be disabled (e.g. another line is playing) */
+  isTtsDisabled?: boolean;
   /** English translation to display below the Chinese text */
   englishText?: string;
   /** Optional onboarding target id for this line row */
@@ -58,6 +60,7 @@ export function TranscriptLine({
   onTtsPlay,
   isTtsLoading = false,
   isTtsPlaying = false,
+  isTtsDisabled = false,
   englishText,
   lineTourId,
   ttsButtonTourId,
@@ -144,17 +147,20 @@ export function TranscriptLine({
         <button
           type="button"
           data-tour-id={ttsButtonTourId}
+          disabled={isTtsDisabled}
           onClick={(e) => {
             e.stopPropagation();
             onTtsPlay();
           }}
           className={cn(
             "ml-2 shrink-0 p-0.5 rounded transition-colors",
-            isTtsLoading
-              ? "text-cyan-500"
-              : isTtsPlaying
-                ? "text-cyan-500 animate-pulse"
-                : "text-muted-foreground/70 hover:text-foreground"
+            isTtsDisabled
+              ? "text-muted-foreground/30 cursor-not-allowed"
+              : isTtsLoading
+                ? "text-cyan-500"
+                : isTtsPlaying
+                  ? "text-cyan-500 animate-pulse"
+                  : "text-muted-foreground/70 hover:text-foreground"
           )}
           aria-label={
             isTtsLoading

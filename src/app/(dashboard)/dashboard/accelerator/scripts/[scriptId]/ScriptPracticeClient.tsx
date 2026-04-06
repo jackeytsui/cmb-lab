@@ -65,6 +65,7 @@ function LangBubble({
   labelColor,
   onPlay,
   isPlaying,
+  disabled,
 }: {
   label: string;
   text: string;
@@ -72,6 +73,7 @@ function LangBubble({
   labelColor: string;
   onPlay: () => void;
   isPlaying: boolean;
+  disabled: boolean;
 }) {
   const displayRomanisation = useMemo(() => {
     if (romanisation) return romanisation;
@@ -92,11 +94,13 @@ function LangBubble({
       <button
         type="button"
         onClick={onPlay}
+        disabled={disabled}
         className={cn(
           "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all",
           isPlaying
             ? "bg-blue-500/15 text-blue-500 border border-blue-500/30"
-            : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground border border-border"
+            : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground border border-border",
+          disabled && !isPlaying && "opacity-50 cursor-not-allowed"
         )}
       >
         {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
@@ -130,6 +134,9 @@ export default function ScriptPracticeClient({
   // TTS
   const { speak, stop: stopTTS, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
   const [playingLineKey, setPlayingLineKey] = useState<string | null>(null);
+
+  // Any TTS activity in progress — used to lock all play buttons
+  const ttsBusy = ttsLoading || ttsPlaying || playingLineKey !== null;
 
   // Play all state
   const [playingAllLang, setPlayingAllLang] = useState<"cantonese" | "mandarin" | null>(null);
@@ -263,11 +270,13 @@ export default function ScriptPracticeClient({
         <button
           type="button"
           onClick={() => handlePlayAll("cantonese")}
+          disabled={playingAllLang !== "cantonese" && ttsBusy}
           className={cn(
             "flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-medium transition-colors",
             playingAllLang === "cantonese"
               ? "border-cyan-500 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400"
-              : "border-border bg-card text-foreground hover:bg-accent"
+              : "border-border bg-card text-foreground hover:bg-accent",
+            playingAllLang !== "cantonese" && ttsBusy && "opacity-50 cursor-not-allowed"
           )}
         >
           {playingAllLang === "cantonese" ? (
@@ -285,11 +294,13 @@ export default function ScriptPracticeClient({
         <button
           type="button"
           onClick={() => handlePlayAll("mandarin")}
+          disabled={playingAllLang !== "mandarin" && ttsBusy}
           className={cn(
             "flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-medium transition-colors",
             playingAllLang === "mandarin"
               ? "border-red-500 bg-red-500/10 text-red-600 dark:text-red-400"
-              : "border-border bg-card text-foreground hover:bg-accent"
+              : "border-border bg-card text-foreground hover:bg-accent",
+            playingAllLang !== "mandarin" && ttsBusy && "opacity-50 cursor-not-allowed"
           )}
         >
           {playingAllLang === "mandarin" ? (
@@ -355,6 +366,7 @@ export default function ScriptPracticeClient({
                   labelColor="text-cyan-500"
                   onPlay={() => handlePlayLine(line.cantoneseText, "cantonese", line.id)}
                   isPlaying={playingLineKey === `${line.id}-cantonese` && ttsPlaying}
+                  disabled={ttsBusy && playingLineKey !== `${line.id}-cantonese`}
                 />
                 <LangBubble
                   label="Mandarin"
@@ -363,6 +375,7 @@ export default function ScriptPracticeClient({
                   labelColor="text-red-500"
                   onPlay={() => handlePlayLine(line.mandarinText, "mandarin", line.id)}
                   isPlaying={playingLineKey === `${line.id}-mandarin` && ttsPlaying}
+                  disabled={ttsBusy && playingLineKey !== `${line.id}-mandarin`}
                 />
               </div>
 
