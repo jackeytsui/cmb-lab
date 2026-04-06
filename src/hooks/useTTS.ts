@@ -75,7 +75,9 @@ function browserSpeak(
       return;
     }
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Strip bracketed placeholders like [your name] so they aren't spoken
+    const spokenText = text.replace(/\[[^\]]+\]/g, "");
+    const utterance = new SpeechSynthesisUtterance(spokenText);
     const lang = getBrowserLang(language);
     utterance.lang = lang;
     utterance.rate =

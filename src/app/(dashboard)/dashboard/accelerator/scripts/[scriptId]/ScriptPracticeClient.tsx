@@ -13,8 +13,7 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTTS, type TTSOptions } from "@/hooks/useTTS";
-import { pinyin } from "pinyin-pro";
-import ToJyutping from "to-jyutping";
+import { smartRomanise } from "@/lib/romanise";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,11 +76,8 @@ function LangBubble({
   const displayRomanisation = useMemo(() => {
     if (romanisation) return romanisation;
     if (!text) return "";
-    if (label === "Cantonese") {
-      const list = ToJyutping.getJyutpingList(text);
-      return list?.map(([, jp]) => jp ?? "").join(" ").trim() || "";
-    }
-    return pinyin(text, { toneType: "symbol" });
+    const lang = label === "Cantonese" ? "cantonese" : "mandarin";
+    return smartRomanise(text, lang);
   }, [romanisation, text, label]);
 
   return (

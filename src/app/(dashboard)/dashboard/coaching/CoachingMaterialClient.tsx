@@ -12,6 +12,7 @@ import { useUser } from "@clerk/nextjs";
 import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, GripVertical, ArrowRightLeft, NotebookPen } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
+import { smartRomanise } from "@/lib/romanise";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
 import { exportCoachingNotes } from "@/lib/coaching-export";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
@@ -431,13 +432,8 @@ function NoteCard({
 
   const defaultRomanization = useMemo(() => {
     if (!baseText.trim()) return "";
-    if (noteLanguage === "zh-HK") {
-      return ToJyutping.getJyutpingList(baseText)
-        .map(([, jp]) => jp ?? "")
-        .filter(Boolean)
-        .join(" ");
-    }
-    return pinyin(baseText, { type: "array" }).filter(Boolean).join(" ");
+    const lang = noteLanguage === "zh-HK" ? "cantonese" : "mandarin";
+    return smartRomanise(baseText, lang);
   }, [baseText, noteLanguage]);
 
   const defaultTranslation = useMemo(() => {
