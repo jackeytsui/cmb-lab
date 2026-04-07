@@ -113,9 +113,19 @@ function DrillSide({
   const handleGiveUp = useCallback(() => {
     setInput(side.chineseText);
     setFeedback("revealed");
+    // Don't mark complete yet — let student choose to try again or skip
+  }, [side.chineseText]);
+
+  const handleSkip = useCallback(() => {
     onComplete(side.id);
-    // Stay locked — skip with 0 points
-  }, [side.chineseText, side.id, onComplete]);
+  }, [side.id, onComplete]);
+
+  const handleTryAgain = useCallback(() => {
+    setInput("");
+    setFeedback("idle");
+    setCharFeedback([]);
+    inputRef.current?.focus();
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -224,15 +234,41 @@ function DrillSide({
           )}
         </div>
       )}
-      {feedback === "revealed" && (
+      {feedback === "revealed" && !isLocked && (
+        <div className="space-y-2 w-full">
+          <div className="flex items-center justify-center gap-1 text-amber-500 text-xs font-medium">
+            <span>Answer revealed</span>
+          </div>
+          <div className="flex gap-2 w-full">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleTryAgain}
+              className="flex-1"
+            >
+              Try Again
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSkip}
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Skip
+            </Button>
+          </div>
+        </div>
+      )}
+      {feedback === "revealed" && isLocked && (
         <div className="flex items-center gap-1 text-amber-500 text-xs font-medium">
           <Check className="w-3.5 h-3.5" />
           <span>Skipped</span>
         </div>
       )}
 
-      {/* Action buttons — hidden once locked */}
-      {!isLocked && (
+      {/* Action buttons — hidden once locked or when answer is revealed */}
+      {!isLocked && feedback === "idle" && (
         <div className="flex gap-2 w-full">
           <Button
             type="button"
