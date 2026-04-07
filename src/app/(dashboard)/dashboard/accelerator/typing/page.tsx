@@ -7,6 +7,7 @@ import { FeatureGate } from "@/components/auth/FeatureGate";
 import TypingDrillClient, { type PhrasePair } from "./TypingDrillClient";
 import { AdminEditLink } from "../AdminEditLink";
 import { ContentPageClient } from "../ContentPageClient";
+import { CompletionToggle } from "../CompletionToggle";
 
 export default async function TypingDrillPage() {
   const { userId: clerkId } = await auth();
@@ -87,13 +88,13 @@ export default async function TypingDrillPage() {
           description="Watch the video and download the guide to set up Chinese typing on your device."
           videoKey="accelerator.typing_unlock_kit.video_url"
           pdfKey="accelerator.typing_unlock_kit.pdf_url"
-          completionKey="typing_unlock_kit"
           scrollToId="typing-practice"
           scrollToLabel="Start Typing Practice"
         />
         <div id="typing-practice">
           <TypingDrillClient pairs={pairs} initialCompletedIds={completedIds} />
         </div>
+        <CompletionToggle completionKey="typing_unlock_kit" />
       </div>
     </FeatureGate>
   );

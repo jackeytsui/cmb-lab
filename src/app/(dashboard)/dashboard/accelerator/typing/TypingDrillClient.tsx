@@ -304,13 +304,6 @@ export default function TypingDrillClient({
 
   return (
     <div className="space-y-6">
-      {/* Video section */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="aspect-video flex items-center justify-center bg-muted/30">
-          <p className="text-muted-foreground text-sm">Demo video coming soon</p>
-        </div>
-      </div>
-
       {/* Progress bar */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm text-muted-foreground">
