@@ -428,6 +428,7 @@ function NoteCard({
   const [isCopyingOver, setIsCopyingOver] = useState(false);
   const [showExplanation, setShowExplanation] = useState(!!note.explanation);
   const [explanationDraft, setExplanationDraft] = useState(note.explanation ?? "");
+  const [explanationSaved, setExplanationSaved] = useState(false);
   const explanationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const defaultRomanization = useMemo(() => {
@@ -540,21 +541,35 @@ function NoteCard({
     }
   }, [onCopyOver, isCopyingOver]);
 
+  const flashSaved = useCallback(() => {
+    setExplanationSaved(true);
+    setTimeout(() => setExplanationSaved(false), 1500);
+  }, []);
+
   const handleExplanationChange = useCallback(
     (value: string) => {
       setExplanationDraft(value);
+      setExplanationSaved(false);
       if (explanationTimerRef.current) clearTimeout(explanationTimerRef.current);
       explanationTimerRef.current = setTimeout(() => {
         onSaveExplanation?.(value);
+        flashSaved();
       }, 800);
     },
-    [onSaveExplanation],
+    [onSaveExplanation, flashSaved],
   );
 
   const handleExplanationBlur = useCallback(() => {
     if (explanationTimerRef.current) clearTimeout(explanationTimerRef.current);
     onSaveExplanation?.(explanationDraft);
-  }, [onSaveExplanation, explanationDraft]);
+    flashSaved();
+  }, [onSaveExplanation, explanationDraft, flashSaved]);
+
+  const handleExplanationSave = useCallback(() => {
+    if (explanationTimerRef.current) clearTimeout(explanationTimerRef.current);
+    onSaveExplanation?.(explanationDraft);
+    flashSaved();
+  }, [onSaveExplanation, explanationDraft, flashSaved]);
 
   const annotationSize = Math.round(fontSize * 1.2);
   const englishSize = Math.round(fontSize * 1.1);
@@ -896,14 +911,31 @@ function NoteCard({
           {(showExplanation || (note.explanation && !canEdit)) && (
             <div className="mt-2 border-t border-border/50 pt-2">
               {canEdit && onSaveExplanation ? (
-                <textarea
-                  value={explanationDraft}
-                  onChange={(e) => handleExplanationChange(e.target.value)}
-                  onBlur={handleExplanationBlur}
-                  rows={2}
-                  className="w-full rounded-md border border-violet-500/25 bg-violet-500/5 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-y"
-                  placeholder="Add notes or explanation for this entry..."
-                />
+                <div className="space-y-1">
+                  <textarea
+                    value={explanationDraft}
+                    onChange={(e) => handleExplanationChange(e.target.value)}
+                    onBlur={handleExplanationBlur}
+                    rows={2}
+                    className="w-full rounded-md border border-violet-500/25 bg-violet-500/5 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-y"
+                    placeholder="Add notes or explanation for this entry..."
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    {explanationSaved && (
+                      <span className="text-[10px] text-emerald-500 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                        Saved
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleExplanationSave}
+                      className="rounded px-2 py-0.5 text-[10px] font-medium bg-violet-500/10 text-violet-500 hover:bg-violet-500/20 transition-colors"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
               ) : note.explanation ? (
                 <p className="text-xs text-violet-400/80 whitespace-pre-wrap leading-relaxed">
                   {note.explanation}
