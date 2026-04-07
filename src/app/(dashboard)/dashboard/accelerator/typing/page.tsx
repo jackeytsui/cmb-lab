@@ -88,8 +88,12 @@ export default async function TypingDrillPage() {
           videoKey="accelerator.typing_unlock_kit.video_url"
           pdfKey="accelerator.typing_unlock_kit.pdf_url"
           completionKey="typing_unlock_kit"
+          scrollToId="typing-practice"
+          scrollToLabel="Start Typing Practice"
         />
-        <TypingDrillClient pairs={pairs} initialCompletedIds={completedIds} />
+        <div id="typing-practice">
+          <TypingDrillClient pairs={pairs} initialCompletedIds={completedIds} />
+        </div>
       </div>
     </FeatureGate>
   );

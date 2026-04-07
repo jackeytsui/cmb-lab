@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Download, FileText, Loader2, CheckCircle2, Circle } from "lucide-react";
+import { Download, FileText, Loader2, CheckCircle2, Circle, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ContentPageClientProps {
@@ -10,6 +10,10 @@ interface ContentPageClientProps {
   videoKey: string;
   pdfKey: string;
   completionKey?: string;
+  /** ID of an element to scroll to — renders a "Start Practice" button */
+  scrollToId?: string;
+  /** Label for the scroll button (default: "Start Practice") */
+  scrollToLabel?: string;
 }
 
 export function ContentPageClient({
@@ -18,6 +22,8 @@ export function ContentPageClient({
   videoKey,
   pdfKey,
   completionKey,
+  scrollToId,
+  scrollToLabel = "Start Practice",
 }: ContentPageClientProps) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -151,6 +157,20 @@ export function ContentPageClient({
             <Circle className="w-4 h-4" />
           )}
           {completed ? "Completed" : "Mark as Complete"}
+        </button>
+      )}
+
+      {/* Scroll to practice */}
+      {scrollToId && (
+        <button
+          type="button"
+          onClick={() => {
+            document.getElementById(scrollToId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          className="w-full rounded-xl border-2 border-cyan-500/30 bg-cyan-500/10 p-4 flex items-center justify-center gap-2.5 text-sm font-semibold text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 transition-all"
+        >
+          <ArrowDown className="w-4 h-4" />
+          {scrollToLabel}
         </button>
       )}
     </div>
