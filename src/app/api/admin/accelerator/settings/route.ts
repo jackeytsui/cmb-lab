@@ -10,6 +10,7 @@ const ALLOWED_KEYS = [
   "accelerator.starter_pack.pdf_url",
   "accelerator.typing_unlock_kit.video_url",
   "accelerator.typing_unlock_kit.pdf_url",
+  "tone_mastery.hero_video_url",
 ];
 
 /**
@@ -23,7 +24,7 @@ export async function GET() {
   }
 
   const rows = await db.execute(
-    sql`SELECT key, value FROM app_settings WHERE key LIKE 'accelerator.%'`
+    sql`SELECT key, value FROM app_settings WHERE key LIKE 'accelerator.%' OR key LIKE 'tone_mastery.%'`
   );
 
   const settings: Record<string, string> = {};

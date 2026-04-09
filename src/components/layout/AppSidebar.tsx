@@ -25,6 +25,8 @@ import {
   Gift,
   ClipboardList,
   Package,
+  Music,
+  Ear,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
 
@@ -39,7 +41,10 @@ type FeatureKey =
   | "video_threads"
   | "certificates"
   | "ai_chat"
-  | "mandarin_accelerator";
+  | "mandarin_accelerator"
+  | "audio_accelerator_edition"
+  | "tone_mastery"
+  | "listening_training";
 
 type NavItemWithFeature = NavSection["items"][number] & {
   featureKey?: FeatureKey;
@@ -136,6 +141,30 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         url: "/dashboard/accelerator/starter-pack",
         icon: Package,
         featureKey: "mandarin_accelerator",
+      },
+    ],
+  },
+  {
+    label: "Mandarin Accelerator Extra Pack",
+    minRole: "student",
+    items: [
+      {
+        title: "Audio Accelerator Edition",
+        url: "/dashboard/accelerator-extra/audio",
+        icon: AudioLines,
+        featureKey: "audio_accelerator_edition",
+      },
+      {
+        title: "Tone Mastery",
+        url: "/dashboard/accelerator-extra/tone-mastery",
+        icon: Music,
+        featureKey: "tone_mastery",
+      },
+      {
+        title: "Listening Training",
+        url: "/dashboard/accelerator-extra/listening-training",
+        icon: Ear,
+        featureKey: "listening_training",
       },
     ],
   },

@@ -30,6 +30,9 @@ export const FEATURE_KEYS = [
   "certificates",
   "ai_chat",
   "mandarin_accelerator",
+  "audio_accelerator_edition",
+  "tone_mastery",
+  "listening_training",
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
