@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Loader2, Play, Volume2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Loader2, Pause, Play, RotateCcw, Volume2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTTS } from "@/hooks/useTTS";
 
@@ -46,15 +46,30 @@ function QuestionCard({
   isCompleted: boolean;
   onComplete: (questionId: string) => void;
 }) {
-  const { speak, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
+  const { speak, stop, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
   const [wrongPicks, setWrongPicks] = useState<Set<string>>(new Set());
   const [solved, setSolved] = useState(isCompleted);
+  const [rate, setRate] = useState<"slow" | "medium" | "fast">("medium");
+  const [replayCount, setReplayCount] = useState(1);
+  const replayAbortRef = useRef(false);
 
   const options = useMemo(() => shuffleOptions(question), [question]);
 
-  const handlePlay = useCallback(() => {
-    speak(question.chineseText, { language: "zh-CN" });
-  }, [speak, question.chineseText]);
+  const handlePlay = useCallback(async () => {
+    if (ttsPlaying) {
+      stop();
+      replayAbortRef.current = true;
+      return;
+    }
+    replayAbortRef.current = false;
+    for (let i = 0; i < replayCount; i++) {
+      if (replayAbortRef.current) break;
+      await speak(question.chineseText, { language: "zh-CN", rate });
+      if (i < replayCount - 1 && !replayAbortRef.current) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+  }, [speak, stop, ttsPlaying, question.chineseText, rate, replayCount]);
 
   const handlePick = useCallback(
     (option: string) => {
@@ -86,33 +101,75 @@ function QuestionCard({
           {question.sortOrder}.
         </span>
         <div className="flex-1 space-y-2">
-          <div className="flex items-center gap-3">
-            {/* Play button */}
+          {/* English translation */}
+          <p className="text-base font-medium text-foreground italic">
+            {question.englishText}
+          </p>
+
+          {/* Audio controls */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Play / Stop button */}
             <button
               type="button"
               onClick={handlePlay}
-              disabled={ttsLoading || ttsPlaying}
+              disabled={ttsLoading}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all border shrink-0",
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all border",
                 ttsPlaying
                   ? "bg-cyan-500/15 text-cyan-500 border-cyan-500/30"
                   : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground border-border",
               )}
             >
               {ttsLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : ttsPlaying ? (
-                <Volume2 className="w-4 h-4 animate-pulse" />
+                <Pause className="w-3.5 h-3.5" />
               ) : (
-                <Play className="w-4 h-4" />
+                <Play className="w-3.5 h-3.5" />
               )}
-              {ttsPlaying ? "Playing..." : "Listen"}
+              {ttsLoading ? "Loading..." : ttsPlaying ? "Stop" : "Listen"}
             </button>
 
-            {/* English translation */}
-            <p className="text-base font-medium text-foreground italic">
-              {question.englishText}
-            </p>
+            {/* Speed selector */}
+            <div className="inline-flex items-center rounded-full border border-border overflow-hidden text-[11px]">
+              {(["slow", "medium", "fast"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRate(r)}
+                  className={cn(
+                    "px-2.5 py-1 font-medium transition-colors",
+                    rate === r
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                  )}
+                >
+                  {r === "slow" ? "0.8x" : r === "medium" ? "1x" : "1.3x"}
+                </button>
+              ))}
+            </div>
+
+            {/* Replay count */}
+            <div className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+              <RotateCcw className="w-3 h-3" />
+              <div className="inline-flex items-center rounded-full border border-border overflow-hidden">
+                {[1, 2, 3].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setReplayCount(c)}
+                    className={cn(
+                      "px-2 py-1 font-medium transition-colors",
+                      replayCount === c
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                    )}
+                  >
+                    {c}x
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
