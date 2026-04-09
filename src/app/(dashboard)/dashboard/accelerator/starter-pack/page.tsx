@@ -6,7 +6,7 @@ export default function StarterPackPage() {
     <FeatureGate feature="mandarin_accelerator">
       <div className="container mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Starter Pack</h1>
+          <h1 className="text-2xl font-bold text-foreground">The &ldquo;Broken Cantonese to Fluent Mandarin&rdquo; Starter Pack</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Everything you need to get started with the Mandarin Accelerator.
           </p>

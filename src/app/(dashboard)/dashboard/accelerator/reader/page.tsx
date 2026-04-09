@@ -38,7 +38,7 @@ async function CuratedPassagesList() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            AI Reader (Curated Passages)
+            Comprehensive AI Reader
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Short Mandarin reading passages. Tap any passage to open in the

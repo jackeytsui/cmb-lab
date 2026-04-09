@@ -74,7 +74,7 @@ export default async function TypingDrillPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">
-              Typing Unlock Kit
+              The Chinese Typing Unlock Kit
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Practice typing Chinese characters — Cantonese and Mandarin side

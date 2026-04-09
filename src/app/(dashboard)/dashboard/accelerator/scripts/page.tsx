@@ -70,7 +70,7 @@ async function ScriptsContent() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            Conversation Scripts
+            The Conversation Confidence Starter Scripts
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Practice speaking with real-life dialogue scenarios.

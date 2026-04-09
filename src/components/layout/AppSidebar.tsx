@@ -114,12 +114,6 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         featureKey: "mandarin_accelerator",
       },
       {
-        title: "Starter Pack",
-        url: "/dashboard/accelerator/starter-pack",
-        icon: Package,
-        featureKey: "mandarin_accelerator",
-      },
-      {
         title: "Typing Unlock Kit",
         url: "/dashboard/accelerator/typing",
         icon: Keyboard,
@@ -132,9 +126,15 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         featureKey: "mandarin_accelerator",
       },
       {
-        title: "AI Reader (Curated)",
+        title: "AI Reader",
         url: "/dashboard/accelerator/reader",
         icon: BookOpenText,
+        featureKey: "mandarin_accelerator",
+      },
+      {
+        title: "Starter Pack",
+        url: "/dashboard/accelerator/starter-pack",
+        icon: Package,
         featureKey: "mandarin_accelerator",
       },
     ],
