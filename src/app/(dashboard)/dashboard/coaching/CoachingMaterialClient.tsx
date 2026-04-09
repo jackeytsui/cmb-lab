@@ -559,6 +559,15 @@ function NoteCard({
     }
   }, [savedExplanation]);
 
+  const handleExplanationDelete = useCallback(() => {
+    if (explanationTimerRef.current) clearTimeout(explanationTimerRef.current);
+    onSaveExplanation?.("");
+    setSavedExplanation("");
+    setExplanationDraft("");
+    setIsEditingExplanation(false);
+    setShowExplanation(false);
+  }, [onSaveExplanation]);
+
   const annotationSize = Math.round(fontSize * 1.2);
   const englishSize = Math.round(fontSize * 1.1);
 
@@ -928,18 +937,27 @@ function NoteCard({
                     </div>
                   </div>
                 ) : (
-                  /* View mode: saved text + Edit button */
+                  /* View mode: saved text + Edit / Delete buttons */
                   <div className="group flex items-start gap-1.5">
                     <p className="flex-1 text-xs text-violet-400/80 whitespace-pre-wrap leading-relaxed">
                       {savedExplanation}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingExplanation(true)}
-                      className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground transition-all"
-                    >
-                      Edit
-                    </button>
+                    <div className="shrink-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingExplanation(true)}
+                        className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExplanationDelete}
+                        className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-red-500 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 )
               ) : savedExplanation ? (
