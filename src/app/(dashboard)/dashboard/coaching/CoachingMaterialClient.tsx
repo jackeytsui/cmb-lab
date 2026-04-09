@@ -19,6 +19,7 @@ import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import {
   extractToneFromPinyin,
   extractToneFromJyutping,
+  getToneColorClass,
   getToneColorStyle,
 } from "@/lib/tone-colors";
 
@@ -744,15 +745,22 @@ function NoteCard({
                                 {chars.map((c, ci) => {
                                   if (!/\p{Script=Han}/u.test(c)) return <span key={ci}>{c}</span>;
                                   let toneStyle: React.CSSProperties | undefined;
+                                  let toneClass = "";
                                   if (isCantonese) {
                                     const jp = ToJyutping.getJyutpingList(c);
                                     const syl = jp?.[0]?.[1];
-                                    if (syl) toneStyle = getToneColorStyle(extractToneFromJyutping(syl), "cantonese");
+                                    if (syl) {
+                                      toneStyle = getToneColorStyle(extractToneFromJyutping(syl), "cantonese");
+                                      toneClass = getToneColorClass(extractToneFromJyutping(syl), "cantonese");
+                                    }
                                   } else {
                                     const py = pinyin(c, { toneType: "num", type: "array" })[0];
-                                    if (py) toneStyle = getToneColorStyle(extractToneFromPinyin(py), "mandarin");
+                                    if (py) {
+                                      toneStyle = getToneColorStyle(extractToneFromPinyin(py), "mandarin");
+                                      toneClass = getToneColorClass(extractToneFromPinyin(py), "mandarin");
+                                    }
                                   }
-                                  return <span key={ci} style={toneStyle}>{c}</span>;
+                                  return <span key={ci} className={toneClass || undefined} style={toneStyle}>{c}</span>;
                                 })}
                               </span>
                             );
@@ -774,6 +782,11 @@ function NoteCard({
                                 const syllable = overrideMap!.get(startOffset + ci);
                                 if (syllable) {
                                   const isCantoNote = note.pane === "cantonese";
+                                  const toneColorClass = toneColorsEnabled
+                                    ? (isCantoNote
+                                        ? getToneColorClass(extractToneFromJyutping(syllable), "cantonese")
+                                        : getToneColorClass(extractToneFromPinyin(syllable), "mandarin"))
+                                    : "";
                                   const toneStyle = toneColorsEnabled
                                     ? (isCantoNote
                                         ? getToneColorStyle(extractToneFromJyutping(syllable), "cantonese")
@@ -787,7 +800,7 @@ function NoteCard({
                                       >
                                         {syllable}
                                       </span>
-                                      <span style={toneStyle}>{char}</span>
+                                      <span className={toneColorClass || undefined} style={toneStyle}>{char}</span>
                                     </span>
                                   );
                                 }
