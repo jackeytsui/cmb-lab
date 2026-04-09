@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, Pause, Play, RotateCcw, Volume2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTTS } from "@/hooks/useTTS";
+import { pinyin } from "pinyin-pro";
+import { getToneColorClass, extractToneFromPinyin } from "@/lib/tone-colors";
 
 type Question = {
   id: string;
@@ -37,6 +39,56 @@ function shuffleOptions(question: Question): string[] {
   return result;
 }
 
+function RevealSection({
+  chineseText,
+  englishText,
+}: {
+  chineseText: string;
+  englishText: string;
+}) {
+  const chars = useMemo(() => {
+    const charArray = [...chineseText];
+    const pinyinArray = pinyin(chineseText, {
+      toneType: "symbol",
+      type: "array",
+    });
+    const toneNumbers = pinyin(chineseText, {
+      pattern: "num",
+      type: "array",
+    }).map(Number);
+
+    return charArray.map((char, i) => {
+      const isChinese = /\p{Script=Han}/u.test(char);
+      const py = pinyinArray[i] ?? "";
+      const tone = toneNumbers[i] ?? 0;
+      const colorClass = isChinese ? getToneColorClass(tone, "mandarin") : "";
+      return { char, py: isChinese ? py : "", colorClass };
+    });
+  }, [chineseText]);
+
+  return (
+    <div className="pl-7 pt-2 space-y-2">
+      {/* Characters with pinyin above */}
+      <div className="flex flex-wrap gap-x-0.5">
+        {chars.map((c, i) => (
+          <span key={i} className="inline-flex flex-col items-center">
+            {c.py && (
+              <span className="text-[10px] text-muted-foreground leading-tight">
+                {c.py}
+              </span>
+            )}
+            <span className={cn("text-xl font-semibold", c.colorClass)}>
+              {c.char}
+            </span>
+          </span>
+        ))}
+      </div>
+      {/* English translation */}
+      <p className="text-sm text-muted-foreground italic">{englishText}</p>
+    </div>
+  );
+}
+
 function QuestionCard({
   question,
   isCompleted,
@@ -49,7 +101,7 @@ function QuestionCard({
   const { speak, stop, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
   const [wrongPicks, setWrongPicks] = useState<Set<string>>(new Set());
   const [solved, setSolved] = useState(isCompleted);
-  const [rate, setRate] = useState<"slow" | "medium" | "fast">("medium");
+  const [rate, setRate] = useState<"x-slow" | "medium" | "fast">("medium");
   const [replayCount, setReplayCount] = useState(1);
   const replayAbortRef = useRef(false);
 
@@ -132,7 +184,7 @@ function QuestionCard({
 
             {/* Speed selector */}
             <div className="inline-flex items-center rounded-full border border-border overflow-hidden text-[11px]">
-              {(["slow", "medium", "fast"] as const).map((r) => (
+              {(["x-slow", "medium", "fast"] as const).map((r) => (
                 <button
                   key={r}
                   type="button"
@@ -144,7 +196,7 @@ function QuestionCard({
                       : "text-muted-foreground hover:text-foreground hover:bg-accent",
                   )}
                 >
-                  {r === "slow" ? "0.8x" : r === "medium" ? "1x" : "1.3x"}
+                  {r === "x-slow" ? "0.5x" : r === "medium" ? "1x" : "1.5x"}
                 </button>
               ))}
             </div>
@@ -230,16 +282,12 @@ function QuestionCard({
         })}
       </div>
 
-      {/* Reveal Chinese characters after correct */}
+      {/* Reveal Chinese characters with pinyin + tone colors + English */}
       {solved && (
-        <div className="pl-7 pt-1 space-y-1">
-          <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
-            {question.chineseText}
-          </p>
-          <p className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
-            {question.correctPinyin}
-          </p>
-        </div>
+        <RevealSection
+          chineseText={question.chineseText}
+          englishText={question.englishText}
+        />
       )}
     </div>
   );
