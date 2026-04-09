@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 // --- Types ---
 
@@ -371,6 +372,13 @@ export function useTTS(): UseTTSReturn {
     },
     [fetchAndCacheAudio],
   );
+
+  // Stop audio when navigating to a different page
+  const pathname = usePathname();
+  useEffect(() => {
+    stop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   // Cleanup on unmount: stop audio and revoke all blob URLs
   useEffect(() => {
