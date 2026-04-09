@@ -29,9 +29,10 @@ const allSections: PortalSection[] = [
     items: [
       { id: "courses", title: "Courses", href: "/admin/courses", description: "Manage courses, modules, lessons, and publication." },
       { id: "exercises", title: "Exercises", href: "/admin/exercises", description: "Practice bank and assignment flows." },
-      { id: "audio-course", title: "Audio Course", href: "/admin/audio-course", description: "HelloAudio and podcast content." },
+      { id: "audio-course", title: "Audio Course", href: "/admin/audio-course", description: "Manage audio series. Check 'Extra Pack' to make a series appear in Audio Accelerator Edition." },
       { id: "video-uploads", title: "Video Uploads", href: "/admin/content", description: "Upload and assign video/media assets." },
       { id: "accelerator", title: "Mandarin Accelerator", href: "/admin/accelerator/typing", description: "Typing drills, conversation scripts, and curated passages for LTO students." },
+      { id: "tone-mastery", title: "Tone Mastery Clips", href: "/admin/accelerator-extra/tone-mastery", description: "Upload and manage video clips for the Advanced Tone Mastery System." },
     ],
   },
   {
