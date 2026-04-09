@@ -82,9 +82,10 @@ function DrillSide({
   >([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const { speak, isPlaying } = useTTS();
+  const [skipped, setSkipped] = useState(false);
 
-  // "correct" and "revealed" are terminal — input stays locked
-  const isLocked = feedback === "correct" || feedback === "revealed";
+  // "correct" or skipped are terminal — "revealed" allows Try Again
+  const isLocked = feedback === "correct" || skipped;
 
   const handleCheck = useCallback(() => {
     if (isLocked || feedback === "wrong" || !input.trim()) return;
@@ -117,6 +118,7 @@ function DrillSide({
   }, [side.chineseText]);
 
   const handleSkip = useCallback(() => {
+    setSkipped(true);
     onComplete(side.id);
   }, [side.id, onComplete]);
 
@@ -196,7 +198,7 @@ function DrillSide({
                 ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-300"
                 : ""
         }`}
-        disabled={isLocked || feedback === "wrong"}
+        disabled={isLocked || feedback === "wrong" || feedback === "revealed"}
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
