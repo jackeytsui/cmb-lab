@@ -73,6 +73,7 @@ export const listeningQuestions = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     sortOrder: integer("sort_order").notNull().default(0),
     chineseText: text("chinese_text").notNull(),
+    englishText: text("english_text").notNull().default(""),
     correctPinyin: text("correct_pinyin").notNull(),
     wrongPinyin1: text("wrong_pinyin1").notNull(),
     wrongPinyin2: text("wrong_pinyin2").notNull(),

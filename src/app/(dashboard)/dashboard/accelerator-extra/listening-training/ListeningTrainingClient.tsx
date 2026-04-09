@@ -9,6 +9,7 @@ type Question = {
   id: string;
   sortOrder: number;
   chineseText: string;
+  englishText: string;
   correctPinyin: string;
   wrongPinyin1: string;
   wrongPinyin2: string;
@@ -79,37 +80,40 @@ function QuestionCard({
           : "border-border bg-card",
       )}
     >
-      {/* Question number + Chinese text */}
+      {/* Question: number + listen button + English translation */}
       <div className="flex items-start gap-3">
-        <span className="text-sm font-bold text-muted-foreground/60 tabular-nums mt-0.5">
+        <span className="text-sm font-bold text-muted-foreground/60 tabular-nums mt-1">
           {question.sortOrder}.
         </span>
         <div className="flex-1 space-y-2">
-          <p className="text-lg font-semibold text-foreground">
-            {question.chineseText}
-          </p>
+          <div className="flex items-center gap-3">
+            {/* Play button */}
+            <button
+              type="button"
+              onClick={handlePlay}
+              disabled={ttsLoading || ttsPlaying}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all border shrink-0",
+                ttsPlaying
+                  ? "bg-cyan-500/15 text-cyan-500 border-cyan-500/30"
+                  : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground border-border",
+              )}
+            >
+              {ttsLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : ttsPlaying ? (
+                <Volume2 className="w-4 h-4 animate-pulse" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              {ttsPlaying ? "Playing..." : "Listen"}
+            </button>
 
-          {/* Play button */}
-          <button
-            type="button"
-            onClick={handlePlay}
-            disabled={ttsLoading || ttsPlaying}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all border",
-              ttsPlaying
-                ? "bg-cyan-500/15 text-cyan-500 border-cyan-500/30"
-                : "bg-muted hover:bg-accent text-muted-foreground hover:text-foreground border-border",
-            )}
-          >
-            {ttsLoading ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : ttsPlaying ? (
-              <Volume2 className="w-3 h-3 animate-pulse" />
-            ) : (
-              <Play className="w-3 h-3" />
-            )}
-            {ttsPlaying ? "Playing..." : "Listen"}
-          </button>
+            {/* English translation */}
+            <p className="text-base font-medium text-foreground italic">
+              {question.englishText}
+            </p>
+          </div>
         </div>
 
         {/* Completed badge */}
@@ -169,10 +173,13 @@ function QuestionCard({
         })}
       </div>
 
-      {/* Reveal Chinese after correct */}
+      {/* Reveal Chinese characters after correct */}
       {solved && (
-        <div className="pl-7 pt-1">
-          <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+        <div className="pl-7 pt-1 space-y-1">
+          <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+            {question.chineseText}
+          </p>
+          <p className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
             {question.correctPinyin}
           </p>
         </div>
