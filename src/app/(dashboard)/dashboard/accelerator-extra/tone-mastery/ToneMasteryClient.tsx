@@ -185,7 +185,7 @@ export function ToneMasteryClient() {
                 className="rounded-xl border border-border bg-card overflow-hidden"
               >
                 {/* Video area */}
-                <div className="relative aspect-[9/16] max-h-[280px] bg-black">
+                <div className="relative aspect-square bg-black">
                   {isPlayingThis ? (
                     <video
                       src={clip.videoUrl}
