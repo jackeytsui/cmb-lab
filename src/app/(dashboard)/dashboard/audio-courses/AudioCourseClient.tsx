@@ -64,7 +64,11 @@ function formatTime(seconds: number): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function AudioCourseClient() {
+export function AudioCourseClient({
+  apiBaseUrl = "/api/audio-courses",
+}: {
+  apiBaseUrl?: string;
+} = {}) {
   const [courses, setCourses] = useState<AudioCourse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
@@ -95,7 +99,7 @@ export function AudioCourseClient() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    fetch("/api/audio-courses")
+    fetch(apiBaseUrl)
       .then((res) => res.json())
       .then((data) => {
         setCourses(data.courses ?? []);
