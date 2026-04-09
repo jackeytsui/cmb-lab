@@ -14,6 +14,7 @@ type AudioSeriesMeta = {
   studentInstructions?: string;
   allowedTagIds?: string[];
   allowedUserIds?: string[];
+  extraPack?: boolean;
 };
 
 function parseAudioSeriesMeta(raw: string | null): AudioSeriesMeta | null {
@@ -31,6 +32,7 @@ function parseAudioSeriesMeta(raw: string | null): AudioSeriesMeta | null {
       studentInstructions: parsed.studentInstructions ?? "",
       allowedTagIds: Array.isArray(parsed.allowedTagIds) ? parsed.allowedTagIds : [],
       allowedUserIds: Array.isArray(parsed.allowedUserIds) ? parsed.allowedUserIds : [],
+      extraPack: parsed.extraPack === true,
     };
   } catch {
     return null;
@@ -61,6 +63,7 @@ function stringifySeriesMeta(input: Omit<AudioSeriesMeta, "audioCourse">): strin
     studentInstructions: input.studentInstructions?.trim() ?? "",
     allowedTagIds: input.allowedTagIds ?? [],
     allowedUserIds: input.allowedUserIds ?? [],
+    extraPack: input.extraPack ?? false,
   });
 }
 
@@ -131,6 +134,7 @@ export async function GET() {
       studentInstructions: meta?.studentInstructions ?? "",
       allowedTagIds: meta?.allowedTagIds ?? [],
       allowedUserIds: meta?.allowedUserIds ?? [],
+      extraPack: meta?.extraPack ?? false,
       moduleId: mainModule?.id ?? null,
       lessons: moduleLessons.map((lesson) => {
         const lc = parseLessonContent(lesson.content);
@@ -166,6 +170,7 @@ export async function POST(request: NextRequest) {
     studentInstructions?: string;
     allowedTagIds?: string[];
     allowedUserIds?: string[];
+    extraPack?: boolean;
   };
 
   const title = body.title?.trim() ?? "";
@@ -192,6 +197,7 @@ export async function POST(request: NextRequest) {
         studentInstructions: body.studentInstructions ?? "",
         allowedTagIds: body.allowedTagIds ?? [],
         allowedUserIds: body.allowedUserIds ?? [],
+        extraPack: body.extraPack ?? false,
       }),
       isPublished: false,
       sortOrder: (maxOrder?.sortOrder ?? 0) + 1,

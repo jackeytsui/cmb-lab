@@ -14,6 +14,7 @@ type AudioSeriesMeta = {
   studentInstructions?: string;
   allowedTagIds?: string[];
   allowedUserIds?: string[];
+  extraPack?: boolean;
 };
 
 function parseMeta(raw: string | null): AudioSeriesMeta | null {
@@ -37,6 +38,7 @@ function stringifyMeta(input: Omit<AudioSeriesMeta, "audioCourse">): string {
     studentInstructions: input.studentInstructions?.trim() ?? "",
     allowedTagIds: input.allowedTagIds ?? [],
     allowedUserIds: input.allowedUserIds ?? [],
+    extraPack: input.extraPack ?? false,
   });
 }
 
@@ -60,6 +62,7 @@ export async function PUT(
     studentInstructions?: string;
     allowedTagIds?: string[];
     allowedUserIds?: string[];
+    extraPack?: boolean;
     isPublished?: boolean;
   };
 
@@ -91,6 +94,7 @@ export async function PUT(
         studentInstructions: body.studentInstructions ?? existingMeta?.studentInstructions ?? "",
         allowedTagIds: body.allowedTagIds ?? existingMeta?.allowedTagIds ?? [],
         allowedUserIds: body.allowedUserIds ?? existingMeta?.allowedUserIds ?? [],
+        extraPack: body.extraPack ?? existingMeta?.extraPack ?? false,
       }),
       isPublished: body.isPublished ?? existing.isPublished,
     })

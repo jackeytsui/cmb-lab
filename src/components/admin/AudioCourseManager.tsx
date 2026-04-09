@@ -52,6 +52,7 @@ type AudioSeries = {
   studentInstructions: string;
   allowedTagIds: string[];
   allowedUserIds: string[];
+  extraPack: boolean;
   moduleId: string | null;
   lessons: AudioLesson[];
   isPublished: boolean;
@@ -833,6 +834,23 @@ export function AudioCourseManager() {
                   multiline
                   onSave={(v) => saveSeries({ studentInstructions: v })}
                 />
+                {/* Extra Pack toggle */}
+                <div className="flex items-center gap-3 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={activeSeries.extraPack ?? false}
+                      onChange={(e) => saveSeries({ extraPack: e.target.checked })}
+                      className="rounded border-border"
+                    />
+                    <span className="text-sm font-medium text-foreground">
+                      Extra Pack series
+                    </span>
+                  </label>
+                  <span className="text-xs text-muted-foreground">
+                    Shows in Mandarin Accelerator Extra Pack instead of regular Audio Courses
+                  </span>
+                </div>
               </section>
 
               {/* Visibility / Access Control */}
