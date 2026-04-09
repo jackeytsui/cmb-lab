@@ -183,27 +183,30 @@ function QuestionCard({
             </button>
 
             {/* Speed selector */}
-            <div className="inline-flex items-center rounded-full border border-border overflow-hidden text-[11px]">
-              {(["x-slow", "medium", "fast"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRate(r)}
-                  className={cn(
-                    "px-2.5 py-1 font-medium transition-colors",
-                    rate === r
-                      ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                  )}
-                >
-                  {r === "x-slow" ? "0.5x" : r === "medium" ? "1x" : "1.5x"}
-                </button>
-              ))}
+            <div className="inline-flex items-center gap-1.5 text-[11px]">
+              <span className="text-muted-foreground font-medium">Speed</span>
+              <div className="inline-flex items-center rounded-full border border-border overflow-hidden">
+                {(["x-slow", "medium", "fast"] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRate(r)}
+                    className={cn(
+                      "px-2.5 py-1 font-medium transition-colors",
+                      rate === r
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                    )}
+                  >
+                    {r === "x-slow" ? "0.5x" : r === "medium" ? "1x" : "1.5x"}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Replay count */}
-            <div className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <RotateCcw className="w-3 h-3" />
+            <div className="inline-flex items-center gap-1.5 text-[11px]">
+              <span className="text-muted-foreground font-medium">Repeat</span>
               <div className="inline-flex items-center rounded-full border border-border overflow-hidden">
                 {[1, 2, 3].map((c) => (
                   <button
