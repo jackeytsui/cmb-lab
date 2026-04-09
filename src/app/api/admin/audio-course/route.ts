@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { courses, lessons, modules } from "@/db/schema";
+import { courses, lessons, modules, tagContentGrants } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
 
 type AudioSeriesMeta = {
@@ -208,6 +208,18 @@ export async function POST(request: NextRequest) {
       sortOrder: 0,
     })
     .returning();
+
+  // Sync tag_content_grants for tag-based access
+  const tagIds: string[] = body.allowedTagIds ?? [];
+  if (tagIds.length > 0) {
+    await db.insert(tagContentGrants).values(
+      tagIds.map((tagId) => ({
+        tagId,
+        contentType: "audio_series",
+        contentId: course.id,
+      })),
+    );
+  }
 
   return NextResponse.json({
     series: {

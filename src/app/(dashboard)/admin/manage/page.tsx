@@ -17,8 +17,8 @@ const allSections: PortalSection[] = [
     id: "access",
     title: "Users & Access",
     items: [
-      { id: "user-access", title: "Students & Tags", href: "/admin/users", description: "Manage students, tags, bulk operations, and enrollment." },
-      { id: "tag-access", title: "Tag Access Control", href: "/admin/tag-access", description: "Control what features and content each tag grants or denies." },
+      { id: "user-access", title: "User Management", href: "/admin/users", description: "Manage students, bulk operations, and enrollment." },
+      { id: "tag-access", title: "Tag Management", href: "/admin/tag-access", description: "Create, edit, and manage tags and their feature/content access grants." },
       { id: "roles", title: "Roles & Permissions", href: "/admin/roles", description: "Design role templates and feature grants." },
       { id: "api-keys", title: "API Keys", href: "/admin/api-keys", description: "Create and revoke integration keys." },
     ],

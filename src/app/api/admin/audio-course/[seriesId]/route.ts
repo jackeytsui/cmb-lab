@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { courses } from "@/db/schema";
+import { courses, tagContentGrants } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
 
 type AudioSeriesMeta = {
@@ -96,6 +96,28 @@ export async function PUT(
     })
     .where(eq(courses.id, seriesId))
     .returning();
+
+  // Sync tag_content_grants so Tag Management page stays in sync
+  const newTagIds: string[] = body.allowedTagIds ?? existingMeta?.allowedTagIds ?? [];
+  // Remove old grants for this series
+  await db
+    .delete(tagContentGrants)
+    .where(
+      and(
+        eq(tagContentGrants.contentType, "audio_series"),
+        eq(tagContentGrants.contentId, seriesId),
+      ),
+    );
+  // Insert new grants
+  if (newTagIds.length > 0) {
+    await db.insert(tagContentGrants).values(
+      newTagIds.map((tagId) => ({
+        tagId,
+        contentType: "audio_series",
+        contentId: seriesId,
+      })),
+    );
+  }
 
   return NextResponse.json({ series: updated });
 }

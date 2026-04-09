@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Minus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Minus, Loader2, Trash2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { TagBadge } from "@/components/tags/TagBadge";
 
@@ -324,19 +326,29 @@ function TagRow({
 // Main component
 // ---------------------------------------------------------------------------
 
+const TAG_COLORS = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#8b5cf6",
+];
+
 export function TagAccessClient() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [audioSeries, setAudioSeries] = useState<AudioSeries[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Create tag form
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState(TAG_COLORS[5]);
+  const [creating, setCreating] = useState(false);
+  const [deletingTagId, setDeletingTagId] = useState<string | null>(null);
+
+  const fetchData = useCallback(() => {
     Promise.all([
       fetch("/api/admin/tags").then((r) => (r.ok ? r.json() : { tags: [] })),
       fetch("/api/audio-courses").then((r) => (r.ok ? r.json() : { courses: [] })),
     ])
       .then(([tagsData, coursesData]) => {
         setTags(tagsData.tags ?? []);
-        // Extract audio series from courses
         const series = (coursesData.courses ?? []).map(
           (c: { id: string; title: string }) => ({
             id: c.id,
@@ -348,6 +360,48 @@ export function TagAccessClient() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleCreateTag = async () => {
+    if (!newTagName.trim() || creating) return;
+    setCreating(true);
+    try {
+      const res = await fetch("/api/admin/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newTagName.trim(),
+          color: newTagColor,
+          type: "system",
+        }),
+      });
+      if (res.ok) {
+        setNewTagName("");
+        setShowCreateForm(false);
+        fetchData();
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDeleteTag = async (tagId: string, tagName: string) => {
+    if (!confirm(`Delete tag "${tagName}"? This will remove it from all students.`)) return;
+    setDeletingTagId(tagId);
+    try {
+      await fetch(`/api/admin/tags/${tagId}`, { method: "DELETE" });
+      fetchData();
+    } catch {
+      // ignore
+    } finally {
+      setDeletingTagId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -356,25 +410,84 @@ export function TagAccessClient() {
     );
   }
 
-  if (tags.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-card p-8 text-center">
-        <p className="text-muted-foreground">
-          No tags exist yet. Create tags from the Students & Tags page first.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Header with create button */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {tags.length} tag{tags.length !== 1 ? "s" : ""} configured
         </p>
+        <Button
+          onClick={() => setShowCreateForm(!showCreateForm)}
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+        >
+          {showCreateForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          {showCreateForm ? "Cancel" : "Create Tag"}
+        </Button>
       </div>
+
+      {/* Create tag form */}
+      {showCreateForm && (
+        <div className="rounded-lg border border-dashed border-border bg-card p-4 space-y-3">
+          <div className="flex gap-3">
+            <Input
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
+              placeholder="Tag name"
+              className="flex-1"
+              onKeyDown={(e) => e.key === "Enter" && handleCreateTag()}
+            />
+            <Button onClick={handleCreateTag} disabled={creating || !newTagName.trim()} size="sm">
+              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create"}
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Color:</span>
+            {TAG_COLORS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => setNewTagColor(color)}
+                className={cn(
+                  "w-6 h-6 rounded-full border-2 transition-all",
+                  newTagColor === color ? "border-foreground scale-110" : "border-transparent",
+                )}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {tags.length === 0 && !showCreateForm && (
+        <div className="rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-muted-foreground">
+            No tags exist yet. Click &ldquo;Create Tag&rdquo; to get started.
+          </p>
+        </div>
+      )}
+
+      {/* Tag rows */}
       {tags.map((tag) => (
-        <TagRow key={tag.id} tag={tag} audioSeries={audioSeries} />
+        <div key={tag.id} className="relative">
+          <TagRow tag={tag} audioSeries={audioSeries} />
+          <button
+            type="button"
+            onClick={() => handleDeleteTag(tag.id, tag.name)}
+            disabled={deletingTagId === tag.id}
+            className="absolute top-3 right-3 p-1 rounded text-muted-foreground/50 hover:text-red-500 transition-colors"
+            title={`Delete tag "${tag.name}"`}
+          >
+            {deletingTagId === tag.id ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+          </button>
+        </div>
       ))}
     </div>
   );
