@@ -10,23 +10,24 @@ import type React from "react";
  */
 
 // Pleco standard tone colors (Mandarin — 4 tones + neutral)
+// Uses !important override classes from globals.css to beat text-foreground inheritance
 export const MANDARIN_TONE_COLORS: Record<number, string> = {
-  1: "text-red-500", // First tone (high level) -- red
-  2: "text-green-500", // Second tone (rising) -- green
-  3: "text-blue-500", // Third tone (dipping) -- blue
-  4: "text-purple-500", // Fourth tone (falling) -- purple
-  0: "text-muted-foreground", // Neutral tone -- grey
+  1: "tone-color-red", // First tone (high level) -- red
+  2: "tone-color-green", // Second tone (rising) -- green
+  3: "tone-color-blue", // Third tone (dipping) -- blue
+  4: "tone-color-purple", // Fourth tone (falling) -- purple
+  0: "tone-color-muted", // Neutral tone -- grey
 };
 
 // Cantonese 6-tone colors
 export const CANTONESE_TONE_COLORS: Record<number, string> = {
-  1: "text-red-500", // High level
-  2: "text-green-500", // High rising
-  3: "text-blue-500", // Mid level
-  4: "text-orange-500", // Low falling
-  5: "text-purple-500", // Low rising
-  6: "text-teal-500", // Low level
-  0: "text-muted-foreground", // Unknown
+  1: "tone-color-red", // High level
+  2: "tone-color-green", // High rising
+  3: "tone-color-blue", // Mid level
+  4: "tone-color-orange", // Low falling
+  5: "tone-color-purple", // Low rising
+  6: "tone-color-teal", // Low level
+  0: "tone-color-muted", // Unknown
 };
 
 /**
