@@ -307,10 +307,20 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         .where(
           sql`${lessonProgress.userId} = ${studentId} AND ${lessonProgress.completedAt} IS NOT NULL`
         ),
-      db
-        .select({ lastActive: max(lessonProgress.lastAccessedAt) })
-        .from(lessonProgress)
-        .where(eq(lessonProgress.userId, studentId)),
+      (async () => {
+        const { featureEngagementEvents } = await import("@/db/schema");
+        const [lessonLast] = await db
+          .select({ lastActive: max(lessonProgress.lastAccessedAt) })
+          .from(lessonProgress)
+          .where(eq(lessonProgress.userId, studentId));
+        const [engagementLast] = await db
+          .select({ lastActive: max(featureEngagementEvents.createdAt) })
+          .from(featureEngagementEvents)
+          .where(eq(featureEngagementEvents.userId, studentId));
+        const dates = [lessonLast?.lastActive, engagementLast?.lastActive].filter(Boolean) as Date[];
+        if (dates.length === 0) return [{ lastActive: null }];
+        return [{ lastActive: new Date(Math.max(...dates.map((d) => d.getTime()))) }];
+      })(),
       getActivityTimeline(studentId),
     ]);
 
