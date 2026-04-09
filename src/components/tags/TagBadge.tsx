@@ -29,7 +29,7 @@ interface TagBadgeProps {
  * TagBadge - Inline color-coded tag pill.
  *
  * - Coach tags: solid border, filled style
- * - System tags: dashed border with "GHL" label for distinction
+ * - System tags: dashed border with "SYS" label for distinction
  * - Background uses tag color at 20% opacity, text in tag color
  * - Optional remove button on hover
  */
@@ -50,7 +50,7 @@ export function TagBadge({ name, color, type, onRemove }: TagBadgeProps) {
       }}
     >
       {isSystem && (
-        <span className="text-[10px] font-semibold opacity-70">GHL</span>
+        <span className="text-[10px] font-semibold opacity-70">SYS</span>
       )}
       {name}
       {onRemove && (

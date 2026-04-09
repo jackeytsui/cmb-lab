@@ -15,26 +15,25 @@ type Question = {
   wrongPinyin3: string;
 };
 
-/** Deterministic shuffle based on question ID so options stay stable per session */
+/**
+ * Randomize option positions per question.
+ * Uses sortOrder to deterministically place the correct answer at different positions
+ * so it's not always A. Stable across re-renders.
+ */
 function shuffleOptions(question: Question): string[] {
-  const options = [
-    question.correctPinyin,
-    question.wrongPinyin1,
-    question.wrongPinyin2,
-    question.wrongPinyin3,
-  ];
-  // Simple hash-based shuffle using question ID
-  let seed = 0;
-  for (let i = 0; i < question.id.length; i++) {
-    seed = ((seed << 5) - seed + question.id.charCodeAt(i)) | 0;
+  const wrongs = [question.wrongPinyin1, question.wrongPinyin2, question.wrongPinyin3];
+  // Place correct answer at position based on sortOrder (cycles through 0-3)
+  const correctPos = question.sortOrder % 4;
+  const result: string[] = [];
+  let wi = 0;
+  for (let i = 0; i < 4; i++) {
+    if (i === correctPos) {
+      result.push(question.correctPinyin);
+    } else {
+      result.push(wrongs[wi++]);
+    }
   }
-  const shuffled = [...options];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    seed = (seed * 1103515245 + 12345) | 0;
-    const j = Math.abs(seed) % (i + 1);
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
+  return result;
 }
 
 function QuestionCard({

@@ -345,11 +345,11 @@ export function TagAccessClient() {
   const fetchData = useCallback(() => {
     Promise.all([
       fetch("/api/admin/tags").then((r) => (r.ok ? r.json() : { tags: [] })),
-      fetch("/api/audio-courses").then((r) => (r.ok ? r.json() : { courses: [] })),
+      fetch("/api/admin/audio-course").then((r) => (r.ok ? r.json() : { series: [] })),
     ])
-      .then(([tagsData, coursesData]) => {
+      .then(([tagsData, audioData]) => {
         setTags(tagsData.tags ?? []);
-        const series = (coursesData.courses ?? []).map(
+        const series = (audioData.series ?? []).map(
           (c: { id: string; title: string }) => ({
             id: c.id,
             title: c.title,
