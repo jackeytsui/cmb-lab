@@ -5,7 +5,6 @@ import {
   AudioLines,
   ChevronDown,
   ChevronRight,
-  Download,
   ExternalLink,
   FileText,
   ListChecks,
@@ -17,7 +16,6 @@ import {
   RotateCw,
   SkipBack,
   SkipForward,
-  Trash2,
   Trophy,
   Volume2,
   VolumeX,
@@ -25,11 +23,6 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
-import {
-  isOfflineCached,
-  saveForOffline,
-  removeFromOffline,
-} from "@/lib/offline-cache";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -214,9 +207,6 @@ export function AudioCourseClient({
   const [noteLoaded, setNoteLoaded] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Offline cache state
-  const [offlineCached, setOfflineCached] = useState<Set<string>>(new Set());
-  const [offlineSaving, setOfflineSaving] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(apiBaseUrl)
@@ -230,21 +220,6 @@ export function AudioCourseClient({
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, []);
-
-  // Check which lessons are cached offline
-  useEffect(() => {
-    if (courses.length === 0) return;
-    const allLessons = courses.flatMap((c) => c.lessons);
-    Promise.all(
-      allLessons.map(async (l) => {
-        const url = `/api/audio-courses/stream/${l.id}`;
-        const cached = await isOfflineCached(url);
-        return cached ? l.id : null;
-      }),
-    ).then((results) => {
-      setOfflineCached(new Set(results.filter(Boolean) as string[]));
-    });
-  }, [courses]);
 
   // Load exercise info for all lessons
   useEffect(() => {
@@ -455,20 +430,6 @@ export function AudioCourseClient({
         onPlay={() => setIsPlaying(true)}
       />
 
-      {/* Offline listening info */}
-      {offlineCached.size > 0 && (
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 flex items-start gap-3">
-          <WifiOff className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-          <div className="text-xs text-muted-foreground">
-            <span className="font-medium text-emerald-600 dark:text-emerald-400">
-              {offlineCached.size} lesson{offlineCached.size !== 1 ? "s" : ""} saved for offline.
-            </span>{" "}
-            Cached lessons play without internet. Clearing browser data will remove saved lessons. Look for the{" "}
-            <Download className="inline w-3 h-3" /> icon next to each lesson to save more.
-          </div>
-        </div>
-      )}
-
       {/* Page header */}
       <div>
         <h1 className="text-xl font-bold text-foreground sm:text-2xl">Audio Courses</h1>
@@ -621,45 +582,6 @@ export function AudioCourseClient({
                               <span className="text-xs text-muted-foreground">
                                 {lesson.durationMinutes} min
                               </span>
-                            )}
-                            {/* Offline save/remove */}
-                            {hasAudio && (
-                              <button
-                                type="button"
-                                title={offlineCached.has(lesson.id) ? "Remove offline copy" : "Save for offline"}
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  const url = `/api/audio-courses/stream/${lesson.id}`;
-                                  if (offlineCached.has(lesson.id)) {
-                                    await removeFromOffline(url);
-                                    setOfflineCached((prev) => {
-                                      const next = new Set(prev);
-                                      next.delete(lesson.id);
-                                      return next;
-                                    });
-                                  } else {
-                                    setOfflineSaving(lesson.id);
-                                    const ok = await saveForOffline(url);
-                                    if (ok) {
-                                      setOfflineCached((prev) => new Set(prev).add(lesson.id));
-                                    }
-                                    setOfflineSaving(null);
-                                  }
-                                }}
-                                className={`p-0.5 rounded transition-colors ${
-                                  offlineCached.has(lesson.id)
-                                    ? "text-emerald-500 hover:text-red-400"
-                                    : "text-muted-foreground/40 hover:text-foreground"
-                                }`}
-                              >
-                                {offlineSaving === lesson.id ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : offlineCached.has(lesson.id) ? (
-                                  <WifiOff className="h-3.5 w-3.5" />
-                                ) : (
-                                  <Download className="h-3.5 w-3.5" />
-                                )}
-                              </button>
                             )}
                           </div>
                         </div>
