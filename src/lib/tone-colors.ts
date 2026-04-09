@@ -152,3 +152,24 @@ export function getToneColorStyle(
   const hex = (lang === "mandarin" ? MANDARIN_TONE_HEX : CANTONESE_TONE_HEX)[tone];
   return hex ? { color: hex } : undefined;
 }
+
+/**
+ * Get hex color for a tone.
+ */
+export function getToneColorHex(
+  tone: number,
+  lang: "mandarin" | "cantonese",
+): string {
+  return (lang === "mandarin" ? MANDARIN_TONE_HEX : CANTONESE_TONE_HEX)[tone] ?? "";
+}
+
+/** Short data-attribute code for CSS-based tone coloring via [data-tc] selectors */
+const MANDARIN_TC: Record<number, string> = { 1: "r", 2: "g", 3: "b", 4: "p", 0: "m" };
+const CANTONESE_TC: Record<number, string> = { 1: "r", 2: "g", 3: "b", 4: "o", 5: "p", 6: "t", 0: "m" };
+
+export function getToneDataAttr(
+  tone: number,
+  lang: "mandarin" | "cantonese",
+): string {
+  return (lang === "mandarin" ? MANDARIN_TC : CANTONESE_TC)[tone] ?? "";
+}

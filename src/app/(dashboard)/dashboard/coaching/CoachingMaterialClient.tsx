@@ -21,6 +21,8 @@ import {
   extractToneFromJyutping,
   getToneColorClass,
   getToneColorStyle,
+  getToneColorHex,
+  getToneDataAttr,
 } from "@/lib/tone-colors";
 
 async function fetchJiebaSegments(
@@ -744,23 +746,18 @@ function NoteCard({
                                 className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20">
                                 {chars.map((c, ci) => {
                                   if (!/\p{Script=Han}/u.test(c)) return <span key={ci}>{c}</span>;
-                                  let toneStyle: React.CSSProperties | undefined;
-                                  let toneClass = "";
+                                  let tone = 0;
+                                  const lang = isCantonese ? "cantonese" as const : "mandarin" as const;
                                   if (isCantonese) {
                                     const jp = ToJyutping.getJyutpingList(c);
                                     const syl = jp?.[0]?.[1];
-                                    if (syl) {
-                                      toneStyle = getToneColorStyle(extractToneFromJyutping(syl), "cantonese");
-                                      toneClass = getToneColorClass(extractToneFromJyutping(syl), "cantonese");
-                                    }
+                                    if (syl) tone = extractToneFromJyutping(syl);
                                   } else {
                                     const py = pinyin(c, { toneType: "num", type: "array" })[0];
-                                    if (py) {
-                                      toneStyle = getToneColorStyle(extractToneFromPinyin(py), "mandarin");
-                                      toneClass = getToneColorClass(extractToneFromPinyin(py), "mandarin");
-                                    }
+                                    if (py) tone = extractToneFromPinyin(py);
                                   }
-                                  return <span key={ci} className={toneClass || undefined} style={toneStyle}>{c}</span>;
+                                  const tc = getToneDataAttr(tone, lang);
+                                  return <span key={ci} className={getToneColorClass(tone, lang) || undefined} style={getToneColorStyle(tone, lang)} {...(tc ? { "data-tc": tc } : {})}>{c}</span>;
                                 })}
                               </span>
                             );
@@ -782,16 +779,13 @@ function NoteCard({
                                 const syllable = overrideMap!.get(startOffset + ci);
                                 if (syllable) {
                                   const isCantoNote = note.pane === "cantonese";
-                                  const toneColorClass = toneColorsEnabled
-                                    ? (isCantoNote
-                                        ? getToneColorClass(extractToneFromJyutping(syllable), "cantonese")
-                                        : getToneColorClass(extractToneFromPinyin(syllable), "mandarin"))
-                                    : "";
-                                  const toneStyle = toneColorsEnabled
-                                    ? (isCantoNote
-                                        ? getToneColorStyle(extractToneFromJyutping(syllable), "cantonese")
-                                        : getToneColorStyle(extractToneFromPinyin(syllable), "mandarin"))
-                                    : undefined;
+                                  const lang = isCantoNote ? "cantonese" as const : "mandarin" as const;
+                                  const tone = isCantoNote
+                                    ? extractToneFromJyutping(syllable)
+                                    : extractToneFromPinyin(syllable);
+                                  const toneColorClass = toneColorsEnabled ? getToneColorClass(tone, lang) : "";
+                                  const toneStyle = toneColorsEnabled ? getToneColorStyle(tone, lang) : undefined;
+                                  const toneTc = toneColorsEnabled ? getToneDataAttr(tone, lang) : "";
                                   return (
                                     <span key={ci} className="inline-flex flex-col items-center" style={{ minWidth: "1.1em" }}>
                                       <span
@@ -800,7 +794,7 @@ function NoteCard({
                                       >
                                         {syllable}
                                       </span>
-                                      <span className={toneColorClass || undefined} style={toneStyle}>{char}</span>
+                                      <span className={toneColorClass || undefined} style={toneStyle} {...(toneTc ? { "data-tc": toneTc } : {})}>{char}</span>
                                     </span>
                                   );
                                 }

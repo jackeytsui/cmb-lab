@@ -229,3 +229,13 @@
 .tone-color-orange { color: #f97316 !important; }
 .tone-color-teal { color: #14b8a6 !important; }
 .tone-color-muted { color: var(--muted-foreground) !important; }
+
+/* Data-attribute based tone coloring — ultimate fallback */
+[data-tone-color] { color: attr(data-tone-color type(<color>)) !important; }
+span[data-tc="r"] { color: #ef4444 !important; }
+span[data-tc="g"] { color: #22c55e !important; }
+span[data-tc="b"] { color: #3b82f6 !important; }
+span[data-tc="p"] { color: #a855f7 !important; }
+span[data-tc="o"] { color: #f97316 !important; }
+span[data-tc="t"] { color: #14b8a6 !important; }
+span[data-tc="m"] { color: var(--muted-foreground) !important; }
