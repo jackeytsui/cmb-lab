@@ -95,14 +95,14 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
           type="button"
           onClick={feedUrl ? () => setExpanded(true) : generateFeed}
           disabled={loading}
-          className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 transition-colors"
         >
           {loading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <Wifi className="w-3.5 h-3.5" />
+            <Wifi className="w-4 h-4" />
           )}
-          {loading ? "Generating..." : "Listen offline via podcast app"}
+          {loading ? "Generating your feed..." : "Listen offline via podcast app"}
         </button>
       ) : (
         <div className="space-y-3">
