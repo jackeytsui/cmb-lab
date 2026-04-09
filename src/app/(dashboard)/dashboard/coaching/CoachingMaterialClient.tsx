@@ -773,8 +773,9 @@ function NoteCard({
                               {segChars.map((char, ci) => {
                                 const syllable = overrideMap!.get(startOffset + ci);
                                 if (syllable) {
+                                  const isCantoNote = note.pane === "cantonese";
                                   const toneStyle = toneColorsEnabled
-                                    ? (showJyutping
+                                    ? (isCantoNote
                                         ? getToneColorStyle(extractToneFromJyutping(syllable), "cantonese")
                                         : getToneColorStyle(extractToneFromPinyin(syllable), "mandarin"))
                                     : undefined;
