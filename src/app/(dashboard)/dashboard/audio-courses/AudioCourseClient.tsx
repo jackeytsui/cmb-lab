@@ -61,6 +61,113 @@ type AudioCourse = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; courseTitle: string }) {
+  const [feedUrl, setFeedUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const generateFeed = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/audio-courses/podcast-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seriesId: courseId }),
+      });
+      if (res.ok) {
+        const { token } = await res.json();
+        setFeedUrl(`${window.location.origin}/api/podcast/private/${token}/feed`);
+        setExpanded(true);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyUrl = () => {
+    if (feedUrl) {
+      navigator.clipboard.writeText(feedUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="border-b border-border/60 px-3 sm:px-4 py-3">
+      {!expanded ? (
+        <button
+          type="button"
+          onClick={feedUrl ? () => setExpanded(true) : generateFeed}
+          disabled={loading}
+          className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {loading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Wifi className="w-3.5 h-3.5" />
+          )}
+          {loading ? "Generating..." : "Listen offline via podcast app"}
+        </button>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <WifiOff className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="text-sm font-medium text-foreground">
+              Your Private Podcast Feed
+            </span>
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              readOnly
+              value={feedUrl ?? ""}
+              className="h-8 flex-1 rounded-md border border-input bg-muted/30 px-2 text-[11px] font-mono text-foreground"
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+            <button
+              type="button"
+              onClick={copyUrl}
+              className="shrink-0 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+
+          <div className="rounded-md bg-muted/30 p-3 text-[11px] text-muted-foreground space-y-2">
+            <p className="font-medium text-foreground">How to listen offline:</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>Copy the feed URL above</li>
+              <li>Open your podcast app (Spotify, Apple Podcasts, YouTube Music, etc.)</li>
+              <li>Find &ldquo;Add RSS feed&rdquo; or &ldquo;Add by URL&rdquo; in the app</li>
+              <li>Paste your personal feed URL</li>
+              <li>Download episodes for offline listening</li>
+            </ol>
+            <div className="border-t border-border/50 pt-2 mt-2 space-y-1">
+              <p className="font-medium text-amber-500">Important:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                <li>This URL is <strong>personal to you</strong> — do not share it</li>
+                <li>It gives access to your &ldquo;{courseTitle}&rdquo; audio lessons</li>
+                <li>If you need to revoke access, contact support</li>
+              </ul>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            Hide
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -439,6 +546,9 @@ export function AudioCourseClient({
                     )}
                   </div>
                 )}
+
+                {/* Private podcast feed for offline listening */}
+                <OfflinePodcastSection courseId={course.id} courseTitle={course.title} />
 
                 {/* Lesson list */}
                 <div className="divide-y divide-border/60">

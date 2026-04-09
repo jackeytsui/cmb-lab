@@ -122,6 +122,27 @@ export const lessonAttachmentsRelations = relations(lessonAttachments, ({ one })
   }),
 }));
 
+// Private podcast feed tokens (per-student, per-series)
+export const podcastTokens = pgTable(
+  "podcast_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    seriesId: uuid("series_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("podcast_tokens_user_series_idx").on(table.userId, table.seriesId),
+  ],
+);
+
+import { users } from "./users";
+
 // Type inference
 export type Course = typeof courses.$inferSelect;
 export type NewCourse = typeof courses.$inferInsert;
