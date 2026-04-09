@@ -138,7 +138,7 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
 
             <div className="space-y-2">
               <div>
-                <p className="font-semibold text-foreground">Apple Podcasts (iPhone/Mac)</p>
+                <p className="font-semibold text-foreground">Apple Podcasts (iPhone/Mac) — Recommended</p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-1">
                   <li>Open Apple Podcasts</li>
                   <li>Tap Library &rarr; tap the 3 dots (&hellip;) at top right</li>
@@ -149,34 +149,28 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
               </div>
 
               <div>
-                <p className="font-semibold text-foreground">Spotify</p>
+                <p className="font-semibold text-foreground">YouTube Music (Android/iPhone)</p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-1">
-                  <li>Open Spotify on your phone</li>
-                  <li>Go to Search &rarr; tap the search bar</li>
-                  <li>Paste the feed URL directly into the search bar</li>
-                  <li>Tap the show that appears &rarr; Follow</li>
-                  <li>Tap the download arrow on episodes for offline</li>
-                </ol>
-              </div>
-
-              <div>
-                <p className="font-semibold text-foreground">YouTube Music</p>
-                <ol className="list-decimal list-inside space-y-0.5 ml-1">
-                  <li>Open YouTube Music app</li>
-                  <li>Go to Library &rarr; Podcasts</li>
-                  <li>Tap the 3 dots &rarr; &ldquo;Add a podcast by RSS feed&rdquo;</li>
-                  <li>Paste your feed URL</li>
+                  <li>Open the YouTube Music app</li>
+                  <li>Tap Library &rarr; tap Podcasts at the top</li>
+                  <li>Tap &ldquo;Add podcast&rdquo; in the bottom right</li>
+                  <li>Paste your feed URL into the input field</li>
                   <li>Download episodes for offline listening</li>
                 </ol>
               </div>
 
               <div>
-                <p className="font-semibold text-foreground">Other podcast apps (Pocket Casts, Overcast, etc.)</p>
+                <p className="font-semibold text-foreground">Overcast, Pocket Casts, Castro, etc.</p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-1">
-                  <li>Look for &ldquo;Add by URL&rdquo; or &ldquo;Add RSS feed&rdquo; in the app settings</li>
+                  <li>Look for &ldquo;Add by URL&rdquo; or &ldquo;Add RSS feed&rdquo; in the app</li>
                   <li>Paste your feed URL</li>
                   <li>Subscribe and download episodes</li>
                 </ol>
+              </div>
+
+              <div className="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
+                <p className="font-semibold text-amber-600 dark:text-amber-400">Spotify</p>
+                <p>Spotify does not currently support adding private RSS feeds as a listener. Use Apple Podcasts, YouTube Music, or another podcast app listed above instead.</p>
               </div>
             </div>
 
