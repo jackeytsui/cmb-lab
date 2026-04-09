@@ -129,21 +129,63 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
             </button>
           </div>
 
-          <div className="rounded-md bg-muted/30 p-3 text-[11px] text-muted-foreground space-y-2">
-            <p className="font-medium text-foreground">How to listen offline:</p>
-            <ol className="list-decimal list-inside space-y-1">
-              <li>Copy the feed URL above</li>
-              <li>Open your podcast app (Spotify, Apple Podcasts, YouTube Music, etc.)</li>
-              <li>Find &ldquo;Add RSS feed&rdquo; or &ldquo;Add by URL&rdquo; in the app</li>
-              <li>Paste your personal feed URL</li>
-              <li>Download episodes for offline listening</li>
-            </ol>
-            <div className="border-t border-border/50 pt-2 mt-2 space-y-1">
+          <p className="text-[11px] text-muted-foreground">
+            This is your personal feed URL. Use the <strong>same link</strong> for any podcast app — just copy and paste it.
+          </p>
+
+          <div className="rounded-md bg-muted/30 p-3 text-[11px] text-muted-foreground space-y-3">
+            <p className="font-medium text-foreground">Step-by-step for each app:</p>
+
+            <div className="space-y-2">
+              <div>
+                <p className="font-semibold text-foreground">Apple Podcasts (iPhone/Mac)</p>
+                <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                  <li>Open Apple Podcasts</li>
+                  <li>Tap Library &rarr; tap the 3 dots (&hellip;) at top right</li>
+                  <li>Tap &ldquo;Follow a Show by URL&rdquo;</li>
+                  <li>Paste your feed URL &rarr; tap Follow</li>
+                  <li>Tap the download icon on each episode for offline</li>
+                </ol>
+              </div>
+
+              <div>
+                <p className="font-semibold text-foreground">Spotify</p>
+                <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                  <li>Open Spotify on your phone</li>
+                  <li>Go to Search &rarr; tap the search bar</li>
+                  <li>Paste the feed URL directly into the search bar</li>
+                  <li>Tap the show that appears &rarr; Follow</li>
+                  <li>Tap the download arrow on episodes for offline</li>
+                </ol>
+              </div>
+
+              <div>
+                <p className="font-semibold text-foreground">YouTube Music</p>
+                <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                  <li>Open YouTube Music app</li>
+                  <li>Go to Library &rarr; Podcasts</li>
+                  <li>Tap the 3 dots &rarr; &ldquo;Add a podcast by RSS feed&rdquo;</li>
+                  <li>Paste your feed URL</li>
+                  <li>Download episodes for offline listening</li>
+                </ol>
+              </div>
+
+              <div>
+                <p className="font-semibold text-foreground">Other podcast apps (Pocket Casts, Overcast, etc.)</p>
+                <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                  <li>Look for &ldquo;Add by URL&rdquo; or &ldquo;Add RSS feed&rdquo; in the app settings</li>
+                  <li>Paste your feed URL</li>
+                  <li>Subscribe and download episodes</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="border-t border-border/50 pt-2 space-y-1">
               <p className="font-medium text-amber-500">Important:</p>
               <ul className="list-disc list-inside space-y-0.5">
-                <li>This URL is <strong>personal to you</strong> — do not share it</li>
+                <li>This URL is <strong>personal to you</strong> — do not share it with others</li>
                 <li>It gives access to your &ldquo;{courseTitle}&rdquo; audio lessons</li>
-                <li>If you need to revoke access, contact support</li>
+                <li>If your link stops working, generate a new one here</li>
               </ul>
             </div>
           </div>
