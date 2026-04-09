@@ -562,7 +562,14 @@ export function AudioCourseClient({
                           key={lesson.id}
                           role="button"
                           tabIndex={hasAudio ? 0 : -1}
-                          onClick={() => hasAudio && playLesson(lesson, course)}
+                          onClick={() => {
+                            if (!hasAudio) return;
+                            if (isActive) {
+                              togglePlayPause();
+                            } else {
+                              playLesson(lesson, course);
+                            }
+                          }}
                           className={`flex w-full items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 text-left transition-colors cursor-pointer ${
                             isActive
                               ? "bg-primary/5"
