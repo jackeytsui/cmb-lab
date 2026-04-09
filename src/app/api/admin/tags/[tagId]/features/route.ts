@@ -67,13 +67,12 @@ export async function PUT(
   }
 
   try {
-    await db.transaction(async (tx) => {
-      // Delete existing grants
-      await tx.delete(tagFeatureGrants).where(eq(tagFeatureGrants.tagId, tagId));
+    // Delete then insert (no transaction — neon-http doesn't support them)
+    {
+      await db.delete(tagFeatureGrants).where(eq(tagFeatureGrants.tagId, tagId));
 
-      // Insert new grants
       if (parsed.data.grants.length > 0) {
-        await tx.insert(tagFeatureGrants).values(
+        await db.insert(tagFeatureGrants).values(
           parsed.data.grants.map((g) => ({
             tagId,
             featureKey: g.featureKey,
@@ -81,7 +80,7 @@ export async function PUT(
           }))
         );
       }
-    });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

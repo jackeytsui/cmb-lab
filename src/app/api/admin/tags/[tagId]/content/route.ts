@@ -66,19 +66,18 @@ export async function PUT(
   }
 
   try {
-    await db.transaction(async (tx) => {
-      await tx.delete(tagContentGrants).where(eq(tagContentGrants.tagId, tagId));
+    // Delete then insert (no transaction — neon-http doesn't support them)
+    await db.delete(tagContentGrants).where(eq(tagContentGrants.tagId, tagId));
 
-      if (parsed.data.grants.length > 0) {
-        await tx.insert(tagContentGrants).values(
-          parsed.data.grants.map((g) => ({
-            tagId,
-            contentType: g.contentType,
-            contentId: g.contentId,
-          }))
-        );
-      }
-    });
+    if (parsed.data.grants.length > 0) {
+      await db.insert(tagContentGrants).values(
+        parsed.data.grants.map((g) => ({
+          tagId,
+          contentType: g.contentType,
+          contentId: g.contentId,
+        }))
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
