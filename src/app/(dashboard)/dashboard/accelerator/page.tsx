@@ -11,9 +11,18 @@ import {
   curatedPassages,
   passageReadStatus,
   acceleratorContentCompletion,
+  toneMasteryClips,
+  toneMasteryProgress,
+  listeningQuestions,
+  listeningProgress,
 } from "@/db/schema";
 import { eq, asc, count, sql } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
+import { resolvePermissions } from "@/lib/permissions";
+import {
+  getUserFeatureTagOverrides,
+  hasFeatureWithTagOverrides,
+} from "@/lib/tag-feature-access";
 import Link from "next/link";
 import {
   Keyboard,
@@ -23,6 +32,9 @@ import {
   ChevronRight,
   ClipboardList,
   Package,
+  AudioLines,
+  Music,
+  Ear,
 } from "lucide-react";
 
 interface SectionProgress {
@@ -174,8 +186,74 @@ async function AcceleratorDashboard() {
     },
   ];
 
-  const totalItems = sections.reduce((s, sec) => s + sec.total, 0);
-  const totalDone = sections.reduce((s, sec) => s + sec.completed, 0);
+  // --- Extra Pack: check which features the user has access to ---
+  const permissions = await resolvePermissions(user.id);
+  const tagOverrides = await getUserFeatureTagOverrides(user.id);
+
+  const hasAudioAccelerator = hasFeatureWithTagOverrides(
+    "audio_accelerator_edition",
+    permissions.features.has("audio_accelerator_edition"),
+    tagOverrides,
+  );
+  const hasToneMastery = hasFeatureWithTagOverrides(
+    "tone_mastery",
+    permissions.features.has("tone_mastery"),
+    tagOverrides,
+  );
+  const hasListeningTraining = hasFeatureWithTagOverrides(
+    "listening_training",
+    permissions.features.has("listening_training"),
+    tagOverrides,
+  );
+
+  const extraSections: SectionProgress[] = [];
+
+  if (hasAudioAccelerator) {
+    extraSections.push({
+      label: "Audio Accelerator Edition",
+      href: "/dashboard/accelerator-extra/audio",
+      icon: <AudioLines className="w-5 h-5" />,
+      completed: 0,
+      total: 1,
+      color: "bg-indigo-500/10 text-indigo-500",
+    });
+  }
+
+  if (hasToneMastery) {
+    const [toneTotal] = await db.select({ count: count() }).from(toneMasteryClips);
+    const [toneDone] = await db
+      .select({ count: count() })
+      .from(toneMasteryProgress)
+      .where(eq(toneMasteryProgress.userId, user.id));
+    extraSections.push({
+      label: "Tone Mastery",
+      href: "/dashboard/accelerator-extra/tone-mastery",
+      icon: <Music className="w-5 h-5" />,
+      completed: toneDone.count,
+      total: toneTotal.count,
+      color: "bg-violet-500/10 text-violet-500",
+    });
+  }
+
+  if (hasListeningTraining) {
+    const [listenTotal] = await db.select({ count: count() }).from(listeningQuestions);
+    const [listenDone] = await db
+      .select({ count: count() })
+      .from(listeningProgress)
+      .where(eq(listeningProgress.userId, user.id));
+    extraSections.push({
+      label: "Listening Training",
+      href: "/dashboard/accelerator-extra/listening-training",
+      icon: <Ear className="w-5 h-5" />,
+      completed: listenDone.count,
+      total: listenTotal.count,
+      color: "bg-cyan-500/10 text-cyan-500",
+    });
+  }
+
+  const allSections = [...sections, ...extraSections];
+  const totalItems = allSections.reduce((s, sec) => s + sec.total, 0);
+  const totalDone = allSections.reduce((s, sec) => s + sec.completed, 0);
   const overallPct =
     totalItems > 0 ? Math.round((totalDone / totalItems) * 100) : 0;
   const allComplete = totalItems > 0 && totalDone >= totalItems;
@@ -223,6 +301,25 @@ async function AcceleratorDashboard() {
           <ProgressCard key={section.label} section={section} />
         ))}
       </div>
+
+      {/* Extra Pack sections (if student has access) */}
+      {extraSections.length > 0 && (
+        <>
+          <div className="pt-2">
+            <h2 className="text-lg font-semibold text-foreground">
+              Extra Pack
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Your bonus order bump content.
+            </p>
+          </div>
+          <div className="space-y-4">
+            {extraSections.map((section) => (
+              <ProgressCard key={section.label} section={section} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

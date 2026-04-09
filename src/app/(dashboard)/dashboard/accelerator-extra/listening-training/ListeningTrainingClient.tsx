@@ -59,29 +59,36 @@ function RevealSection({
 
     return charArray.map((char, i) => {
       const isChinese = /\p{Script=Han}/u.test(char);
+      const isPunctuation = /[。，？！、；：""''（）【】《》…—·\s]/.test(char);
       const py = pinyinArray[i] ?? "";
       const tone = toneNumbers[i] ?? 0;
       const colorClass = isChinese ? getToneColorClass(tone, "mandarin") : "";
-      return { char, py: isChinese ? py : "", colorClass };
+      return { char, py: isChinese ? py : "", colorClass, isPunctuation };
     });
   }, [chineseText]);
 
   return (
     <div className="pl-7 pt-2 space-y-2">
       {/* Characters with pinyin above */}
-      <div className="flex flex-wrap gap-x-0.5">
-        {chars.map((c, i) => (
-          <span key={i} className="inline-flex flex-col items-center">
-            {c.py && (
-              <span className="text-[10px] text-muted-foreground leading-tight">
-                {c.py}
-              </span>
-            )}
-            <span className={cn("text-xl font-semibold", c.colorClass)}>
+      <div className="flex flex-wrap gap-x-0.5 items-end">
+        {chars.map((c, i) =>
+          c.isPunctuation ? (
+            <span key={i} className="text-xl font-semibold text-muted-foreground self-end">
               {c.char}
             </span>
-          </span>
-        ))}
+          ) : (
+            <span key={i} className="inline-flex flex-col items-center">
+              {c.py && (
+                <span className="text-[10px] text-muted-foreground leading-tight">
+                  {c.py}
+                </span>
+              )}
+              <span className={cn("text-xl font-semibold", c.colorClass)}>
+                {c.char}
+              </span>
+            </span>
+          ),
+        )}
       </div>
       {/* English translation */}
       <p className="text-sm text-muted-foreground italic">{englishText}</p>
