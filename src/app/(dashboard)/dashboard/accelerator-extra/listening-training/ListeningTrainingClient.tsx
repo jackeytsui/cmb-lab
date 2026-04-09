@@ -70,20 +70,20 @@ function RevealSection({
   return (
     <div className="pl-7 pt-2 space-y-2">
       {/* Characters with pinyin above */}
-      <div className="flex flex-wrap gap-x-0.5 items-end">
+      <div className="flex flex-wrap items-end">
         {chars.map((c, i) =>
           c.isPunctuation ? (
-            <span key={i} className="text-xl font-semibold text-muted-foreground self-end">
+            <span key={i} className="text-lg text-muted-foreground/50 self-end leading-none mb-[1px]">
               {c.char}
             </span>
           ) : (
-            <span key={i} className="inline-flex flex-col items-center">
+            <span key={i} className="inline-flex flex-col items-center px-[1px]">
               {c.py && (
                 <span className="text-[10px] text-muted-foreground leading-tight">
                   {c.py}
                 </span>
               )}
-              <span className={cn("text-xl font-semibold", c.colorClass)}>
+              <span className={cn("text-lg font-medium", c.colorClass)}>
                 {c.char}
               </span>
             </span>

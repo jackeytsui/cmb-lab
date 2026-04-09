@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CheckCircle, Loader2, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { pinyin } from "pinyin-pro";
+import { getToneColorClass } from "@/lib/tone-colors";
 
 type Clip = {
   id: string;
@@ -14,11 +16,6 @@ type Clip = {
   itemNumber: number;
   variant: string;
   sortOrder: number;
-};
-
-type ClipGroup = {
-  groupNumber: number;
-  clips: Clip[];
 };
 
 function toYouTubeEmbed(url: string): string | null {
@@ -35,6 +32,36 @@ function toYouTubeEmbed(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Render Chinese characters with tone-colored styling and pinyin above */
+function ToneColoredChars({ chinese }: { chinese: string }) {
+  const chars = [...chinese];
+  const pinyinArray = pinyin(chinese, { toneType: "symbol", type: "array" });
+  const toneNumbers = pinyin(chinese, { pattern: "num", type: "array" }).map(Number);
+
+  return (
+    <span className="inline-flex items-end gap-[1px]">
+      {chars.map((char, i) => {
+        const isChinese = /\p{Script=Han}/u.test(char);
+        const tone = toneNumbers[i] ?? 0;
+        const colorClass = isChinese ? getToneColorClass(tone, "mandarin") : "";
+        const py = isChinese ? pinyinArray[i] : "";
+        return (
+          <span key={i} className="inline-flex flex-col items-center">
+            {py && (
+              <span className="text-[10px] text-muted-foreground leading-tight">
+                {py}
+              </span>
+            )}
+            <span className={cn("text-base font-medium", colorClass)}>
+              {char}
+            </span>
+          </span>
+        );
+      })}
+    </span>
+  );
 }
 
 export function ToneMasteryClient() {
@@ -56,18 +83,6 @@ export function ToneMasteryClient() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
-
-  const groups = useMemo<ClipGroup[]>(() => {
-    const map = new Map<number, Clip[]>();
-    for (const clip of clips) {
-      const list = map.get(clip.groupNumber) ?? [];
-      list.push(clip);
-      map.set(clip.groupNumber, list);
-    }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([groupNumber, groupClips]) => ({ groupNumber, clips: groupClips }));
-  }, [clips]);
 
   const ratedCount = Object.keys(ratings).length;
   const totalCount = clips.length;
@@ -106,7 +121,7 @@ export function ToneMasteryClient() {
 
   return (
     <div className="space-y-8">
-      {/* Hero video */}
+      {/* Hero / intro video */}
       {heroEmbed ? (
         <div className="aspect-video w-full rounded-xl overflow-hidden border border-border bg-black">
           <iframe
@@ -123,7 +138,13 @@ export function ToneMasteryClient() {
             Your browser does not support the video tag.
           </video>
         </div>
-      ) : null}
+      ) : (
+        <div className="aspect-video w-full rounded-xl border border-dashed border-border bg-muted/30 flex items-center justify-center">
+          <p className="text-sm text-muted-foreground">
+            Introduction video — coming soon
+          </p>
+        </div>
+      )}
 
       {/* Progress bar */}
       {totalCount > 0 && (
@@ -150,100 +171,91 @@ export function ToneMasteryClient() {
         </div>
       )}
 
-      {/* Clip groups */}
-      {groups.map((group) => (
-        <div key={group.groupNumber} className="space-y-3">
-          <h2 className="text-lg font-semibold text-foreground">
-            Group {group.groupNumber}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {group.clips.map((clip) => {
-              const rating = ratings[clip.id];
-              const isSaving = savingClipId === clip.id;
-              const isPlayingThis = playingClipId === clip.id;
+      {/* All clips — flat grid, no grouping */}
+      {totalCount > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {clips.map((clip) => {
+            const rating = ratings[clip.id];
+            const isSaving = savingClipId === clip.id;
+            const isPlayingThis = playingClipId === clip.id;
 
-              return (
-                <div
-                  key={clip.id}
-                  className="rounded-xl border border-border bg-card overflow-hidden"
-                >
-                  {/* Video */}
-                  <div className="relative aspect-[9/16] max-h-[280px] bg-black">
-                    {isPlayingThis ? (
-                      <video
-                        src={clip.videoUrl}
-                        className="w-full h-full object-contain"
-                        controls
-                        autoPlay
-                        playsInline
-                        onEnded={() => setPlayingClipId(null)}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setPlayingClipId(clip.id)}
-                        className="w-full h-full flex flex-col items-center justify-center gap-2 text-white/80 hover:text-white transition-colors"
-                      >
-                        <Play className="w-10 h-10" />
-                        <span className="text-2xl font-bold">{clip.chinese}</span>
-                        <span className="text-sm">{clip.pinyin}</span>
-                      </button>
-                    )}
+            return (
+              <div
+                key={clip.id}
+                className="rounded-xl border border-border bg-card overflow-hidden"
+              >
+                {/* Video area */}
+                <div className="relative aspect-[9/16] max-h-[280px] bg-black">
+                  {isPlayingThis ? (
+                    <video
+                      src={clip.videoUrl}
+                      className="w-full h-full object-contain"
+                      controls
+                      autoPlay
+                      playsInline
+                      onEnded={() => setPlayingClipId(null)}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPlayingClipId(clip.id)}
+                      className="w-full h-full flex items-center justify-center text-white/60 hover:text-white transition-colors"
+                    >
+                      <Play className="w-12 h-12" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Tone-colored Chinese + pinyin + English + rating */}
+                <div className="p-3 space-y-2">
+                  <div className="flex flex-col items-center gap-1">
+                    <ToneColoredChars chinese={clip.chinese} />
+                    <span className="text-xs text-muted-foreground italic">
+                      {clip.title}
+                    </span>
                   </div>
 
-                  {/* Info + rating */}
-                  <div className="p-3 space-y-2">
-                    <div className="text-center">
-                      <span className="text-sm font-medium text-foreground">
-                        {clip.title}
-                      </span>
-                      <span className="text-xs text-muted-foreground ml-2">
-                        {clip.groupNumber}-{clip.itemNumber}{clip.variant}
+                  {/* Self-rating */}
+                  {rating ? (
+                    <div className="flex justify-center">
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full",
+                          rating === "good"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                        )}
+                      >
+                        <CheckCircle className="w-3 h-3" />
+                        {rating === "good" ? "Good" : "Not so great"}
                       </span>
                     </div>
-
-                    {/* Self-rating */}
-                    {rating ? (
-                      <div className="flex justify-center">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full",
-                            rating === "good"
-                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                              : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                          )}
-                        >
-                          <CheckCircle className="w-3 h-3" />
-                          {rating === "good" ? "Good" : "Not so great"}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleRate(clip.id, "good")}
-                          disabled={isSaving}
-                          className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
-                        >
-                          Good
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRate(clip.id, "not_good")}
-                          disabled={isSaving}
-                          className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
-                        >
-                          Not so great
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRate(clip.id, "good")}
+                        disabled={isSaving}
+                        className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Good
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRate(clip.id, "not_good")}
+                        disabled={isSaving}
+                        className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Not so great
+                      </button>
+                    </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
-      ))}
+      )}
     </div>
   );
 }
