@@ -60,13 +60,17 @@ export default async function TypingDrillPage() {
     (a, b) => a.sortOrder - b.sortOrder
   );
 
-  // Fetch user's completed sentence IDs
+  // Fetch user's completed sentence IDs (and which were skipped)
   const progressRows = await db
-    .select({ sentenceId: typingProgress.sentenceId })
+    .select({
+      sentenceId: typingProgress.sentenceId,
+      skipped: typingProgress.skipped,
+    })
     .from(typingProgress)
     .where(eq(typingProgress.userId, user.id));
 
   const completedIds = progressRows.map((r) => r.sentenceId);
+  const skippedIds = progressRows.filter((r) => r.skipped).map((r) => r.sentenceId);
 
   return (
     <FeatureGate feature="mandarin_accelerator">
@@ -92,7 +96,11 @@ export default async function TypingDrillPage() {
           scrollToLabel="Start Typing Practice"
         />
         <div id="typing-practice">
-          <TypingDrillClient pairs={pairs} initialCompletedIds={completedIds} />
+          <TypingDrillClient
+            pairs={pairs}
+            initialCompletedIds={completedIds}
+            initialSkippedIds={skippedIds}
+          />
         </div>
         <CompletionToggle completionKey="typing_unlock_kit" />
       </div>

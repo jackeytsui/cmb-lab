@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   integer,
+  boolean,
   pgEnum,
   uniqueIndex,
   index,
@@ -57,6 +58,7 @@ export const typingProgress = pgTable(
       .notNull()
       .references(() => typingSentences.id, { onDelete: "cascade" }),
     completedAt: timestamp("completed_at").notNull().defaultNow(),
+    skipped: boolean("skipped").notNull().default(false),
   },
   (table) => [
     uniqueIndex("typing_progress_user_sentence_idx").on(

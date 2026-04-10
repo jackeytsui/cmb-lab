@@ -267,6 +267,13 @@
       "when": 1775791016913,
       "tag": "0037_aberrant_randall",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1775900000000,
+      "tag": "0038_typing_progress_skipped",
+      "breakpoints": true
     }
   ]
 }

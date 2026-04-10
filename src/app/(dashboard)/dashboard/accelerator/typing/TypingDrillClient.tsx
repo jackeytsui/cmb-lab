@@ -26,6 +26,7 @@ export interface PhrasePair {
 interface TypingDrillClientProps {
   pairs: PhrasePair[];
   initialCompletedIds: string[];
+  initialSkippedIds?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -64,13 +65,15 @@ function DrillSide({
   side,
   language,
   isCompleted,
+  isSkipped,
   onComplete,
   onUncomplete,
 }: {
   side: SentenceSide;
   language: "cantonese" | "mandarin";
   isCompleted: boolean;
-  onComplete: (id: string) => void;
+  isSkipped: boolean;
+  onComplete: (id: string, skipped?: boolean) => void;
   onUncomplete: (id: string) => void;
 }) {
   const [input, setInput] = useState(() =>
@@ -78,7 +81,7 @@ function DrillSide({
   );
   const [feedback, setFeedback] = useState<
     "idle" | "correct" | "wrong" | "revealed"
-  >(() => (isCompleted ? "correct" : "idle"));
+  >(() => (isSkipped ? "revealed" : isCompleted ? "correct" : "idle"));
   const [charFeedback, setCharFeedback] = useState<
     Array<{ char: string; correct: boolean }>
   >([]);
@@ -98,7 +101,7 @@ function DrillSide({
     if (isCorrect) {
       setFeedback("correct");
       setCharFeedback([]);
-      onComplete(side.id);
+      onComplete(side.id, false);
       // Stay locked — no reset
     } else {
       setFeedback("wrong");
@@ -115,8 +118,8 @@ function DrillSide({
   const handleGiveUp = useCallback(() => {
     setInput(side.chineseText);
     setFeedback("revealed");
-    // Count as completed in the progress bar, but still allow Try Again.
-    onComplete(side.id);
+    // Count as completed in the progress bar (with skipped=true), but still allow Try Again.
+    onComplete(side.id, true);
   }, [side.chineseText, side.id, onComplete]);
 
   const handleTryAgain = useCallback(() => {
@@ -287,9 +290,13 @@ function DrillSide({
 export default function TypingDrillClient({
   pairs,
   initialCompletedIds,
+  initialSkippedIds = [],
 }: TypingDrillClientProps) {
   const [completedIds, setCompletedIds] = useState<Set<string>>(
     () => new Set(initialCompletedIds)
+  );
+  const [skippedIds, setSkippedIds] = useState<Set<string>>(
+    () => new Set(initialSkippedIds)
   );
 
   const totalSentences = pairs.reduce(
@@ -304,17 +311,34 @@ export default function TypingDrillClient({
     0
   );
 
-  const handleComplete = useCallback((sentenceId: string) => {
-    setCompletedIds((prev) => new Set(prev).add(sentenceId));
-    fetch("/api/accelerator/typing/progress", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sentenceId }),
-    }).catch(() => {});
-  }, []);
+  const handleComplete = useCallback(
+    (sentenceId: string, skipped = false) => {
+      setCompletedIds((prev) => new Set(prev).add(sentenceId));
+      setSkippedIds((prev) => {
+        const next = new Set(prev);
+        if (skipped) {
+          next.add(sentenceId);
+        } else {
+          next.delete(sentenceId);
+        }
+        return next;
+      });
+      fetch("/api/accelerator/typing/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sentenceId, skipped }),
+      }).catch(() => {});
+    },
+    []
+  );
 
   const handleUncomplete = useCallback((sentenceId: string) => {
     setCompletedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(sentenceId);
+      return next;
+    });
+    setSkippedIds((prev) => {
       const next = new Set(prev);
       next.delete(sentenceId);
       return next;
@@ -382,6 +406,7 @@ export default function TypingDrillClient({
                     side={pair.cantonese}
                     language="cantonese"
                     isCompleted={completedIds.has(pair.cantonese.id)}
+                    isSkipped={skippedIds.has(pair.cantonese.id)}
                     onComplete={handleComplete}
                     onUncomplete={handleUncomplete}
                   />
@@ -393,6 +418,7 @@ export default function TypingDrillClient({
                     side={pair.mandarin}
                     language="mandarin"
                     isCompleted={completedIds.has(pair.mandarin.id)}
+                    isSkipped={skippedIds.has(pair.mandarin.id)}
                     onComplete={handleComplete}
                     onUncomplete={handleUncomplete}
                   />
