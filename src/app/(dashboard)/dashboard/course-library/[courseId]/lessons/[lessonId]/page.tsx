@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Download as DownloadIcon } from "lucide-react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
+import { QuizLessonViewer } from "./QuizLessonViewer";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -145,13 +146,31 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           </div>
         )}
 
-        {row.lessonType === "quiz" && (
-          <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              Quiz viewer coming soon.
-            </p>
-          </div>
-        )}
+        {row.lessonType === "quiz" && (() => {
+          // Strip correctOptionIds before passing to client so answers
+          // can't be read from the DOM.
+          const rawQuestions = Array.isArray(content.questions)
+            ? (content.questions as Array<Record<string, unknown>>)
+            : [];
+          const safeQuestions = rawQuestions.map((q) => ({
+            id: String(q.id ?? ""),
+            prompt: String(q.prompt ?? ""),
+            type: (q.type as "single" | "multiple" | "true_false") ?? "single",
+            options: Array.isArray(q.options)
+              ? (q.options as Array<{ id: string; text: string }>).map((o) => ({
+                  id: String(o.id ?? ""),
+                  text: String(o.text ?? ""),
+                }))
+              : [],
+            points: typeof q.points === "number" ? q.points : 1,
+          }));
+          const safeQuiz = {
+            description: typeof content.description === "string" ? content.description : undefined,
+            passingScore: typeof content.passingScore === "number" ? content.passingScore : 70,
+            questions: safeQuestions,
+          };
+          return <QuizLessonViewer lessonId={lessonId} quiz={safeQuiz} />;
+        })()}
       </div>
     </FeatureGate>
   );
