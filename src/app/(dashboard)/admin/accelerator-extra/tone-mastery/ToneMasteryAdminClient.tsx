@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Pencil, Plus, Trash2, Upload, Check, X, FileSpreadsheet } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2, Upload, Check, X, FileSpreadsheet, XCircle } from "lucide-react";
 
 type Clip = {
   id: string;
@@ -31,6 +31,7 @@ function EditableClipRow({
   const [sortOrder, setSortOrder] = useState(String(clip.sortOrder));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleSave = async () => {
     setSaving(true);
@@ -55,19 +56,46 @@ function EditableClipRow({
   const handleReplaceVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Create a fresh AbortController for this upload
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    // Safety net: auto-abort after 5 minutes so nothing hangs forever
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 5 * 60 * 1000);
+
     setUploading(true);
     try {
       const blob = await upload(`tone-mastery/${file.name}`, file, {
         access: "public",
         handleUploadUrl: "/api/admin/accelerator-extra/tone-mastery/upload",
+        abortSignal: controller.signal,
       });
       await onSave(clip.id, { videoUrl: blob.url });
     } catch (err) {
-      alert(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      // Don't alert on user-initiated aborts
+      if (err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message))) {
+        console.log(`[Tone Mastery] Upload cancelled for ${clip.id}`);
+      } else {
+        alert(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
     } finally {
+      clearTimeout(timeoutId);
+      abortControllerRef.current = null;
       setUploading(false);
       e.target.value = "";
     }
+  };
+
+  const handleCancelUpload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    // Force-reset uploading state even if the abort didn't propagate cleanly
+    setUploading(false);
   };
 
   if (editing) {
@@ -95,30 +123,46 @@ function EditableClipRow({
       <span className="text-xs text-muted-foreground/50 tabular-nums w-8 text-right">#{clip.sortOrder}</span>
 
       {/* Video status */}
-      {clip.videoUrl && clip.videoUrl !== "placeholder" ? (
+      {uploading ? (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-[10px] text-amber-500 font-medium">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Uploading...
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 hover:bg-red-500/10"
+            onClick={handleCancelUpload}
+            title="Cancel upload"
+          >
+            <XCircle className="w-4 h-4 text-red-500" />
+          </Button>
+        </div>
+      ) : clip.videoUrl && clip.videoUrl !== "placeholder" ? (
         <span className="text-[10px] text-emerald-500 font-medium">MP4</span>
       ) : (
         <label className="cursor-pointer">
-          <input type="file" accept="video/mp4,video/*" className="hidden" onChange={handleReplaceVideo} disabled={uploading} />
+          <input type="file" accept="video/mp4,video/*" className="hidden" onChange={handleReplaceVideo} />
           <span className="text-[10px] text-amber-500 font-medium hover:underline cursor-pointer">
-            {uploading ? "Uploading..." : "Upload MP4"}
+            Upload MP4
           </span>
         </label>
       )}
 
       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {clip.videoUrl && clip.videoUrl !== "placeholder" && (
+        {!uploading && clip.videoUrl && clip.videoUrl !== "placeholder" && (
           <label className="cursor-pointer">
-            <input type="file" accept="video/mp4,video/*" className="hidden" onChange={handleReplaceVideo} disabled={uploading} />
-            <Button size="sm" variant="ghost" className="pointer-events-none h-7 w-7 p-0" disabled={uploading}>
-              {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-muted-foreground" />}
+            <input type="file" accept="video/mp4,video/*" className="hidden" onChange={handleReplaceVideo} />
+            <Button size="sm" variant="ghost" className="pointer-events-none h-7 w-7 p-0">
+              <Upload className="w-3.5 h-3.5 text-muted-foreground" />
             </Button>
           </label>
         )}
-        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditing(true)}>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditing(true)} disabled={uploading}>
           <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
         </Button>
-        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => onDelete(clip.id)}>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => onDelete(clip.id)} disabled={uploading}>
           <Trash2 className="w-3.5 h-3.5 text-red-500" />
         </Button>
       </div>
