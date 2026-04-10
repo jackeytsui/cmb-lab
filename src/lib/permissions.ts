@@ -27,6 +27,7 @@ export const FEATURE_KEYS = [
   "listening_lab",
   "coaching_material",
   "flashcards",
+  "course_library",
   "video_threads",
   "certificates",
   "ai_chat",

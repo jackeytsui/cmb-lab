@@ -21,6 +21,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   listening_lab: "YouTube Listening Lab",
   coaching_material: "My Coaching Material",
   flashcards: "Flashcards",
+  course_library: "Course Library",
   video_threads: "Video Threads",
   certificates: "Certificates",
   ai_chat: "AI Chat",
