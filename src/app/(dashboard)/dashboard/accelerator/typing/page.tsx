@@ -60,17 +60,35 @@ export default async function TypingDrillPage() {
     (a, b) => a.sortOrder - b.sortOrder
   );
 
-  // Fetch user's completed sentence IDs (and which were skipped)
-  const progressRows = await db
-    .select({
-      sentenceId: typingProgress.sentenceId,
-      skipped: typingProgress.skipped,
-    })
-    .from(typingProgress)
-    .where(eq(typingProgress.userId, user.id));
+  // Fetch user's completed sentence IDs (and which were skipped).
+  // The `skipped` column was added in a later migration — fall back gracefully
+  // if it doesn't exist yet so the page still works pre-migration.
+  let completedIds: string[] = [];
+  let skippedIds: string[] = [];
+  try {
+    const progressRows = await db
+      .select({
+        sentenceId: typingProgress.sentenceId,
+        skipped: typingProgress.skipped,
+      })
+      .from(typingProgress)
+      .where(eq(typingProgress.userId, user.id));
 
-  const completedIds = progressRows.map((r) => r.sentenceId);
-  const skippedIds = progressRows.filter((r) => r.skipped).map((r) => r.sentenceId);
+    completedIds = progressRows.map((r) => r.sentenceId);
+    skippedIds = progressRows.filter((r) => r.skipped).map((r) => r.sentenceId);
+  } catch (err) {
+    // If the skipped column doesn't exist yet (pre-migration), fall back to
+    // the legacy query that just fetches sentenceId.
+    console.warn(
+      "[Typing Drill] Failed to read 'skipped' column — falling back to legacy query:",
+      err instanceof Error ? err.message : err,
+    );
+    const legacyRows = await db
+      .select({ sentenceId: typingProgress.sentenceId })
+      .from(typingProgress)
+      .where(eq(typingProgress.userId, user.id));
+    completedIds = legacyRows.map((r) => r.sentenceId);
+  }
 
   return (
     <FeatureGate feature="mandarin_accelerator">
