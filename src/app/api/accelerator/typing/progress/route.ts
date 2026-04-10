@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import { typingProgress } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -68,6 +68,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Failed to record typing progress:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DELETE — remove a sentence from progress (deduct when student clicks Try Again)
+// ---------------------------------------------------------------------------
+
+export async function DELETE(req: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const parsed = markCompleteSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation error", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    await db
+      .delete(typingProgress)
+      .where(
+        and(
+          eq(typingProgress.userId, user.id),
+          eq(typingProgress.sentenceId, parsed.data.sentenceId)
+        )
+      );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to remove typing progress:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

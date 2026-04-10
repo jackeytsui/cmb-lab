@@ -65,11 +65,13 @@ function DrillSide({
   language,
   isCompleted,
   onComplete,
+  onUncomplete,
 }: {
   side: SentenceSide;
   language: "cantonese" | "mandarin";
   isCompleted: boolean;
   onComplete: (id: string) => void;
+  onUncomplete: (id: string) => void;
 }) {
   const [input, setInput] = useState(() =>
     isCompleted ? side.chineseText : ""
@@ -82,10 +84,9 @@ function DrillSide({
   >([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const { speak, isPlaying } = useTTS();
-  const [skipped, setSkipped] = useState(false);
 
-  // "correct" or skipped are terminal — "revealed" allows Try Again
-  const isLocked = feedback === "correct" || skipped;
+  // "correct" is terminal (locked). "revealed" counts as completed but allows Try Again to deduct.
+  const isLocked = feedback === "correct";
 
   const handleCheck = useCallback(() => {
     if (isLocked || feedback === "wrong" || !input.trim()) return;
@@ -114,20 +115,18 @@ function DrillSide({
   const handleGiveUp = useCallback(() => {
     setInput(side.chineseText);
     setFeedback("revealed");
-    // Don't mark complete yet — let student choose to try again or skip
-  }, [side.chineseText]);
-
-  const handleSkip = useCallback(() => {
-    setSkipped(true);
+    // Count as completed in the progress bar, but still allow Try Again.
     onComplete(side.id);
-  }, [side.id, onComplete]);
+  }, [side.chineseText, side.id, onComplete]);
 
   const handleTryAgain = useCallback(() => {
     setInput("");
     setFeedback("idle");
     setCharFeedback([]);
+    // Deduct from progress until they click I give up or Check again.
+    onUncomplete(side.id);
     inputRef.current?.focus();
-  }, []);
+  }, [side.id, onUncomplete]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -236,36 +235,20 @@ function DrillSide({
           )}
         </div>
       )}
-      {feedback === "revealed" && !isLocked && (
+      {feedback === "revealed" && (
         <div className="space-y-2 w-full">
-          <div className="flex items-center justify-center gap-1 text-amber-500 text-xs font-medium">
-            <span>Answer revealed</span>
+          <div className="flex items-center justify-center gap-1.5 text-amber-500 text-xs font-semibold">
+            <Check className="w-3.5 h-3.5" />
+            <span>Skipped</span>
           </div>
-          <div className="flex gap-2 w-full">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleTryAgain}
-              className="flex-1"
-            >
-              Try Again
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleSkip}
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
-            >
-              Skip
-            </Button>
-          </div>
-        </div>
-      )}
-      {feedback === "revealed" && isLocked && (
-        <div className="flex items-center gap-1 text-amber-500 text-xs font-medium">
-          <Check className="w-3.5 h-3.5" />
-          <span>Skipped</span>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleTryAgain}
+            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow-sm"
+          >
+            Try Again
+          </Button>
         </div>
       )}
 
@@ -287,7 +270,7 @@ function DrillSide({
             size="sm"
             onClick={handleCheck}
             disabled={feedback !== "idle" || !input.trim()}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-sm"
           >
             Check
           </Button>
@@ -325,6 +308,19 @@ export default function TypingDrillClient({
     setCompletedIds((prev) => new Set(prev).add(sentenceId));
     fetch("/api/accelerator/typing/progress", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sentenceId }),
+    }).catch(() => {});
+  }, []);
+
+  const handleUncomplete = useCallback((sentenceId: string) => {
+    setCompletedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(sentenceId);
+      return next;
+    });
+    fetch("/api/accelerator/typing/progress", {
+      method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sentenceId }),
     }).catch(() => {});
@@ -387,6 +383,7 @@ export default function TypingDrillClient({
                     language="cantonese"
                     isCompleted={completedIds.has(pair.cantonese.id)}
                     onComplete={handleComplete}
+                    onUncomplete={handleUncomplete}
                   />
                 </div>
               )}
@@ -397,6 +394,7 @@ export default function TypingDrillClient({
                     language="mandarin"
                     isCompleted={completedIds.has(pair.mandarin.id)}
                     onComplete={handleComplete}
+                    onUncomplete={handleUncomplete}
                   />
                 </div>
               )}
