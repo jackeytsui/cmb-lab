@@ -188,7 +188,7 @@ export function ToneMasteryClient() {
                 <div className="relative aspect-square bg-black">
                   {isPlayingThis ? (
                     <video
-                      src={clip.videoUrl}
+                      src={`/api/accelerator-extra/tone-mastery/stream/${clip.id}`}
                       className="w-full h-full object-contain"
                       controls
                       autoPlay

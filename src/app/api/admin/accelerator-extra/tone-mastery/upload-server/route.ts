@@ -58,10 +58,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upload to Vercel Blob using server-side put()
+    // Upload to Vercel Blob using server-side put().
+    // Uses private access to match the CMB Lab blob store configuration.
+    // Playback happens through the /api/accelerator-extra/tone-mastery/stream/[clipId]
+    // proxy endpoint which authenticates with BLOB_READ_WRITE_TOKEN.
     const blob = await put(`tone-mastery/${file.name}`, file, {
-      access: "public",
+      access: "private",
       addRandomSuffix: true,
+      contentType: file.type,
       token: process.env.BLOB_READ_WRITE_TOKEN,
     });
 
