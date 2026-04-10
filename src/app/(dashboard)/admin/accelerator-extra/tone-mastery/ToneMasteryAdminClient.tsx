@@ -1,10 +1,60 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Pencil, Plus, Trash2, Upload, Check, X, FileSpreadsheet, XCircle } from "lucide-react";
+
+// Upload a file to our server-side endpoint via XHR so we get progress callbacks.
+function uploadFileWithProgress(
+  endpoint: string,
+  file: File,
+  abortSignal: AbortSignal,
+  onProgress: (percent: number) => void
+): Promise<{ url: string }> {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", endpoint);
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (data.url) {
+            resolve({ url: data.url });
+          } else {
+            reject(new Error(data.error || "No URL returned"));
+          }
+        } catch {
+          reject(new Error("Invalid response from server"));
+        }
+      } else {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          reject(new Error(data.error || `Upload failed with status ${xhr.status}`));
+        } catch {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+    xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+
+    abortSignal.addEventListener("abort", () => xhr.abort());
+
+    xhr.send(formData);
+  });
+}
 
 type Clip = {
   id: string;
@@ -32,7 +82,7 @@ function EditableClipRow({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadStage, setUploadStage] = useState<
-    "idle" | "token" | "uploading" | "saving"
+    "idle" | "uploading" | "saving"
   >("idle");
   const [uploadPercent, setUploadPercent] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -84,23 +134,17 @@ function EditableClipRow({
 
     setUploadError(null);
     setUploading(true);
-    setUploadStage("token");
+    setUploadStage("uploading");
     setUploadPercent(0);
     try {
-      console.log(`[Tone Mastery] Requesting upload token from server...`);
+      console.log(`[Tone Mastery] Uploading to server endpoint...`);
 
-      const blob = await upload(`tone-mastery/${file.name}`, file, {
-        access: "public",
-        handleUploadUrl: "/api/admin/accelerator-extra/tone-mastery/upload",
-        abortSignal: controller.signal,
-        onUploadProgress: (progress: { percentage: number; loaded: number; total: number }) => {
-          if (uploadStage !== "uploading") {
-            console.log(`[Tone Mastery] Upload started for clip ${clip.id}`);
-            setUploadStage("uploading");
-          }
-          setUploadPercent(Math.round(progress.percentage));
-        },
-      });
+      const blob = await uploadFileWithProgress(
+        "/api/admin/accelerator-extra/tone-mastery/upload-server",
+        file,
+        controller.signal,
+        (percent) => setUploadPercent(percent)
+      );
 
       console.log(`[Tone Mastery] Upload complete. Blob URL:`, blob.url);
       setUploadStage("saving");
@@ -163,7 +207,6 @@ function EditableClipRow({
         <div className="flex items-center gap-2 min-w-[180px] justify-end">
           <span className="inline-flex items-center gap-1 text-[10px] text-amber-500 font-medium tabular-nums">
             <Loader2 className="w-3 h-3 animate-spin" />
-            {uploadStage === "token" && "Requesting token..."}
             {uploadStage === "uploading" && `Uploading ${uploadPercent}%`}
             {uploadStage === "saving" && "Saving..."}
             {uploadStage === "idle" && "Starting..."}
@@ -291,10 +334,13 @@ export function ToneMasteryAdminClient() {
     if (!file) return;
     setUploading(true);
     try {
-      const blob = await upload(`tone-mastery/${file.name}`, file, {
-        access: "public",
-        handleUploadUrl: "/api/admin/accelerator-extra/tone-mastery/upload",
-      });
+      const controller = new AbortController();
+      const blob = await uploadFileWithProgress(
+        "/api/admin/accelerator-extra/tone-mastery/upload-server",
+        file,
+        controller.signal,
+        () => {}
+      );
       const nextSort = clips.length > 0 ? Math.max(...clips.map((c) => c.sortOrder)) + 1 : 1;
       const res = await fetch("/api/admin/accelerator-extra/tone-mastery", {
         method: "POST",
