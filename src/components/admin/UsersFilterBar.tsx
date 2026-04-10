@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Filter, X, Search, Check, Tag as TagIcon } from "lucide-react";
+import { Filter, X, Search, Check, Tag as TagIcon, Loader2 } from "lucide-react";
 
 interface TagOption {
   id: string;
@@ -41,6 +41,7 @@ export function UsersFilterBar({
   roleFilter,
 }: Props) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [showFilters, setShowFilters] = useState(() => {
     // Auto-open filters if any are active on mount
     return Boolean(
@@ -51,92 +52,87 @@ export function UsersFilterBar({
         initialPortalAccess,
     );
   });
-  const [search, setSearch] = useState(initialSearch);
-  const [coachId, setCoachId] = useState(initialCoachId);
-  const [createdFrom, setCreatedFrom] = useState(initialCreatedFrom);
-  const [createdTo, setCreatedTo] = useState(initialCreatedTo);
-  const [tagIds, setTagIds] = useState<Set<string>>(new Set(initialTagIds));
-  const [portalAccess, setPortalAccess] = useState(initialPortalAccess);
+
+  // Search state — local because it submits on Enter
+  const [searchDraft, setSearchDraft] = useState(initialSearch);
+
+  // Tag search input inside the picker (pure UI, no URL effect)
   const [tagSearch, setTagSearch] = useState("");
+
+  // Currently applied filter values (derived from URL initial props)
+  const applied = {
+    search: initialSearch,
+    coachId: initialCoachId,
+    createdFrom: initialCreatedFrom,
+    createdTo: initialCreatedTo,
+    tagIds: initialTagIds,
+    portalAccess: initialPortalAccess,
+  };
+
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (applied.coachId) n++;
+    if (applied.createdFrom) n++;
+    if (applied.createdTo) n++;
+    if (applied.tagIds.length > 0) n++;
+    if (applied.portalAccess) n++;
+    return n;
+  }, [applied.coachId, applied.createdFrom, applied.createdTo, applied.tagIds, applied.portalAccess]);
+
+  // Build the URL with given overrides (merges with currently applied filters)
+  const buildUrl = useCallback(
+    (overrides: Partial<typeof applied>) => {
+      const merged = { ...applied, ...overrides };
+      const params = new URLSearchParams();
+      params.set("tab", "users");
+      params.set("usersRole", roleFilter);
+      if (merged.search) params.set("search", merged.search);
+      if (merged.coachId) params.set("coachId", merged.coachId);
+      if (merged.createdFrom) params.set("createdFrom", merged.createdFrom);
+      if (merged.createdTo) params.set("createdTo", merged.createdTo);
+      if (merged.tagIds.length > 0) params.set("tagIds", merged.tagIds.join(","));
+      if (merged.portalAccess) params.set("portalAccess", merged.portalAccess);
+      return `?${params.toString()}`;
+    },
+    [applied, roleFilter],
+  );
+
+  const navigate = useCallback(
+    (overrides: Partial<typeof applied>) => {
+      startTransition(() => {
+        router.push(buildUrl(overrides));
+      });
+    },
+    [router, buildUrl],
+  );
+
+  const clearAll = useCallback(() => {
+    startTransition(() => {
+      router.push(
+        `?tab=users&usersRole=${roleFilter}${
+          applied.search ? `&search=${encodeURIComponent(applied.search)}` : ""
+        }`,
+      );
+    });
+  }, [router, roleFilter, applied.search]);
+
+  const toggleTagId = (id: string) => {
+    const next = applied.tagIds.includes(id)
+      ? applied.tagIds.filter((t) => t !== id)
+      : [...applied.tagIds, id];
+    navigate({ tagIds: next });
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigate({ search: searchDraft });
+  };
 
   const filteredTags = useMemo(() => {
     const q = tagSearch.trim().toLowerCase();
     if (!q) return allTags;
     return allTags.filter((t) => t.name.toLowerCase().includes(q));
   }, [allTags, tagSearch]);
-
-  const activeFilterCount = useMemo(() => {
-    let n = 0;
-    if (coachId) n++;
-    if (createdFrom) n++;
-    if (createdTo) n++;
-    if (tagIds.size > 0) n++;
-    if (portalAccess) n++;
-    return n;
-  }, [coachId, createdFrom, createdTo, tagIds, portalAccess]);
-
-  const buildUrl = useCallback(
-    (overrides: Partial<Record<string, string>> = {}) => {
-      const params = new URLSearchParams();
-      params.set("tab", "users");
-      params.set("usersRole", roleFilter);
-      if (overrides.search !== undefined ? overrides.search : search) {
-        params.set("search", overrides.search ?? search);
-      }
-      if (overrides.coachId !== undefined ? overrides.coachId : coachId) {
-        params.set("coachId", overrides.coachId ?? coachId);
-      }
-      if (
-        overrides.createdFrom !== undefined ? overrides.createdFrom : createdFrom
-      ) {
-        params.set("createdFrom", overrides.createdFrom ?? createdFrom);
-      }
-      if (overrides.createdTo !== undefined ? overrides.createdTo : createdTo) {
-        params.set("createdTo", overrides.createdTo ?? createdTo);
-      }
-      const tagIdsList =
-        overrides.tagIds !== undefined
-          ? overrides.tagIds
-          : Array.from(tagIds).join(",");
-      if (tagIdsList) params.set("tagIds", tagIdsList);
-      if (
-        overrides.portalAccess !== undefined ? overrides.portalAccess : portalAccess
-      ) {
-        params.set("portalAccess", overrides.portalAccess ?? portalAccess);
-      }
-      return `?${params.toString()}`;
-    },
-    [roleFilter, search, coachId, createdFrom, createdTo, tagIds, portalAccess],
-  );
-
-  const applyFilters = useCallback(() => {
-    router.push(buildUrl());
-  }, [router, buildUrl]);
-
-  const clearAll = useCallback(() => {
-    setCoachId("");
-    setCreatedFrom("");
-    setCreatedTo("");
-    setTagIds(new Set());
-    setPortalAccess("");
-    router.push(
-      `?tab=users&usersRole=${roleFilter}${search ? `&search=${search}` : ""}`,
-    );
-  }, [router, roleFilter, search]);
-
-  const toggleTagId = (id: string) => {
-    setTagIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    router.push(buildUrl());
-  };
 
   return (
     <div className="space-y-3">
@@ -145,9 +141,9 @@ export function UsersFilterBar({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name or email"
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            placeholder="Search name or email (press Enter)"
             className="w-full rounded-md border border-border bg-background pl-9 pr-3 py-2 text-sm"
           />
         </form>
@@ -179,6 +175,9 @@ export function UsersFilterBar({
             Clear
           </button>
         )}
+        {isPending && (
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+        )}
       </div>
 
       {showFilters && (
@@ -190,8 +189,8 @@ export function UsersFilterBar({
                 Assigned Coach
               </label>
               <select
-                value={coachId}
-                onChange={(e) => setCoachId(e.target.value)}
+                value={applied.coachId}
+                onChange={(e) => navigate({ coachId: e.target.value })}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               >
                 <option value="">Any</option>
@@ -210,8 +209,8 @@ export function UsersFilterBar({
                 Portal Access
               </label>
               <select
-                value={portalAccess}
-                onChange={(e) => setPortalAccess(e.target.value)}
+                value={applied.portalAccess}
+                onChange={(e) => navigate({ portalAccess: e.target.value })}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               >
                 <option value="">Any</option>
@@ -229,16 +228,16 @@ export function UsersFilterBar({
               <div className="flex gap-1 items-center">
                 <input
                   type="date"
-                  value={createdFrom}
-                  onChange={(e) => setCreatedFrom(e.target.value)}
+                  value={applied.createdFrom}
+                  onChange={(e) => navigate({ createdFrom: e.target.value })}
                   className="flex-1 rounded-md border border-border bg-background px-2 py-2 text-xs"
                   placeholder="From"
                 />
                 <span className="text-xs text-muted-foreground">to</span>
                 <input
                   type="date"
-                  value={createdTo}
-                  onChange={(e) => setCreatedTo(e.target.value)}
+                  value={applied.createdTo}
+                  onChange={(e) => navigate({ createdTo: e.target.value })}
                   className="flex-1 rounded-md border border-border bg-background px-2 py-2 text-xs"
                   placeholder="To"
                 />
@@ -249,7 +248,9 @@ export function UsersFilterBar({
           {/* Tags filter */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Has Tags {tagIds.size > 0 && `(${tagIds.size} selected — ALL required)`}
+              Has Tags{" "}
+              {applied.tagIds.length > 0 &&
+                `(${applied.tagIds.length} selected — ALL required)`}
             </label>
             {allTags.length === 0 ? (
               <p className="text-xs text-muted-foreground italic">
@@ -265,7 +266,7 @@ export function UsersFilterBar({
                     value={tagSearch}
                     onChange={(e) => setTagSearch(e.target.value)}
                     placeholder={`Search ${allTags.length} tag${allTags.length === 1 ? "" : "s"}...`}
-                    className="w-full rounded-md border border-border bg-background pl-8 pr-3 py-1.5 text-xs"
+                    className="w-full rounded-md border border-border bg-background pl-8 pr-8 py-1.5 text-xs"
                   />
                   {tagSearch && (
                     <button
@@ -287,7 +288,7 @@ export function UsersFilterBar({
                 ) : (
                   <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-0.5">
                     {filteredTags.map((tag) => {
-                      const selected = tagIds.has(tag.id);
+                      const selected = applied.tagIds.includes(tag.id);
                       return (
                         <button
                           key={tag.id}
@@ -312,32 +313,15 @@ export function UsersFilterBar({
                   </div>
                 )}
 
-                {/* Show selected count when filtered */}
-                {tagSearch && tagIds.size > 0 && (
+                {tagSearch && applied.tagIds.length > 0 && (
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    {tagIds.size} tag{tagIds.size === 1 ? "" : "s"} selected
+                    {applied.tagIds.length} tag
+                    {applied.tagIds.length === 1 ? "" : "s"} selected
                     (including ones not shown)
                   </p>
                 )}
               </>
             )}
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-border">
-            <button
-              type="button"
-              onClick={clearAll}
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={applyFilters}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-            >
-              Apply filters
-            </button>
           </div>
         </div>
       )}
