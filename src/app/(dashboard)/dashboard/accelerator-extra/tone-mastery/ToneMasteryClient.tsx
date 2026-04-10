@@ -185,24 +185,45 @@ export function ToneMasteryClient() {
                 className="rounded-xl border border-border bg-card overflow-hidden"
               >
                 {/* Video area */}
-                <div className="relative aspect-square bg-black">
-                  {isPlayingThis ? (
-                    <video
-                      src={`/api/accelerator-extra/tone-mastery/stream/${clip.id}`}
-                      className="w-full h-full object-contain"
-                      controls
-                      autoPlay
-                      playsInline
-                      onEnded={() => setPlayingClipId(null)}
-                    />
+                <div className="relative aspect-square bg-black overflow-hidden">
+                  {clip.videoUrl && clip.videoUrl !== "placeholder" ? (
+                    isPlayingThis ? (
+                      <video
+                        src={`/api/accelerator-extra/tone-mastery/stream/${clip.id}`}
+                        className="w-full h-full object-cover"
+                        controls
+                        autoPlay
+                        playsInline
+                        onEnded={() => setPlayingClipId(null)}
+                      />
+                    ) : (
+                      <>
+                        {/* Preview frame: #t=0.1 forces Safari/iOS to render the first frame */}
+                        <video
+                          src={`/api/accelerator-extra/tone-mastery/stream/${clip.id}#t=0.1`}
+                          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                          preload="metadata"
+                          muted
+                          playsInline
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPlayingClipId(clip.id)}
+                          className="absolute inset-0 flex items-center justify-center text-white/90 hover:text-white transition-all bg-black/20 hover:bg-black/10"
+                          aria-label="Play clip"
+                        >
+                          <Play
+                            className="w-14 h-14 drop-shadow-lg"
+                            fill="currentColor"
+                          />
+                        </button>
+                      </>
+                    )
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setPlayingClipId(clip.id)}
-                      className="w-full h-full flex items-center justify-center text-white/60 hover:text-white transition-colors"
-                    >
+                    // Placeholder — no video uploaded yet
+                    <div className="w-full h-full flex items-center justify-center text-white/30">
                       <Play className="w-12 h-12" />
-                    </button>
+                    </div>
                   )}
                 </div>
 
