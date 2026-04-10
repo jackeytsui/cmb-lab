@@ -14,6 +14,7 @@ import {
   File as FileIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { QuizBuilder } from "./QuizBuilder";
 
 type LessonType = "video" | "text" | "quiz" | "download";
 
@@ -191,10 +192,11 @@ export function LessonEditorClient({
         />
       )}
       {lesson.lessonType === "quiz" && (
-        <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
-          <HelpCircle className="w-10 h-10 text-amber-500/40 mx-auto mb-3" />
-          <p className="text-sm font-medium">Quiz builder coming in step 5</p>
-        </div>
+        <QuizBuilder
+          lessonId={lesson.id}
+          content={lesson.content}
+          onUpdate={updateContent}
+        />
       )}
 
       <button type="button" onClick={() => router.refresh()} className="hidden" />
