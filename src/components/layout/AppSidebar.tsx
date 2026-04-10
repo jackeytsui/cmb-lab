@@ -38,6 +38,8 @@ type FeatureKey =
   | "audio_courses"
   | "listening_lab"
   | "coaching_material"
+  | "flashcards"
+  | "course_library"
   | "video_threads"
   | "certificates"
   | "ai_chat"
@@ -63,6 +65,12 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         url: "/dashboard/audio-courses",
         icon: AudioLines,
         featureKey: "audio_courses",
+      },
+      {
+        title: "Course Library",
+        url: "/dashboard/course-library",
+        icon: BookOpenText,
+        featureKey: "course_library",
       },
     ],
   },
