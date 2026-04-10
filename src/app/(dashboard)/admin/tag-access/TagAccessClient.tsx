@@ -34,20 +34,48 @@ interface AudioSeries {
   title: string;
 }
 
-const FEATURE_KEYS = [
-  { key: "dictionary_reader", label: "AI Passage Reader" },
-  { key: "audio_courses", label: "Audio Courses" },
-  { key: "listening_lab", label: "YouTube Listening Lab" },
-  { key: "coaching_material", label: "Coaching Material" },
-  { key: "mandarin_accelerator", label: "Mandarin Accelerator" },
-  { key: "audio_accelerator_edition", label: "Audio Accelerator Edition" },
-  { key: "tone_mastery", label: "Tone Mastery" },
-  { key: "listening_training", label: "Listening Training" },
-  { key: "ai_conversation", label: "AI Conversation" },
-  { key: "practice_sets", label: "Practice Sets" },
-  { key: "video_threads", label: "Video Threads" },
-  { key: "certificates", label: "Certificates" },
-  { key: "ai_chat", label: "AI Chat" },
+// Feature access grouped into logical categories for easier scanning.
+// Order within each category matches the typical student journey.
+const FEATURE_CATEGORIES: Array<{
+  label: string;
+  description?: string;
+  features: Array<{ key: string; label: string }>;
+}> = [
+  {
+    label: "Core Learning Tools",
+    description: "Baseline features for regular students",
+    features: [
+      { key: "dictionary_reader", label: "AI Passage Reader" },
+      { key: "listening_lab", label: "YouTube Listening Lab" },
+      { key: "audio_courses", label: "Audio Courses" },
+      { key: "coaching_material", label: "Coaching Material" },
+      { key: "flashcards", label: "Flashcards" },
+    ],
+  },
+  {
+    label: "Mandarin Accelerator",
+    description: "Accelerator-track content",
+    features: [
+      { key: "mandarin_accelerator", label: "Mandarin Accelerator" },
+      { key: "audio_accelerator_edition", label: "Audio Accelerator Edition" },
+      { key: "tone_mastery", label: "Tone Mastery" },
+      { key: "listening_training", label: "Listening Training" },
+    ],
+  },
+  {
+    label: "AI & Practice",
+    description: "Interactive and AI-powered tools",
+    features: [
+      { key: "ai_conversation", label: "AI Conversation" },
+      { key: "ai_chat", label: "AI Chat" },
+      { key: "practice_sets", label: "Practice Sets" },
+      { key: "video_threads", label: "Video Threads" },
+    ],
+  },
+  {
+    label: "Other",
+    features: [{ key: "certificates", label: "Certificates" }],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -201,37 +229,53 @@ function TagRow({
                 <h4 className="text-sm font-semibold text-foreground mb-3">
                   Feature Access
                 </h4>
-                <p className="text-[10px] text-muted-foreground mb-3">
+                <p className="text-[10px] text-muted-foreground mb-4">
                   Click to cycle: none → <span className="text-emerald-500">additive</span> (grants) → <span className="text-red-500">deny</span> (blocks) → none
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {FEATURE_KEYS.map(({ key, label }) => {
-                    const state = getFeatureState(key);
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => toggleFeature(key)}
-                        className={cn(
-                          "flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors text-left",
-                          state === "additive"
-                            ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : state === "deny"
-                              ? "border-red-500/50 bg-red-500/10 text-red-600 dark:text-red-400"
-                              : "border-border bg-background text-muted-foreground hover:text-foreground"
+                <div className="space-y-5">
+                  {FEATURE_CATEGORIES.map((category) => (
+                    <div key={category.label}>
+                      <div className="mb-2 flex items-baseline gap-2">
+                        <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {category.label}
+                        </h5>
+                        {category.description && (
+                          <span className="text-[10px] text-muted-foreground/70">
+                            {category.description}
+                          </span>
                         )}
-                      >
-                        {state === "additive" ? (
-                          <Plus className="w-3 h-3 shrink-0" />
-                        ) : state === "deny" ? (
-                          <Minus className="w-3 h-3 shrink-0" />
-                        ) : (
-                          <span className="w-3 h-3 shrink-0 rounded-full border border-border" />
-                        )}
-                        {label}
-                      </button>
-                    );
-                  })}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {category.features.map(({ key, label }) => {
+                          const state = getFeatureState(key);
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => toggleFeature(key)}
+                              className={cn(
+                                "flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors text-left",
+                                state === "additive"
+                                  ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                  : state === "deny"
+                                    ? "border-red-500/50 bg-red-500/10 text-red-600 dark:text-red-400"
+                                    : "border-border bg-background text-muted-foreground hover:text-foreground"
+                              )}
+                            >
+                              {state === "additive" ? (
+                                <Plus className="w-3 h-3 shrink-0" />
+                              ) : state === "deny" ? (
+                                <Minus className="w-3 h-3 shrink-0" />
+                              ) : (
+                                <span className="w-3 h-3 shrink-0 rounded-full border border-border" />
+                              )}
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 

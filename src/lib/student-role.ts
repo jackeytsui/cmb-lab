@@ -10,6 +10,7 @@ export const DEFAULT_STUDENT_FEATURES = [
   "audio_courses",
   "listening_lab",
   "coaching_material",
+  "flashcards",
 ];
 
 export async function ensureDefaultStudentRole() {
