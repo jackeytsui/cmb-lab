@@ -6,15 +6,14 @@ import { AddUserQuickDialog } from "@/components/admin/AddUserQuickDialog";
 import { getActiveStudentsPageData } from "@/lib/active-student-queries";
 import { ActiveStudentDataTable } from "@/components/admin/ActiveStudentDataTable";
 import { ErrorAlert } from "@/components/ui/error-alert";
-import { ChevronRight, Users, Globe, ExternalLink, Info, Search } from "lucide-react";
+import { ChevronRight, Users, Globe, ExternalLink, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StudentInvitePanel } from "@/components/admin/StudentInvitePanel";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { and, count, desc, eq, ilike, isNull, or, inArray } from "drizzle-orm";
-import { AssignCoachDropdown } from "@/components/admin/AssignCoachDropdown";
-import { UsersSearchInput } from "@/components/admin/UsersSearchInput";
-import { DeleteUserButton } from "@/components/admin/DeleteUserButton";
+import { users, studentTags, tags } from "@/db/schema";
+import { and, count, desc, eq, gte, lte, ilike, isNull, or, inArray, asc } from "drizzle-orm";
+import { UsersManageTable } from "@/components/admin/UsersManageTable";
+import { UsersFilterBar } from "@/components/admin/UsersFilterBar";
 
 /**
  * Admin Students page - displays student data table with server-side
@@ -48,12 +47,22 @@ export default async function AdminStudentsPage({
   const sortBy = (params.sortBy as string) || (tab === "ghl" ? "created" : "createdAt");
   const sortOrder = ((params.sortOrder as string) || "desc") as "asc" | "desc";
   const search = (params.search as string) || "";
-  
+
   // GHL Filters
-  const tags = (params.tags as string) || undefined;
+  const ghlTags = (params.tags as string) || undefined;
   const assignedTo = (params.assignedTo as string) || undefined;
   const country = (params.country as string) || undefined;
   const productLine = (params.productLine as string) || undefined;
+
+  // Users tab filters
+  const filterCoachId = (params.coachId as string) || ""; // "" | "unassigned" | coach UUID
+  const filterCreatedFrom = (params.createdFrom as string) || ""; // ISO date
+  const filterCreatedTo = (params.createdTo as string) || ""; // ISO date
+  const filterTagIdsRaw = (params.tagIds as string) || ""; // comma-separated UUIDs
+  const filterTagIds = filterTagIdsRaw
+    ? filterTagIdsRaw.split(",").filter(Boolean)
+    : [];
+  const filterPortalAccess = (params.portalAccess as string) || ""; // "active" | "paused" | "expired"
 
 
   // Fetch enriched student data server-side with error handling
@@ -69,11 +78,13 @@ export default async function AdminStudentsPage({
           portalAccessStatus: "active" | "paused" | "expired";
           assignedCoachId?: string | null;
           assignedCoachName?: string | null;
+          tagIds: string[];
         }>;
         total: number;
       }
     | null = null;
   let coaches: Array<{ id: string; name: string | null; email: string }> = [];
+  let allTags: Array<{ id: string; name: string; color: string }> = [];
   let dataError: string | null = null;
 
   try {
@@ -84,7 +95,7 @@ export default async function AdminStudentsPage({
         sortBy,
         sortOrder,
         search,
-        tags,
+        tags: ghlTags,
         assignedTo,
         country,
         productLine,
@@ -94,15 +105,79 @@ export default async function AdminStudentsPage({
         usersRoleFilter === "student" || usersRoleFilter === "coach" || usersRoleFilter === "admin"
           ? eq(users.role, usersRoleFilter)
           : undefined;
+
+      // Coach filter
+      const coachClause = filterCoachId === "unassigned"
+        ? isNull(users.assignedCoachId)
+        : filterCoachId
+          ? eq(users.assignedCoachId, filterCoachId)
+          : undefined;
+
+      // Created date range filter
+      const createdFromDate = filterCreatedFrom
+        ? new Date(filterCreatedFrom)
+        : null;
+      const createdToDate = filterCreatedTo
+        ? new Date(filterCreatedTo)
+        : null;
+      const createdClause = and(
+        createdFromDate && !isNaN(createdFromDate.getTime())
+          ? gte(users.createdAt, createdFromDate)
+          : undefined,
+        createdToDate && !isNaN(createdToDate.getTime())
+          ? lte(users.createdAt, createdToDate)
+          : undefined,
+      );
+
+      // Tag filter — pre-compute the set of user IDs that have ALL required tags
+      let taggedUserIds: string[] | null = null;
+      if (filterTagIds.length > 0) {
+        const rows = await db
+          .select({ userId: studentTags.userId })
+          .from(studentTags)
+          .where(inArray(studentTags.tagId, filterTagIds));
+
+        // Group by userId; require all selected tags to be present (AND semantics)
+        const tagsPerUser = new Map<string, Set<string>>();
+        for (const row of rows) {
+          const set = tagsPerUser.get(row.userId) ?? new Set<string>();
+          tagsPerUser.set(row.userId, set);
+        }
+        // Second pass to count unique tag matches per user
+        const rowsWithTagIds = await db
+          .select({
+            userId: studentTags.userId,
+            tagId: studentTags.tagId,
+          })
+          .from(studentTags)
+          .where(inArray(studentTags.tagId, filterTagIds));
+        const uniqueTagsPerUser = new Map<string, Set<string>>();
+        for (const row of rowsWithTagIds) {
+          const set = uniqueTagsPerUser.get(row.userId) ?? new Set<string>();
+          set.add(row.tagId);
+          uniqueTagsPerUser.set(row.userId, set);
+        }
+        taggedUserIds = Array.from(uniqueTagsPerUser.entries())
+          .filter(([, set]) => set.size === filterTagIds.length)
+          .map(([userId]) => userId);
+
+        if (taggedUserIds.length === 0) {
+          taggedUserIds = ["00000000-0000-0000-0000-000000000000"]; // force no matches
+        }
+      }
+
       const whereClause = and(
         isNull(users.deletedAt),
         roleClause,
+        coachClause,
+        createdClause,
+        taggedUserIds ? inArray(users.id, taggedUserIds) : undefined,
         search
           ? or(ilike(users.email, `%${search}%`), ilike(users.name, `%${search}%`))
           : undefined
       );
       const offset = (page - 1) * pageSize;
-      const [items, totalRows, coachRows] = await Promise.all([
+      const [items, totalRows, coachRows, allTagRows] = await Promise.all([
         db
           .select({
             id: users.id,
@@ -129,55 +204,86 @@ export default async function AdminStudentsPage({
             ),
           )
           .orderBy(users.name),
+        db
+          .select({ id: tags.id, name: tags.name, color: tags.color })
+          .from(tags)
+          .orderBy(asc(tags.name)),
       ]);
       coaches = coachRows;
+      allTags = allTagRows;
 
       // Build a map of coach IDs to names for resolving assigned coach display
       const coachMap = new Map(coachRows.map((c) => [c.id, c.name || c.email]));
 
-      usersResult = {
-        items: await (async () => {
-          const clerk = await clerkClient();
-          const enriched = await Promise.all(
-            items.map(async (item) => {
-              let portalAccessStatus: "active" | "paused" | "expired" = "active";
-              try {
-                const clerkUser = await clerk.users.getUser(item.clerkId);
-                const metadata = (clerkUser.publicMetadata ?? {}) as Record<string, unknown>;
-                const rawStatus =
-                  metadata.cmbPortalAccessStatus === "active" ||
-                  metadata.cmbPortalAccessStatus === "paused" ||
-                  metadata.cmbPortalAccessStatus === "expired"
-                    ? metadata.cmbPortalAccessStatus
-                    : metadata.cmbPortalAccessRevoked === true
-                      ? "paused"
-                      : "active";
-                portalAccessStatus = rawStatus;
-                if (typeof metadata.cmbCourseEndDate === "string") {
-                  const date = new Date(metadata.cmbCourseEndDate);
-                  if (!Number.isNaN(date.getTime()) && date.getTime() < Date.now()) {
-                    portalAccessStatus = "expired";
-                  }
-                }
-              } catch {
-                // Keep default active when metadata is unavailable.
-              }
-              return {
-                id: item.id,
-                name: item.name,
-                email: item.email,
-                role: item.role,
-                createdAt: item.createdAt,
-                portalAccessStatus,
-                assignedCoachId: item.assignedCoachId ?? null,
-                assignedCoachName: item.assignedCoachId
-                  ? coachMap.get(item.assignedCoachId) ?? null
-                  : null,
-              };
+      // Fetch tag assignments for the current page of users (one query)
+      const pageUserIds = items.map((u) => u.id);
+      const tagAssignments = pageUserIds.length > 0
+        ? await db
+            .select({
+              userId: studentTags.userId,
+              tagId: studentTags.tagId,
             })
-          );
-          return enriched;
-        })(),
+            .from(studentTags)
+            .where(inArray(studentTags.userId, pageUserIds))
+        : [];
+      const tagsByUser = new Map<string, string[]>();
+      for (const row of tagAssignments) {
+        const list = tagsByUser.get(row.userId) ?? [];
+        list.push(row.tagId);
+        tagsByUser.set(row.userId, list);
+      }
+
+      const clerk = await clerkClient();
+      const enriched = await Promise.all(
+        items.map(async (item) => {
+          let portalAccessStatus: "active" | "paused" | "expired" = "active";
+          try {
+            const clerkUser = await clerk.users.getUser(item.clerkId);
+            const metadata = (clerkUser.publicMetadata ?? {}) as Record<string, unknown>;
+            const rawStatus =
+              metadata.cmbPortalAccessStatus === "active" ||
+              metadata.cmbPortalAccessStatus === "paused" ||
+              metadata.cmbPortalAccessStatus === "expired"
+                ? metadata.cmbPortalAccessStatus
+                : metadata.cmbPortalAccessRevoked === true
+                  ? "paused"
+                  : "active";
+            portalAccessStatus = rawStatus;
+            if (typeof metadata.cmbCourseEndDate === "string") {
+              const date = new Date(metadata.cmbCourseEndDate);
+              if (!Number.isNaN(date.getTime()) && date.getTime() < Date.now()) {
+                portalAccessStatus = "expired";
+              }
+            }
+          } catch {
+            // Keep default active when metadata is unavailable.
+          }
+          return {
+            id: item.id,
+            name: item.name,
+            email: item.email,
+            role: item.role,
+            createdAt: item.createdAt,
+            portalAccessStatus,
+            assignedCoachId: item.assignedCoachId ?? null,
+            assignedCoachName: item.assignedCoachId
+              ? coachMap.get(item.assignedCoachId) ?? null
+              : null,
+            tagIds: tagsByUser.get(item.id) ?? [],
+          };
+        })
+      );
+
+      // In-memory filter by portal access (since this comes from Clerk metadata,
+      // not the DB). Applied post-fetch.
+      const portalFiltered = filterPortalAccess === "active" ||
+        filterPortalAccess === "paused" ||
+        filterPortalAccess === "expired"
+        ? enriched.filter((u) => u.portalAccessStatus === filterPortalAccess)
+        : enriched;
+
+      usersResult = {
+        items: portalFiltered,
         total: Number(totalRows[0]?.total ?? 0),
       };
     }
@@ -268,170 +374,67 @@ export default async function AdminStudentsPage({
       {dataError ? (
         <ErrorAlert message={dataError} variant="block" />
       ) : tab === "users" && usersResult ? (
-        <section aria-label="All users list">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              {[
-                { key: "all", label: "All" },
-                { key: "student", label: "Students" },
-                { key: "coach", label: "Coaches" },
-                { key: "admin", label: "Admins" },
-              ].map((roleTab) => (
-                <Link
-                  key={roleTab.key}
-                  href={`?tab=users&usersRole=${roleTab.key}`}
-                  className={cn(
-                    "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                    usersRoleFilter === roleTab.key
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {roleTab.label}
-                </Link>
-              ))}
-            </div>
-            <UsersSearchInput defaultValue={search} roleFilter={usersRoleFilter} />
+        <section aria-label="All users list" className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { key: "all", label: "All" },
+              { key: "student", label: "Students" },
+              { key: "coach", label: "Coaches" },
+              { key: "admin", label: "Admins" },
+            ].map((roleTab) => (
+              <Link
+                key={roleTab.key}
+                href={`?tab=users&usersRole=${roleTab.key}`}
+                className={cn(
+                  "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                  usersRoleFilter === roleTab.key
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-background text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {roleTab.label}
+              </Link>
+            ))}
           </div>
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30">
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Name
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Email
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Role
-                    </th>
-                    {(usersRoleFilter === "all" || usersRoleFilter === "student") && (
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Assigned Coach
-                    </th>
-                    )}
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Portal Access
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Created
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usersResult.items.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={(usersRoleFilter === "all" || usersRoleFilter === "student") ? 7 : 6}
-                        className="px-4 py-8 text-center text-sm text-muted-foreground"
-                      >
-                        No users found.
-                      </td>
-                    </tr>
-                  ) : (
-                    usersResult.items.map((user) => (
-                      <tr
-                        key={user.id}
-                        className="border-b border-border/60 hover:bg-muted/30"
-                      >
-                        <td className="px-4 py-3 text-sm text-foreground">
-                          <Link
-                            href={`/admin/users/${user.id}`}
-                            className="hover:text-primary"
-                          >
-                            {user.name || user.email.split("@")[0]}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {user.email}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className="capitalize text-foreground">{user.role}</span>
-                        </td>
-                        {(usersRoleFilter === "all" || usersRoleFilter === "student") && (
-                        <td className="px-4 py-3 text-sm">
-                          {user.role === "student" ? (
-                            <AssignCoachDropdown
-                              studentId={user.id}
-                              currentCoachId={user.assignedCoachId ?? null}
-                              currentCoachName={user.assignedCoachName ?? null}
-                              coaches={coaches}
-                            />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        )}
-                        <td className="px-4 py-3 text-sm">
-                          <span
-                            className={cn(
-                              "inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-                              user.portalAccessStatus === "active"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : user.portalAccessStatus === "paused"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-red-100 text-red-700"
-                            )}
-                          >
-                            {user.portalAccessStatus}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {new Date(user.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <DeleteUserButton
-                            userId={user.id}
-                            userName={user.name || user.email}
-                          />
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="mt-3 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, usersResult.total)} of {usersResult.total} users.
-            </p>
-            {usersResult.total > pageSize && (
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`?tab=users&usersRole=${usersRoleFilter}${search ? `&search=${search}` : ""}&page=${page - 1}&pageSize=${pageSize}`}
-                  className={cn(
-                    "rounded-md border border-border px-3 py-1 text-xs font-medium transition-colors",
-                    page <= 1
-                      ? "pointer-events-none opacity-40"
-                      : "hover:bg-accent hover:text-accent-foreground"
-                  )}
-                  aria-disabled={page <= 1}
-                >
-                  Previous
-                </Link>
-                <span className="text-xs text-muted-foreground">
-                  Page {page} of {Math.ceil(usersResult.total / pageSize)}
-                </span>
-                <Link
-                  href={`?tab=users&usersRole=${usersRoleFilter}${search ? `&search=${search}` : ""}&page=${page + 1}&pageSize=${pageSize}`}
-                  className={cn(
-                    "rounded-md border border-border px-3 py-1 text-xs font-medium transition-colors",
-                    page * pageSize >= usersResult.total
-                      ? "pointer-events-none opacity-40"
-                      : "hover:bg-accent hover:text-accent-foreground"
-                  )}
-                  aria-disabled={page * pageSize >= usersResult.total}
-                >
-                  Next
-                </Link>
-              </div>
-            )}
-          </div>
+
+          <UsersFilterBar
+            coaches={coaches}
+            allTags={allTags}
+            initialSearch={search}
+            initialCoachId={filterCoachId}
+            initialCreatedFrom={filterCreatedFrom}
+            initialCreatedTo={filterCreatedTo}
+            initialTagIds={filterTagIds}
+            initialPortalAccess={filterPortalAccess}
+            roleFilter={usersRoleFilter}
+          />
+
+          <UsersManageTable
+            items={usersResult.items}
+            total={usersResult.total}
+            page={page}
+            pageSize={pageSize}
+            coaches={coaches}
+            allTags={allTags}
+            usersRoleFilter={usersRoleFilter}
+            showAssignedCoachColumn={
+              usersRoleFilter === "all" || usersRoleFilter === "student"
+            }
+            baseQueryString={(() => {
+              const p = new URLSearchParams();
+              p.set("tab", "users");
+              p.set("usersRole", usersRoleFilter);
+              if (search) p.set("search", search);
+              if (filterCoachId) p.set("coachId", filterCoachId);
+              if (filterCreatedFrom) p.set("createdFrom", filterCreatedFrom);
+              if (filterCreatedTo) p.set("createdTo", filterCreatedTo);
+              if (filterTagIds.length > 0)
+                p.set("tagIds", filterTagIds.join(","));
+              if (filterPortalAccess) p.set("portalAccess", filterPortalAccess);
+              p.set("pageSize", String(pageSize));
+              return `?${p.toString()}`;
+            })()}
+          />
         </section>
       ) : tab === "ghl" && ghlResult ? (
         <section aria-label="GHL Active Student List">
@@ -444,7 +447,7 @@ export default async function AdminStudentsPage({
             sortOrder={sortOrder}
             search={search}
             filters={{
-              tags,
+              tags: ghlTags,
               assignedTo,
               country,
               productLine,
