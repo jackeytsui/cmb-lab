@@ -31,6 +31,11 @@ function EditableClipRow({
   const [sortOrder, setSortOrder] = useState(String(clip.sortOrder));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState<
+    "idle" | "token" | "uploading" | "saving"
+  >("idle");
+  const [uploadPercent, setUploadPercent] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleSave = async () => {
@@ -57,34 +62,64 @@ function EditableClipRow({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Create a fresh AbortController for this upload
+    const fileSizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    console.log(
+      `[Tone Mastery] Starting upload for clip ${clip.id}: ${file.name} (${fileSizeMb}MB)`
+    );
+
+    // Pre-validate file size (match server limit of 100MB)
+    if (file.size > 100 * 1024 * 1024) {
+      setUploadError(`File too large: ${fileSizeMb}MB (max 100MB)`);
+      e.target.value = "";
+      return;
+    }
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Safety net: auto-abort after 5 minutes so nothing hangs forever
     const timeoutId = setTimeout(() => {
+      console.warn(`[Tone Mastery] Upload timed out after 5min for clip ${clip.id}`);
       controller.abort();
     }, 5 * 60 * 1000);
 
+    setUploadError(null);
     setUploading(true);
+    setUploadStage("token");
+    setUploadPercent(0);
     try {
+      console.log(`[Tone Mastery] Requesting upload token from server...`);
+
       const blob = await upload(`tone-mastery/${file.name}`, file, {
         access: "public",
         handleUploadUrl: "/api/admin/accelerator-extra/tone-mastery/upload",
         abortSignal: controller.signal,
+        onUploadProgress: (progress: { percentage: number; loaded: number; total: number }) => {
+          if (uploadStage !== "uploading") {
+            console.log(`[Tone Mastery] Upload started for clip ${clip.id}`);
+            setUploadStage("uploading");
+          }
+          setUploadPercent(Math.round(progress.percentage));
+        },
       });
+
+      console.log(`[Tone Mastery] Upload complete. Blob URL:`, blob.url);
+      setUploadStage("saving");
       await onSave(clip.id, { videoUrl: blob.url });
+      console.log(`[Tone Mastery] DB updated for clip ${clip.id}`);
     } catch (err) {
-      // Don't alert on user-initiated aborts
       if (err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message))) {
-        console.log(`[Tone Mastery] Upload cancelled for ${clip.id}`);
+        console.log(`[Tone Mastery] Upload cancelled for clip ${clip.id}`);
       } else {
-        alert(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        console.error(`[Tone Mastery] Upload failed for clip ${clip.id}:`, err);
+        setUploadError(msg);
       }
     } finally {
       clearTimeout(timeoutId);
       abortControllerRef.current = null;
       setUploading(false);
+      setUploadStage("idle");
+      setUploadPercent(0);
       e.target.value = "";
     }
   };
@@ -94,8 +129,9 @@ function EditableClipRow({
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    // Force-reset uploading state even if the abort didn't propagate cleanly
     setUploading(false);
+    setUploadStage("idle");
+    setUploadPercent(0);
   };
 
   if (editing) {
@@ -124,10 +160,13 @@ function EditableClipRow({
 
       {/* Video status */}
       {uploading ? (
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 text-[10px] text-amber-500 font-medium">
+        <div className="flex items-center gap-2 min-w-[180px] justify-end">
+          <span className="inline-flex items-center gap-1 text-[10px] text-amber-500 font-medium tabular-nums">
             <Loader2 className="w-3 h-3 animate-spin" />
-            Uploading...
+            {uploadStage === "token" && "Requesting token..."}
+            {uploadStage === "uploading" && `Uploading ${uploadPercent}%`}
+            {uploadStage === "saving" && "Saving..."}
+            {uploadStage === "idle" && "Starting..."}
           </span>
           <Button
             size="sm"
@@ -138,6 +177,21 @@ function EditableClipRow({
           >
             <XCircle className="w-4 h-4 text-red-500" />
           </Button>
+        </div>
+      ) : uploadError ? (
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[10px] text-red-500 font-medium max-w-[200px] truncate"
+            title={uploadError}
+          >
+            ✕ {uploadError}
+          </span>
+          <label className="cursor-pointer">
+            <input type="file" accept="video/mp4,video/*" className="hidden" onChange={handleReplaceVideo} />
+            <span className="text-[10px] text-amber-500 font-medium hover:underline cursor-pointer">
+              Retry
+            </span>
+          </label>
         </div>
       ) : clip.videoUrl && clip.videoUrl !== "placeholder" ? (
         <span className="text-[10px] text-emerald-500 font-medium">MP4</span>
