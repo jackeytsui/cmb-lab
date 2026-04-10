@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Minus, Loader2, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, X, Plus, Loader2, Trash2, CheckCheck, XCircle, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -146,21 +146,43 @@ function TagRow({
     }
   }, [tag.id, featureGrants, contentGrants]);
 
+  // Cycle a single feature: none → grant → deny → grant → deny ...
+  // (Once clicked, features stay in grant/deny. Use bulk "Clear" to reset.)
   const toggleFeature = (featureKey: string) => {
     setFeatureGrants((prev) => {
       const existing = prev.find((g) => g.featureKey === featureKey);
       if (!existing) {
-        // Add as additive
         return [...prev, { featureKey, grantType: "additive" as const }];
       }
-      if (existing.grantType === "additive") {
-        // Switch to deny
-        return prev.map((g) =>
-          g.featureKey === featureKey ? { ...g, grantType: "deny" as const } : g
-        );
+      const nextType: "additive" | "deny" =
+        existing.grantType === "additive" ? "deny" : "additive";
+      return prev.map((g) =>
+        g.featureKey === featureKey ? { ...g, grantType: nextType } : g
+      );
+    });
+    setDirty(true);
+  };
+
+  // Bulk set all features in a category to a specific state.
+  // "clear" removes the grant rows entirely (falls back to role defaults).
+  const setCategoryFeatures = (
+    featureKeys: string[],
+    nextState: "additive" | "deny" | "clear"
+  ) => {
+    setFeatureGrants((prev) => {
+      const withoutCategory = prev.filter(
+        (g) => !featureKeys.includes(g.featureKey)
+      );
+      if (nextState === "clear") {
+        return withoutCategory;
       }
-      // Remove (deny → none)
-      return prev.filter((g) => g.featureKey !== featureKey);
+      return [
+        ...withoutCategory,
+        ...featureKeys.map((key) => ({
+          featureKey: key,
+          grantType: nextState,
+        })),
+      ];
     });
     setDirty(true);
   };
@@ -192,11 +214,11 @@ function TagRow({
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
-      {/* Header */}
+      {/* Header — reserve pr-10 so the trash icon (absolute top-3 right-3) never overlaps the grants count */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 pr-12 text-left hover:bg-accent/50 transition-colors"
       >
         {expanded ? (
           <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -209,9 +231,9 @@ function TagRow({
             {tag.description}
           </span>
         )}
-        <span className="ml-auto text-[10px] text-muted-foreground">
+        <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
           {featureGrants.length > 0 && expanded
-            ? `${featureGrants.length} feature grants`
+            ? `${featureGrants.length} feature ${featureGrants.length === 1 ? "grant" : "grants"}`
             : ""}
         </span>
       </button>
@@ -231,52 +253,95 @@ function TagRow({
                   Feature Access
                 </h4>
                 <p className="text-[10px] text-muted-foreground mb-4">
-                  Click to cycle: none → <span className="text-emerald-500">additive</span> (grants) → <span className="text-red-500">deny</span> (blocks) → none
+                  Click a feature to toggle between{" "}
+                  <span className="text-emerald-500 font-medium">Grant</span> and{" "}
+                  <span className="text-red-500 font-medium">Deny</span>. Use the
+                  category buttons to bulk-set.
                 </p>
                 <div className="space-y-5">
-                  {FEATURE_CATEGORIES.map((category) => (
-                    <div key={category.label}>
-                      <div className="mb-2 flex items-baseline gap-2">
-                        <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {category.label}
-                        </h5>
-                        {category.description && (
-                          <span className="text-[10px] text-muted-foreground/70">
-                            {category.description}
-                          </span>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {category.features.map(({ key, label }) => {
-                          const state = getFeatureState(key);
-                          return (
+                  {FEATURE_CATEGORIES.map((category) => {
+                    const categoryKeys = category.features.map((f) => f.key);
+                    return (
+                      <div key={category.label}>
+                        <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-baseline gap-2">
+                            <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              {category.label}
+                            </h5>
+                            {category.description && (
+                              <span className="text-[10px] text-muted-foreground/70">
+                                {category.description}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
                             <button
-                              key={key}
                               type="button"
-                              onClick={() => toggleFeature(key)}
-                              className={cn(
-                                "flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors text-left",
-                                state === "additive"
-                                  ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                  : state === "deny"
-                                    ? "border-red-500/50 bg-red-500/10 text-red-600 dark:text-red-400"
-                                    : "border-border bg-background text-muted-foreground hover:text-foreground"
-                              )}
+                              onClick={() =>
+                                setCategoryFeatures(categoryKeys, "additive")
+                              }
+                              className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                              title="Grant all in this category"
                             >
-                              {state === "additive" ? (
-                                <Plus className="w-3 h-3 shrink-0" />
-                              ) : state === "deny" ? (
-                                <Minus className="w-3 h-3 shrink-0" />
-                              ) : (
-                                <span className="w-3 h-3 shrink-0 rounded-full border border-border" />
-                              )}
-                              {label}
+                              <CheckCheck className="w-3 h-3" />
+                              Grant all
                             </button>
-                          );
-                        })}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCategoryFeatures(categoryKeys, "deny")
+                              }
+                              className="inline-flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
+                              title="Deny all in this category"
+                            >
+                              <XCircle className="w-3 h-3" />
+                              Deny all
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCategoryFeatures(categoryKeys, "clear")
+                              }
+                              className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                              title="Clear all grants in this category (falls back to role defaults)"
+                            >
+                              <Circle className="w-3 h-3" />
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {category.features.map(({ key, label }) => {
+                            const state = getFeatureState(key);
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => toggleFeature(key)}
+                                className={cn(
+                                  "flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors text-left",
+                                  state === "additive"
+                                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                    : state === "deny"
+                                      ? "border-red-500/50 bg-red-500/10 text-red-600 dark:text-red-400"
+                                      : "border-dashed border-border bg-background text-muted-foreground hover:text-foreground"
+                                )}
+                              >
+                                {state === "additive" ? (
+                                  <Check className="w-3.5 h-3.5 shrink-0" />
+                                ) : state === "deny" ? (
+                                  <X className="w-3.5 h-3.5 shrink-0" />
+                                ) : (
+                                  <Circle className="w-3 h-3 shrink-0 opacity-40" />
+                                )}
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
