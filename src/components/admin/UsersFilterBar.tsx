@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Filter, X, Search, Check } from "lucide-react";
+import { Filter, X, Search, Check, Tag as TagIcon } from "lucide-react";
 
 interface TagOption {
   id: string;
@@ -57,6 +57,13 @@ export function UsersFilterBar({
   const [createdTo, setCreatedTo] = useState(initialCreatedTo);
   const [tagIds, setTagIds] = useState<Set<string>>(new Set(initialTagIds));
   const [portalAccess, setPortalAccess] = useState(initialPortalAccess);
+  const [tagSearch, setTagSearch] = useState("");
+
+  const filteredTags = useMemo(() => {
+    const q = tagSearch.trim().toLowerCase();
+    if (!q) return allTags;
+    return allTags.filter((t) => t.name.toLowerCase().includes(q));
+  }, [allTags, tagSearch]);
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
@@ -249,31 +256,70 @@ export function UsersFilterBar({
                 No tags exist yet.
               </p>
             ) : (
-              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                {allTags.map((tag) => {
-                  const selected = tagIds.has(tag.id);
-                  return (
+              <>
+                {/* Search input */}
+                <div className="relative mb-2">
+                  <TagIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    value={tagSearch}
+                    onChange={(e) => setTagSearch(e.target.value)}
+                    placeholder={`Search ${allTags.length} tag${allTags.length === 1 ? "" : "s"}...`}
+                    className="w-full rounded-md border border-border bg-background pl-8 pr-3 py-1.5 text-xs"
+                  />
+                  {tagSearch && (
                     <button
-                      key={tag.id}
                       type="button"
-                      onClick={() => toggleTagId(tag.id)}
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-                        selected
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border bg-background text-muted-foreground hover:text-foreground",
-                      )}
+                      onClick={() => setTagSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label="Clear search"
                     >
-                      {selected && <Check className="w-3 h-3" />}
-                      <span
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: tag.color }}
-                      />
-                      {tag.name}
+                      <X className="w-3.5 h-3.5" />
                     </button>
-                  );
-                })}
-              </div>
+                  )}
+                </div>
+
+                {/* Filtered list */}
+                {filteredTags.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-2">
+                    No tags match &ldquo;{tagSearch}&rdquo;
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-0.5">
+                    {filteredTags.map((tag) => {
+                      const selected = tagIds.has(tag.id);
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => toggleTagId(tag.id)}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                            selected
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border bg-background text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {selected && <Check className="w-3 h-3" />}
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: tag.color }}
+                          />
+                          {tag.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Show selected count when filtered */}
+                {tagSearch && tagIds.size > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {tagIds.size} tag{tagIds.size === 1 ? "" : "s"} selected
+                    (including ones not shown)
+                  </p>
+                )}
+              </>
             )}
           </div>
 

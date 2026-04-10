@@ -10,6 +10,8 @@ import {
   UserPlus,
   Trash2,
   Check,
+  X,
+  Search,
 } from "lucide-react";
 
 type RoleValue = "student" | "coach" | "admin";
@@ -69,8 +71,15 @@ export function UsersManageTable({
   const [activeAction, setActiveAction] = useState<BulkAction>(null);
   const [selectedCoachId, setSelectedCoachId] = useState<string>("");
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  const [bulkTagSearch, setBulkTagSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+
+  const filteredBulkTags = useMemo(() => {
+    const q = bulkTagSearch.trim().toLowerCase();
+    if (!q) return allTags;
+    return allTags.filter((t) => t.name.toLowerCase().includes(q));
+  }, [allTags, bulkTagSearch]);
 
   const tagById = useMemo(
     () => new Map(allTags.map((t) => [t.id, t])),
@@ -116,6 +125,7 @@ export function UsersManageTable({
     setActiveAction(action);
     setSelectedCoachId("");
     setSelectedTagIds(new Set());
+    setBulkTagSearch("");
     setResultMessage(null);
   }, []);
 
@@ -123,6 +133,7 @@ export function UsersManageTable({
     setActiveAction(null);
     setSelectedCoachId("");
     setSelectedTagIds(new Set());
+    setBulkTagSearch("");
   }, []);
 
   const refreshPage = useCallback(() => {
@@ -344,37 +355,78 @@ export function UsersManageTable({
                 {activeAction === "add_tags" ? "Add" : "Remove"} tags
                 for {selectedIds.size} user(s) — click tags to select
               </label>
-              <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-                {allTags.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">
-                    No tags available. Create tags in Tag Access first.
-                  </span>
-                ) : (
-                  allTags.map((tag) => {
-                    const selected = selectedTagIds.has(tag.id);
-                    return (
+
+              {allTags.length === 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  No tags available. Create tags in Tag Access first.
+                </span>
+              ) : (
+                <>
+                  {/* Search input */}
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <input
+                      type="text"
+                      value={bulkTagSearch}
+                      onChange={(e) => setBulkTagSearch(e.target.value)}
+                      placeholder={`Search ${allTags.length} tag${allTags.length === 1 ? "" : "s"}...`}
+                      className="w-full rounded-md border border-border bg-background pl-8 pr-3 py-1.5 text-xs"
+                    />
+                    {bulkTagSearch && (
                       <button
-                        key={tag.id}
                         type="button"
-                        onClick={() => toggleTagSelection(tag.id)}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-                          selected
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border bg-background text-muted-foreground hover:text-foreground",
-                        )}
+                        onClick={() => setBulkTagSearch("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        aria-label="Clear search"
                       >
-                        {selected && <Check className="w-3 h-3" />}
-                        <span
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                        {tag.name}
+                        <X className="w-3.5 h-3.5" />
                       </button>
-                    );
-                  })
-                )}
-              </div>
+                    )}
+                  </div>
+
+                  {/* Filtered list */}
+                  {filteredBulkTags.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic py-2">
+                      No tags match &ldquo;{bulkTagSearch}&rdquo;
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto p-0.5">
+                      {filteredBulkTags.map((tag) => {
+                        const selected = selectedTagIds.has(tag.id);
+                        return (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() => toggleTagSelection(tag.id)}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                              selected
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-background text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            {selected && <Check className="w-3 h-3" />}
+                            <span
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            {tag.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {bulkTagSearch && selectedTagIds.size > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {selectedTagIds.size} tag
+                      {selectedTagIds.size === 1 ? "" : "s"} selected
+                      (including ones not shown)
+                    </p>
+                  )}
+                </>
+              )}
+
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
