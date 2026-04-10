@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import { toneMasteryProgress } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 const ratingSchema = z.object({
   clipId: z.string().uuid(),
   selfRating: z.enum(["good", "not_good"]),
+});
+
+const deleteSchema = z.object({
+  clipId: z.string().uuid(),
 });
 
 /**
@@ -51,6 +56,45 @@ export async function POST(request: NextRequest) {
     console.error("Error saving tone mastery progress:", error);
     return NextResponse.json(
       { error: "Failed to save progress" },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * DELETE /api/accelerator-extra/tone-mastery/progress
+ * Remove a self-rating for a clip (used by "Try Again" / un-rate flow).
+ */
+export async function DELETE(request: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const parsed = deleteSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 },
+      );
+    }
+
+    await db
+      .delete(toneMasteryProgress)
+      .where(
+        and(
+          eq(toneMasteryProgress.userId, user.id),
+          eq(toneMasteryProgress.clipId, parsed.data.clipId),
+        ),
+      );
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("Error removing tone mastery rating:", error);
+    return NextResponse.json(
+      { error: "Failed to remove rating" },
       { status: 500 },
     );
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, Loader2, Play } from "lucide-react";
+import { CheckCircle, Loader2, Play, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pinyin } from "pinyin-pro";
 import { getToneColorClass } from "@/lib/tone-colors";
@@ -108,6 +108,28 @@ export function ToneMasteryClient() {
     },
     [],
   );
+
+  const handleUnrate = useCallback(async (clipId: string) => {
+    setSavingClipId(clipId);
+    try {
+      const res = await fetch("/api/accelerator-extra/tone-mastery/progress", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clipId }),
+      });
+      if (res.ok) {
+        setRatings((prev) => {
+          const next = { ...prev };
+          delete next[clipId];
+          return next;
+        });
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSavingClipId(null);
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -238,7 +260,7 @@ export function ToneMasteryClient() {
 
                   {/* Self-rating */}
                   {rating ? (
-                    <div className="flex justify-center">
+                    <div className="flex items-center justify-center gap-2">
                       <span
                         className={cn(
                           "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full",
@@ -250,6 +272,20 @@ export function ToneMasteryClient() {
                         <CheckCircle className="w-3 h-3" />
                         {rating === "good" ? "Good" : "Not so great"}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => handleUnrate(clip.id)}
+                        disabled={isSaving}
+                        className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                        title="Re-rate this clip"
+                      >
+                        {isSaving ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <RotateCcw className="w-3 h-3" />
+                        )}
+                        Try again
+                      </button>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center gap-2">
