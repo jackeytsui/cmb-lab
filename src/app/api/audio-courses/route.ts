@@ -31,11 +31,13 @@ export async function GET() {
     .where(and(isNull(courses.deletedAt), eq(courses.isPublished, true)))
     .orderBy(asc(courses.sortOrder), asc(courses.createdAt));
 
-  // Filter to audio courses only
+  // Filter to audio courses only — exclude extraPack courses because they have
+  // their own dedicated page (/dashboard/accelerator-extra/audio) gated by the
+  // `audio_accelerator_edition` feature.
   const audioCourses = courseRows.filter((course) => {
     try {
       const meta = JSON.parse(course.description ?? "{}");
-      return meta.audioCourse === true;
+      return meta.audioCourse === true && meta.extraPack !== true;
     } catch {
       return false;
     }

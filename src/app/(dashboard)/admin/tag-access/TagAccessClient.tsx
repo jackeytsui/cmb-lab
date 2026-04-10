@@ -32,6 +32,7 @@ interface ContentGrant {
 interface AudioSeries {
   id: string;
   title: string;
+  extraPack: boolean;
 }
 
 // Feature access grouped into logical categories for easier scanning.
@@ -393,12 +394,18 @@ export function TagAccessClient() {
     ])
       .then(([tagsData, audioData]) => {
         setTags(tagsData.tags ?? []);
-        const series = (audioData.series ?? []).map(
-          (c: { id: string; title: string }) => ({
-            id: c.id,
-            title: c.title,
-          })
-        );
+        // Exclude extraPack series from tag-based Audio Course Access grants —
+        // those courses live on the dedicated Audio Accelerator Edition page
+        // and are gated by the `audio_accelerator_edition` feature toggle.
+        const series = (audioData.series ?? [])
+          .filter((c: { extraPack?: boolean }) => c.extraPack !== true)
+          .map(
+            (c: { id: string; title: string; extraPack?: boolean }) => ({
+              id: c.id,
+              title: c.title,
+              extraPack: c.extraPack === true,
+            })
+          );
         setAudioSeries(series);
       })
       .finally(() => setLoading(false));
