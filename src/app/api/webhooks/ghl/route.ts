@@ -1,6 +1,7 @@
 // src/app/api/webhooks/ghl/route.ts
 // Inbound GHL webhook endpoint for contact events (tag updates, etc.)
-// Verifies shared secret, rate limits by IP, and routes events to processors.
+// Multi-location aware: verifies locationId against known ghlLocations,
+// uses per-location webhook secret for verification.
 // Always returns 200 to GHL to prevent retries and noise.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -8,6 +9,9 @@ import { webhookLimiter, rateLimitResponse, getClientIp } from "@/lib/rate-limit
 import { z } from "zod";
 import { processInboundTagUpdate } from "@/lib/ghl/tag-sync";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
+import { db } from "@/db";
+import { ghlLocations } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 // --- Zod schemas for GHL webhook payloads ---
 
@@ -34,21 +38,54 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Verify shared secret
-    const secret = req.headers.get("x-webhook-secret");
-    if (secret !== process.env.GHL_INBOUND_WEBHOOK_SECRET) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await req.json();
     const parsed = ghlWebhookSchema.safeParse(body);
     if (!parsed.success) {
       console.error("[GHL Webhook] Invalid payload:", parsed.error.issues);
-      // Return 200 anyway -- don't cause GHL retries for bad payloads
       return NextResponse.json({ received: true, error: "invalid_payload" });
     }
 
     const event = parsed.data;
+
+    // Verify webhook secret: try per-location first, then fall back to global env var
+    const secret = req.headers.get("x-webhook-secret");
+    let verified = false;
+
+    if (event.locationId) {
+      // Look up per-location webhook secret
+      const locationRows = await db
+        .select({ webhookSecret: ghlLocations.webhookSecret })
+        .from(ghlLocations)
+        .where(eq(ghlLocations.ghlLocationId, event.locationId))
+        .limit(1);
+
+      if (locationRows.length > 0 && locationRows[0].webhookSecret) {
+        verified = secret === locationRows[0].webhookSecret;
+      } else {
+        // Location found but no per-location secret — fall back to global
+        verified = secret === process.env.GHL_INBOUND_WEBHOOK_SECRET;
+      }
+
+      // Check that the location is known
+      if (locationRows.length === 0) {
+        await logSyncEvent({
+          eventType: `webhook.unknown_location`,
+          direction: "inbound",
+          entityType: "webhook",
+          entityId: event.id,
+          payload: { locationId: event.locationId, type: event.type },
+        });
+        // Still return 200 — don't cause GHL retries
+        return NextResponse.json({ received: true, error: "unknown_location" });
+      }
+    } else {
+      // No locationId in payload — use global secret
+      verified = secret === process.env.GHL_INBOUND_WEBHOOK_SECRET;
+    }
+
+    if (!verified) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     // Route by event type
     switch (event.type) {
@@ -58,19 +95,16 @@ export async function POST(req: NextRequest) {
           console.error("[GHL Webhook] Invalid ContactTagUpdate:", tagEvent.error.issues);
           return NextResponse.json({ received: true, error: "invalid_tag_update" });
         }
-        // Process asynchronously but within the request lifecycle
-        // (GHL expects quick response, but we can do the work here)
         await processInboundTagUpdate(tagEvent.data.id, tagEvent.data.tags);
         break;
       }
       default: {
-        // Unknown event type -- log for future extensibility
         await logSyncEvent({
           eventType: `webhook.${event.type}`,
           direction: "inbound",
           entityType: "webhook",
           entityId: event.id,
-          payload: { type: event.type, unhandled: true },
+          payload: { type: event.type, locationId: event.locationId, unhandled: true },
         });
         break;
       }

@@ -47,6 +47,7 @@ export const studentTags = pgTable(
       .references(() => tags.id, { onDelete: "cascade" }),
     assignedBy: uuid("assigned_by").references(() => users.id),
     assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+    lastModifiedAt: timestamp("last_modified_at").notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("student_tags_user_tag_unique").on(table.userId, table.tagId),

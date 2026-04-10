@@ -166,9 +166,7 @@ async function evaluateAutoTagRules(
         if (result.assigned) {
           stats.assigned++;
           // Fire-and-forget sync to GHL
-          syncTagToGhl(student.userId, rule.tagName, "add", {
-            tagType: rule.tagType,
-          }).catch(console.error);
+          syncTagToGhl(student.userId, rule.tagName, "add").catch(console.error);
         }
       } catch (error) {
         console.error(

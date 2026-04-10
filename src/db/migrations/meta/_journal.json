@@ -253,6 +253,20 @@
       "when": 1774454268250,
       "tag": "0035_lumpy_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1775711734714,
+      "tag": "0036_robust_blonde_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1775791016913,
+      "tag": "0037_aberrant_randall",
+      "breakpoints": true
     }
   ]
 }

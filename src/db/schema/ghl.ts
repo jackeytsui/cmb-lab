@@ -7,6 +7,8 @@ import {
   jsonb,
   integer,
   boolean,
+  uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { users } from "./users";
@@ -27,14 +29,28 @@ export const syncStatusEnum = pgEnum("sync_status", [
 
 // --- Tables ---
 
-// GHL Contacts: maps LMS users to GHL contacts (one-to-one)
+// GHL Locations: stores credentials for each connected GHL sub-account
+export const ghlLocations = pgTable("ghl_locations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(), // display name, e.g. "Main Sub-Account"
+  ghlLocationId: text("ghl_location_id").notNull().unique(),
+  apiToken: text("api_token").notNull(), // encrypted at app layer
+  webhookSecret: text("webhook_secret"), // per-location webhook verification
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at")
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+// GHL Contacts: maps LMS users to GHL contacts (many-per-user for multi-location)
 export const ghlContacts = pgTable("ghl_contacts", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
     .notNull()
-    .unique()
     .references(() => users.id, { onDelete: "cascade" }),
-  ghlContactId: text("ghl_contact_id").notNull().unique(),
+  ghlContactId: text("ghl_contact_id").notNull(),
   ghlLocationId: text("ghl_location_id").notNull(),
   lastSyncedAt: timestamp("last_synced_at"),
   syncStatus: text("sync_status").notNull().default("active"),
@@ -45,7 +61,11 @@ export const ghlContacts = pgTable("ghl_contacts", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-});
+}, (table) => [
+  uniqueIndex("ghl_contacts_user_location_unique").on(table.userId, table.ghlLocationId),
+  uniqueIndex("ghl_contacts_ghl_contact_id_unique").on(table.ghlContactId),
+  index("ghl_contacts_user_id_idx").on(table.userId),
+]);
 
 // Sync Events: audit log and processing queue for all sync operations
 export const syncEvents = pgTable("sync_events", {
@@ -79,14 +99,25 @@ export const ghlFieldMappings = pgTable("ghl_field_mappings", {
 
 // --- Relations ---
 
+export const ghlLocationsRelations = relations(ghlLocations, ({ many }) => ({
+  contacts: many(ghlContacts),
+}));
+
 export const ghlContactsRelations = relations(ghlContacts, ({ one }) => ({
   user: one(users, {
     fields: [ghlContacts.userId],
     references: [users.id],
   }),
+  location: one(ghlLocations, {
+    fields: [ghlContacts.ghlLocationId],
+    references: [ghlLocations.ghlLocationId],
+  }),
 }));
 
 // --- Type Inference ---
+
+export type GhlLocation = typeof ghlLocations.$inferSelect;
+export type NewGhlLocation = typeof ghlLocations.$inferInsert;
 
 export type GhlContact = typeof ghlContacts.$inferSelect;
 export type NewGhlContact = typeof ghlContacts.$inferInsert;

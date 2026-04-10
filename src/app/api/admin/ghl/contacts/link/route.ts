@@ -49,11 +49,13 @@ export async function POST(request: NextRequest) {
 
     const { email } = userRows[0];
 
-    const result = await findOrLinkContact(userId, email);
+    const results = await findOrLinkContact(userId, email);
 
     return NextResponse.json({
-      ghlContactId: result.ghlContactId,
-      isNewLink: result.isNewLink,
+      links: results,
+      // Backward compat: first link
+      ghlContactId: results[0]?.ghlContactId,
+      isNewLink: results[0]?.isNewLink ?? false,
     });
   } catch (error) {
     const message =

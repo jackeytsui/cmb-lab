@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { hasMinimumRole } from "@/lib/auth";
-import { getGhlContactId } from "@/lib/ghl/contacts";
+import { getGhlContactId, getLocationForContact } from "@/lib/ghl/contacts";
 import {
   fetchGhlContactData,
   refreshGhlContactData,
@@ -57,8 +57,10 @@ export async function GET(
     // Resolve custom fields using active field mappings
     const fields = await resolveCustomFields(result.data.customFields);
 
-    // Build GHL deep link
-    const locationId = process.env.GHL_LOCATION_ID;
+    // Build GHL deep link using the contact's linked location
+    const locationId = ghlContactId
+      ? await getLocationForContact(ghlContactId)
+      : null;
     const ghlDeepLink =
       ghlContactId && locationId
         ? `https://app.gohighlevel.com/v2/location/${locationId}/contacts/detail/${ghlContactId}`

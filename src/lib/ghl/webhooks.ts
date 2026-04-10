@@ -6,8 +6,8 @@
 import { db } from "@/db";
 import { syncEvents, users } from "@/db/schema";
 import { eq, and, inArray, gte } from "drizzle-orm";
-import { ghlClient } from "@/lib/ghl/client";
-import { getGhlContactId, findOrLinkContact } from "@/lib/ghl/contacts";
+import { getGhlClientForLocation } from "@/lib/ghl/client";
+import { getGhlContactId, getLocationForContact, findOrLinkContact } from "@/lib/ghl/contacts";
 import {
   logSyncEvent,
   markEventCompleted,
@@ -138,8 +138,10 @@ export async function dispatchWebhook(
 
     if (email) {
       try {
-        const result = await findOrLinkContact(userId, email);
-        ghlContactId = result.ghlContactId;
+        const results = await findOrLinkContact(userId, email);
+        if (results.length > 0) {
+          ghlContactId = results[0].ghlContactId;
+        }
       } catch {
         // findOrLinkContact throws if no GHL contact found for email -- graceful skip
       }
@@ -230,6 +232,7 @@ export async function deliverWebhook(
   payload: WebhookPayload,
   ghlContactId: string
 ): Promise<void> {
+  // Event tags keep lms: prefix to distinguish from user-created tags
   const tagName = `lms:${payload.eventType}`;
 
   // Mark outbound change for echo detection (best-effort)
@@ -242,8 +245,18 @@ export async function deliverWebhook(
     );
   }
 
+  // Get location-specific client for this contact
+  const locationId = await getLocationForContact(ghlContactId);
+  if (!locationId) {
+    throw new Error(`No location found for GHL contact ${ghlContactId}`);
+  }
+  const client = await getGhlClientForLocation(locationId);
+  if (!client) {
+    throw new Error(`GHL location ${locationId} not found or inactive`);
+  }
+
   // Add tag to GHL contact
-  await ghlClient.post(`/contacts/${ghlContactId}/tags`, {
+  await client.post(`/contacts/${ghlContactId}/tags`, {
     tags: [tagName],
   });
 

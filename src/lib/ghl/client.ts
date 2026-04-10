@@ -22,7 +22,16 @@ interface GhlResponse<T = unknown> {
 }
 
 class GhlClient {
+  private tokenOverride: string | null;
+
+  constructor(tokenOverride?: string) {
+    this.tokenOverride = tokenOverride ?? null;
+  }
+
   private getToken(): string {
+    if (this.tokenOverride) {
+      return this.tokenOverride;
+    }
     const token = process.env.GHL_API_TOKEN;
     if (!token) {
       throw new Error(
@@ -163,10 +172,47 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Singleton instance -- all GHL calls go through this
+// Singleton instance -- uses GHL_API_TOKEN env var (backward compat / fallback)
 export const ghlClient = new GhlClient();
 
-// Helper to read location ID from environment
+/**
+ * Create a GHL client with a specific API token.
+ * Use this for per-location API calls.
+ */
+export function createGhlClient(apiToken: string): GhlClient {
+  return new GhlClient(apiToken);
+}
+
+/**
+ * Get a GHL client configured for a specific location.
+ * Looks up the API token from the ghlLocations table.
+ * Returns null if location not found or inactive.
+ */
+export async function getGhlClientForLocation(
+  ghlLocationId: string
+): Promise<GhlClient | null> {
+  // Lazy import to avoid circular dependency
+  const { db } = await import("@/db");
+  const { ghlLocations } = await import("@/db/schema");
+  const { eq, and } = await import("drizzle-orm");
+
+  const rows = await db
+    .select({ apiToken: ghlLocations.apiToken })
+    .from(ghlLocations)
+    .where(
+      and(
+        eq(ghlLocations.ghlLocationId, ghlLocationId),
+        eq(ghlLocations.isActive, true)
+      )
+    )
+    .limit(1);
+
+  if (rows.length === 0) return null;
+
+  return new GhlClient(rows[0].apiToken);
+}
+
+// Helper to read location ID from environment (legacy single-location fallback)
 export function getGhlLocationId(): string {
   const locationId = process.env.GHL_LOCATION_ID;
   if (!locationId) {

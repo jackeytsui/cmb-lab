@@ -1,65 +1,67 @@
 // src/lib/ghl/tag-sync.ts
 // Bidirectional tag sync between LMS and GHL.
-// Outbound: LMS tag assignment -> GHL contact tag via API
-// Inbound: GHL ContactTagUpdate webhook -> LMS tag assignment
+// Outbound: LMS tag assignment -> GHL contact tag via API (all linked locations)
+// Inbound: GHL ContactTagUpdate webhook -> LMS tag assignment (only for tags that exist in CMB Lab)
 // Echo detection prevents infinite sync loops.
+// No prefix: tags sync with their exact name across both platforms.
 
 import { db } from "@/db";
 import { ghlContacts, tags } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { ghlClient } from "@/lib/ghl/client";
-import { getGhlContactId } from "@/lib/ghl/contacts";
+import { getGhlClientForLocation } from "@/lib/ghl/client";
+import { getGhlContactLinks, getLocationForContact } from "@/lib/ghl/contacts";
 import { markOutboundChange, isEchoWebhook } from "@/lib/ghl/echo-detection";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
-import { assignTag, removeTag, createTag } from "@/lib/tags";
+import { assignTag, removeTag } from "@/lib/tags";
 
 /**
- * Sync a tag change from LMS to GHL.
+ * Sync a tag change from LMS to GHL across ALL linked locations.
  * Call this fire-and-forget after assignTag/removeTag in API routes:
  *   syncTagToGhl(userId, tagName, "add").catch(console.error)
  *
- * Tag naming: coach tags are prefixed with `lms:` in GHL.
- * System tags sync without prefix.
- *
- * Throws on failure so the caller's .catch() can log the error.
+ * Tags sync with their exact name — no prefix.
  */
 export async function syncTagToGhl(
   userId: string,
   tagName: string,
-  action: "add" | "remove",
-  options?: { tagType?: "coach" | "system" }
+  action: "add" | "remove"
 ): Promise<void> {
-  const ghlContactId = await getGhlContactId(userId);
-  if (!ghlContactId) {
-    // User not linked to GHL -- nothing to sync
-    return;
+  const links = await getGhlContactLinks(userId);
+  if (links.length === 0) return; // User not linked to any GHL location
+
+  for (const link of links) {
+    try {
+      const client = await getGhlClientForLocation(link.ghlLocationId);
+      if (!client) continue; // Location not found or inactive
+
+      // Mark outbound change BEFORE the API call for echo detection
+      await markOutboundChange(link.ghlContactId, "tag", tagName);
+
+      if (action === "add") {
+        await client.post(`/contacts/${link.ghlContactId}/tags`, {
+          tags: [tagName],
+        });
+      } else {
+        await client.delete(
+          `/contacts/${link.ghlContactId}/tags/${encodeURIComponent(tagName)}`
+        );
+      }
+
+      await logSyncEvent({
+        eventType: `tag.${action}`,
+        direction: "outbound",
+        entityType: "tag",
+        entityId: tagName,
+        ghlContactId: link.ghlContactId,
+        payload: { locationId: link.ghlLocationId },
+      });
+    } catch (error) {
+      console.error(
+        `[GHL Tag Sync] Failed to sync tag "${tagName}" ${action} to location ${link.ghlLocationId}:`,
+        error instanceof Error ? error.message : error
+      );
+    }
   }
-
-  // Coach tags get lms: prefix in GHL; system tags sync as-is
-  const tagType = options?.tagType ?? "coach";
-  const ghlTagName = tagType === "coach" ? `lms:${tagName}` : tagName;
-
-  // Mark outbound change BEFORE the API call for echo detection
-  await markOutboundChange(ghlContactId, "tag", ghlTagName);
-
-  if (action === "add") {
-    await ghlClient.post(`/contacts/${ghlContactId}/tags`, {
-      tags: [ghlTagName],
-    });
-  } else {
-    // GHL tag removal: DELETE /contacts/:contactId/tags/:tagName
-    await ghlClient.delete(
-      `/contacts/${ghlContactId}/tags/${encodeURIComponent(ghlTagName)}`
-    );
-  }
-
-  await logSyncEvent({
-    eventType: `tag.${action}`,
-    direction: "outbound",
-    entityType: "tag",
-    entityId: ghlTagName,
-    ghlContactId,
-  });
 }
 
 /**
@@ -67,15 +69,15 @@ export async function syncTagToGhl(
  */
 export async function syncTagRemovalFromGhl(
   userId: string,
-  tagName: string,
-  options?: { tagType?: "coach" | "system" }
+  tagName: string
 ): Promise<void> {
-  return syncTagToGhl(userId, tagName, "remove", options);
+  return syncTagToGhl(userId, tagName, "remove");
 }
 
 /**
  * Process an inbound tag update from GHL webhook.
  * Diffs the full tag list against cached tags to find additions/removals.
+ * Only syncs tags that already exist in CMB Lab — unknown GHL tags are ignored.
  * Uses echo detection as a secondary safety net.
  * Tags synced inbound use source: "webhook" to prevent outbound echo.
  */
@@ -112,29 +114,26 @@ export async function processInboundTagUpdate(
   const addedTags = currentGhlTags.filter((t) => !previousTags.includes(t));
   const removedTags = previousTags.filter((t) => !currentGhlTags.includes(t));
 
-  // Process additions
-  for (const ghlTagName of addedTags) {
-    // Check echo detection -- if this is our own outbound change echoing back, skip
-    const isEcho = await isEchoWebhook(ghlContactId, "tag", ghlTagName);
+  // Process additions — only for tags that exist in CMB Lab
+  for (const tagName of addedTags) {
+    // Check echo detection
+    const isEcho = await isEchoWebhook(ghlContactId, "tag", tagName);
     if (isEcho) {
       continue;
     }
 
-    // Strip lms: prefix if present (these are LMS-originated tags)
-    const tagName = ghlTagName.startsWith("lms:")
-      ? ghlTagName.slice(4)
-      : ghlTagName;
-
-    // Find or create the tag in LMS
-    let tag = await findTagByName(tagName);
+    // Look up in CMB Lab — skip if not found (CMB Lab is master tag list)
+    const tag = await findTagByName(tagName);
     if (!tag) {
-      // GHL-originated tag -- create as system type
-      tag = await createTag({
-        name: tagName,
-        color: "#6b7280", // neutral gray for system tags
-        type: "system",
-        description: `Auto-created from GHL tag: ${ghlTagName}`,
+      await logSyncEvent({
+        eventType: "tag.inbound_skipped",
+        direction: "inbound",
+        entityType: "tag",
+        entityId: tagName,
+        ghlContactId,
+        payload: { reason: "not_in_cmb_lab", tagName },
       });
+      continue;
     }
 
     await assignTag(userId, tag.id, undefined, { source: "webhook" });
@@ -143,26 +142,22 @@ export async function processInboundTagUpdate(
       eventType: "tag.add",
       direction: "inbound",
       entityType: "tag",
-      entityId: ghlTagName,
+      entityId: tagName,
       ghlContactId,
       payload: { lmsTagId: tag.id, lmsTagName: tagName },
     });
   }
 
-  // Process removals
-  for (const ghlTagName of removedTags) {
-    const isEcho = await isEchoWebhook(ghlContactId, "tag", ghlTagName);
+  // Process removals — only for tags that exist in CMB Lab
+  for (const tagName of removedTags) {
+    const isEcho = await isEchoWebhook(ghlContactId, "tag", tagName);
     if (isEcho) {
       continue;
     }
 
-    const tagName = ghlTagName.startsWith("lms:")
-      ? ghlTagName.slice(4)
-      : ghlTagName;
-
     const tag = await findTagByName(tagName);
     if (!tag) {
-      continue; // Tag doesn't exist in LMS, nothing to remove
+      continue; // Tag doesn't exist in CMB Lab, nothing to remove
     }
 
     // Only auto-remove system (GHL-originated) tags. Do NOT remove coach tags.
@@ -171,7 +166,7 @@ export async function processInboundTagUpdate(
         eventType: "tag.remove_skipped",
         direction: "inbound",
         entityType: "tag",
-        entityId: ghlTagName,
+        entityId: tagName,
         ghlContactId,
         payload: { reason: "coach_tag_protected", lmsTagId: tag.id },
       });
@@ -184,7 +179,7 @@ export async function processInboundTagUpdate(
       eventType: "tag.remove",
       direction: "inbound",
       entityType: "tag",
-      entityId: ghlTagName,
+      entityId: tagName,
       ghlContactId,
       payload: { lmsTagId: tag.id, lmsTagName: tagName },
     });

@@ -82,9 +82,7 @@ export async function POST(
 
     // Fire-and-forget: sync tag to GHL if this was a new assignment
     if (result.assigned) {
-      syncTagToGhl(studentId, result.tag.name, "add", {
-        tagType: result.tag.type,
-      }).catch(console.error);
+      syncTagToGhl(studentId, result.tag.name, "add").catch(console.error);
     }
 
     return NextResponse.json(
@@ -143,9 +141,7 @@ export async function DELETE(
 
     // Fire-and-forget: sync tag removal to GHL
     if (result.tag) {
-      syncTagToGhl(studentId, result.tag.name, "remove", {
-        tagType: result.tag.type,
-      }).catch(console.error);
+      syncTagToGhl(studentId, result.tag.name, "remove").catch(console.error);
     }
 
     return NextResponse.json({ success: true, tag: result.tag });

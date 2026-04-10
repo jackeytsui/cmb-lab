@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { hasMinimumRole } from "@/lib/auth";
-import { ConnectionStatus } from "./components/ConnectionStatus";
+import { LocationManager } from "./components/LocationManager";
 import { FieldMappingTable } from "./components/FieldMappingTable";
 import { SyncEventLog } from "./components/SyncEventLog";
 import { AutoTagRuleEditor } from "@/components/tags/AutoTagRuleEditor";
 
 /**
  * Admin GHL Integration settings page.
- * Provides connection testing, field mapping CRUD, and sync event log.
+ * Provides location management (multi-sub-account), field mapping CRUD, and sync event log.
  *
  * Access Control:
  * - Requires admin role
@@ -23,14 +23,14 @@ export default async function GhlSettingsPage() {
     <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <p className="mt-2 text-zinc-400">
-            Manage CRM connection, field mappings, and sync events.
+            Manage CRM connections, field mappings, and sync events.
           </p>
         </div>
 
         <div className="space-y-8">
-          {/* Section 1: Connection Status */}
+          {/* Section 1: GHL Locations (Multi-Sub-Account) */}
           <section>
-            <ConnectionStatus />
+            <LocationManager />
           </section>
 
           {/* Section 2: Custom Field Mappings */}
