@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Pencil, Plus, Trash2, Upload, Check, X } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2, Upload, Check, X, FileSpreadsheet } from "lucide-react";
 
 type Clip = {
   id: string;
@@ -138,6 +138,16 @@ export function ToneMasteryAdminClient() {
   const [form, setForm] = useState({ title: "", pinyin: "", chinese: "", sortOrder: "0" });
   const [uploading, setUploading] = useState(false);
 
+  // Bulk import
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{
+    imported: number;
+    skipped: number;
+    error?: string;
+  } | null>(null);
+
   const fetchClips = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/accelerator-extra/tone-mastery");
@@ -215,6 +225,124 @@ export function ToneMasteryAdminClient() {
     }
   };
 
+  // Parse TSV/CSV into clip objects.
+  // Expected columns (tab or comma separated), optional header row:
+  //   Chinese, Pinyin, English, Group, Item, Variant
+  const parseBulkInput = useCallback((text: string) => {
+    const lines = text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const rows: Array<{
+      chinese: string;
+      pinyin: string;
+      title: string;
+      groupNumber: number;
+      itemNumber: number;
+      variant: string;
+    }> = [];
+    const errors: string[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Skip header row if first line contains "chinese" or "pinyin" (case-insensitive)
+      if (i === 0 && /chinese|pinyin|english|group/i.test(line) && !/\d/.test(line.split(/[\t,]/)[3] ?? "")) {
+        continue;
+      }
+
+      const parts = line.split(/\t|,/).map((p) => p.trim());
+      if (parts.length < 6) {
+        errors.push(`Line ${i + 1}: expected 6 columns, got ${parts.length}`);
+        continue;
+      }
+
+      const [chinese, pinyinCol, title, groupStr, itemStr, variant] = parts;
+      const groupNumber = parseInt(groupStr);
+      const itemNumber = parseInt(itemStr);
+
+      if (!chinese || !pinyinCol || !title || !variant) {
+        errors.push(`Line ${i + 1}: missing required field`);
+        continue;
+      }
+      if (isNaN(groupNumber) || groupNumber < 1) {
+        errors.push(`Line ${i + 1}: invalid group number "${groupStr}"`);
+        continue;
+      }
+      if (isNaN(itemNumber) || itemNumber < 1) {
+        errors.push(`Line ${i + 1}: invalid item number "${itemStr}"`);
+        continue;
+      }
+
+      rows.push({
+        chinese,
+        pinyin: pinyinCol,
+        title,
+        groupNumber,
+        itemNumber,
+        variant: variant.toUpperCase(),
+      });
+    }
+
+    return { rows, errors };
+  }, []);
+
+  const bulkPreview = useCallback(() => {
+    const { rows, errors } = parseBulkInput(bulkText);
+    return { rows, errors };
+  }, [bulkText, parseBulkInput]);
+
+  const handleBulkImport = useCallback(async () => {
+    setBulkResult(null);
+    const { rows, errors } = parseBulkInput(bulkText);
+
+    if (errors.length > 0) {
+      setBulkResult({
+        imported: 0,
+        skipped: 0,
+        error: `Parse errors:\n${errors.join("\n")}`,
+      });
+      return;
+    }
+
+    if (rows.length === 0) {
+      setBulkResult({ imported: 0, skipped: 0, error: "No rows to import." });
+      return;
+    }
+
+    setBulkImporting(true);
+    try {
+      const res = await fetch("/api/admin/accelerator-extra/tone-mastery/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clips: rows }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBulkResult({
+          imported: 0,
+          skipped: 0,
+          error: data.error || "Import failed",
+        });
+        return;
+      }
+      setBulkResult({
+        imported: data.imported ?? 0,
+        skipped: data.skipped ?? 0,
+      });
+      setBulkText("");
+      fetchClips();
+    } catch (err) {
+      setBulkResult({
+        imported: 0,
+        skipped: 0,
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setBulkImporting(false);
+    }
+  }, [bulkText, parseBulkInput, fetchClips]);
+
   const handleUpdateClip = async (clipId: string, data: Partial<Clip>) => {
     await fetch(`/api/admin/accelerator-extra/tone-mastery/${clipId}`, {
       method: "PUT",
@@ -261,11 +389,133 @@ export function ToneMasteryAdminClient() {
       <div className="rounded-xl border border-border bg-card p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Clips ({clips.length})</h3>
-          <Button onClick={() => setShowForm(!showForm)} variant="outline" size="sm" className="gap-1.5">
-            {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {showForm ? "Cancel" : "Add Clip"}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => {
+                setShowBulkImport(!showBulkImport);
+                setShowForm(false);
+                setBulkResult(null);
+              }}
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+            >
+              {showBulkImport ? <X className="w-4 h-4" /> : <FileSpreadsheet className="w-4 h-4" />}
+              {showBulkImport ? "Cancel" : "Bulk Import"}
+            </Button>
+            <Button
+              onClick={() => {
+                setShowForm(!showForm);
+                setShowBulkImport(false);
+              }}
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+            >
+              {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              {showForm ? "Cancel" : "Add Clip"}
+            </Button>
+          </div>
         </div>
+
+        {showBulkImport && (() => {
+          const preview = bulkPreview();
+          return (
+            <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Bulk Import Clips (Placeholders)</p>
+                <p className="text-xs text-muted-foreground">
+                  Paste rows from Google Sheets or similar. Columns (tab-separated):{" "}
+                  <code className="text-[11px] bg-muted px-1 py-0.5 rounded">
+                    Chinese · Pinyin · English · Group · Item · Variant
+                  </code>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Header row is optional. Videos start as placeholders — upload individually after import.
+                </p>
+              </div>
+
+              <textarea
+                value={bulkText}
+                onChange={(e) => {
+                  setBulkText(e.target.value);
+                  setBulkResult(null);
+                }}
+                placeholder={`没有\tméi yǒu\tNo\t2\t3\tB\n如果\trú guǒ\tIf\t2\t3\tC\n还是\thái shì\tStill\t2\t4\tA`}
+                className="w-full min-h-[180px] rounded-md border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                disabled={bulkImporting}
+              />
+
+              {/* Preview */}
+              {bulkText.trim() && (
+                <div className="text-xs space-y-1">
+                  {preview.errors.length > 0 ? (
+                    <div className="text-red-500">
+                      <span className="font-medium">Parse errors:</span>
+                      <ul className="list-disc list-inside">
+                        {preview.errors.slice(0, 5).map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                        {preview.errors.length > 5 && (
+                          <li>...and {preview.errors.length - 5} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      <span className="text-emerald-500 font-medium">{preview.rows.length}</span> row
+                      {preview.rows.length === 1 ? "" : "s"} ready to import
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Result */}
+              {bulkResult && (
+                <div
+                  className={`text-xs rounded-md p-2 ${
+                    bulkResult.error
+                      ? "bg-red-500/10 text-red-500"
+                      : "bg-emerald-500/10 text-emerald-500"
+                  }`}
+                >
+                  {bulkResult.error ? (
+                    <pre className="whitespace-pre-wrap font-mono text-[11px]">
+                      {bulkResult.error}
+                    </pre>
+                  ) : (
+                    <>
+                      ✓ Imported {bulkResult.imported} new clip
+                      {bulkResult.imported === 1 ? "" : "s"}
+                      {bulkResult.skipped > 0 &&
+                        ` · Skipped ${bulkResult.skipped} (already exists)`}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleBulkImport}
+                  disabled={
+                    bulkImporting ||
+                    !bulkText.trim() ||
+                    preview.errors.length > 0 ||
+                    preview.rows.length === 0
+                  }
+                  className="gap-2"
+                >
+                  {bulkImporting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="w-4 h-4" />
+                  )}
+                  {bulkImporting ? "Importing..." : `Import ${preview.rows.length} Clips`}
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
 
         {showForm && (
           <div className="rounded-lg border border-dashed border-border p-4 space-y-3">

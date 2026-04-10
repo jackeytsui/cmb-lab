@@ -77,9 +77,9 @@ function RevealSection({
               {c.char}
             </span>
           ) : (
-            <span key={i} className="inline-flex flex-col items-center px-[1px]">
+            <span key={i} className="inline-flex flex-col items-center px-[2px]">
               {c.py && (
-                <span className="text-[10px] text-muted-foreground leading-tight">
+                <span className="text-base text-foreground leading-tight mb-0.5">
                   {c.py}
                 </span>
               )}
