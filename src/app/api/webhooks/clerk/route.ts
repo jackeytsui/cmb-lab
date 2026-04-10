@@ -4,7 +4,8 @@ import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { users, roles, tags } from "@/db/schema";
 import { eq, and, ilike, isNull } from "drizzle-orm";
-import { updateGhlContactEmail } from "@/lib/ghl/contacts";
+import { getGhlContactLinks, updateGhlContactEmail } from "@/lib/ghl/contacts";
+import { linkAndSyncTagsFromGhl } from "@/lib/ghl/tag-sync";
 import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { assignRole } from "@/lib/user-roles";
@@ -174,6 +175,23 @@ export async function POST(req: NextRequest) {
         }
 
         await applyInvitationMetadataToUser(created.id, invitationMetadata);
+
+        // Auto-link to GHL across all active locations and pull in any
+        // pre-existing tags (from checkout flows, sales ops, etc.)
+        try {
+          const stats = await linkAndSyncTagsFromGhl(created.id, normalizedEmail);
+          if (stats.linkedLocations > 0) {
+            console.log(
+              `[Clerk Webhook] Linked new user ${created.id} to ${stats.linkedLocations} GHL location(s); applied ${stats.tagsApplied} tag(s), ignored ${stats.tagsIgnored}`
+            );
+          }
+        } catch (err) {
+          // Non-blocking — user creation should not fail if GHL link fails
+          console.error(
+            `[Clerk Webhook] GHL link/sync failed for user ${created.id}:`,
+            err
+          );
+        }
       }
     }
 
@@ -241,14 +259,36 @@ export async function POST(req: NextRequest) {
           await applyInvitationMetadataToUser(updated.id, invitationMetadata);
         }
 
-        // Sync email change to GHL if user is linked
+        // Sync email change to GHL if user is linked; otherwise try to link now.
         const user = await db
           .select({ id: users.id })
           .from(users)
           .where(eq(users.clerkId, id))
           .limit(1);
         if (user.length > 0) {
-          await updateGhlContactEmail(user[0].id, normalizedEmail);
+          const existingLinks = await getGhlContactLinks(user[0].id);
+          if (existingLinks.length > 0) {
+            // Already linked — just sync email change across all linked locations
+            await updateGhlContactEmail(user[0].id, normalizedEmail);
+          } else {
+            // Never linked — attempt auto-link + tag pull now
+            try {
+              const stats = await linkAndSyncTagsFromGhl(
+                user[0].id,
+                normalizedEmail
+              );
+              if (stats.linkedLocations > 0) {
+                console.log(
+                  `[Clerk Webhook] Linked existing user ${user[0].id} to ${stats.linkedLocations} GHL location(s); applied ${stats.tagsApplied} tag(s)`
+                );
+              }
+            } catch (err) {
+              console.error(
+                `[Clerk Webhook] GHL link/sync failed for updated user ${user[0].id}:`,
+                err
+              );
+            }
+          }
         }
       }
     }

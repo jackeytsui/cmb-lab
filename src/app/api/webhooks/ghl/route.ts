@@ -95,7 +95,11 @@ export async function POST(req: NextRequest) {
           console.error("[GHL Webhook] Invalid ContactTagUpdate:", tagEvent.error.issues);
           return NextResponse.json({ received: true, error: "invalid_tag_update" });
         }
-        await processInboundTagUpdate(tagEvent.data.id, tagEvent.data.tags);
+        await processInboundTagUpdate(
+          tagEvent.data.id,
+          tagEvent.data.tags,
+          tagEvent.data.locationId
+        );
         break;
       }
       default: {

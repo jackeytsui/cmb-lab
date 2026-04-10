@@ -6,7 +6,7 @@
 import { db } from "@/db";
 import { ghlContacts, ghlFieldMappings } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { ghlClient } from "@/lib/ghl/client";
+import { getGhlClientForLocation } from "@/lib/ghl/client";
 import type { GhlFieldMapping } from "@/db/schema";
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -53,10 +53,11 @@ export interface FetchResult {
 export async function fetchGhlContactData(
   userId: string
 ): Promise<FetchResult> {
-  // Look up ghlContacts row for userId
+  // Look up ghlContacts row for userId (first link only)
   const rows = await db
     .select({
       ghlContactId: ghlContacts.ghlContactId,
+      ghlLocationId: ghlContacts.ghlLocationId,
       cachedData: ghlContacts.cachedData,
       lastFetchedAt: ghlContacts.lastFetchedAt,
     })
@@ -68,7 +69,7 @@ export async function fetchGhlContactData(
     return { data: null, lastFetchedAt: null };
   }
 
-  const { ghlContactId, cachedData, lastFetchedAt } = rows[0];
+  const { ghlContactId, ghlLocationId, cachedData, lastFetchedAt } = rows[0];
 
   // Check cache freshness
   if (cachedData && lastFetchedAt) {
@@ -81,9 +82,21 @@ export async function fetchGhlContactData(
     }
   }
 
-  // Cache stale or missing -- fetch from GHL
+  // Cache stale or missing -- fetch from GHL using per-location client
   try {
-    const response = await ghlClient.get<GhlContactApiResponse>(
+    const client = await getGhlClientForLocation(ghlLocationId);
+    if (!client) {
+      // Location not configured -- return stale cache if available
+      if (cachedData) {
+        return {
+          data: cachedData as unknown as GhlContactData,
+          lastFetchedAt,
+        };
+      }
+      return { data: null, lastFetchedAt: null };
+    }
+
+    const response = await client.get<GhlContactApiResponse>(
       `/contacts/${ghlContactId}`
     );
 
@@ -98,14 +111,14 @@ export async function fetchGhlContactData(
       phone: contact.phone ?? null,
     };
 
-    // Update cache in database
+    // Update cache in database (scoped to this specific contact)
     await db
       .update(ghlContacts)
       .set({
         cachedData: freshData as unknown as Record<string, unknown>,
         lastFetchedAt: new Date(),
       })
-      .where(eq(ghlContacts.userId, userId));
+      .where(eq(ghlContacts.ghlContactId, ghlContactId));
 
     return { data: freshData, lastFetchedAt: new Date() };
   } catch (error) {
@@ -132,7 +145,7 @@ export async function fetchGhlContactData(
 export async function refreshGhlContactData(
   userId: string
 ): Promise<FetchResult> {
-  // Invalidate cache by clearing lastFetchedAt
+  // Invalidate cache for all the user's GHL contacts by clearing lastFetchedAt
   await db
     .update(ghlContacts)
     .set({ lastFetchedAt: null })
