@@ -272,20 +272,23 @@ export function ToneMasteryClient() {
                         <CheckCircle className="w-3 h-3" />
                         {rating === "good" ? "Good" : "Not so great"}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleUnrate(clip.id)}
-                        disabled={isSaving}
-                        className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                        title="Re-rate this clip"
-                      >
-                        {isSaving ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <RotateCcw className="w-3 h-3" />
-                        )}
-                        Try again
-                      </button>
+                      {/* Only show Try Again for "Not so great" — good ratings are terminal */}
+                      {rating === "not_good" && (
+                        <button
+                          type="button"
+                          onClick={() => handleUnrate(clip.id)}
+                          disabled={isSaving}
+                          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                          title="Re-rate this clip"
+                        >
+                          {isSaving ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <RotateCcw className="w-3 h-3" />
+                          )}
+                          Try again
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center justify-center gap-2">
