@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Check, X, Plus, Loader2, Trash2, CheckCheck, XCircle, Circle } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, X, Plus, Loader2, Trash2, CheckCheck, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -146,36 +146,35 @@ function TagRow({
     }
   }, [tag.id, featureGrants, contentGrants]);
 
-  // Cycle a single feature: none → grant → deny → grant → deny ...
-  // (Once clicked, features stay in grant/deny. Use bulk "Clear" to reset.)
+  // Toggle between Grant (green ✓) and Deny (red ✗).
+  // A feature with no record is treated as deny visually, so clicking it
+  // creates a Grant record. From there, clicking alternates between grant
+  // and deny records.
   const toggleFeature = (featureKey: string) => {
     setFeatureGrants((prev) => {
       const existing = prev.find((g) => g.featureKey === featureKey);
-      if (!existing) {
-        return [...prev, { featureKey, grantType: "additive" as const }];
+      if (!existing || existing.grantType === "deny") {
+        // No record or deny → flip to grant
+        const withoutKey = prev.filter((g) => g.featureKey !== featureKey);
+        return [...withoutKey, { featureKey, grantType: "additive" as const }];
       }
-      const nextType: "additive" | "deny" =
-        existing.grantType === "additive" ? "deny" : "additive";
+      // Grant → flip to deny
       return prev.map((g) =>
-        g.featureKey === featureKey ? { ...g, grantType: nextType } : g
+        g.featureKey === featureKey ? { ...g, grantType: "deny" as const } : g
       );
     });
     setDirty(true);
   };
 
-  // Bulk set all features in a category to a specific state.
-  // "clear" removes the grant rows entirely (falls back to role defaults).
+  // Bulk set all features in a category to Grant or Deny.
   const setCategoryFeatures = (
     featureKeys: string[],
-    nextState: "additive" | "deny" | "clear"
+    nextState: "additive" | "deny"
   ) => {
     setFeatureGrants((prev) => {
       const withoutCategory = prev.filter(
         (g) => !featureKeys.includes(g.featureKey)
       );
-      if (nextState === "clear") {
-        return withoutCategory;
-      }
       return [
         ...withoutCategory,
         ...featureKeys.map((key) => ({
@@ -202,9 +201,14 @@ function TagRow({
     setDirty(true);
   };
 
-  const getFeatureState = (featureKey: string): "none" | "additive" | "deny" => {
+  // Only 2 visible states: "additive" (Grant) or "deny".
+  // An unset feature (no DB row) is displayed as "deny" — visually identical
+  // to an explicit deny. The difference matters for permission resolution
+  // (no record = inherit from role defaults, explicit deny = always blocked)
+  // but is hidden from the admin UI for simplicity.
+  const getFeatureState = (featureKey: string): "additive" | "deny" => {
     const grant = featureGrants.find((g) => g.featureKey === featureKey);
-    return grant?.grantType ?? "none";
+    return grant?.grantType === "additive" ? "additive" : "deny";
   };
 
   const hasAudioSeries = (seriesId: string) =>
@@ -253,10 +257,9 @@ function TagRow({
                   Feature Access
                 </h4>
                 <p className="text-[10px] text-muted-foreground mb-4">
-                  Click a feature to toggle between{" "}
-                  <span className="text-emerald-500 font-medium">Grant</span> and{" "}
-                  <span className="text-red-500 font-medium">Deny</span>. Use the
-                  category buttons to bulk-set.
+                  Every feature is either{" "}
+                  <span className="text-emerald-500 font-medium">Grant</span> or{" "}
+                  <span className="text-red-500 font-medium">Deny</span>. Click a card to toggle, or use the category buttons to bulk-set.
                 </p>
                 <div className="space-y-5">
                   {FEATURE_CATEGORIES.map((category) => {
@@ -297,17 +300,6 @@ function TagRow({
                               <XCircle className="w-3 h-3" />
                               Deny all
                             </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setCategoryFeatures(categoryKeys, "clear")
-                              }
-                              className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-                              title="Clear all grants in this category (falls back to role defaults)"
-                            >
-                              <Circle className="w-3 h-3" />
-                              Clear
-                            </button>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -322,17 +314,13 @@ function TagRow({
                                   "flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors text-left",
                                   state === "additive"
                                     ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                    : state === "deny"
-                                      ? "border-red-500/50 bg-red-500/10 text-red-600 dark:text-red-400"
-                                      : "border-dashed border-border bg-background text-muted-foreground hover:text-foreground"
+                                    : "border-red-500/50 bg-red-500/10 text-red-600 dark:text-red-400"
                                 )}
                               >
                                 {state === "additive" ? (
                                   <Check className="w-3.5 h-3.5 shrink-0" />
-                                ) : state === "deny" ? (
-                                  <X className="w-3.5 h-3.5 shrink-0" />
                                 ) : (
-                                  <Circle className="w-3 h-3 shrink-0 opacity-40" />
+                                  <X className="w-3.5 h-3.5 shrink-0" />
                                 )}
                                 {label}
                               </button>
