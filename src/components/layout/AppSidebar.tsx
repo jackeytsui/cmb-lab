@@ -66,12 +66,6 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         icon: AudioLines,
         featureKey: "audio_courses",
       },
-      {
-        title: "Course Library",
-        url: "/dashboard/course-library",
-        icon: BookOpenText,
-        featureKey: "course_library",
-      },
     ],
   },
   {
@@ -199,6 +193,7 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     minRole: "coach",
     items: [
       { title: "Admin Portal", url: "/admin/manage", icon: LayoutDashboard },
+      { title: "Course Library", url: "/admin/course-library", icon: BookOpenText },
     ],
   },
 ];
