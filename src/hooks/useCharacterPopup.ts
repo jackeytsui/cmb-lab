@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useDebouncedCallback } from "use-debounce";
+import { toast } from "sonner";
 
 // --- Types ---
 
@@ -410,7 +411,18 @@ export function useCharacterPopup(): UseCharacterPopupReturn {
           }),
         });
 
-        if (!res.ok) throw new Error("Save failed");
+        if (!res.ok) {
+          // Try to pull a server error message so failures are visible
+          // instead of silently rolling back.
+          let message = `Save failed (${res.status})`;
+          try {
+            const errData = (await res.json()) as { error?: string };
+            if (errData.error) message = errData.error;
+          } catch {
+            /* ignore parse errors */
+          }
+          throw new Error(message);
+        }
 
         const data = (await res.json()) as { id: string; alreadySaved: boolean };
 
@@ -423,9 +435,12 @@ export function useCharacterPopup(): UseCharacterPopupReturn {
             return next;
           });
         }
+        if (!data.alreadySaved) {
+          toast.success(`Saved "${entry.traditional}" to flashcards`);
+        }
         return data.id;
-      } catch {
-        // Rollback
+      } catch (err) {
+        // Rollback optimistic update and tell the user what happened.
         if (mountedRef.current) {
           setSavedVocabMap((prev) => {
             const next = new Map(prev);
@@ -434,6 +449,10 @@ export function useCharacterPopup(): UseCharacterPopupReturn {
             return next;
           });
         }
+        const message =
+          err instanceof Error ? err.message : "Failed to save word";
+        console.error("[vocabulary] save failed:", err);
+        toast.error(message);
         return null;
       }
     },
@@ -458,8 +477,9 @@ export function useCharacterPopup(): UseCharacterPopupReturn {
             `/api/vocabulary?id=${encodeURIComponent(existingId)}`,
             { method: "DELETE" }
           );
-          if (!res.ok) throw new Error("Delete failed");
-        } catch {
+          if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+          toast.success(`Removed "${entry.traditional}" from flashcards`);
+        } catch (err) {
           // Rollback on error
           if (mountedRef.current) {
             setSavedVocabMap((prev) => {
@@ -469,6 +489,10 @@ export function useCharacterPopup(): UseCharacterPopupReturn {
               return next;
             });
           }
+          const message =
+            err instanceof Error ? err.message : "Failed to remove word";
+          console.error("[vocabulary] delete failed:", err);
+          toast.error(message);
         }
       } else {
         await ensureSaved(entry);

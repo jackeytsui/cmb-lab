@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { savedVocabulary } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -10,9 +10,13 @@ import { and, eq } from "drizzle-orm";
  * Returns the authenticated user's saved vocabulary words as an array
  * of { id, traditional } for client-side bookmark state tracking.
  * Called once on reader page mount to populate the saved set.
+ *
+ * Uses getRealUser() so admins can bookmark words under their own account
+ * even while in View As mode. /api/flashcards also reads via raw Clerk
+ * auth() (== getRealUser), so the two stay consistent.
  */
 export async function GET() {
-  const user = await getCurrentUser();
+  const user = await getRealUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -47,7 +51,7 @@ export async function GET() {
  * Returns: { id, alreadySaved: boolean }
  */
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getRealUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -117,7 +121,7 @@ export async function POST(request: NextRequest) {
  * Returns: { success: true }
  */
 export async function DELETE(request: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getRealUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
