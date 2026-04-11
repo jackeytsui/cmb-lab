@@ -6,6 +6,7 @@ import { useTTS, type TTSOptions } from "@/hooks/useTTS";
 import { ToneColoredText } from "@/components/ToneColoredText";
 import { pinyin } from "pinyin-pro";
 import { extractToneFromPinyin, getToneColorClass } from "@/lib/tone-colors";
+import { convertScript } from "@/lib/chinese-convert";
 
 /** Get Pleco-style tone color from pinyin syllable */
 function pinyinToneColor(syllable: string): string {
@@ -76,8 +77,8 @@ function SpeakButton({
 
 function FlashCard({
   card,
+  displayChinese,
   isFlipped,
-  scriptMode,
   onFlip,
   onRemove,
   speak,
@@ -85,19 +86,14 @@ function FlashCard({
   ttsPlaying,
 }: {
   card: FlashcardItem;
+  displayChinese: string;
   isFlipped: boolean;
-  scriptMode: ScriptMode;
   onFlip: () => void;
   onRemove: () => void;
   speak: (text: string, options?: TTSOptions) => Promise<void>;
   ttsLoading: boolean;
   ttsPlaying: boolean;
 }) {
-  const displayChinese =
-    scriptMode === "simplified" && card.simplified
-      ? card.simplified
-      : card.chinese;
-
   // Determine language for TTS
   const lang: "zh-CN" | "zh-HK" =
     card.pane === "cantonese" ? "zh-HK" : "zh-CN";
@@ -229,6 +225,14 @@ export function FlashcardsClient() {
   const [studyFlipped, setStudyFlipped] = useState(false);
   const [studyRate, setStudyRate] = useState<NonNullable<TTSRate>>("medium");
 
+  // Map of cardId -> display text in the currently-selected script.
+  // Populated async by an effect whenever cards or scriptMode change.
+  // Before the effect runs (or for cards without a conversion hit), we fall
+  // back to the raw stored text via getDisplayText() below.
+  const [displayTextMap, setDisplayTextMap] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+
   const fetchCards = useCallback(async () => {
     try {
       setLoading(true);
@@ -246,6 +250,61 @@ export function FlashcardsClient() {
   useEffect(() => {
     fetchCards();
   }, [fetchCards]);
+
+  // Re-compute display text whenever cards or the script toggle change.
+  // Mandarin cards get converted via opencc-js (HK<->CN). Cantonese cards
+  // are left alone — Cantonese written form is traditional by convention
+  // and we don't want to accidentally simplify it.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next = new Map<string, string>();
+      for (const card of cards) {
+        if (card.pane === "cantonese") {
+          next.set(card.id, card.chinese);
+          continue;
+        }
+        // Prefer a pre-stored simplified form if one exists.
+        if (scriptMode === "simplified" && card.simplified) {
+          next.set(card.id, card.simplified);
+          continue;
+        }
+        // Otherwise convert the stored text to the selected script.
+        // convertScript is near-idempotent: if the stored text is already
+        // in the target script, it passes through mostly unchanged.
+        const from =
+          scriptMode === "simplified" ? "traditional" : "simplified";
+        try {
+          const converted = await convertScript(
+            card.chinese,
+            from,
+            scriptMode,
+          );
+          next.set(card.id, converted);
+        } catch {
+          next.set(card.id, card.chinese);
+        }
+      }
+      if (!cancelled) setDisplayTextMap(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cards, scriptMode]);
+
+  /** Get the Chinese text to render for a card in the current script mode. */
+  const getDisplayText = useCallback(
+    (card: FlashcardItem): string => {
+      const cached = displayTextMap.get(card.id);
+      if (cached) return cached;
+      // Fallback while conversion is still loading: preserve old behavior.
+      if (scriptMode === "simplified" && card.simplified) {
+        return card.simplified;
+      }
+      return card.chinese;
+    },
+    [displayTextMap, scriptMode],
+  );
 
   const filteredCards = useMemo(
     () =>
@@ -308,13 +367,10 @@ export function FlashcardsClient() {
 
   const handleStudySpeak = useCallback(() => {
     if (!studyCard) return;
-    const displayChinese =
-      scriptMode === "simplified" && studyCard.simplified
-        ? studyCard.simplified
-        : studyCard.chinese;
+    const displayChinese = getDisplayText(studyCard);
     const lang: "zh-CN" | "zh-HK" = studyCard.pane === "cantonese" ? "zh-HK" : "zh-CN";
     speak(displayChinese, { language: lang, rate: studyRate });
-  }, [studyCard, scriptMode, studyRate, speak]);
+  }, [studyCard, getDisplayText, studyRate, speak]);
 
   useEffect(() => {
     if (!studyMode) return;
@@ -369,10 +425,7 @@ export function FlashcardsClient() {
 
   // Study mode — single card at a time
   if (studyMode && studyCard) {
-    const studyDisplayChinese =
-      scriptMode === "simplified" && studyCard.simplified
-        ? studyCard.simplified
-        : studyCard.chinese;
+    const studyDisplayChinese = getDisplayText(studyCard);
     const studyLang: "zh-CN" | "zh-HK" =
       studyCard.pane === "cantonese" ? "zh-HK" : "zh-CN";
     const studyRoman =
@@ -520,8 +573,8 @@ export function FlashcardsClient() {
             <FlashCard
               key={card.id}
               card={card}
+              displayChinese={getDisplayText(card)}
               isFlipped={flippedCards.has(card.id)}
-              scriptMode={scriptMode}
               onFlip={() => toggleFlip(card.id)}
               onRemove={() => handleRemove(card)}
               speak={speak}

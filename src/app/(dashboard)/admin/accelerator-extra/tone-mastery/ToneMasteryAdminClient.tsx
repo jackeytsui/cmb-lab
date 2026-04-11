@@ -1,60 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Pencil, Plus, Trash2, Upload, Check, X, FileSpreadsheet, XCircle } from "lucide-react";
-
-// Upload a file to our server-side endpoint via XHR so we get progress callbacks.
-function uploadFileWithProgress(
-  endpoint: string,
-  file: File,
-  abortSignal: AbortSignal,
-  onProgress: (percent: number) => void
-): Promise<{ url: string }> {
-  return new Promise((resolve, reject) => {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", endpoint);
-
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    });
-
-    xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (data.url) {
-            resolve({ url: data.url });
-          } else {
-            reject(new Error(data.error || "No URL returned"));
-          }
-        } catch {
-          reject(new Error("Invalid response from server"));
-        }
-      } else {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          reject(new Error(data.error || `Upload failed with status ${xhr.status}`));
-        } catch {
-          reject(new Error(`Upload failed with status ${xhr.status}`));
-        }
-      }
-    });
-
-    xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
-    xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
-
-    abortSignal.addEventListener("abort", () => xhr.abort());
-
-    xhr.send(formData);
-  });
-}
 
 type Clip = {
   id: string;
@@ -137,14 +87,22 @@ function EditableClipRow({
     setUploadStage("uploading");
     setUploadPercent(0);
     try {
-      console.log(`[Tone Mastery] Uploading to server endpoint...`);
+      console.log(`[Tone Mastery] Uploading directly to Vercel Blob...`);
 
-      const blob = await uploadFileWithProgress(
-        "/api/admin/accelerator-extra/tone-mastery/upload-server",
-        file,
-        controller.signal,
-        (percent) => setUploadPercent(percent)
-      );
+      // Client-upload via @vercel/blob/client. The browser streams directly
+      // to Blob storage using a short-lived token minted by the /upload route,
+      // so we sidestep Vercel's 4.5MB serverless function body limit entirely.
+      // multipart chunking kicks in for anything over 5MB.
+      const blob = await upload(`tone-mastery/${file.name}`, file, {
+        access: "private",
+        contentType: file.type,
+        handleUploadUrl: "/api/admin/accelerator-extra/tone-mastery/upload",
+        multipart: file.size > 5 * 1024 * 1024,
+        abortSignal: controller.signal,
+        onUploadProgress: ({ percentage }) => {
+          setUploadPercent(Math.round(percentage));
+        },
+      });
 
       console.log(`[Tone Mastery] Upload complete. Blob URL:`, blob.url);
       setUploadStage("saving");
@@ -335,12 +293,15 @@ export function ToneMasteryAdminClient() {
     setUploading(true);
     try {
       const controller = new AbortController();
-      const blob = await uploadFileWithProgress(
-        "/api/admin/accelerator-extra/tone-mastery/upload-server",
-        file,
-        controller.signal,
-        () => {}
-      );
+      // Client-upload: streams directly to Vercel Blob, bypasses 4.5MB
+      // serverless function body limit.
+      const blob = await upload(`tone-mastery/${file.name}`, file, {
+        access: "private",
+        contentType: file.type,
+        handleUploadUrl: "/api/admin/accelerator-extra/tone-mastery/upload",
+        multipart: file.size > 5 * 1024 * 1024,
+        abortSignal: controller.signal,
+      });
       const nextSort = clips.length > 0 ? Math.max(...clips.map((c) => c.sortOrder)) + 1 : 1;
       const res = await fetch("/api/admin/accelerator-extra/tone-mastery", {
         method: "POST",
