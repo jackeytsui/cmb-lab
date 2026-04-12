@@ -27,6 +27,7 @@ import {
   Package,
   Music,
   Ear,
+  CalendarCheck,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
 
@@ -148,6 +149,12 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         title: "Starter Pack",
         url: "/dashboard/accelerator/starter-pack",
         icon: Package,
+        featureKey: "mandarin_accelerator",
+      },
+      {
+        title: "Book a Call",
+        url: "/dashboard/accelerator/book-a-call",
+        icon: CalendarCheck,
         featureKey: "mandarin_accelerator",
       },
     ],

@@ -56,3 +56,6 @@ venv/
 
 # Dictionary source data (large, downloaded on demand)
 /data/
+
+# GHL course scraper output (contains course content and blob URLs)
+/scripts/scraped-ghl/

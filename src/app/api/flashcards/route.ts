@@ -1,34 +1,27 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  users,
   coachingNoteStars,
   coachingNotes,
   coachingSessions,
   savedVocabulary,
 } from "@/db/schema";
+import { getCurrentUser } from "@/lib/auth";
 
 /**
  * GET /api/flashcards
  * Returns all flashcard items for the current user:
  *   - Starred coaching notes (from 1:1 and inner circle)
  *   - Saved vocabulary (from AI Passage Reader and YouTube Listening Lab)
+ *
+ * Uses getCurrentUser() so admins in "View As" mode see the
+ * impersonated student's flashcards.
  */
 export async function GET() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
-
+  const dbUser = await getCurrentUser();
   if (!dbUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   // 1. Starred coaching notes

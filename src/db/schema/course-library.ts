@@ -209,6 +209,7 @@ export interface CourseLibraryAttachment {
 export interface CourseLibraryVideoContent {
   videoUrl: string;
   posterUrl?: string;
+  thumbnailUrl?: string;
   durationSeconds?: number;
   transcript?: string;
   description?: string;
@@ -217,6 +218,7 @@ export interface CourseLibraryVideoContent {
 
 export interface CourseLibraryTextContent {
   body: string;
+  thumbnailUrl?: string;
   attachments?: CourseLibraryAttachment[];
 }
 

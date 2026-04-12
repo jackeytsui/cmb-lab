@@ -12,8 +12,11 @@ import {
   Upload,
   XCircle,
   File as FileIcon,
+  ImagePlus,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { QuizBuilder } from "./QuizBuilder";
 
 type LessonType = "video" | "text" | "quiz" | "download";
@@ -205,6 +208,229 @@ export function LessonEditorClient({
 }
 
 // ---------------------------------------------------------------------------
+// Thumbnail Uploader — reused by video & text lesson forms
+// ---------------------------------------------------------------------------
+
+function ThumbnailUploader({
+  lessonId,
+  thumbnailUrl,
+  content,
+  onUpdate,
+}: {
+  lessonId: string;
+  thumbnailUrl: string;
+  content: Record<string, unknown>;
+  onUpdate: (next: Record<string, unknown>) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadPct(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const result = await uploadWithProgress(
+        "image",
+        file,
+        controller.signal,
+        setUploadPct,
+      );
+      const nextContent = { ...content, thumbnailUrl: result.url };
+      await saveLessonContent(lessonId, nextContent);
+      onUpdate(nextContent);
+    } catch {
+      // ignore
+    } finally {
+      setUploading(false);
+      setUploadPct(0);
+      abortRef.current = null;
+      e.target.value = "";
+    }
+  };
+
+  const handleRemove = async () => {
+    const nextContent = { ...content };
+    delete nextContent.thumbnailUrl;
+    await saveLessonContent(lessonId, nextContent);
+    onUpdate(nextContent);
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+      <h3 className="text-sm font-semibold text-foreground">Thumbnail</h3>
+      {thumbnailUrl ? (
+        <div className="flex items-start gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/course-library/image/${lessonId}`}
+            alt="Thumbnail"
+            className="w-32 h-20 object-cover rounded-md border border-border"
+          />
+          <div className="flex flex-col gap-1">
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleUpload}
+                disabled={uploading}
+              />
+              <span className="text-xs text-primary hover:underline">Replace</span>
+            </label>
+            <button
+              type="button"
+              onClick={handleRemove}
+              className="text-xs text-red-500 hover:text-red-400 text-left inline-flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <label className="cursor-pointer block">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={handleUpload}
+            disabled={uploading}
+          />
+          <div className="rounded-md border border-dashed border-border bg-muted/30 p-4 text-center hover:bg-muted/50 transition-colors">
+            <ImagePlus className="w-6 h-6 text-muted-foreground/40 mx-auto mb-1" />
+            <p className="text-xs text-muted-foreground">
+              Upload thumbnail (JPEG, PNG, WebP)
+            </p>
+          </div>
+        </label>
+      )}
+      {uploading && (
+        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary transition-all"
+            style={{ width: `${uploadPct}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Attachments Manager — upload/remove file attachments on a lesson
+// ---------------------------------------------------------------------------
+
+function AttachmentsManager({
+  lessonId,
+  content,
+  onUpdate,
+}: {
+  lessonId: string;
+  content: Record<string, unknown>;
+  onUpdate: (next: Record<string, unknown>) => void;
+}) {
+  const attachments = (content.attachments as Array<{ url: string; filename: string; sizeBytes: number }>) ?? [];
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadPct(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const result = await uploadWithProgress(
+        "file",
+        file,
+        controller.signal,
+        setUploadPct,
+      );
+      const nextAttachments = [
+        ...attachments,
+        { url: result.url, filename: result.filename, sizeBytes: result.sizeBytes },
+      ];
+      const nextContent = { ...content, attachments: nextAttachments };
+      await saveLessonContent(lessonId, nextContent);
+      onUpdate(nextContent);
+    } catch {
+      // ignore
+    } finally {
+      setUploading(false);
+      setUploadPct(0);
+      abortRef.current = null;
+      e.target.value = "";
+    }
+  };
+
+  const handleRemove = async (idx: number) => {
+    const nextAttachments = attachments.filter((_, i) => i !== idx);
+    const nextContent = { ...content, attachments: nextAttachments };
+    await saveLessonContent(lessonId, nextContent);
+    onUpdate(nextContent);
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+      <h3 className="text-sm font-semibold text-foreground">Attachments</h3>
+      {attachments.length > 0 && (
+        <div className="space-y-2">
+          {attachments.map((att, idx) => (
+            <div
+              key={att.url}
+              className="rounded-md border border-border bg-background p-2 flex items-center gap-2"
+            >
+              <FileIcon className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-foreground flex-1 truncate">
+                {att.filename}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {(att.sizeBytes / 1024 / 1024).toFixed(1)}MB
+              </span>
+              <button
+                type="button"
+                onClick={() => handleRemove(idx)}
+                className="text-red-500 hover:text-red-400"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <label className="cursor-pointer block">
+        <input
+          type="file"
+          className="hidden"
+          onChange={handleUpload}
+          disabled={uploading}
+        />
+        <div className="rounded-md border border-dashed border-border bg-muted/30 p-3 text-center hover:bg-muted/50 transition-colors">
+          <p className="text-xs text-muted-foreground">
+            + Add file (PDF, ZIP, DOCX up to 100MB)
+          </p>
+        </div>
+      </label>
+      {uploading && (
+        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary transition-all"
+            style={{ width: `${uploadPct}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Video Lesson Form
 // ---------------------------------------------------------------------------
 
@@ -366,19 +592,33 @@ function VideoLessonForm({
         )}
       </div>
 
+      {/* Thumbnail */}
+      <ThumbnailUploader
+        lessonId={lessonId}
+        thumbnailUrl={(content.thumbnailUrl as string) ?? ""}
+        content={content}
+        onUpdate={onUpdate}
+      />
+
+      {/* Attachments */}
+      <AttachmentsManager
+        lessonId={lessonId}
+        content={content}
+        onUpdate={onUpdate}
+      />
+
       {/* Metadata */}
       <div className="rounded-lg border border-border bg-card p-5 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Metadata</h3>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Description (markdown)
+            Description
           </label>
-          <textarea
+          <RichTextEditor
             value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            rows={4}
+            onChange={setDesc}
             placeholder="What students will learn in this video"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
+            compact
           />
         </div>
         <div>
@@ -466,39 +706,51 @@ function TextLessonForm({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card p-5 space-y-3">
-      <h3 className="text-sm font-semibold text-foreground">Body (markdown)</h3>
-      <textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        rows={18}
-        placeholder="# Lesson heading&#10;&#10;Write your lesson content here using markdown..."
-        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
-      />
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground">
-          {draft.length} characters
-        </span>
-        {dirty ? (
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {saving ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Check className="w-3 h-3" />
-            )}
-            Save
-          </button>
-        ) : savedAt ? (
-          <span className="text-[10px] text-emerald-500">
-            Saved at {savedAt.toLocaleTimeString()}
-          </span>
-        ) : null}
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">Body</h3>
+        <RichTextEditor
+          value={draft}
+          onChange={setDraft}
+          placeholder="Write your lesson content here..."
+        />
+        <div className="flex items-center justify-end">
+          {dirty ? (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Check className="w-3 h-3" />
+              )}
+              Save
+            </button>
+          ) : savedAt ? (
+            <span className="text-[10px] text-emerald-500">
+              Saved at {savedAt.toLocaleTimeString()}
+            </span>
+          ) : null}
+        </div>
       </div>
+
+      {/* Thumbnail */}
+      <ThumbnailUploader
+        lessonId={lessonId}
+        thumbnailUrl={(content.thumbnailUrl as string) ?? ""}
+        content={content}
+        onUpdate={onUpdate}
+      />
+
+      {/* Attachments */}
+      <AttachmentsManager
+        lessonId={lessonId}
+        content={content}
+        onUpdate={onUpdate}
+      />
     </div>
   );
 }
@@ -645,12 +897,11 @@ function DownloadLessonForm({
 
       <div className="rounded-lg border border-border bg-card p-5 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Description</h3>
-        <textarea
+        <RichTextEditor
           value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-          rows={4}
+          onChange={setDesc}
           placeholder="What is this download, and how should students use it?"
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+          compact
         />
         {dirty && (
           <div className="flex justify-end">

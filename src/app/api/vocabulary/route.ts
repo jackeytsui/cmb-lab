@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRealUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import { savedVocabulary } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -11,12 +11,11 @@ import { and, eq } from "drizzle-orm";
  * of { id, traditional } for client-side bookmark state tracking.
  * Called once on reader page mount to populate the saved set.
  *
- * Uses getRealUser() so admins can bookmark words under their own account
- * even while in View As mode. /api/flashcards also reads via raw Clerk
- * auth() (== getRealUser), so the two stay consistent.
+ * Uses getCurrentUser() so admins in "View As" mode see the impersonated
+ * student's vocabulary. Consistent with /api/flashcards.
  */
 export async function GET() {
-  const user = await getRealUser();
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -51,7 +50,7 @@ export async function GET() {
  * Returns: { id, alreadySaved: boolean }
  */
 export async function POST(request: NextRequest) {
-  const user = await getRealUser();
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -121,7 +120,7 @@ export async function POST(request: NextRequest) {
  * Returns: { success: true }
  */
 export async function DELETE(request: NextRequest) {
-  const user = await getRealUser();
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
