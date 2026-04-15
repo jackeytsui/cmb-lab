@@ -11,6 +11,7 @@ export const DEFAULT_STUDENT_FEATURES = [
   "listening_lab",
   "coaching_material",
   "flashcards",
+  "notepad",
 ];
 
 export async function ensureDefaultStudentRole() {

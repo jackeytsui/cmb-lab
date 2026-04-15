@@ -35,6 +35,7 @@ export const FEATURE_KEYS = [
   "audio_accelerator_edition",
   "tone_mastery",
   "listening_training",
+  "notepad",
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];

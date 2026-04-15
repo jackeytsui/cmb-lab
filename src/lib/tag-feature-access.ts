@@ -31,6 +31,7 @@ const LTO_DENIED_FEATURES: readonly FeatureKey[] = [
   "video_threads",
   "certificates",
   "ai_chat",
+  "notepad",
 ];
 
 /**

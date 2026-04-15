@@ -28,6 +28,7 @@ import {
   Music,
   Ear,
   CalendarCheck,
+  NotebookPen,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
 
@@ -47,7 +48,8 @@ type FeatureKey =
   | "mandarin_accelerator"
   | "audio_accelerator_edition"
   | "tone_mastery"
-  | "listening_training";
+  | "listening_training"
+  | "notepad";
 
 type NavItemWithFeature = NavSection["items"][number] & {
   featureKey?: FeatureKey;
@@ -90,6 +92,12 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         url: "/dashboard/listening",
         icon: Headphones,
         featureKey: "listening_lab",
+      },
+      {
+        title: "Notepad",
+        url: "/dashboard/notepad",
+        icon: NotebookPen,
+        featureKey: "notepad",
       },
     ],
   },

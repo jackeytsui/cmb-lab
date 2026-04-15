@@ -11,6 +11,7 @@ const isStudentAllowedRoute = createRouteMatcher([
   "/dashboard/audio-courses(.*)",
   "/dashboard/flashcards(.*)",
   "/dashboard/accelerator(.*)",
+  "/dashboard/notepad(.*)",
   "/settings(.*)",
 ]);
 const isProtectedRoute = createRouteMatcher([

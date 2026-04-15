@@ -29,6 +29,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   audio_accelerator_edition: "Audio Accelerator Edition",
   tone_mastery: "Advanced Tone Mastery System",
   listening_training: "Native Speed Listening Comprehension Training",
+  notepad: "Notepad",
 };
 
 // ---------------------------------------------------------------------------
