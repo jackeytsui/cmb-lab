@@ -659,6 +659,12 @@ function NoteCard({
               <textarea
                 value={draftText}
                 onChange={(e) => setDraftText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSave();
+                  }
+                }}
                 rows={3}
                 className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                 placeholder="Chinese text"
@@ -667,12 +673,24 @@ function NoteCard({
                 ref={romanInputRef}
                 value={draftRomanization}
                 onChange={handleRomanizationChange}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSave();
+                  }
+                }}
                 className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                 placeholder={noteLanguage === "zh-HK" ? "Jyutping" : "Pinyin (type chang4 → chàng, nü3 → nǚ)"}
               />
               <textarea
                 value={draftTranslation}
                 onChange={(e) => setDraftTranslation(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSave();
+                  }
+                }}
                 rows={2}
                 className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                 placeholder="English translation"
@@ -922,6 +940,12 @@ function NoteCard({
                     <textarea
                       value={explanationDraft}
                       onChange={(e) => setExplanationDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleExplanationSave();
+                        }
+                      }}
                       rows={2}
                       autoFocus
                       className="w-full rounded-md border border-violet-500/25 bg-violet-500/5 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-y"
