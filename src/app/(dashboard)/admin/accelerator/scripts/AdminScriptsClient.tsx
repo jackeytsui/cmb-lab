@@ -28,6 +28,7 @@ import {
   Loader2,
   Volume2,
   X,
+  Wand2,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -101,6 +102,8 @@ export default function AdminScriptsClient() {
 
   // Audio upload state
   const [uploadingAudio, setUploadingAudio] = useState<string | null>(null);
+  // Audio regenerate (TTS) state — key = `${lineId}-${field}`
+  const [regeneratingAudio, setRegeneratingAudio] = useState<string | null>(null);
 
   // -----------------------------------------------------------------------
   // Fetch scripts
@@ -309,6 +312,38 @@ export default function AdminScriptsClient() {
   }
 
   // -----------------------------------------------------------------------
+  // Regenerate audio via TTS for one line/field
+  // -----------------------------------------------------------------------
+
+  async function handleRegenerateAudio(
+    lineId: string,
+    field: "cantoneseAudioUrl" | "mandarinAudioUrl",
+  ) {
+    const key = `${lineId}-${field}`;
+    setRegeneratingAudio(key);
+    try {
+      const res = await fetch(
+        "/api/admin/accelerator/scripts/regenerate-audio",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lineId, field }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error ?? `Regenerate failed (${res.status})`);
+      }
+      await fetchScripts();
+    } catch (err) {
+      console.error("Audio regenerate error:", err);
+      alert(err instanceof Error ? err.message : "Audio regenerate failed");
+    } finally {
+      setRegeneratingAudio(null);
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Line management in form
   // -----------------------------------------------------------------------
 
@@ -484,6 +519,10 @@ export default function AdminScriptsClient() {
                               uploadingAudio ===
                               `${line.id}-cantoneseAudioUrl`
                             }
+                            regenerating={
+                              regeneratingAudio ===
+                              `${line.id}-cantoneseAudioUrl`
+                            }
                             onFileSelect={(file) =>
                               handleAudioUpload(
                                 script.id,
@@ -491,6 +530,9 @@ export default function AdminScriptsClient() {
                                 "cantoneseAudioUrl",
                                 file
                               )
+                            }
+                            onRegenerate={() =>
+                              handleRegenerateAudio(line.id, "cantoneseAudioUrl")
                             }
                           />
                           <AudioUploadButton
@@ -500,6 +542,10 @@ export default function AdminScriptsClient() {
                               uploadingAudio ===
                               `${line.id}-mandarinAudioUrl`
                             }
+                            regenerating={
+                              regeneratingAudio ===
+                              `${line.id}-mandarinAudioUrl`
+                            }
                             onFileSelect={(file) =>
                               handleAudioUpload(
                                 script.id,
@@ -507,6 +553,9 @@ export default function AdminScriptsClient() {
                                 "mandarinAudioUrl",
                                 file
                               )
+                            }
+                            onRegenerate={() =>
+                              handleRegenerateAudio(line.id, "mandarinAudioUrl")
                             }
                           />
                         </div>
@@ -704,14 +753,19 @@ function AudioUploadButton({
   label,
   audioUrl,
   uploading,
+  regenerating,
   onFileSelect,
+  onRegenerate,
 }: {
   label: string;
   audioUrl: string | null;
   uploading: boolean;
+  regenerating: boolean;
   onFileSelect: (file: File) => void;
+  onRegenerate: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const busy = uploading || regenerating;
 
   return (
     <div className="flex items-center gap-2">
@@ -736,27 +790,61 @@ function AudioUploadButton({
             size="sm"
             className="h-6 text-xs"
             onClick={() => inputRef.current?.click()}
-            disabled={uploading}
+            disabled={busy}
           >
             Replace
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 text-xs"
+            onClick={onRegenerate}
+            disabled={busy}
+            title="Regenerate audio from stored text via TTS"
+          >
+            {regenerating ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <Wand2 className="w-3 h-3 mr-1" />
+            )}
+            Regenerate
+          </Button>
         </div>
       ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-        >
-          {uploading ? (
-            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-          ) : (
-            <Upload className="w-3 h-3 mr-1" />
-          )}
-          {label}
-        </Button>
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+          >
+            {uploading ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <Upload className="w-3 h-3 mr-1" />
+            )}
+            {label}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onRegenerate}
+            disabled={busy}
+            title="Generate audio from stored text via TTS"
+          >
+            {regenerating ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <Wand2 className="w-3 h-3 mr-1" />
+            )}
+            Generate
+          </Button>
+        </>
       )}
     </div>
   );
