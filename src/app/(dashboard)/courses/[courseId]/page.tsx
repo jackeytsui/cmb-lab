@@ -22,6 +22,7 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { PracticeSetCard } from "@/components/practice/assignments/PracticeSetCard";
 import { resolvePermissions } from "@/lib/permissions";
 import { hasMinimumRole } from "@/lib/auth";
+import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
@@ -53,6 +54,10 @@ export default async function CourseDetailPage({ params }: PageProps) {
   let accessTier: "preview" | "full" = "full";
 
   if (!isCoachOrAbove) {
+    // Classic LTO students don't get regular courses — send them to Accelerator
+    if (await userHasLtoStudentTag(user.id)) {
+      redirect("/dashboard/accelerator");
+    }
     const permissions = await resolvePermissions(user.id);
     if (!permissions.canAccessCourse(courseId)) {
       redirect("/courses");

@@ -8,6 +8,7 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { BookOpen } from "lucide-react";
 import { resolvePermissions } from "@/lib/permissions";
 import { hasMinimumRole } from "@/lib/auth";
+import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
 
 export const metadata = {
   title: "My Courses | Canto to Mando",
@@ -37,6 +38,11 @@ export default async function MyCoursesPage() {
 
     // Coaches see all courses
     const isCoachOrAbove = await hasMinimumRole("coach");
+
+    // Classic LTO students don't get regular courses — send them to Accelerator
+    if (!isCoachOrAbove && (await userHasLtoStudentTag(user.id))) {
+      redirect("/dashboard/accelerator");
+    }
 
     let userCourses: {
       id: string;

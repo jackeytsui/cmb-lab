@@ -3,9 +3,10 @@ import { redirect, notFound } from "next/navigation";
 import { db } from "@/db";
 import { practiceSets, practiceSetAssignments, lessons } from "@/db/schema";
 import { eq, and, isNull, asc } from "drizzle-orm";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, hasMinimumRole } from "@/lib/auth";
 import { PracticePlayer } from "@/components/practice/player/PracticePlayer";
 import { getNextLesson } from "@/lib/unlock";
+import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
 
 // ============================================================
 // Types
@@ -42,6 +43,15 @@ export default async function PracticePage({ params }: PageProps) {
 
   // 2. Get setId from params
   const { setId } = await params;
+
+  // 2a. Classic LTO students don't get regular practice sets
+  const isCoachOrAbove = await hasMinimumRole("coach");
+  if (!isCoachOrAbove) {
+    const ltoUser = await getCurrentUser();
+    if (ltoUser && (await userHasLtoStudentTag(ltoUser.id))) {
+      redirect("/dashboard/accelerator");
+    }
+  }
 
   // 3. Fetch practice set with exercises in a single query, plus user in parallel
   const [practiceSetWithExercises, dbUser] = await Promise.all([

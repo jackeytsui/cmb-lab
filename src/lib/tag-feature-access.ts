@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { studentTags, tagFeatureGrants, tagContentGrants } from "@/db/schema";
+import { studentTags, tags, tagFeatureGrants, tagContentGrants } from "@/db/schema";
 import { FEATURE_KEYS, type FeatureKey } from "@/lib/permissions";
 
 type FeatureOverrideState = {
@@ -12,6 +12,28 @@ type FeatureOverrideState = {
 const FEATURE_KEY_SET = new Set<string>(FEATURE_KEYS);
 
 /**
+ * Classic LTO students (users with the `LTO_student` system tag) are an
+ * exclusive cohort that should only see Mandarin Accelerator content. These
+ * features are hard-denied in code so the deny takes effect even if the
+ * per-tag DB grants aren't configured.
+ */
+export const LTO_STUDENT_TAG_NAME = "LTO_student";
+
+const LTO_DENIED_FEATURES: readonly FeatureKey[] = [
+  "ai_conversation",
+  "practice_sets",
+  "dictionary_reader",
+  "audio_courses",
+  "listening_lab",
+  "coaching_material",
+  "flashcards",
+  "course_library",
+  "video_threads",
+  "certificates",
+  "ai_chat",
+];
+
+/**
  * Get feature overrides for a user based on their tags.
  *
  * Queries tag_feature_grants table (DB-driven).
@@ -20,14 +42,20 @@ const FEATURE_KEY_SET = new Set<string>(FEATURE_KEYS);
  */
 export async function getUserFeatureTagOverrides(userId: string): Promise<FeatureOverrideState> {
   const userTagRows = await db
-    .select({ tagId: studentTags.tagId })
+    .select({ tagId: studentTags.tagId, tagName: tags.name })
     .from(studentTags)
+    .innerJoin(tags, eq(studentTags.tagId, tags.id))
     .where(eq(studentTags.userId, userId));
 
   const allow = new Set<FeatureKey>();
   const deny = new Set<FeatureKey>();
 
   if (userTagRows.length === 0) return { allow, deny };
+
+  const hasLtoTag = userTagRows.some((r) => r.tagName === LTO_STUDENT_TAG_NAME);
+  if (hasLtoTag) {
+    for (const f of LTO_DENIED_FEATURES) deny.add(f);
+  }
 
   const tagIds = userTagRows.map((r) => r.tagId);
 
@@ -50,6 +78,20 @@ export async function getUserFeatureTagOverrides(userId: string): Promise<Featur
   }
 
   return { allow, deny };
+}
+
+/**
+ * True if the user has the `LTO_student` system tag. Used to gate
+ * regular-student routes that don't correspond to a single feature key.
+ */
+export async function userHasLtoStudentTag(userId: string): Promise<boolean> {
+  const row = await db
+    .select({ id: studentTags.tagId })
+    .from(studentTags)
+    .innerJoin(tags, eq(studentTags.tagId, tags.id))
+    .where(and(eq(studentTags.userId, userId), eq(tags.name, LTO_STUDENT_TAG_NAME)))
+    .limit(1);
+  return row.length > 0;
 }
 
 /**

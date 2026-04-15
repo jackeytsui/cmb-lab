@@ -10,6 +10,7 @@ import {
 import { eq, and, isNull, asc } from "drizzle-orm";
 import { resolvePermissions, canAccessLesson } from "@/lib/permissions";
 import { hasMinimumRole } from "@/lib/auth";
+import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
 import { ChevronLeft, BookOpenText, FileText, Link as LinkIcon, Download } from "lucide-react";
 import { checkLessonUnlock } from "@/lib/unlock";
 import { InteractiveVideoPlayer } from "@/components/video/InteractiveVideoPlayer";
@@ -75,6 +76,10 @@ export default async function LessonPlayerPage({ params }: PageProps) {
   // 4. Verify user has valid access via permission resolver (full hierarchy check)
   const isCoachOrAbove = await hasMinimumRole("coach");
   if (!isCoachOrAbove) {
+    // Classic LTO students don't get regular lessons — send them to Accelerator
+    if (await userHasLtoStudentTag(user.id)) {
+      redirect("/dashboard/accelerator");
+    }
     const permissions = await resolvePermissions(user.id);
     const hasAccess = await canAccessLesson(permissions, lessonId);
     if (!hasAccess) {
