@@ -57,19 +57,47 @@ interface ScriptPracticeClientProps {
 // ---------------------------------------------------------------------------
 // Ruby renderer: align stored romanization syllables over each CJK character.
 // Non-CJK characters (punctuation, English, spaces) pass through without ruby.
-// Respects coach-edited romanisation text — splits by whitespace to get syllables.
-// If syllable count doesn't match CJK character count, falls back to showing the
-// full romanisation line above the text.
+// Respects coach-edited romanisation text. Splits syllables by runs of
+// letter+mark+digit chars so punctuation stuck to a syllable (e.g. `，qǐng`
+// or `jian ma？`) still parses cleanly. As a fallback for jyutping stored
+// without spaces (e.g. `cing2man6nei1dou6`), splits after each tone digit.
+// If syllable count still doesn't match CJK character count, falls back to
+// showing the full romanisation line above the text.
 // ---------------------------------------------------------------------------
 
 const CJK_REGEX = /[\u3400-\u9fff]/;
+
+function extractSyllables(romanisation: string): string[] {
+  // Primary: runs of letters/diacritics/digits — robust against punctuation
+  // glued onto syllables with no whitespace.
+  const matches = Array.from(romanisation.matchAll(/[\p{L}\p{M}\p{N}]+/gu)).map(
+    (m) => m[0],
+  );
+  return matches;
+}
+
+function splitJyutpingByTone(romanisation: string): string[] {
+  // Jyutping syllables end in a tone digit 1-6. Split after each digit so
+  // `cing2man6nei1dou6` -> ["cing2", "man6", "nei1", "dou6"].
+  const out: string[] = [];
+  const re = /[\p{L}\p{M}]+[1-6]/gu;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(romanisation)) !== null) out.push(m[0]);
+  return out;
+}
 
 function RubyLine({ text, romanisation }: { text: string; romanisation: string }) {
   const rendered = useMemo(() => {
     if (!text) return null;
 
-    const syllables = romanisation.trim().split(/\s+/).filter(Boolean);
     const cjkCharCount = Array.from(text).filter((c) => CJK_REGEX.test(c)).length;
+
+    let syllables = extractSyllables(romanisation);
+    if (syllables.length !== cjkCharCount) {
+      // Try jyutping tone-digit split for coach-edited Cantonese with no spaces
+      const toneSplit = splitJyutpingByTone(romanisation);
+      if (toneSplit.length === cjkCharCount) syllables = toneSplit;
+    }
 
     // Fallback: syllable count doesn't align with CJK characters — show as one
     // line of ruby above the whole sentence instead of per-character.
