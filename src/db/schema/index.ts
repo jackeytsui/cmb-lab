@@ -9,6 +9,7 @@ export * from "./conversations";
 export * from "./chat";
 export * from "./prompts";
 export * from "./notes";
+export * from "./notepad";
 export * from "./notifications";
 export * from "./uploads";
 export * from "./ghl";
