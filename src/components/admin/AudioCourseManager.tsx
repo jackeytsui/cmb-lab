@@ -129,7 +129,13 @@ function normalizeUploadError(error: unknown): string {
   return message;
 }
 
-const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes per file
+// Base 5 minutes + 10 seconds per MB. For a 124 MB file: ~25 min window.
+// A hard upper cap of 90 minutes prevents a hung upload from hanging forever.
+function uploadTimeoutForFile(sizeBytes: number): number {
+  const sizeMb = sizeBytes / (1024 * 1024);
+  const ms = 5 * 60 * 1000 + Math.ceil(sizeMb) * 10 * 1000;
+  return Math.min(ms, 90 * 60 * 1000);
+}
 
 async function preflightUploadCheck(): Promise<void> {
   const controller = new AbortController();
@@ -164,7 +170,11 @@ async function uploadFile(
   console.log(`[audio-upload] starting SDK upload for "${file.name}" (${formatSize(file.size)})`);
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  const timeoutMs = uploadTimeoutForFile(file.size);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  console.log(
+    `[audio-upload] timeout budget: ${Math.round(timeoutMs / 60000)} min`,
+  );
 
   try {
     const result = await upload(pathname, file, {
