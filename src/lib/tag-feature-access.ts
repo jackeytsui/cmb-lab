@@ -96,7 +96,8 @@ export async function userHasLtoStudentTag(userId: string): Promise<boolean> {
 
 /**
  * Apply feature tag overrides to a base feature set.
- * Removes denied features, adds allowed features.
+ * Adds allowed features, then removes denied features.
+ * Deny ALWAYS wins over allow (matches hasFeatureWithTagOverrides semantics).
  */
 export function applyFeatureTagOverrides(
   baseFeatures: Iterable<string>,
@@ -104,12 +105,13 @@ export function applyFeatureTagOverrides(
 ): Set<string> {
   const next = new Set<string>(baseFeatures);
 
-  for (const denied of overrides.deny) {
-    next.delete(denied);
-  }
-
+  // Apply allow first so deny can override conflicting grants from other tags
   for (const allowed of overrides.allow) {
     next.add(allowed);
+  }
+
+  for (const denied of overrides.deny) {
+    next.delete(denied);
   }
 
   return next;
