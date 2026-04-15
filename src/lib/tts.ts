@@ -219,6 +219,12 @@ export async function synthesizeSpeechElevenLabs(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
+  // Model is configurable. Default to multilingual_v2 (no language_code allowed).
+  // If the env names a *_v2_5 model (turbo/flash), include language_code: "yue"
+  // since those DO accept the parameter and route Cantonese more accurately.
+  const modelId = process.env.ELEVENLABS_CANTONESE_MODEL || "eleven_multilingual_v2";
+  const supportsLanguageCode = /v2_5|turbo|flash/i.test(modelId);
+
   try {
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -231,8 +237,8 @@ export async function synthesizeSpeechElevenLabs(
         },
         body: JSON.stringify({
           text,
-          model_id: "eleven_multilingual_v2",
-          language_code: "yue",
+          model_id: modelId,
+          ...(supportsLanguageCode ? { language_code: "yue" } : {}),
           voice_settings: { stability, similarity_boost: similarityBoost, speed },
         }),
         signal: controller.signal,
