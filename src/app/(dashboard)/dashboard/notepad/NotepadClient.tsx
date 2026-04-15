@@ -15,6 +15,7 @@ import {
   Download,
   Loader2,
   Check,
+  ArrowRightLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -160,11 +161,16 @@ async function deleteNote(id: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Single saved note render (with inline edit + star + delete)
+// Single saved note render — mirrors ICGC NoteCard layout:
+// inline action row above content (visible on hover, hidden during edit).
+// Edit mode exposes 3 fields: text, romanization, translation.
+// NotebookPen toggles a per-note explanation/notes section.
+// ArrowRightLeft copies (translates) the note to the other pane.
 // ---------------------------------------------------------------------------
 
 function NoteRow({
   note,
+  index,
   language,
   scriptMode,
   fontSize,
@@ -172,15 +178,24 @@ function NoteRow({
   onDelete,
   onToggleStar,
   onSaveEdit,
+  onSaveExplanation,
+  onCopyOver,
 }: {
   note: NotepadNote;
+  index: number;
   language: Language;
   scriptMode: ScriptMode;
   fontSize: number;
   toneColorsEnabled: boolean;
   onDelete: () => void;
   onToggleStar: () => void;
-  onSaveEdit: (textOverride: string | null) => void;
+  onSaveEdit: (updates: {
+    textOverride: string | null;
+    romanizationOverride: string | null;
+    translationOverride: string | null;
+  }) => void;
+  onSaveExplanation: (explanation: string | null) => void;
+  onCopyOver: () => Promise<void>;
 }) {
   const baseText = note.textOverride ?? note.text;
   const processed = useProcessedChineseText({
@@ -190,120 +205,284 @@ function NoteRow({
   });
 
   const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState(baseText);
+  const [draftText, setDraftText] = useState(baseText);
+  const [draftRomanization, setDraftRomanization] = useState(
+    note.romanizationOverride ?? "",
+  );
+  const [draftTranslation, setDraftTranslation] = useState(
+    note.translationOverride ?? "",
+  );
+
+  // Explanation state
+  const [showExplanation, setShowExplanation] = useState(!!note.explanation);
+  const [explanationDraft, setExplanationDraft] = useState(note.explanation ?? "");
+  const [isEditingExplanation, setIsEditingExplanation] = useState(
+    !note.explanation,
+  );
+  const [isCopyingOver, setIsCopyingOver] = useState(false);
+
+  const startEditing = () => {
+    setDraftText(baseText);
+    setDraftRomanization(note.romanizationOverride ?? "");
+    setDraftTranslation(note.translationOverride ?? "");
+    setIsEditing(true);
+  };
 
   const handleSave = () => {
-    const next = draft.trim();
-    onSaveEdit(next && next !== note.text ? next : null);
+    const t = draftText.trim();
+    onSaveEdit({
+      textOverride: t && t !== note.text ? t : null,
+      romanizationOverride: draftRomanization.trim() || null,
+      translationOverride: draftTranslation.trim() || null,
+    });
     setIsEditing(false);
   };
 
+  const handleExplanationSave = () => {
+    onSaveExplanation(explanationDraft.trim() || null);
+    setIsEditingExplanation(false);
+  };
+
+  const handleCopyOver = async () => {
+    if (isCopyingOver) return;
+    setIsCopyingOver(true);
+    try {
+      await onCopyOver();
+    } finally {
+      setIsCopyingOver(false);
+    }
+  };
+
+  const otherLangLabel = language === "zh-CN" ? "Cantonese" : "Mandarin";
+
   return (
-    <div className="group relative rounded-md border border-border bg-background p-3 space-y-2">
-      {/* Hover actions */}
-      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          type="button"
-          onClick={onToggleStar}
-          title={note.starred === 1 ? "Unstar" : "Star"}
-          className="size-7 rounded-md border border-border hover:bg-accent flex items-center justify-center"
-        >
-          <Star
-            className={cn(
-              "size-3.5",
-              note.starred === 1
-                ? "fill-amber-400 text-amber-400"
-                : "text-muted-foreground",
-            )}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setDraft(baseText);
-            setIsEditing((v) => !v);
-          }}
-          title="Edit text"
-          className="size-7 rounded-md border border-border hover:bg-accent flex items-center justify-center"
-        >
-          <Pencil className="size-3.5 text-muted-foreground" />
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          title="Delete"
-          className="size-7 rounded-md border border-border hover:bg-red-500/10 hover:border-red-500/40 flex items-center justify-center"
-        >
-          <Trash2 className="size-3.5 text-muted-foreground" />
-        </button>
-      </div>
-
-      {note.starred === 1 && !isEditing && (
-        <Star className="size-3 fill-amber-400 text-amber-400 absolute top-3 left-3" />
-      )}
-
-      {isEditing ? (
-        <div className="space-y-2">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSave();
-              } else if (e.key === "Escape") {
-                setIsEditing(false);
-              }
-            }}
-            rows={2}
-            autoFocus
-            className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          <div className="flex items-center gap-2">
+    <div className="rounded-md border border-border bg-background p-3 flex gap-2">
+      <span className="self-start inline-flex min-w-5 justify-center text-[10px] text-muted-foreground pt-1">
+        {index + 1}.
+      </span>
+      <div className="flex-1 space-y-2 min-w-0">
+        {/* Action row — inline, hidden during edit */}
+        {!isEditing && (
+          <div className="flex items-center justify-end gap-1 -mb-1">
             <button
               type="button"
-              onClick={handleSave}
-              className="rounded-md border border-input bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-accent"
+              onClick={onToggleStar}
+              title={note.starred === 1 ? "Unstar" : "Star note"}
+              className={cn(
+                "inline-flex size-6 items-center justify-center rounded transition-colors",
+                note.starred === 1
+                  ? "text-amber-500"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
             >
-              Save
+              <Star className={cn("size-3.5", note.starred === 1 && "fill-amber-400")} />
             </button>
             <button
               type="button"
-              onClick={() => setIsEditing(false)}
-              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={handleCopyOver}
+              disabled={isCopyingOver}
+              title={`Copy over to ${otherLangLabel}`}
+              className="inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:text-cyan-500 transition-colors disabled:opacity-50"
             >
-              Cancel
+              {isCopyingOver ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <ArrowRightLeft className="size-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowExplanation((p) => !p)}
+              title="Add notes / explanation"
+              className={cn(
+                "inline-flex size-6 items-center justify-center rounded transition-colors",
+                showExplanation || note.explanation
+                  ? "text-violet-500"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <NotebookPen className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={startEditing}
+              title="Edit note"
+              className="inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              title="Delete note"
+              className="inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:text-red-500"
+            >
+              <Trash2 className="size-3.5" />
             </button>
           </div>
-        </div>
-      ) : processed.segments.length > 0 ? (
-        <ReaderTextArea
-          segments={processed.segments}
-          showPinyin={language === "zh-CN"}
-          showJyutping={language === "zh-HK"}
-          showEnglish={true}
-          translationMode="proper"
-          fontSize={fontSize}
-          language={language}
-          onSpeakSentence={processed.handleSpeakSentence}
-          isSpeaking={processed.isPlaying || processed.ttsLoading}
-          speakingText={processed.speakingText}
-          ttsError={processed.ttsError}
-          translationCache={processed.translationCache}
-          onTranslationFetched={(text, translation) => {
-            processed.setTranslationCache((prev) => {
-              const next = new Map(prev);
-              next.set(text, translation);
-              return next;
-            });
-          }}
-          batchTranslations={processed.batchTranslations}
-          isTranslating={processed.isTranslating}
-          toneColorsEnabled={toneColorsEnabled}
-        />
-      ) : (
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      )}
+        )}
+
+        {/* Body: edit mode OR rendered output */}
+        {isEditing ? (
+          <div className="space-y-2">
+            <textarea
+              value={draftText}
+              onChange={(e) => setDraftText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSave();
+                }
+              }}
+              rows={3}
+              autoFocus
+              className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              placeholder="Chinese text"
+            />
+            <input
+              value={draftRomanization}
+              onChange={(e) => setDraftRomanization(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSave();
+                }
+              }}
+              className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              placeholder={language === "zh-HK" ? "Jyutping (override)" : "Pinyin (override)"}
+            />
+            <textarea
+              value={draftTranslation}
+              onChange={(e) => setDraftTranslation(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSave();
+                }
+              }}
+              rows={2}
+              className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              placeholder="English translation (override)"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSave}
+                className="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium text-foreground hover:border-primary/40 transition-colors"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="rounded-md border border-input bg-background px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : processed.segments.length > 0 ? (
+          <ReaderTextArea
+            segments={processed.segments}
+            showPinyin={language === "zh-CN"}
+            showJyutping={language === "zh-HK"}
+            showEnglish={true}
+            translationMode="proper"
+            fontSize={fontSize}
+            language={language}
+            onSpeakSentence={processed.handleSpeakSentence}
+            isSpeaking={processed.isPlaying || processed.ttsLoading}
+            speakingText={processed.speakingText}
+            ttsError={processed.ttsError}
+            translationCache={
+              note.translationOverride
+                ? new Map([[baseText, note.translationOverride]])
+                : processed.translationCache
+            }
+            onTranslationFetched={(text, translation) => {
+              processed.setTranslationCache((prev) => {
+                const next = new Map(prev);
+                next.set(text, translation);
+                return next;
+              });
+            }}
+            batchTranslations={processed.batchTranslations}
+            isTranslating={processed.isTranslating}
+            toneColorsEnabled={toneColorsEnabled}
+          />
+        ) : (
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        )}
+
+        {/* Explanation / notes section */}
+        {(showExplanation || note.explanation) && !isEditing && (
+          <div className="mt-2 border-t border-border/50 pt-2">
+            {isEditingExplanation ? (
+              <div className="space-y-1.5">
+                <textarea
+                  value={explanationDraft}
+                  onChange={(e) => setExplanationDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleExplanationSave();
+                    }
+                  }}
+                  rows={2}
+                  autoFocus
+                  className="w-full rounded-md border border-violet-500/25 bg-violet-500/5 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30 resize-y"
+                  placeholder="Add notes or explanation for this entry..."
+                />
+                <div className="flex items-center justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingExplanation(false);
+                      setExplanationDraft(note.explanation ?? "");
+                    }}
+                    className="rounded px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExplanationSave}
+                    className="rounded px-2 py-0.5 text-[10px] font-medium bg-violet-500/15 text-violet-500 hover:bg-violet-500/25 transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="group/exp flex items-start gap-1.5">
+                <p className="flex-1 text-xs text-violet-400/80 whitespace-pre-wrap leading-relaxed">
+                  {note.explanation}
+                </p>
+                <div className="shrink-0 flex gap-1 opacity-0 group-hover/exp:opacity-100 transition-all">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingExplanation(true)}
+                    className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExplanationDraft("");
+                      setIsEditingExplanation(true);
+                      onSaveExplanation(null);
+                    }}
+                    className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-red-500 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -323,6 +502,7 @@ function NotepadPane({
   onCreate,
   onUpdateNote,
   onDeleteNote,
+  onCopyOverNote,
   toneColorsEnabled,
   notesAscending,
   onToggleSort,
@@ -339,6 +519,7 @@ function NotepadPane({
   onCreate: (pane: Pane, text: string) => Promise<void>;
   onUpdateNote: (id: string, updates: Parameters<typeof patchNote>[1]) => Promise<void>;
   onDeleteNote: (id: string) => Promise<void>;
+  onCopyOverNote: (id: string) => Promise<void>;
   toneColorsEnabled: boolean;
   notesAscending: boolean;
   onToggleSort: () => void;
@@ -516,10 +697,11 @@ function NotepadPane({
             </button>
           </div>
           <div className="space-y-2">
-            {sortedNotes.map((note) => (
+            {sortedNotes.map((note, index) => (
               <NoteRow
                 key={note.id}
                 note={note}
+                index={index}
                 language={language}
                 scriptMode={scriptMode}
                 fontSize={fontSize}
@@ -530,9 +712,11 @@ function NotepadPane({
                     starred: note.starred === 1 ? 0 : 1,
                   })
                 }
-                onSaveEdit={(textOverride) =>
-                  void onUpdateNote(note.id, { textOverride })
+                onSaveEdit={(updates) => void onUpdateNote(note.id, updates)}
+                onSaveExplanation={(explanation) =>
+                  void onUpdateNote(note.id, { explanation })
                 }
+                onCopyOver={() => onCopyOverNote(note.id)}
               />
             ))}
           </div>
@@ -611,6 +795,43 @@ export function NotepadClient() {
     }
   }, []);
 
+  const handleCopyOver = useCallback(
+    async (id: string) => {
+      const source = notes.find((n) => n.id === id);
+      if (!source) return;
+      const sourceText = source.textOverride ?? source.text;
+      const fromLang = source.pane;
+      const toLang: Pane = source.pane === "mandarin" ? "cantonese" : "mandarin";
+      try {
+        const res = await fetch("/api/coaching/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: sourceText, fromLang, toLang }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setErrorMsg(data.error ?? `Copy-over failed (${res.status})`);
+          return;
+        }
+        const data = await res.json();
+        if (!data.translated) {
+          setErrorMsg("Translation came back empty");
+          return;
+        }
+        const { note: created, error } = await createNote(toLang, data.translated);
+        if (created) {
+          setNotes((prev) => [created, ...prev]);
+          flashSaved();
+        } else {
+          setErrorMsg(error ?? "Failed to save translated note");
+        }
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : "Copy-over failed");
+      }
+    },
+    [notes],
+  );
+
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
@@ -682,6 +903,7 @@ export function NotepadClient() {
           onCreate={handleCreate}
           onUpdateNote={handleUpdate}
           onDeleteNote={handleDelete}
+          onCopyOverNote={handleCopyOver}
           toneColorsEnabled={toneColorsEnabled}
           notesAscending={notesAscending}
           onToggleSort={() => setNotesAscending((v) => !v)}
@@ -699,6 +921,7 @@ export function NotepadClient() {
           onCreate={handleCreate}
           onUpdateNote={handleUpdate}
           onDeleteNote={handleDelete}
+          onCopyOverNote={handleCopyOver}
           toneColorsEnabled={toneColorsEnabled}
           notesAscending={notesAscending}
           onToggleSort={() => setNotesAscending((v) => !v)}

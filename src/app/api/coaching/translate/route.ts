@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { auth } from "@clerk/nextjs/server";
 
 export async function POST(request: Request) {
-  const isCoachOrAdmin = await hasMinimumRole("coach");
-  if (!isCoachOrAdmin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Any authenticated user — also called by /dashboard/notepad copy-over.
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();
