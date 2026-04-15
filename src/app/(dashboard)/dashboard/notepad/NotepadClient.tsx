@@ -104,18 +104,24 @@ async function fetchNotes(): Promise<NotepadNote[]> {
   }
 }
 
-async function createNote(pane: Pane, text: string): Promise<NotepadNote | null> {
+async function createNote(
+  pane: Pane,
+  text: string,
+): Promise<{ note: NotepadNote | null; error: string | null }> {
   try {
     const res = await fetch("/api/notepad/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pane, text }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { note: null, error: data.error ?? `Failed (${res.status})` };
+    }
     const data = await res.json();
-    return data.note ?? null;
-  } catch {
-    return null;
+    return { note: data.note ?? null, error: null };
+  } catch (err) {
+    return { note: null, error: err instanceof Error ? err.message : "Network error" };
   }
 }
 
@@ -574,11 +580,16 @@ export function NotepadClient() {
     setTimeout(() => setSaveFlash(false), 1500);
   };
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const handleCreate = useCallback(async (pane: Pane, text: string) => {
-    const created = await createNote(pane, text);
-    if (created) {
-      setNotes((prev) => [created as NotepadNote, ...prev]);
+    const { note, error } = await createNote(pane, text);
+    if (note) {
+      setNotes((prev) => [note, ...prev]);
       flashSaved();
+      setErrorMsg(null);
+    } else {
+      setErrorMsg(error ?? "Failed to save note");
     }
   }, []);
 
@@ -647,6 +658,18 @@ export function NotepadClient() {
           </span>
         )}
       </div>
+      {errorMsg && (
+        <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300 flex items-center justify-between gap-3">
+          <span>{errorMsg}</span>
+          <button
+            type="button"
+            onClick={() => setErrorMsg(null)}
+            className="text-xs underline hover:no-underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="flex flex-col lg:flex-row gap-4">
         <NotepadPane
           pane="mandarin"
