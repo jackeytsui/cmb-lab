@@ -55,6 +55,78 @@ interface ScriptPracticeClientProps {
 }
 
 // ---------------------------------------------------------------------------
+// Ruby renderer: align stored romanization syllables over each CJK character.
+// Non-CJK characters (punctuation, English, spaces) pass through without ruby.
+// Respects coach-edited romanisation text — splits by whitespace to get syllables.
+// If syllable count doesn't match CJK character count, falls back to showing the
+// full romanisation line above the text.
+// ---------------------------------------------------------------------------
+
+const CJK_REGEX = /[\u3400-\u9fff]/;
+
+function RubyLine({ text, romanisation }: { text: string; romanisation: string }) {
+  const rendered = useMemo(() => {
+    if (!text) return null;
+
+    const syllables = romanisation.trim().split(/\s+/).filter(Boolean);
+    const cjkCharCount = Array.from(text).filter((c) => CJK_REGEX.test(c)).length;
+
+    // Fallback: syllable count doesn't align with CJK characters — show as one
+    // line of ruby above the whole sentence instead of per-character.
+    const canAlign = cjkCharCount > 0 && syllables.length === cjkCharCount;
+
+    if (!canAlign) {
+      return (
+        <div className="space-y-1">
+          {romanisation && (
+            <p className="text-base font-medium tracking-wide text-muted-foreground">
+              {romanisation}
+            </p>
+          )}
+          <p className="text-2xl font-medium text-foreground leading-relaxed">
+            {text}
+          </p>
+        </div>
+      );
+    }
+
+    let syllableIdx = 0;
+    const nodes: React.ReactNode[] = [];
+    Array.from(text).forEach((char, i) => {
+      if (CJK_REGEX.test(char)) {
+        nodes.push(
+          <ruby key={i} className="ruby-aligned">
+            {char}
+            <rp>(</rp>
+            <rt className="text-sm font-medium tracking-wide text-muted-foreground">
+              {syllables[syllableIdx++]}
+            </rt>
+            <rp>)</rp>
+          </ruby>
+        );
+      } else {
+        // Non-CJK (punctuation, English) — still wrap in ruby with empty rt so
+        // baseline stays consistent across the line.
+        nodes.push(
+          <ruby key={i} className="ruby-aligned">
+            {char}
+            <rt className="text-sm">&nbsp;</rt>
+          </ruby>
+        );
+      }
+    });
+
+    return (
+      <p className="text-2xl font-medium text-foreground leading-[2.4]">
+        {nodes}
+      </p>
+    );
+  }, [text, romanisation]);
+
+  return rendered;
+}
+
+// ---------------------------------------------------------------------------
 // Single language bubble (used inside the split line)
 // ---------------------------------------------------------------------------
 
@@ -87,10 +159,7 @@ function LangBubble({
       <span className={cn("text-[10px] uppercase tracking-wider font-bold", labelColor)}>
         {label}
       </span>
-      <p className={cn("text-xs font-medium tracking-wide text-muted-foreground")}>
-        {displayRomanisation}
-      </p>
-      <p className="text-lg font-medium text-foreground">{text}</p>
+      <RubyLine text={text} romanisation={displayRomanisation} />
       <button
         type="button"
         onClick={onPlay}
