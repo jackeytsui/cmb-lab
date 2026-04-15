@@ -106,16 +106,30 @@ export async function POST(req: NextRequest) {
   const pathname = `conversation-scripts/${line.scriptId}/${line.id}/regen-${isCantonese ? "yue" : "cmn"}-${Date.now()}.mp3`;
   let blobUrl: string;
   try {
+    // Match the pattern used by submissions/upload (works in prod):
+    // no explicit token (SDK auto-reads BLOB_READ_WRITE_TOKEN), public access,
+    // addRandomSuffix to avoid collisions on retries.
     const blob = await put(pathname, audio, {
       access: "public",
       contentType: "audio/mpeg",
       addRandomSuffix: true,
-      token: process.env.BLOB_READ_WRITE_TOKEN,
     });
     blobUrl = blob.url;
   } catch (err) {
     console.error("[regenerate-audio] Blob upload failure:", err);
-    return NextResponse.json({ error: "Failed to store generated audio" }, { status: 502 });
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      {
+        error: `Failed to store generated audio: ${message}`,
+        hint:
+          message.toLowerCase().includes("token") || message.toLowerCase().includes("auth")
+            ? "Check BLOB_READ_WRITE_TOKEN env var on Vercel"
+            : message.toLowerCase().includes("access")
+              ? "Vercel Blob store may be in private mode — see existing AdminScriptsClient pattern"
+              : undefined,
+      },
+      { status: 502 },
+    );
   }
 
   // 4. Update just this one column on this line (non-destructive — does NOT touch
