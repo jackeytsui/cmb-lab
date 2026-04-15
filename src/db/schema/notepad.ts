@@ -30,3 +30,27 @@ export const notepadEntries = pgTable(
 
 export type NotepadEntry = typeof notepadEntries.$inferSelect;
 export type NewNotepadEntry = typeof notepadEntries.$inferInsert;
+
+/**
+ * Saved notes inside a user's Notepad. Each Enter commits one note.
+ * Modeled on coaching sessionNotes but lives outside of any session.
+ */
+export const notepadNotes = pgTable("notepad_notes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  pane: text("pane").notNull(), // 'mandarin' | 'cantonese'
+  text: text("text").notNull(), // committed Traditional Chinese source
+  order: integer("order").notNull().default(0),
+  starred: integer("starred").notNull().default(0), // 0/1
+  textOverride: text("text_override"),
+  romanizationOverride: text("romanization_override"),
+  translationOverride: text("translation_override"),
+  explanation: text("explanation"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type NotepadNote = typeof notepadNotes.$inferSelect;
+export type NewNotepadNote = typeof notepadNotes.$inferInsert;
