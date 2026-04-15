@@ -1058,6 +1058,7 @@ function CoachingPanel({
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showAllSessions, setShowAllSessions] = useState(false);
+  const [notesAscending, setNotesAscending] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingSessionName, setEditingSessionName] = useState("");
@@ -1351,12 +1352,16 @@ function CoachingPanel({
   );
   const mandarinNotes = useMemo(() => {
     const notes = (activeSession?.notes ?? []).filter((n) => n.pane === "mandarin");
-    return [...notes].sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
-  }, [activeSession]);
+    return [...notes].sort((a, b) =>
+      notesAscending ? (a.order ?? 0) - (b.order ?? 0) : (b.order ?? 0) - (a.order ?? 0),
+    );
+  }, [activeSession, notesAscending]);
   const cantoneseNotes = useMemo(() => {
     const notes = (activeSession?.notes ?? []).filter((n) => n.pane === "cantonese");
-    return [...notes].sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
-  }, [activeSession]);
+    return [...notes].sort((a, b) =>
+      notesAscending ? (a.order ?? 0) - (b.order ?? 0) : (b.order ?? 0) - (a.order ?? 0),
+    );
+  }, [activeSession, notesAscending]);
 
   useEffect(() => {
     if (sessionType === "one-on-one" && !canWrite && userEmail) {
@@ -2574,8 +2579,18 @@ function CoachingPanel({
 
           {activeSession && mandarinNotes.length > 0 && (
             <div className="mt-4 space-y-2">
-              <div className="text-xs font-medium text-muted-foreground">
-                Session Notes (Mandarin)
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Session Notes (Mandarin)
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNotesAscending((v) => !v)}
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  title={notesAscending ? "Showing oldest first" : "Showing newest first"}
+                >
+                  {notesAscending ? "↑ Oldest first" : "↓ Newest first"}
+                </button>
               </div>
               <div className="space-y-2">
                 {mandarinNotes.map((note, index) => (
@@ -2859,8 +2874,18 @@ function CoachingPanel({
 
           {activeSession && cantoneseNotes.length > 0 && (
             <div className="mt-4 space-y-2">
-              <div className="text-xs font-medium text-muted-foreground">
-                Session Notes (Cantonese)
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Session Notes (Cantonese)
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNotesAscending((v) => !v)}
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  title={notesAscending ? "Showing oldest first" : "Showing newest first"}
+                >
+                  {notesAscending ? "↑ Oldest first" : "↓ Newest first"}
+                </button>
               </div>
               <div className="space-y-2">
                 {cantoneseNotes.map((note, index) => (
