@@ -67,25 +67,39 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2. Synthesize. Mirror /api/tts provider priority for the common cases:
-  //    - Cantonese: ElevenLabs (if configured) → Azure
-  //    - Mandarin: Azure (OpenAI admin support can be added later if needed)
-  let audio: Buffer;
-  try {
-    const hasElevenLabs = Boolean(
-      process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_CANTONESE_VOICE_ID,
-    );
-    if (isCantonese && hasElevenLabs) {
+  // 2. Synthesize. Cantonese: ElevenLabs (if configured) with Azure fallback;
+  //    Mandarin: Azure direct. ElevenLabs failures are common (model/language
+  //    combos, voice config drift, quota), so a fallback keeps the feature
+  //    working — the regenerated audio just won't be the ElevenLabs voice.
+  const hasElevenLabs = Boolean(
+    process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_CANTONESE_VOICE_ID,
+  );
+
+  let audio: Buffer | null = null;
+  let primaryError: string | null = null;
+
+  if (isCantonese && hasElevenLabs) {
+    try {
       audio = await synthesizeSpeechElevenLabs(text, "medium");
-    } else {
+    } catch (err) {
+      primaryError = err instanceof Error ? err.message : "ElevenLabs failed";
+      console.warn("[regenerate-audio] ElevenLabs failed, falling back to Azure:", err);
+    }
+  }
+
+  if (!audio) {
+    try {
       const { voiceName, lang } = resolveVoice(isCantonese ? "zh-HK" : "zh-CN");
       const ssml = buildSSML(text, voiceName, lang, "medium");
       audio = await synthesizeSpeech(ssml);
+    } catch (err) {
+      const azureError = err instanceof Error ? err.message : "Azure failed";
+      console.error("[regenerate-audio] Azure failed:", err);
+      const combined = primaryError
+        ? `Both providers failed. ElevenLabs: ${primaryError}. Azure: ${azureError}`
+        : azureError;
+      return NextResponse.json({ error: combined }, { status: 502 });
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "TTS synthesis failed";
-    console.error("[regenerate-audio] TTS failure:", err);
-    return NextResponse.json({ error: message }, { status: 502 });
   }
 
   // 3. Upload to Blob

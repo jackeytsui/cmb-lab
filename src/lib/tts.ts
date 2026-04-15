@@ -244,7 +244,12 @@ export async function synthesizeSpeechElevenLabs(
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`ElevenLabs TTS: API error ${response.status}:`, errorText);
-      throw new Error(`ElevenLabs TTS error: ${response.status}`);
+      // Include a snippet of the response body so callers can diagnose
+      // (e.g. "language_code 'yue' not supported for this model").
+      const snippet = errorText.slice(0, 300).replace(/\s+/g, " ").trim();
+      throw new Error(
+        `ElevenLabs TTS error: ${response.status}${snippet ? ` — ${snippet}` : ""}`,
+      );
     }
 
     return Buffer.from(await response.arrayBuffer());
