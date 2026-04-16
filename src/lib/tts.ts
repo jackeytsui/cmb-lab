@@ -171,9 +171,10 @@ export function buildCacheKey(
   voice: string,
   rate: string
 ): string {
-  // v4: bust cache for English language-switching in SSML
+  // v5: bust cache after ElevenLabs model migration (multilingual_v2 →
+  // turbo_v2_5) — old entries contain wrong-accent Cantonese audio.
   const hash = createHash("md5").update(text).digest("hex");
-  return `tts:v4:${language}:${voice}:${rate}:${hash}`;
+  return `tts:v5:${language}:${voice}:${rate}:${hash}`;
 }
 
 /**
@@ -219,10 +220,12 @@ export async function synthesizeSpeechElevenLabs(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-  // Model is configurable. Default to multilingual_v2 (no language_code allowed).
-  // If the env names a *_v2_5 model (turbo/flash), include language_code: "yue"
-  // since those DO accept the parameter and route Cantonese more accurately.
-  const modelId = process.env.ELEVENLABS_CANTONESE_MODEL || "eleven_multilingual_v2";
+  // Default to turbo_v2_5 — it accepts `language_code: "yue"`, which is the
+  // only ElevenLabs configuration that properly routes Cantonese text
+  // (without it, multilingual_v2 produces a Mandarin-inflected accent).
+  // Override via ELEVENLABS_CANTONESE_MODEL env if the configured voice_id
+  // needs a different model.
+  const modelId = process.env.ELEVENLABS_CANTONESE_MODEL || "eleven_turbo_v2_5";
   const supportsLanguageCode = /v2_5|turbo|flash/i.test(modelId);
 
   try {
