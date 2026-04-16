@@ -742,7 +742,8 @@ export function NotepadClient() {
   });
   const [hydrated, setHydrated] = useState(false);
   const [notes, setNotes] = useState<NotepadNote[]>([]);
-  const [notesAscending, setNotesAscending] = useState(false);
+  const [mandarinNotesAscending, setMandarinNotesAscending] = useState(false);
+  const [cantoneseNotesAscending, setCantoneseNotesAscending] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [saveFlash, setSaveFlash] = useState(false);
 
@@ -905,8 +906,8 @@ export function NotepadClient() {
           onDeleteNote={handleDelete}
           onCopyOverNote={handleCopyOver}
           toneColorsEnabled={toneColorsEnabled}
-          notesAscending={notesAscending}
-          onToggleSort={() => setNotesAscending((v) => !v)}
+          notesAscending={mandarinNotesAscending}
+          onToggleSort={() => setMandarinNotesAscending((v) => !v)}
           onExport={handleExport}
           exporting={exporting}
         />
@@ -923,8 +924,8 @@ export function NotepadClient() {
           onDeleteNote={handleDelete}
           onCopyOverNote={handleCopyOver}
           toneColorsEnabled={toneColorsEnabled}
-          notesAscending={notesAscending}
-          onToggleSort={() => setNotesAscending((v) => !v)}
+          notesAscending={cantoneseNotesAscending}
+          onToggleSort={() => setCantoneseNotesAscending((v) => !v)}
           onExport={handleExport}
           exporting={exporting}
         />
