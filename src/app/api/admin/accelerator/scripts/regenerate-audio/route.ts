@@ -106,12 +106,11 @@ export async function POST(req: NextRequest) {
   const pathname = `conversation-scripts/${line.scriptId}/${line.id}/regen-${isCantonese ? "yue" : "cmn"}-${Date.now()}.mp3`;
   let blobUrl: string;
   try {
-    // Match the pattern used by submissions/upload (works in prod):
-    // no explicit token (SDK auto-reads BLOB_READ_WRITE_TOKEN), public access,
-    // addRandomSuffix to avoid collisions on retries.
+    // CMB Lab Blob store is private-only — public access fails with 400.
     const blob = await put(pathname, audio, {
-      access: "public",
+      access: "private",
       contentType: "audio/mpeg",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
       addRandomSuffix: true,
     });
     blobUrl = blob.url;

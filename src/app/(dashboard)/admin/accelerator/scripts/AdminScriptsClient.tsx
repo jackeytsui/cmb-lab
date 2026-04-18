@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -265,14 +264,21 @@ export default function AdminScriptsClient() {
     setUploadingAudio(uploadKey);
 
     try {
-      const blob = await upload(
-        `conversation-scripts/${scriptId}/${lineId}/${file.name}`,
-        file,
-        {
-          access: "public",
-          handleUploadUrl: "/api/admin/accelerator/scripts/upload",
-        }
+      const form = new FormData();
+      form.append("file", file);
+      form.append(
+        "pathname",
+        `conversation-scripts/${scriptId}/${lineId}/${file.name}`
       );
+      const uploadRes = await fetch("/api/admin/accelerator/scripts/upload", {
+        method: "POST",
+        body: form,
+      });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json().catch(() => ({}));
+        throw new Error(err.error ?? `Upload failed (${uploadRes.status})`);
+      }
+      const { url: uploadedUrl } = (await uploadRes.json()) as { url: string };
 
       // Find the script and its lines, update the specific line's audio URL
       const script = scripts.find((s) => s.id === scriptId);
@@ -287,11 +293,11 @@ export default function AdminScriptsClient() {
         englishText: line.englishText,
         cantoneseAudioUrl:
           line.id === lineId && field === "cantoneseAudioUrl"
-            ? blob.url
+            ? uploadedUrl
             : line.cantoneseAudioUrl,
         mandarinAudioUrl:
           line.id === lineId && field === "mandarinAudioUrl"
-            ? blob.url
+            ? uploadedUrl
             : line.mandarinAudioUrl,
         sortOrder: line.sortOrder,
       }));
