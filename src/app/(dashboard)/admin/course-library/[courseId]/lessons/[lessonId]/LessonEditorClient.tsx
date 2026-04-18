@@ -595,7 +595,7 @@ function VideoLessonForm({
             <div className="rounded-md border border-dashed border-border bg-muted/30 p-6 text-center hover:bg-muted/50 transition-colors">
               <Upload className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
-                Click to upload MP4 (up to 500MB)
+                Click to upload MP4 (up to 10GB)
               </p>
             </div>
           </label>

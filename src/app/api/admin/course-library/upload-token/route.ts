@@ -14,7 +14,9 @@ export const maxDuration = 60;
  * scoped to course-library/.
  */
 
-const MAX_SIZE_BYTES = 500 * 1024 * 1024; // 500MB ceiling matches the UI hint
+// 10GB ceiling. Vercel Blob supports up to 5TB per blob; this is just a
+// sanity cap to prevent runaway uploads. Raise if team starts hitting it.
+const MAX_SIZE_BYTES = 10 * 1024 * 1024 * 1024;
 const PATHNAME_PREFIX = "course-library/";
 const ALLOWED_CONTENT_TYPES = [
   // video
