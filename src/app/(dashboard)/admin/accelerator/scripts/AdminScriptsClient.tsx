@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { playWithGain, type PlayWithGainHandle } from "@/lib/play-with-gain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -781,16 +782,14 @@ function AudioUploadButton({
   onRegenerate: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const handleRef = useRef<PlayWithGainHandle | null>(null);
   const [playing, setPlaying] = useState(false);
   const busy = uploading || regenerating;
 
   const stopPlayback = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.onended = null;
-      audioRef.current.onerror = null;
-      audioRef.current = null;
+    if (handleRef.current) {
+      handleRef.current.stop();
+      handleRef.current = null;
     }
     setPlaying(false);
   }, []);
@@ -802,21 +801,15 @@ function AudioUploadButton({
     }
     // Cache-bust so a just-uploaded replacement plays instead of a stale cached copy
     const url = `/api/accelerator/scripts/stream/${lineId}?field=${field}&t=${Date.now()}`;
-    const audio = new Audio(url);
-    audioRef.current = audio;
+    const handle = playWithGain(url);
+    handleRef.current = handle;
     setPlaying(true);
-    const finish = () => {
-      if (audioRef.current === audio) {
-        audioRef.current = null;
+    handle.ended.then(() => {
+      if (handleRef.current === handle) {
+        handleRef.current = null;
       }
       setPlaying(false);
-    };
-    audio.onended = finish;
-    audio.onerror = () => {
-      finish();
-      alert("Audio playback failed. The file may still be processing.");
-    };
-    audio.play().catch(finish);
+    });
   }, [playing, lineId, field, stopPlayback]);
 
   useEffect(() => () => stopPlayback(), [stopPlayback]);

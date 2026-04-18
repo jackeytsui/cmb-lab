@@ -14,6 +14,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTTS, type TTSOptions } from "@/hooks/useTTS";
 import { smartRomanise } from "@/lib/romanise";
+import { playWithGain, type PlayWithGainHandle } from "@/lib/play-with-gain";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -231,37 +232,32 @@ export default function ScriptPracticeClient({
   // TTS
   const { speak, stop: stopTTS, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
   const [playingLineKey, setPlayingLineKey] = useState<string | null>(null);
-  const uploadedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const uploadedHandleRef = useRef<PlayWithGainHandle | null>(null);
 
   // Any audio activity in progress — used to lock all play buttons
   const ttsBusy = ttsLoading || ttsPlaying || playingLineKey !== null;
 
   const stopAllAudio = useCallback(() => {
     stopTTS();
-    if (uploadedAudioRef.current) {
-      uploadedAudioRef.current.pause();
-      uploadedAudioRef.current.onended = null;
-      uploadedAudioRef.current.onerror = null;
-      uploadedAudioRef.current = null;
+    if (uploadedHandleRef.current) {
+      uploadedHandleRef.current.stop();
+      uploadedHandleRef.current = null;
     }
   }, [stopTTS]);
 
   const playUploaded = useCallback(
-    (lineId: string, lang: "cantonese" | "mandarin") =>
-      new Promise<void>((resolve) => {
-        const url = `/api/accelerator/scripts/stream/${lineId}?field=${lang}`;
-        const audio = new Audio(url);
-        uploadedAudioRef.current = audio;
-        const finish = () => {
-          if (uploadedAudioRef.current === audio) {
-            uploadedAudioRef.current = null;
-          }
-          resolve();
-        };
-        audio.onended = finish;
-        audio.onerror = finish;
-        audio.play().catch(finish);
-      }),
+    async (lineId: string, lang: "cantonese" | "mandarin") => {
+      const url = `/api/accelerator/scripts/stream/${lineId}?field=${lang}`;
+      const handle = playWithGain(url);
+      uploadedHandleRef.current = handle;
+      try {
+        await handle.ended;
+      } finally {
+        if (uploadedHandleRef.current === handle) {
+          uploadedHandleRef.current = null;
+        }
+      }
+    },
     [],
   );
 
