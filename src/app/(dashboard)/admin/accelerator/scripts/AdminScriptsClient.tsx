@@ -28,6 +28,8 @@ import {
   Volume2,
   X,
   Wand2,
+  Play,
+  Pause,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -520,6 +522,8 @@ export default function AdminScriptsClient() {
                         <div className="flex gap-3 pt-1">
                           <AudioUploadButton
                             label="Cantonese Audio"
+                            lineId={line.id}
+                            field="cantonese"
                             audioUrl={line.cantoneseAudioUrl}
                             uploading={
                               uploadingAudio ===
@@ -543,6 +547,8 @@ export default function AdminScriptsClient() {
                           />
                           <AudioUploadButton
                             label="Mandarin Audio"
+                            lineId={line.id}
+                            field="mandarin"
                             audioUrl={line.mandarinAudioUrl}
                             uploading={
                               uploadingAudio ===
@@ -757,6 +763,8 @@ export default function AdminScriptsClient() {
 
 function AudioUploadButton({
   label,
+  lineId,
+  field,
   audioUrl,
   uploading,
   regenerating,
@@ -764,6 +772,8 @@ function AudioUploadButton({
   onRegenerate,
 }: {
   label: string;
+  lineId: string;
+  field: "cantonese" | "mandarin";
   audioUrl: string | null;
   uploading: boolean;
   regenerating: boolean;
@@ -771,7 +781,51 @@ function AudioUploadButton({
   onRegenerate: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
   const busy = uploading || regenerating;
+
+  const stopPlayback = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current = null;
+    }
+    setPlaying(false);
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    if (playing) {
+      stopPlayback();
+      return;
+    }
+    // Cache-bust so a just-uploaded replacement plays instead of a stale cached copy
+    const url = `/api/accelerator/scripts/stream/${lineId}?field=${field}&t=${Date.now()}`;
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    setPlaying(true);
+    const finish = () => {
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+      setPlaying(false);
+    };
+    audio.onended = finish;
+    audio.onerror = () => {
+      finish();
+      alert("Audio playback failed. The file may still be processing.");
+    };
+    audio.play().catch(finish);
+  }, [playing, lineId, field, stopPlayback]);
+
+  useEffect(() => () => stopPlayback(), [stopPlayback]);
+
+  // If the stored URL changes (e.g. after regenerate or replace), stop any
+  // in-flight playback so the next click fetches the fresh file.
+  useEffect(() => {
+    stopPlayback();
+  }, [audioUrl, stopPlayback]);
 
   return (
     <div className="flex items-center gap-2">
@@ -788,8 +842,21 @@ function AudioUploadButton({
 
       {audioUrl ? (
         <div className="flex items-center gap-1">
-          <Volume2 className="w-3 h-3 text-green-400" />
-          <span className="text-xs text-green-400">{label}</span>
+          <button
+            type="button"
+            onClick={togglePlay}
+            disabled={busy}
+            className="inline-flex items-center gap-1 text-green-400 hover:text-green-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={playing ? "Stop" : "Play uploaded audio"}
+          >
+            {playing ? (
+              <Pause className="w-3 h-3" />
+            ) : (
+              <Play className="w-3 h-3" />
+            )}
+            <Volume2 className="w-3 h-3" />
+            <span className="text-xs">{label}</span>
+          </button>
           <Button
             type="button"
             variant="ghost"

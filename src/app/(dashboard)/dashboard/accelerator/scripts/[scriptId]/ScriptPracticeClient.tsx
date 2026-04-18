@@ -231,9 +231,39 @@ export default function ScriptPracticeClient({
   // TTS
   const { speak, stop: stopTTS, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
   const [playingLineKey, setPlayingLineKey] = useState<string | null>(null);
+  const uploadedAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Any TTS activity in progress — used to lock all play buttons
+  // Any audio activity in progress — used to lock all play buttons
   const ttsBusy = ttsLoading || ttsPlaying || playingLineKey !== null;
+
+  const stopAllAudio = useCallback(() => {
+    stopTTS();
+    if (uploadedAudioRef.current) {
+      uploadedAudioRef.current.pause();
+      uploadedAudioRef.current.onended = null;
+      uploadedAudioRef.current.onerror = null;
+      uploadedAudioRef.current = null;
+    }
+  }, [stopTTS]);
+
+  const playUploaded = useCallback(
+    (lineId: string, lang: "cantonese" | "mandarin") =>
+      new Promise<void>((resolve) => {
+        const url = `/api/accelerator/scripts/stream/${lineId}?field=${lang}`;
+        const audio = new Audio(url);
+        uploadedAudioRef.current = audio;
+        const finish = () => {
+          if (uploadedAudioRef.current === audio) {
+            uploadedAudioRef.current = null;
+          }
+          resolve();
+        };
+        audio.onended = finish;
+        audio.onerror = finish;
+        audio.play().catch(finish);
+      }),
+    [],
+  );
 
   // Play all state
   const [playingAllLang, setPlayingAllLang] = useState<"cantonese" | "mandarin" | null>(null);
@@ -273,13 +303,25 @@ export default function ScriptPracticeClient({
   );
 
   const handlePlayLine = useCallback(
-    (text: string, lang: "cantonese" | "mandarin", lineId: string) => {
-      const key = `${lineId}-${lang}`;
+    async (line: LineData, lang: "cantonese" | "mandarin") => {
+      const key = `${line.id}-${lang}`;
+      const uploadedUrl =
+        lang === "cantonese" ? line.cantoneseAudioUrl : line.mandarinAudioUrl;
+
+      stopAllAudio();
       setPlayingLineKey(key);
-      speak(text, { language: lang === "cantonese" ? "zh-HK" : "zh-CN" })
-        .finally(() => setPlayingLineKey(null));
+      try {
+        if (uploadedUrl) {
+          await playUploaded(line.id, lang);
+        } else {
+          const text = lang === "cantonese" ? line.cantoneseText : line.mandarinText;
+          await speak(text, { language: lang === "cantonese" ? "zh-HK" : "zh-CN" });
+        }
+      } finally {
+        setPlayingLineKey(null);
+      }
     },
-    [speak]
+    [speak, stopAllAudio, playUploaded]
   );
 
   // Play all for a language
@@ -287,13 +329,13 @@ export default function ScriptPracticeClient({
     async (lang: "cantonese" | "mandarin") => {
       if (playingAllLang === lang) {
         playAllAbortRef.current = true;
-        stopTTS();
+        stopAllAudio();
         setPlayingAllLang(null);
         setPlayingAllIndex(-1);
         return;
       }
 
-      stopTTS();
+      stopAllAudio();
       setPlayingAllLang(lang);
       playAllAbortRef.current = false;
 
@@ -302,28 +344,33 @@ export default function ScriptPracticeClient({
       for (let i = 0; i < lines.length; i++) {
         if (playAllAbortRef.current) break;
         setPlayingAllIndex(i);
-        const lineText = lang === "cantonese" ? lines[i].cantoneseText : lines[i].mandarinText;
+        const line = lines[i];
+        const uploadedUrl =
+          lang === "cantonese" ? line.cantoneseAudioUrl : line.mandarinAudioUrl;
 
-        // Play with a 15s safety timeout to prevent hanging on TTS errors
+        // 15s safety timeout prevents hanging on provider errors
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(resolve, 15000);
-          speak(lineText, { language: ttsLang })
-            .then(() => {
-              clearTimeout(timeout);
-              // Pause between lines for natural pacing
-              setTimeout(resolve, 600);
-            })
-            .catch(() => {
-              clearTimeout(timeout);
-              resolve();
-            });
+          const done = () => {
+            clearTimeout(timeout);
+            setTimeout(resolve, 600); // pacing between lines
+          };
+          const play = uploadedUrl
+            ? playUploaded(line.id, lang)
+            : speak(lang === "cantonese" ? line.cantoneseText : line.mandarinText, {
+                language: ttsLang,
+              });
+          play.then(done).catch(() => {
+            clearTimeout(timeout);
+            resolve();
+          });
         });
       }
 
       setPlayingAllLang(null);
       setPlayingAllIndex(-1);
     },
-    [playingAllLang, lines, speak, stopTTS]
+    [playingAllLang, lines, speak, stopAllAudio, playUploaded]
   );
 
   return (
@@ -461,8 +508,8 @@ export default function ScriptPracticeClient({
                   text={line.cantoneseText}
                   romanisation={line.cantoneseRomanisation}
                   labelColor="text-cyan-500"
-                  onPlay={() => handlePlayLine(line.cantoneseText, "cantonese", line.id)}
-                  isPlaying={playingLineKey === `${line.id}-cantonese` && ttsPlaying}
+                  onPlay={() => handlePlayLine(line, "cantonese")}
+                  isPlaying={playingLineKey === `${line.id}-cantonese`}
                   disabled={ttsBusy && playingLineKey !== `${line.id}-cantonese`}
                 />
                 <LangBubble
@@ -470,8 +517,8 @@ export default function ScriptPracticeClient({
                   text={line.mandarinText}
                   romanisation={line.mandarinRomanisation}
                   labelColor="text-red-500"
-                  onPlay={() => handlePlayLine(line.mandarinText, "mandarin", line.id)}
-                  isPlaying={playingLineKey === `${line.id}-mandarin` && ttsPlaying}
+                  onPlay={() => handlePlayLine(line, "mandarin")}
+                  isPlaying={playingLineKey === `${line.id}-mandarin`}
                   disabled={ttsBusy && playingLineKey !== `${line.id}-mandarin`}
                 />
               </div>
