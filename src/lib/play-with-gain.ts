@@ -11,7 +11,7 @@
  * unavailable (old browsers) or a MediaElementSource can't be created.
  */
 
-const DEFAULT_GAIN = 1.8;
+const DEFAULT_GAIN = 2.5;
 
 type WebkitWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
