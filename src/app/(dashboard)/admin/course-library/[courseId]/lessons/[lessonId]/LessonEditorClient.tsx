@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { upload } from "@vercel/blob/client";
 import {
   Loader2,
   Check,
@@ -35,8 +36,13 @@ const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: 
   download: { label: "Download Lesson", Icon: Download, color: "text-emerald-500" },
 };
 
-// Upload a file to our server endpoint via XHR so we get progress callbacks.
-function uploadWithProgress(
+// Vercel functions cap request bodies at ~4.5MB, so anything larger has
+// to go direct to Vercel Blob via @vercel/blob/client.upload() which
+// handles multipart internally. Small files still take the simple
+// server-POST path for simpler progress reporting.
+const DIRECT_UPLOAD_THRESHOLD = 4 * 1024 * 1024;
+
+function uploadSimple(
   kind: "video" | "file" | "image",
   file: File,
   abortSignal: AbortSignal,
@@ -78,6 +84,36 @@ function uploadWithProgress(
     abortSignal.addEventListener("abort", () => xhr.abort());
     xhr.send(formData);
   });
+}
+
+async function uploadDirect(
+  kind: "video" | "file" | "image",
+  file: File,
+  abortSignal: AbortSignal,
+  onProgress: (pct: number) => void,
+): Promise<{ url: string; filename: string; sizeBytes: number }> {
+  const pathname = `course-library/${kind}/${file.name}`;
+  const blob = await upload(pathname, file, {
+    access: "private",
+    contentType: file.type || "application/octet-stream",
+    handleUploadUrl: "/api/admin/course-library/upload-token",
+    multipart: true,
+    abortSignal,
+    onUploadProgress: ({ percentage }) => onProgress(Math.round(percentage)),
+  });
+  return { url: blob.url, filename: file.name, sizeBytes: file.size };
+}
+
+function uploadWithProgress(
+  kind: "video" | "file" | "image",
+  file: File,
+  abortSignal: AbortSignal,
+  onProgress: (pct: number) => void,
+): Promise<{ url: string; filename: string; sizeBytes: number }> {
+  if (file.size > DIRECT_UPLOAD_THRESHOLD) {
+    return uploadDirect(kind, file, abortSignal, onProgress);
+  }
+  return uploadSimple(kind, file, abortSignal, onProgress);
 }
 
 async function saveLessonContent(
