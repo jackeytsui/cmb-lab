@@ -172,17 +172,35 @@ export async function POST(request: NextRequest) {
     });
 
     const parsed = extractJsonArray(rawResponse);
-    if (!parsed) {
+    let translatedCleaned: string[];
+    if (parsed) {
+      translatedCleaned = parsed.map((t: unknown) =>
+        typeof t === "string" ? t : String(t),
+      );
+    } else if (cleanedWithIndex.length === 1) {
+      // Fallback: for single-sentence inputs (especially short phrases like
+      // 关于/你好), GPT-4o-mini sometimes returns a bare string instead of a
+      // JSON array. Treat the whole response as the translation.
+      const fallback = rawResponse
+        .trim()
+        .replace(/^```(?:json)?\s*|```$/g, "")
+        .replace(/^["'`\[]+|["'`\]]+$/g, "")
+        .trim();
+      if (!fallback) {
+        console.error("Empty translation response:", rawResponse.slice(0, 500));
+        return NextResponse.json(
+          { error: "Failed to parse translation response" },
+          { status: 500 },
+        );
+      }
+      translatedCleaned = [fallback];
+    } else {
       console.error("Failed to parse translation JSON:", rawResponse.slice(0, 500));
       return NextResponse.json(
         { error: "Failed to parse translation response" },
         { status: 500 },
       );
     }
-
-    const translatedCleaned: string[] = parsed.map((t: unknown) =>
-      typeof t === "string" ? t : String(t),
-    );
 
     // Preserve original sentence indices so client mapping remains stable.
     const alignedTranslations: string[] = Array.from({ length: texts.length }, () => "");

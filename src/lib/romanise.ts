@@ -1,5 +1,6 @@
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
+import { toSimplifiedSync } from "@/lib/chinese-convert";
 
 /**
  * Generate romanisation for mixed Chinese/English text.
@@ -27,7 +28,10 @@ export function smartRomanise(
         const list = ToJyutping.getJyutpingList(seg);
         return list?.map(([, jp]) => jp ?? "").join(" ").trim() || "";
       }
-      return pinyin(seg, { toneType: "symbol" });
+      // Mandarin pinyin lookup is unreliable for Traditional characters with
+      // multiple readings — e.g. 於 returns "wū" (classical) instead of "yú".
+      // Always derive pinyin from the Simplified form (source of truth).
+      return pinyin(toSimplifiedSync(seg), { toneType: "symbol" });
     })
     .filter(Boolean)
     .join(" ")

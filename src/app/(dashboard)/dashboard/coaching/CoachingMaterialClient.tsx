@@ -5,7 +5,7 @@ import { ReaderTextArea } from "@/components/reader/ReaderTextArea";
 import { WordSpan } from "@/components/reader/WordSpan";
 import { segmentText, type WordSegment } from "@/lib/segmenter";
 import { detectSentences } from "@/lib/sentences";
-import { convertScript } from "@/lib/chinese-convert";
+import { convertScript, ensureSimplifiedConverter } from "@/lib/chinese-convert";
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
@@ -435,11 +435,29 @@ function NoteCard({
   const [isEditingExplanation, setIsEditingExplanation] = useState(!note.explanation);
   const explanationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Preload the Traditional→Simplified converter so smartRomanise() (which
+  // routes through toSimplifiedSync) gets correct pinyin for Traditional
+  // characters like 於 that have a different default reading in pinyin-pro.
+  const [converterReady, setConverterReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    ensureSimplifiedConverter().then(() => {
+      if (!cancelled) setConverterReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // converterReady is a no-op dependency that forces recomputation once the
+  // Simplified converter loads — smartRomanise returns wrong pinyin for
+  // Traditional text (e.g. 於 → "wū") until toSimplifiedSync works.
   const defaultRomanization = useMemo(() => {
     if (!baseText.trim()) return "";
+    void converterReady;
     const lang = noteLanguage === "zh-HK" ? "cantonese" : "mandarin";
     return smartRomanise(baseText, lang);
-  }, [baseText, noteLanguage]);
+  }, [baseText, noteLanguage, converterReady]);
 
   const defaultTranslation = useMemo(() => {
     if (!processed.sentences.length) return "";
