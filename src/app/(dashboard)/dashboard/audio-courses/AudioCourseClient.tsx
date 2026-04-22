@@ -466,14 +466,6 @@ export function AudioCourseClient({
         onPlay={() => setIsPlaying(true)}
       />
 
-      {/* Page header */}
-      <div>
-        <h1 className="text-xl font-bold text-foreground sm:text-2xl">Audio Courses</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Listen to guided audio lessons from the Canto to Mando Blueprint.
-        </p>
-      </div>
-
       {/* Course list */}
       {courses.map((course) => {
         const isExpanded = expandedCourseId === course.id;

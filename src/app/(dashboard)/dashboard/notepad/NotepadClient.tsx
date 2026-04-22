@@ -5,6 +5,8 @@ import { ReaderTextArea } from "@/components/reader/ReaderTextArea";
 import { useProcessedChineseText, type ScriptMode } from "@/hooks/useProcessedChineseText";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import { exportCoachingNotes } from "@/lib/coaching-export";
+import { ensureSimplifiedConverter } from "@/lib/chinese-convert";
+import { smartRomanise } from "@/lib/romanise";
 import {
   Minus,
   Plus,
@@ -196,6 +198,7 @@ function NoteRow({
   }) => void;
   onSaveExplanation: (explanation: string | null) => void;
   onCopyOver: () => Promise<void>;
+  onPersistTranslation: (t: string) => void;
 }) {
   const baseText = note.textOverride ?? note.text;
   const processed = useProcessedChineseText({
@@ -221,9 +224,24 @@ function NoteRow({
   );
   const [isCopyingOver, setIsCopyingOver] = useState(false);
 
+  // Preload Simplified converter so pinyin pre-fill works for Traditional input
+  useEffect(() => {
+    ensureSimplifiedConverter();
+  }, []);
+
+  // Auto-persist translation once GPT batch fetch completes, so it shows on reload
+  const translationPersistedRef = useRef(false);
+  useEffect(() => {
+    const t = processed.batchTranslations.get(0);
+    if (!t || note.translationOverride || processed.isTranslating || translationPersistedRef.current) return;
+    translationPersistedRef.current = true;
+    onPersistTranslation(t);
+  }, [processed.batchTranslations, processed.isTranslating, note.translationOverride, onPersistTranslation]);
+
   const startEditing = () => {
+    const lang = language === "zh-HK" ? "cantonese" : "mandarin";
     setDraftText(baseText);
-    setDraftRomanization(note.romanizationOverride ?? "");
+    setDraftRomanization(note.romanizationOverride ?? smartRomanise(baseText, lang));
     setDraftTranslation(note.translationOverride ?? "");
     setIsEditing(true);
   };
@@ -406,7 +424,11 @@ function NoteRow({
                 return next;
               });
             }}
-            batchTranslations={processed.batchTranslations}
+            batchTranslations={
+              note.translationOverride
+                ? new Map([[0, note.translationOverride]])
+                : processed.batchTranslations
+            }
             isTranslating={processed.isTranslating}
             toneColorsEnabled={toneColorsEnabled}
           />
@@ -668,7 +690,7 @@ function NotepadPane({
           }}
           rows={1}
           className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
-          placeholder="Paste or type Traditional Chinese here — press Enter to save as a note..."
+          placeholder="Paste or type Traditional Chinese here..."
         />
         <button
           type="button"
@@ -717,6 +739,9 @@ function NotepadPane({
                   void onUpdateNote(note.id, { explanation })
                 }
                 onCopyOver={() => onCopyOverNote(note.id)}
+                onPersistTranslation={(t) =>
+                  void onUpdateNote(note.id, { translationOverride: t })
+                }
               />
             ))}
           </div>
