@@ -54,6 +54,17 @@ export function applyThirdToneSandhi(text: string): string[] {
   // Get just the tone numbers (e.g., [3, 3])
   const tones = pinyin(text, { pattern: "num", type: "array" }).map(Number);
 
+  // Fix 了 used as the particle "le" (neutral tone) when it appears after
+  // another character in the same segment (e.g. "去了", "看了"). When 了 is
+  // the first character (e.g. "了解", "了不起"), pinyin-pro is correct.
+  const chars = [...text];
+  chars.forEach((char, i) => {
+    if (char === "了" && i > 0) {
+      syllables[i] = "le0";
+      tones[i] = 0;
+    }
+  });
+
   const modified = [...syllables];
   const modTones = [...tones];
 
