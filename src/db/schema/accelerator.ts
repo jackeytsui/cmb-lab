@@ -80,6 +80,7 @@ export const conversationScripts = pgTable("conversation_scripts", {
   speakerRole: text("speaker_role").notNull(),
   responderRole: text("responder_role").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
+  contentLocked: boolean("content_locked").notNull().default(false),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")

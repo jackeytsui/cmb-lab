@@ -31,6 +31,8 @@ import {
   Wand2,
   Play,
   Pause,
+  Lock,
+  LockOpen,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -58,6 +60,7 @@ interface Script {
   speakerRole: string;
   responderRole: string;
   sortOrder: number;
+  contentLocked: boolean;
   lines: ScriptLine[];
 }
 
@@ -219,6 +222,21 @@ export default function AdminScriptsClient() {
       await fetchScripts();
     } catch (err) {
       console.error("Error deleting script:", err);
+    }
+  }
+
+  async function handleToggleLock(script: Script) {
+    const locking = !script.contentLocked;
+    if (locking && !confirm(`Lock "${script.title}"? Edits and deletes will be blocked until unlocked.`)) return;
+    try {
+      await fetch("/api/admin/accelerator/scripts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: script.id, contentLocked: locking }),
+      });
+      await fetchScripts();
+    } catch (err) {
+      console.error("Error toggling lock:", err);
     }
   }
 
@@ -456,10 +474,22 @@ export default function AdminScriptsClient() {
                         </p>
                       </div>
                     </CollapsibleTrigger>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                       <Button
                         variant="ghost"
                         size="icon"
+                        title={script.contentLocked ? "Unlock script" : "Lock script"}
+                        onClick={() => handleToggleLock(script)}
+                      >
+                        {script.contentLocked
+                          ? <Lock className="w-4 h-4 text-amber-400" />
+                          : <LockOpen className="w-4 h-4 text-muted-foreground" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={script.contentLocked}
+                        title={script.contentLocked ? "Unlock to edit" : "Edit"}
                         onClick={() => openEdit(script)}
                       >
                         <Pencil className="w-4 h-4" />
@@ -467,6 +497,8 @@ export default function AdminScriptsClient() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        disabled={script.contentLocked}
+                        title={script.contentLocked ? "Unlock to delete" : "Delete"}
                         onClick={() => handleDelete(script.id)}
                       >
                         <Trash2 className="w-4 h-4 text-red-400" />

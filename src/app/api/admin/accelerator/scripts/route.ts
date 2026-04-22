@@ -164,6 +164,39 @@ export async function POST(request: NextRequest) {
 }
 
 // ---------------------------------------------------------------------------
+// PATCH — toggle contentLocked only (safe even when script is locked)
+// ---------------------------------------------------------------------------
+
+export async function PATCH(request: NextRequest) {
+  const hasAccess = await hasMinimumRole("coach");
+  if (!hasAccess) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  try {
+    const { id, contentLocked } = await request.json() as { id: string; contentLocked: boolean };
+    if (!id || typeof contentLocked !== "boolean") {
+      return NextResponse.json({ error: "id and contentLocked required" }, { status: 400 });
+    }
+
+    await db
+      .update(conversationScripts)
+      .set({ contentLocked })
+      .where(eq(conversationScripts.id, id));
+
+    const updated = await db.query.conversationScripts.findFirst({
+      where: eq(conversationScripts.id, id),
+      with: { lines: { orderBy: [asc(scriptLines.sortOrder)] } },
+    });
+
+    return NextResponse.json({ script: updated });
+  } catch (error) {
+    console.error("Error toggling script lock:", error);
+    return NextResponse.json({ error: "Failed to update lock" }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // PUT — update script metadata and optionally replace lines
 // ---------------------------------------------------------------------------
 
@@ -184,6 +217,14 @@ export async function PUT(request: NextRequest) {
     }
 
     const { id, lines, ...updates } = parsed.data;
+
+    // Block edits on locked scripts
+    const existing = await db.query.conversationScripts.findFirst({
+      where: eq(conversationScripts.id, id),
+    });
+    if (existing?.contentLocked) {
+      return NextResponse.json({ error: "Script is locked — unlock it first to make changes." }, { status: 423 });
+    }
 
     // Update script metadata
     const updateData: Record<string, unknown> = {};
@@ -257,6 +298,13 @@ export async function DELETE(request: NextRequest) {
         { error: "Validation failed", details: parsed.error.flatten() },
         { status: 400 }
       );
+    }
+
+    const toDelete = await db.query.conversationScripts.findFirst({
+      where: eq(conversationScripts.id, parsed.data.id),
+    });
+    if (toDelete?.contentLocked) {
+      return NextResponse.json({ error: "Script is locked — unlock it first to delete." }, { status: 423 });
     }
 
     await db
