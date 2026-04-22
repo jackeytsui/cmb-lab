@@ -69,6 +69,8 @@ interface LineInput {
   mandarinRomanisation: string;
   englishText: string;
   sortOrder?: number;
+  cantoneseAudioUrl?: string | null;
+  mandarinAudioUrl?: string | null;
 }
 
 const emptyLine = (): LineInput => ({
@@ -157,6 +159,8 @@ export default function AdminScriptsClient() {
         mandarinRomanisation: l.mandarinRomanisation,
         englishText: l.englishText,
         sortOrder: l.sortOrder,
+        cantoneseAudioUrl: l.cantoneseAudioUrl,
+        mandarinAudioUrl: l.mandarinAudioUrl,
       }))
     );
     setDialogOpen(true);
