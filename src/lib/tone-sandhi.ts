@@ -12,7 +12,14 @@
  * After applyThirdToneSandhi('你好'): ['ní', 'hǎo'] (sandhi applied).
  */
 
-import { pinyin, convert } from "pinyin-pro";
+import { pinyin, convert, customPinyin } from "pinyin-pro";
+
+// 东西 as compound noun → neutral xi (jieba keeps 东西 as one segment so this
+// only fires when 东西 means "thing", not 了 because customPinyin is char-level
+// and would break 了解 — 了 is handled in applyThirdToneSandhi instead).
+customPinyin({
+  东西: "dōng xi",
+});
 
 /**
  * Apply Mandarin third-tone sandhi and return per-syllable pinyin with
@@ -37,6 +44,10 @@ export function applyThirdToneSandhi(text: string): string[] {
   if (!text || !text.trim()) {
     return [];
   }
+
+  // 了 as an isolated segment is always the particle "le" (neutral tone).
+  // customPinyin can't be used here because it would also affect 了解 → liǎojiě.
+  if (text === "了") return ["le"];
 
   // Get per-syllable numbered pinyin (e.g., ['ni3', 'hao3'])
   const syllables = pinyin(text, { toneType: "num", type: "array" });
