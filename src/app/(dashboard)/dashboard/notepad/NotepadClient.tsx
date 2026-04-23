@@ -182,6 +182,7 @@ function NoteRow({
   onSaveEdit,
   onSaveExplanation,
   onCopyOver,
+  onPersistTranslation,
 }: {
   note: NotepadNote;
   index: number;
