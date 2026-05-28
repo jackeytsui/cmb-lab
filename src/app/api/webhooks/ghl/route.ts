@@ -15,17 +15,24 @@ import { eq } from "drizzle-orm";
 
 // --- Zod schemas for GHL webhook payloads ---
 
+// GHL Custom Webhook actions send tags as a comma-separated string;
+// native GHL webhook triggers send tags as a JSON array. Accept both.
+const tagsField = z.union([
+  z.array(z.string()),
+  z.string().transform(s => s.split(",").map(t => t.trim()).filter(Boolean)),
+]);
+
 const contactTagUpdateSchema = z.object({
   type: z.literal("ContactTagUpdate"),
   id: z.string(), // GHL contact ID
-  tags: z.array(z.string()),
+  tags: tagsField,
   locationId: z.string(),
 });
 
 const ghlWebhookSchema = z.object({
   type: z.string(),
   id: z.string().optional(),
-  tags: z.array(z.string()).optional(),
+  tags: tagsField.optional(),
   locationId: z.string().optional(),
 }).passthrough(); // Allow additional fields for future event types
 

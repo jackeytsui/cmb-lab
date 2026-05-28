@@ -478,7 +478,7 @@ export function TagAccessClient() {
         body: JSON.stringify({
           name: newTagName.trim(),
           color: newTagColor,
-          type: "system",
+          type: "coach",
         }),
       });
       if (res.ok) {
