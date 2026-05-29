@@ -65,17 +65,50 @@ export function OtpFirstSignIn() {
       .create({ strategy: "ticket", ticket: inviteTicket })
       .then(async (result) => {
         clearTimeout(timeout);
+
         if (result.status === "complete") {
-          const sessionId = result.createdSessionId;
-          if (sessionId) {
-            await (setSignUpActive ?? setSignInActive)?.({ session: sessionId });
+          if (result.createdSessionId) {
+            await setSignUpActive?.({ session: result.createdSessionId });
           }
           window.location.href = "/dashboard";
-        } else {
-          // Ticket accepted but Clerk needs more info (shouldn't happen for email invites)
-          setError(`Unexpected sign-up state: ${result.status}. Please try signing in with your email below.`);
-          setInviteAccepting(false);
+          return;
         }
+
+        // Clerk requires additional fields (e.g. password when password auth is enabled).
+        // Auto-satisfy them so the student doesn't have to do anything extra.
+        if (result.status === "missing_requirements") {
+          const missing = result.missingFields ?? [];
+          const updates: Record<string, string> = {};
+
+          if (missing.includes("password")) {
+            // Random password — student can always sign in via OTP instead
+            updates.password = crypto.randomUUID().replace(/-/g, "") + "Aa1!";
+          }
+          if (missing.includes("first_name")) updates.firstName = "-";
+          if (missing.includes("last_name")) updates.lastName = "-";
+
+          if (Object.keys(updates).length > 0) {
+            try {
+              const updated = await signUp.update(updates);
+              if (updated.status === "complete") {
+                if (updated.createdSessionId) {
+                  await setSignUpActive?.({ session: updated.createdSessionId });
+                }
+                window.location.href = "/dashboard";
+                return;
+              }
+            } catch (updateErr) {
+              console.error("signUp.update error:", updateErr);
+            }
+          }
+
+          setError("Couldn't complete setup automatically. Please sign in with your email below.");
+          setInviteAccepting(false);
+          return;
+        }
+
+        setError("Unexpected sign-up state. Please sign in with your email below.");
+        setInviteAccepting(false);
       })
       .catch((err) => {
         clearTimeout(timeout);
