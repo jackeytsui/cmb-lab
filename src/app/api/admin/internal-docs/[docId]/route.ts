@@ -13,10 +13,12 @@ const patchSchema = z.object({
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { docId: string } }
+  { params }: { params: Promise<{ docId: string }> }
 ) {
   const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { docId } = await params;
 
   try {
     const body = await request.json();
@@ -34,7 +36,7 @@ export async function PATCH(
     const [doc] = await db
       .update(internalDocs)
       .set(updates)
-      .where(eq(internalDocs.id, params.docId))
+      .where(eq(internalDocs.id, docId))
       .returning();
 
     if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -48,13 +50,15 @@ export async function PATCH(
 
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { docId: string } }
+  { params }: { params: Promise<{ docId: string }> }
 ) {
   const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const { docId } = await params;
+
   try {
-    await db.delete(internalDocs).where(eq(internalDocs.id, params.docId));
+    await db.delete(internalDocs).where(eq(internalDocs.id, docId));
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting internal doc:", error);

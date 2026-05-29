@@ -32,9 +32,16 @@ async function ScriptsContent() {
     dbUserId = user?.id ?? null;
   }
 
-  // Fetch all scripts with line counts
+  // Fetch all scripts with line counts (only columns this page uses)
   const scripts = await db.query.conversationScripts.findMany({
     orderBy: [asc(conversationScripts.sortOrder)],
+    columns: {
+      id: true,
+      title: true,
+      description: true,
+      speakerRole: true,
+      responderRole: true,
+    },
     with: {
       lines: {
         columns: { id: true },

@@ -26,9 +26,17 @@ export default async function ScriptPracticePage({
 }
 
 async function ScriptPracticeContent({ scriptId }: { scriptId: string }) {
-  // Fetch script with lines
+  // Fetch script with lines (only columns this page uses)
   const script = await db.query.conversationScripts.findFirst({
     where: eq(conversationScripts.id, scriptId),
+    columns: {
+      id: true,
+      title: true,
+      description: true,
+      speakerRole: true,
+      responderRole: true,
+      sortOrder: true,
+    },
     with: {
       lines: {
         orderBy: [asc(scriptLines.sortOrder)],
