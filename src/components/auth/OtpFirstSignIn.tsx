@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSignIn, useAuth } from "@clerk/nextjs";
+import { useSignIn, useSignUp, useAuth } from "@clerk/nextjs";
 
 type Step = "email" | "otp" | "password" | "setup-password";
 
@@ -26,6 +26,8 @@ export function OtpFirstSignIn() {
   const { isLoaded, signIn, setActive } = useSignIn();
   const { isSignedIn } = useAuth();
 
+  const { isLoaded: signUpLoaded, signUp } = useSignUp();
+
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -35,8 +37,10 @@ export function OtpFirstSignIn() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [clerkTimedOut, setClerkTimedOut] = useState(false);
+  const [inviteAccepting, setInviteAccepting] = useState(false);
 
   const accessExpired = searchParams.get("access") === "expired";
+  const inviteTicket = searchParams.get("__clerk_ticket");
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
 
   // Auto-redirect if already signed in
@@ -45,6 +49,26 @@ export function OtpFirstSignIn() {
       window.location.href = "/dashboard";
     }
   }, [isSignedIn]);
+
+  // Accept Clerk invitation ticket automatically on page load
+  useEffect(() => {
+    if (!inviteTicket || !signUpLoaded || !signUp || isSignedIn) return;
+    setInviteAccepting(true);
+    signUp
+      .create({ strategy: "ticket", ticket: inviteTicket })
+      .then(async (result) => {
+        if (result.status === "complete" && result.createdSessionId) {
+          // Session is active — redirect to dashboard
+          window.location.href = "/dashboard";
+        }
+      })
+      .catch((err) => {
+        console.error("Invitation acceptance error:", err);
+        setError("This invitation link may have expired. Please contact support.");
+        setInviteAccepting(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signUpLoaded]);
 
   // Clerk load timeout
   useEffect(() => {
@@ -188,6 +212,16 @@ export function OtpFirstSignIn() {
   }
 
   // ---- Render ----
+
+  // Show a simple spinner while the invite ticket is being consumed
+  if (inviteTicket && (inviteAccepting || !signUpLoaded)) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-6 text-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+        <p className="text-sm text-slate-300">Setting up your account…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
