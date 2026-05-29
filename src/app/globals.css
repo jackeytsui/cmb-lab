@@ -239,3 +239,10 @@ span[data-tc="p"] { color: #a855f7 !important; }
 span[data-tc="o"] { color: #f97316 !important; }
 span[data-tc="t"] { color: #14b8a6 !important; }
 span[data-tc="m"] { color: var(--muted-foreground) !important; }
+
+/* TipTap table styles for Internal Docs editor */
+.prose table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+.prose table td,
+.prose table th { border: 1px solid var(--border); padding: 0.4rem 0.6rem; vertical-align: top; min-width: 80px; }
+.prose table th { background-color: color-mix(in srgb, var(--muted) 60%, transparent); font-weight: 600; }
+.prose table tr:nth-child(even) td { background-color: color-mix(in srgb, var(--muted) 30%, transparent); }

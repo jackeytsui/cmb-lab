@@ -8,6 +8,10 @@ import Link from "@tiptap/extension-link";
 import { Color } from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
 import Placeholder from "@tiptap/extension-placeholder";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
 import {
   Bold,
   Italic,
@@ -198,6 +202,10 @@ function DocEditor({
       Color,
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: "Start writing your document here…" }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: (doc.content as object) ?? { type: "doc", content: [] },
     onUpdate: ({ editor }) => {
