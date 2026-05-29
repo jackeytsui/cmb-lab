@@ -7,6 +7,7 @@ import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import { Color } from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
+import Placeholder from "@tiptap/extension-placeholder";
 import {
   Bold,
   Italic,
@@ -196,6 +197,7 @@ function DocEditor({
       TextStyle,
       Color,
       Link.configure({ openOnClick: false }),
+      Placeholder.configure({ placeholder: "Start writing your document here…" }),
     ],
     content: (doc.content as object) ?? { type: "doc", content: [] },
     onUpdate: ({ editor }) => {
