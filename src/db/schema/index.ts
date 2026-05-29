@@ -43,3 +43,4 @@ export * from "./audio-notes";
 export * from "./accelerator";
 export * from "./accelerator-extra";
 export * from "./course-library";
+export * from "./internal-docs";

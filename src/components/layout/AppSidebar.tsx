@@ -288,6 +288,15 @@ export function AppSidebar({
           <Gift className="w-4 h-4 shrink-0 text-amber-500" />
           <span className="group-data-[collapsible=icon]:hidden">Refer a Friend</span>
         </a>
+        {role === "admin" && (
+          <Link
+            href="/admin/internal-docs"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          >
+            <FileText className="w-4 h-4 shrink-0 text-sidebar-foreground/50" />
+            <span className="group-data-[collapsible=icon]:hidden">Internal Docs</span>
+          </Link>
+        )}
       </div>
       <NavUser />
       <SidebarRail />
