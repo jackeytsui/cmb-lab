@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSignIn, useSignUp, useAuth } from "@clerk/nextjs";
+import { useSignIn, useSignUp, useAuth, useClerk } from "@clerk/nextjs";
 
 type Step = "email" | "otp" | "password" | "setup-password";
 
@@ -26,7 +26,8 @@ export function OtpFirstSignIn() {
   const { isLoaded, signIn, setActive } = useSignIn();
   const { isSignedIn } = useAuth();
 
-  const { isLoaded: signUpLoaded, signUp } = useSignUp();
+  const { isLoaded: signUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
+  const { setActive: setSignInActive } = useClerk();
 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
@@ -54,17 +55,32 @@ export function OtpFirstSignIn() {
   useEffect(() => {
     if (!inviteTicket || !signUpLoaded || !signUp || isSignedIn) return;
     setInviteAccepting(true);
+
+    const timeout = setTimeout(() => {
+      setError("Account setup timed out. This invite link may have expired — please request a new one.");
+      setInviteAccepting(false);
+    }, 10000);
+
     signUp
       .create({ strategy: "ticket", ticket: inviteTicket })
       .then(async (result) => {
-        if (result.status === "complete" && result.createdSessionId) {
-          // Session is active — redirect to dashboard
+        clearTimeout(timeout);
+        if (result.status === "complete") {
+          const sessionId = result.createdSessionId;
+          if (sessionId) {
+            await (setSignUpActive ?? setSignInActive)?.({ session: sessionId });
+          }
           window.location.href = "/dashboard";
+        } else {
+          // Ticket accepted but Clerk needs more info (shouldn't happen for email invites)
+          setError(`Unexpected sign-up state: ${result.status}. Please try signing in with your email below.`);
+          setInviteAccepting(false);
         }
       })
       .catch((err) => {
+        clearTimeout(timeout);
         console.error("Invitation acceptance error:", err);
-        setError("This invitation link may have expired. Please contact support.");
+        setError("This invite link has expired or already been used. Request a new one or sign in below.");
         setInviteAccepting(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -213,8 +229,8 @@ export function OtpFirstSignIn() {
 
   // ---- Render ----
 
-  // Show a simple spinner while the invite ticket is being consumed
-  if (inviteTicket && (inviteAccepting || !signUpLoaded)) {
+  // Show spinner while the invite ticket is being consumed (only if no error yet)
+  if (inviteTicket && (inviteAccepting || !signUpLoaded) && !error) {
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
