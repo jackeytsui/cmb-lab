@@ -73,6 +73,7 @@ export async function PUT(
       title: string;
       description: string | null;
       content: string | null;
+      embedUrl: string | null;
       muxPlaybackId: string | null;
       muxAssetId: string | null;
       durationSeconds: number | null;
@@ -93,6 +94,9 @@ export async function PUT(
     }
     if (body.content !== undefined) {
       updateData.content = body.content?.trim() || null;
+    }
+    if (body.embedUrl !== undefined) {
+      updateData.embedUrl = body.embedUrl?.trim() || null;
     }
     if (body.muxPlaybackId !== undefined) {
       updateData.muxPlaybackId = body.muxPlaybackId?.trim() || null;

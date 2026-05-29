@@ -18,6 +18,7 @@ const lessonSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   content: z.string().optional(),
+  embedUrl: z.string().optional(),
   muxPlaybackId: z.string().optional(),
   durationSeconds: z.coerce.number().int().min(0).optional().or(z.literal("")),
   sortOrder: z.coerce.number().int().min(0).default(0),
@@ -27,6 +28,7 @@ type LessonFormData = {
   title: string;
   description?: string;
   content?: string;
+  embedUrl?: string;
   muxPlaybackId?: string;
   durationSeconds?: number | "";
   sortOrder: number;
@@ -75,6 +77,7 @@ export function LessonForm({
       title: lesson?.title || "",
       description: lesson?.description || "",
       content: lesson?.content || "",
+      embedUrl: (lesson as {embedUrl?: string})?.embedUrl || "",
       muxPlaybackId: lesson?.muxPlaybackId || "",
       durationSeconds: lesson?.durationSeconds || "",
       sortOrder: lesson?.sortOrder || 0,
@@ -181,6 +184,7 @@ export function LessonForm({
           moduleId: isEditMode ? undefined : moduleId,
           description: data.description || null,
           content: data.content || null,
+          embedUrl: data.embedUrl || null,
           muxPlaybackId: data.muxPlaybackId || null,
           durationSeconds:
             data.durationSeconds !== "" && data.durationSeconds !== undefined
@@ -248,6 +252,16 @@ export function LessonForm({
             value={watch("content") || ""}
             onChange={(val) => setValue("content", val)}
             placeholder="Write your lesson content here..."
+            />
+        </div>
+
+        <div className="space-y-2">
+            <Label className="text-zinc-300">Embed URL (Optional)</Label>
+            <p className="text-xs text-zinc-500">Paste a Google Form or other iframe embed URL. Students will see it rendered inline below the lesson content.</p>
+            <Input
+            {...register("embedUrl")}
+            placeholder="https://docs.google.com/forms/d/e/.../viewform?embedded=true"
+            className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-400"
             />
         </div>
 

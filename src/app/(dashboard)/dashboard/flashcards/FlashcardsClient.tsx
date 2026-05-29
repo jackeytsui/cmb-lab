@@ -98,11 +98,19 @@ function FlashCard({
   const lang: "zh-CN" | "zh-HK" =
     card.pane === "cantonese" ? "zh-HK" : "zh-CN";
 
+  const hasJyutping = !!card.jyutping;
+
   // Generate diacritical pinyin from the Chinese text (more reliable than stored number-tone)
   const pinyinDiacritical = useMemo(() => {
-    if (card.pane === "cantonese") return null; // no pinyin for Cantonese
+    if (card.pane === "cantonese" || hasJyutping) return null;
     return pinyin(displayChinese, { type: "array", toneType: "symbol" });
-  }, [displayChinese, card.pane]);
+  }, [displayChinese, card.pane, hasJyutping]);
+
+  // Split stored jyutping into per-syllable array aligned to Han characters
+  const jyutpingSyllables = useMemo(() => {
+    if (!card.jyutping) return null;
+    return card.jyutping.split(/\s+/).filter(Boolean);
+  }, [card.jyutping]);
 
   // Split Chinese into characters for per-char alignment
   const chars = useMemo(() => [...displayChinese], [displayChinese]);
@@ -123,12 +131,32 @@ function FlashCard({
           )}
           style={{ transformStyle: "preserve-3d" }}
         >
-          {/* Front — per-character pinyin on top, large Chinese */}
+          {/* Front — per-character romanization on top, large Chinese */}
           <div
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl p-5"
             style={{ backfaceVisibility: "hidden" }}
           >
-            {pinyinDiacritical ? (
+            {jyutpingSyllables ? (
+              <div className="flex items-end justify-center flex-wrap gap-y-1">
+                {(() => {
+                  let jyIdx = 0;
+                  return chars.map((char, i) => {
+                    if (hanRegex.test(char) && jyIdx < jyutpingSyllables.length) {
+                      const jy = jyutpingSyllables[jyIdx++];
+                      return (
+                        <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.6em" }}>
+                          <span className="text-base font-medium whitespace-nowrap text-muted-foreground">
+                            {jy}
+                          </span>
+                          <span className="text-4xl font-bold text-foreground">{char}</span>
+                        </span>
+                      );
+                    }
+                    return <span key={i} className="text-4xl font-bold text-foreground">{char}</span>;
+                  });
+                })()}
+              </div>
+            ) : pinyinDiacritical ? (
               <div className="flex items-end justify-center flex-wrap gap-y-1">
                 {(() => {
                   let pyIdx = 0;
@@ -154,7 +182,7 @@ function FlashCard({
             <span className="mt-3 text-[10px] text-muted-foreground/40">Tap to reveal</span>
           </div>
 
-          {/* Back — English + per-char pinyin + play */}
+          {/* Back — English + per-char romanization + play */}
           <div
             className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl p-5 [transform:rotateY(180deg)]"
             style={{ backfaceVisibility: "hidden" }}
@@ -164,7 +192,27 @@ function FlashCard({
                 {card.english}
               </span>
             )}
-            {pinyinDiacritical ? (
+            {jyutpingSyllables ? (
+              <div className="flex items-end justify-center flex-wrap gap-y-1">
+                {(() => {
+                  let jyIdx = 0;
+                  return chars.map((char, i) => {
+                    if (hanRegex.test(char) && jyIdx < jyutpingSyllables.length) {
+                      const jy = jyutpingSyllables[jyIdx++];
+                      return (
+                        <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.2em" }}>
+                          <span className="text-xs font-medium whitespace-nowrap text-muted-foreground">
+                            {jy}
+                          </span>
+                          <span className="text-xl font-bold text-foreground/70">{char}</span>
+                        </span>
+                      );
+                    }
+                    return <span key={i} className="text-xl font-bold text-foreground/70">{char}</span>;
+                  });
+                })()}
+              </div>
+            ) : pinyinDiacritical ? (
               <div className="flex items-end justify-center flex-wrap gap-y-1">
                 {(() => {
                   let pyIdx = 0;

@@ -1,28 +1,20 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { courses, lessons, modules, users } from "@/db/schema";
-import { and, asc, inArray, isNull, eq } from "drizzle-orm";
+import { courses, lessons, modules } from "@/db/schema";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getUserContentGrants, getRestrictedContentIds } from "@/lib/tag-feature-access";
+import { getCurrentUser } from "@/lib/auth";
 
 /**
  * GET /api/audio-courses
  * Returns published audio courses for authenticated students.
  * Filters by series visibility (tags / specific users). Empty = visible to all.
+ * Uses getCurrentUser() so View As impersonation works correctly for admins.
  */
 export async function GET() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Look up the DB user and their tags for visibility filtering
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, role: true },
-  });
+  const dbUser = await getCurrentUser();
   if (!dbUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const courseRows = await db

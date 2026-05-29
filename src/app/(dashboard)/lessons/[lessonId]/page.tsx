@@ -208,6 +208,19 @@ export default async function LessonPlayerPage({ params }: PageProps) {
           </div>
         )}
 
+        {/* Embedded form / iframe (e.g. Google Form) */}
+        {(lesson as {embedUrl?: string | null}).embedUrl && (
+          <div className="mt-8">
+            <iframe
+              src={(lesson as {embedUrl?: string | null}).embedUrl!}
+              className="w-full rounded-lg border border-zinc-800"
+              style={{ minHeight: "600px" }}
+              title="Embedded content"
+              allowFullScreen
+            />
+          </div>
+        )}
+
         {/* Attachments & Resources */}
         {lesson.attachments && lesson.attachments.length > 0 && (
           <div className="mt-8 pt-8 border-t border-zinc-800">

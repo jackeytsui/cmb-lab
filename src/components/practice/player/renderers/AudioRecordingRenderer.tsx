@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Mic, Square, RotateCcw } from "lucide-react";
 import { PhoneticText } from "@/components/phonetic/PhoneticText";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
@@ -36,6 +37,7 @@ export function AudioRecordingRenderer({
   onSubmit,
   disabled = false,
 }: AudioRecordingRendererProps) {
+  const [isSubmitted, setIsSubmitted] = useState(false);
   const {
     status,
     audioBlob,
@@ -57,6 +59,7 @@ export function AudioRecordingRenderer({
   function handleSubmit() {
     if (!audioBlob || disabled) return;
     onSubmit({ audioBlob });
+    setIsSubmitted(true);
   }
 
   return (

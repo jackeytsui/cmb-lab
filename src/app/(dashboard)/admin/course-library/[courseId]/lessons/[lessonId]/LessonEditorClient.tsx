@@ -93,15 +93,25 @@ async function uploadDirect(
   onProgress: (pct: number) => void,
 ): Promise<{ url: string; filename: string; sizeBytes: number }> {
   const pathname = `course-library/${kind}/${file.name}`;
-  const blob = await upload(pathname, file, {
-    access: "private",
-    contentType: file.type || "application/octet-stream",
-    handleUploadUrl: "/api/admin/course-library/upload-token",
-    multipart: true,
-    abortSignal,
-    onUploadProgress: ({ percentage }) => onProgress(Math.round(percentage)),
-  });
-  return { url: blob.url, filename: file.name, sizeBytes: file.size };
+  try {
+    const blob = await upload(pathname, file, {
+      access: "private",
+      contentType: file.type || "application/octet-stream",
+      handleUploadUrl: "/api/admin/course-library/upload-token",
+      multipart: true,
+      abortSignal,
+      onUploadProgress: ({ percentage }) => onProgress(Math.round(percentage)),
+    });
+    return { url: blob.url, filename: file.name, sizeBytes: file.size };
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("client token")) {
+      throw new Error(
+        "Upload permission denied — make sure your account has admin access, " +
+        "or ask an admin to verify the BLOB_READ_WRITE_TOKEN environment variable is set."
+      );
+    }
+    throw err;
+  }
 }
 
 function uploadWithProgress(
