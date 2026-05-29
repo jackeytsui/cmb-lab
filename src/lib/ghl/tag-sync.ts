@@ -13,6 +13,7 @@ import { findOrLinkContact, getGhlContactLinks, getLocationForContact } from "@/
 import { markOutboundChange, isEchoWebhook } from "@/lib/ghl/echo-detection";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import { assignTag, removeTag } from "@/lib/tags";
+import { clerkClient } from "@clerk/nextjs/server";
 
 /**
  * Sync a tag change from LMS to GHL across ALL linked locations.
@@ -99,7 +100,7 @@ export async function processInboundTagUpdate(
   // Reverse lookup: if no link exists, try to find an LMS user by email
   // (handles case where customer already had a CMB Lab account before checkout)
   if (contactRows.length === 0 && ghlLocationId) {
-    const linked = await reverseLookupAndLink(ghlContactId, ghlLocationId);
+    const { linked } = await reverseLookupAndLink(ghlContactId, ghlLocationId);
     if (linked) {
       contactRows = await db
         .select({
@@ -113,17 +114,23 @@ export async function processInboundTagUpdate(
   }
 
   if (contactRows.length === 0) {
-    await logSyncEvent({
-      eventType: "tag.inbound_skipped",
-      direction: "inbound",
-      entityType: "tag",
-      ghlContactId,
-      payload: {
-        reason: "no_linked_user_and_no_matching_email",
-        tags: currentGhlTags,
-        locationId: ghlLocationId,
-      },
-    });
+    // No CMB Lab account exists for this contact — auto-invite them so they can sign up.
+    // The email was already fetched during reverse lookup; retrieve it again to send the invite.
+    if (ghlLocationId) {
+      await sendGhlContactInvitation(ghlContactId, ghlLocationId, currentGhlTags);
+    } else {
+      await logSyncEvent({
+        eventType: "tag.inbound_skipped",
+        direction: "inbound",
+        entityType: "tag",
+        ghlContactId,
+        payload: {
+          reason: "no_linked_user_and_no_matching_email",
+          tags: currentGhlTags,
+          locationId: ghlLocationId,
+        },
+      });
+    }
     return;
   }
 
@@ -340,17 +347,17 @@ async function findTagByName(
 async function reverseLookupAndLink(
   ghlContactId: string,
   ghlLocationId: string
-): Promise<boolean> {
+): Promise<{ linked: boolean; email?: string }> {
   try {
     const client = await getGhlClientForLocation(ghlLocationId);
-    if (!client) return false;
+    if (!client) return { linked: false };
 
     const response = await client.get<{
       contact: { email?: string };
     }>(`/contacts/${ghlContactId}`);
 
     const email = response.data.contact.email;
-    if (!email) return false;
+    if (!email) return { linked: false };
 
     // Find LMS user by email
     const userRows = await db
@@ -367,7 +374,7 @@ async function reverseLookupAndLink(
         entityId: ghlContactId,
         payload: { email, locationId: ghlLocationId, reason: "no_lms_user_with_email" },
       });
-      return false;
+      return { linked: false, email };
     }
 
     // Create the link
@@ -398,12 +405,73 @@ async function reverseLookupAndLink(
       payload: { email, locationId: ghlLocationId },
     });
 
-    return true;
+    return { linked: true, email };
   } catch (error) {
     console.error(
       `[GHL Reverse Lookup] Failed for contact ${ghlContactId} in location ${ghlLocationId}:`,
       error instanceof Error ? error.message : error
     );
-    return false;
+    return { linked: false };
+  }
+}
+
+/**
+ * Send a Clerk invitation to a GHL contact who has no CMB Lab account yet.
+ * Fetches their email from GHL, then sends an invite with their current tags
+ * embedded as metadata. When they accept and sign up, the Clerk webhook
+ * auto-applies the tags to their new account.
+ */
+async function sendGhlContactInvitation(
+  ghlContactId: string,
+  ghlLocationId: string,
+  ghlTags: string[]
+): Promise<void> {
+  try {
+    const client = await getGhlClientForLocation(ghlLocationId);
+    if (!client) return;
+
+    const response = await client.get<{
+      contact: { email?: string; firstName?: string };
+    }>(`/contacts/${ghlContactId}`);
+
+    const email = response.data.contact.email;
+    if (!email) return;
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() ?? "";
+    const redirectUrl = `${appUrl.replace(/\/$/, "")}/sign-in`;
+
+    // Filter to tags that exist in CMB Lab so metadata stays clean
+    const cmbTagRows = await db
+      .select({ name: tags.name })
+      .from(tags)
+      .where(ilike(tags.name, "%")); // fetch all, filter below
+    const cmbTagNames = new Set(cmbTagRows.map(r => r.name.toLowerCase()));
+    const matchedTags = ghlTags.filter(t => cmbTagNames.has(t.toLowerCase()));
+
+    const clerk = await clerkClient();
+    await clerk.invitations.createInvitation({
+      emailAddress: email,
+      notify: true,
+      ignoreExisting: true,
+      redirectUrl,
+      expiresInDays: 14,
+      publicMetadata: {
+        cmbInviteRole: "student",
+        cmbInviteTags: matchedTags,
+      },
+    });
+
+    await logSyncEvent({
+      eventType: "contact.invited",
+      direction: "inbound",
+      entityType: "contact",
+      entityId: ghlContactId,
+      payload: { email, locationId: ghlLocationId, tags: matchedTags },
+    });
+  } catch (error) {
+    console.error(
+      `[GHL Invite] Failed to invite contact ${ghlContactId}:`,
+      error instanceof Error ? error.message : error
+    );
   }
 }
