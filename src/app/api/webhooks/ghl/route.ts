@@ -1,8 +1,8 @@
 // src/app/api/webhooks/ghl/route.ts
 // Inbound GHL webhook endpoint for contact events (tag updates, etc.)
-// Multi-location aware: verifies locationId against known ghlLocations,
-// uses per-location webhook secret for verification.
-// Always returns 200 to GHL to prevent retries and noise.
+// Accepts both native GHL webhook format (ContactTagUpdate) and Custom Webhook
+// action format (key-value body, JSON or form-encoded).
+// Always returns 200 to prevent GHL retries.
 
 import { NextRequest, NextResponse } from "next/server";
 import { webhookLimiter, rateLimitResponse, getClientIp } from "@/lib/rate-limit";
@@ -13,8 +13,6 @@ import { db } from "@/db";
 import { ghlLocations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-// --- Zod schemas for GHL webhook payloads ---
-
 // GHL Custom Webhook actions send tags as a comma-separated string;
 // native GHL webhook triggers send tags as a JSON array. Accept both.
 const tagsField = z.union([
@@ -23,107 +21,124 @@ const tagsField = z.union([
 ]);
 
 const contactTagUpdateSchema = z.object({
-  type: z.literal("ContactTagUpdate"),
-  id: z.string(), // GHL contact ID
+  id: z.string(),
   tags: tagsField,
   locationId: z.string(),
 });
 
-const ghlWebhookSchema = z.object({
-  type: z.string(),
-  id: z.string().optional(),
-  tags: tagsField.optional(),
-  locationId: z.string().optional(),
-}).passthrough(); // Allow additional fields for future event types
+// Parse the request body regardless of Content-Type.
+// GHL Custom Webhook actions may send form-encoded or JSON.
+async function parseBody(req: NextRequest): Promise<Record<string, unknown> | null> {
+  const contentType = req.headers.get("content-type") ?? "";
+  try {
+    if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      return Object.fromEntries(formData.entries()) as Record<string, unknown>;
+    }
+    // Default: try JSON (also handles missing/wrong content-type)
+    const text = await req.text();
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      // Last resort: try form-encoded even if content-type said JSON
+      const params = new URLSearchParams(text);
+      const result: Record<string, unknown> = {};
+      for (const [k, v] of params.entries()) result[k] = v;
+      return Object.keys(result).length > 0 ? result : null;
+    }
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
-  // Rate limit by IP
   const ip = getClientIp(req);
   const rl = await webhookLimiter.limit(ip);
-  if (!rl.success) {
-    return rateLimitResponse(rl);
-  }
+  if (!rl.success) return rateLimitResponse(rl);
 
   try {
-    const body = await req.json();
-    const parsed = ghlWebhookSchema.safeParse(body);
-    if (!parsed.success) {
-      console.error("[GHL Webhook] Invalid payload:", parsed.error.issues);
+    const body = await parseBody(req);
+    if (!body) {
+      console.error("[GHL Webhook] Could not parse body");
       return NextResponse.json({ received: true, error: "invalid_payload" });
     }
 
-    const event = parsed.data;
+    console.log("[GHL Webhook] Received body:", JSON.stringify(body));
 
-    // Verify webhook secret: try per-location first, then fall back to global env var
+    // Extract fields — support both snake_case and camelCase locationId
+    const eventType = typeof body.type === "string" ? body.type : "ContactTagUpdate";
+    const contactId = body.id ?? body.contactId;
+    const locationId = body.locationId ?? body.location_id;
+    const rawTags = body.tags;
+
     const secret = req.headers.get("x-webhook-secret");
-    let verified = false;
 
-    if (event.locationId) {
-      // Look up per-location webhook secret
+    // Verify secret
+    let verified = false;
+    if (locationId && typeof locationId === "string") {
       const locationRows = await db
         .select({ webhookSecret: ghlLocations.webhookSecret })
         .from(ghlLocations)
-        .where(eq(ghlLocations.ghlLocationId, event.locationId))
+        .where(eq(ghlLocations.ghlLocationId, locationId))
         .limit(1);
 
-      if (locationRows.length > 0 && locationRows[0].webhookSecret) {
-        verified = secret === locationRows[0].webhookSecret;
-      } else {
-        // Location found but no per-location secret — fall back to global
-        verified = secret === process.env.GHL_INBOUND_WEBHOOK_SECRET;
-      }
-
-      // Check that the location is known
       if (locationRows.length === 0) {
+        console.warn("[GHL Webhook] Unknown location:", locationId);
         await logSyncEvent({
-          eventType: `webhook.unknown_location`,
+          eventType: "webhook.unknown_location",
           direction: "inbound",
           entityType: "webhook",
-          entityId: event.id,
-          payload: { locationId: event.locationId, type: event.type },
+          entityId: typeof contactId === "string" ? contactId : "unknown",
+          payload: { locationId, type: eventType, body },
         });
-        // Still return 200 — don't cause GHL retries
         return NextResponse.json({ received: true, error: "unknown_location" });
       }
+
+      if (locationRows[0].webhookSecret) {
+        verified = secret === locationRows[0].webhookSecret;
+      } else {
+        verified = secret === process.env.GHL_INBOUND_WEBHOOK_SECRET;
+      }
     } else {
-      // No locationId in payload — use global secret
+      // No locationId — fall back to global secret
       verified = secret === process.env.GHL_INBOUND_WEBHOOK_SECRET;
     }
 
     if (!verified) {
+      console.warn("[GHL Webhook] Unauthorized — secret mismatch");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Route by event type
-    switch (event.type) {
-      case "ContactTagUpdate": {
-        const tagEvent = contactTagUpdateSchema.safeParse(body);
-        if (!tagEvent.success) {
-          console.error("[GHL Webhook] Invalid ContactTagUpdate:", tagEvent.error.issues);
-          return NextResponse.json({ received: true, error: "invalid_tag_update" });
-        }
-        await processInboundTagUpdate(
-          tagEvent.data.id,
-          tagEvent.data.tags,
-          tagEvent.data.locationId
-        );
-        break;
+    // Route: ContactTagUpdate (native or custom webhook)
+    if (eventType === "ContactTagUpdate" || (contactId && rawTags !== undefined)) {
+      const parsed = contactTagUpdateSchema.safeParse({
+        id: contactId,
+        tags: rawTags,
+        locationId: locationId ?? "",
+      });
+
+      if (!parsed.success) {
+        console.error("[GHL Webhook] Invalid tag update payload:", parsed.error.issues, "body:", body);
+        return NextResponse.json({ received: true, error: "invalid_tag_update" });
       }
-      default: {
-        await logSyncEvent({
-          eventType: `webhook.${event.type}`,
-          direction: "inbound",
-          entityType: "webhook",
-          entityId: event.id,
-          payload: { type: event.type, locationId: event.locationId, unhandled: true },
-        });
-        break;
-      }
+
+      await processInboundTagUpdate(
+        parsed.data.id,
+        parsed.data.tags,
+        parsed.data.locationId
+      );
+    } else {
+      await logSyncEvent({
+        eventType: `webhook.${eventType}`,
+        direction: "inbound",
+        entityType: "webhook",
+        entityId: typeof contactId === "string" ? contactId : "unknown",
+        payload: { type: eventType, locationId, unhandled: true },
+      });
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    // Never return 5xx to GHL -- causes retries and noise
     console.error("[GHL Webhook] Processing error:", error);
     return NextResponse.json({ received: true, error: "processing_error" });
   }
