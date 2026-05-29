@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSignIn, useSignUp, useAuth, useClerk } from "@clerk/nextjs";
+import { useSignIn, useSignUp, useAuth } from "@clerk/nextjs";
 
 type Step = "email" | "otp" | "password" | "setup-password";
 
@@ -27,7 +27,6 @@ export function OtpFirstSignIn() {
   const { isSignedIn } = useAuth();
 
   const { isLoaded: signUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
-  const { setActive: setSignInActive } = useClerk();
 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
