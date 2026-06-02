@@ -1533,7 +1533,18 @@ function CoachingPanel({
     }
     const data = await res.json();
     const normalized = normalizeSessions(data.sessions ?? []);
-    setSessions(normalized);
+    setSessions((prev) =>
+      normalized.map((s) => {
+        const existing = prev.find((p) => p.id === s.id);
+        if (!existing) return s;
+        // Preserve purely-local UI state that is not persisted to the DB
+        return {
+          ...s,
+          mandarin: { ...s.mandarin, scriptMode: existing.mandarin.scriptMode },
+          cantonese: { ...s.cantonese, scriptMode: existing.cantonese.scriptMode },
+        };
+      }),
+    );
     setActiveSessionId((prev) => {
       // Preserve current session if it still exists, otherwise default to first
       if (prev && normalized.some((s) => s.id === prev)) return prev;
@@ -2444,7 +2455,7 @@ function CoachingPanel({
             <button
               type="button"
               onClick={() => setMandoCollapsed(false)}
-              className="flex flex-col items-center justify-center w-full h-full min-h-[200px] gap-2 text-muted-foreground hover:text-foreground transition-colors"
+              className="flex flex-col items-center justify-start w-full h-full min-h-[200px] gap-2 pt-3 text-muted-foreground hover:text-foreground transition-colors"
               title="Expand Mandarin panel"
             >
               <PanelRightOpen className="size-4" />
@@ -2763,7 +2774,7 @@ function CoachingPanel({
             <button
               type="button"
               onClick={() => setCantoCollapsed(false)}
-              className="flex flex-col items-center justify-center w-full h-full min-h-[200px] gap-2 text-muted-foreground hover:text-foreground transition-colors"
+              className="flex flex-col items-center justify-start w-full h-full min-h-[200px] gap-2 pt-3 text-muted-foreground hover:text-foreground transition-colors"
               title="Expand Cantonese panel"
             >
               <PanelLeftOpen className="size-4" />
