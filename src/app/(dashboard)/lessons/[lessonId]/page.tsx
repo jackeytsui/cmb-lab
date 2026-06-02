@@ -11,7 +11,7 @@ import { eq, and, isNull, asc } from "drizzle-orm";
 import { resolvePermissions, canAccessLesson } from "@/lib/permissions";
 import { hasMinimumRole } from "@/lib/auth";
 import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
-import { ChevronLeft, BookOpenText, FileText, Link as LinkIcon, Download } from "lucide-react";
+import { ChevronLeft, BookOpenText, FileText, Link as LinkIcon, Download, CheckCircle2 } from "lucide-react";
 import { checkLessonUnlock } from "@/lib/unlock";
 import { InteractiveVideoPlayer } from "@/components/video/InteractiveVideoPlayer";
 import { VoiceConversation } from "@/components/voice/VoiceConversation";
@@ -20,6 +20,17 @@ import { LessonControls } from "@/components/lesson/LessonControls";
 
 // Demo playback ID for testing when lesson has no Mux playback ID
 const DEMO_PLAYBACK_ID = "a4nOgmxGWg6gULfcBbAa00gXyfcwPnAFldF8RdsNyk8M";
+
+const AUDIO_EXTENSIONS = new Set([".mp3", ".m4a", ".mp4", ".wav", ".ogg", ".aac", ".flac", ".webm", ".opus"]);
+function isAudioUrl(url: string) {
+  try {
+    const ext = new URL(url).pathname.split(".").pop();
+    return ext ? AUDIO_EXTENSIONS.has(`.${ext.toLowerCase()}`) : false;
+  } catch {
+    const ext = url.split("?")[0].split(".").pop();
+    return ext ? AUDIO_EXTENSIONS.has(`.${ext.toLowerCase()}`) : false;
+  }
+}
 
 interface PageProps {
   params: Promise<{ lessonId: string }>;
@@ -225,29 +236,44 @@ export default async function LessonPlayerPage({ params }: PageProps) {
         {lesson.attachments && lesson.attachments.length > 0 && (
           <div className="mt-8 pt-8 border-t border-zinc-800">
             <h3 className="text-lg font-semibold mb-4 text-white">Resources</h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {lesson.attachments.map((att) => (
-                <a
-                  key={att.id}
-                  href={att.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-4 rounded-lg bg-zinc-900/50 border border-zinc-800 hover:bg-zinc-800 transition-colors group"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 group-hover:bg-zinc-700 transition-colors">
-                    {att.type === "file" ? (
-                      <FileText className="h-5 w-5 text-zinc-400" />
-                    ) : (
-                      <LinkIcon className="h-5 w-5 text-blue-400" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-white truncate">{att.title}</p>
-                    <p className="text-xs text-zinc-500 truncate">{att.url}</p>
-                  </div>
-                  <Download className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
-                </a>
-              ))}
+            <div className="grid gap-4">
+              {lesson.attachments.map((att) => {
+                const isAudio = att.type === "file" && isAudioUrl(att.url);
+                if (isAudio) {
+                  return (
+                    <div key={att.id} className="rounded-lg bg-zinc-900/50 border border-zinc-800 p-4">
+                      <p className="text-sm font-medium text-white mb-3">{att.title}</p>
+                      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                      <audio controls className="w-full" preload="metadata">
+                        <source src={att.url} />
+                        Your browser does not support audio playback.
+                      </audio>
+                    </div>
+                  );
+                }
+                return (
+                  <a
+                    key={att.id}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-4 rounded-lg bg-zinc-900/50 border border-zinc-800 hover:bg-zinc-800 transition-colors group"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 group-hover:bg-zinc-700 transition-colors">
+                      {att.type === "file" ? (
+                        <FileText className="h-5 w-5 text-zinc-400" />
+                      ) : (
+                        <LinkIcon className="h-5 w-5 text-blue-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-white truncate">{att.title}</p>
+                      <p className="text-xs text-zinc-500 truncate">{att.url}</p>
+                    </div>
+                    <Download className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+                  </a>
+                );
+              })}
             </div>
           </div>
         )}
@@ -259,6 +285,17 @@ export default async function LessonPlayerPage({ params }: PageProps) {
             lessonTitle={lesson.title}
           />
         </div>
+
+        {/* Assignment confirmation message — shown for assignment-type lessons */}
+        {(lesson as {lessonType?: string; confirmationMessage?: string | null}).lessonType === "assignment" &&
+          (lesson as {confirmationMessage?: string | null}).confirmationMessage && (
+          <div className="mt-6 flex items-start gap-3 rounded-lg border border-green-700/40 bg-green-950/30 p-4">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-400 mt-0.5" />
+            <p className="text-sm text-green-200 whitespace-pre-wrap">
+              {(lesson as {confirmationMessage?: string | null}).confirmationMessage}
+            </p>
+          </div>
+        )}
 
         {/* Lesson Controls (Mark Complete / Next Lesson) */}
         <LessonControls lessonId={lessonId} courseId={courseId} />

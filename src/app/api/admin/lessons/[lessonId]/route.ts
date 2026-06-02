@@ -73,6 +73,8 @@ export async function PUT(
       title: string;
       description: string | null;
       content: string | null;
+      lessonType: string;
+      confirmationMessage: string | null;
       embedUrl: string | null;
       muxPlaybackId: string | null;
       muxAssetId: string | null;
@@ -94,6 +96,13 @@ export async function PUT(
     }
     if (body.content !== undefined) {
       updateData.content = body.content?.trim() || null;
+    }
+    if (body.lessonType !== undefined) {
+      const validTypes = ["standard", "assignment"];
+      updateData.lessonType = validTypes.includes(body.lessonType) ? body.lessonType : "standard";
+    }
+    if (body.confirmationMessage !== undefined) {
+      updateData.confirmationMessage = body.confirmationMessage?.trim() || null;
     }
     if (body.embedUrl !== undefined) {
       updateData.embedUrl = body.embedUrl?.trim() || null;

@@ -56,6 +56,8 @@ export const lessons = pgTable("lessons", {
   title: text("title").notNull(),
   description: text("description"),
   content: text("content"), // Rich text content for the lesson
+  lessonType: text("lesson_type").notNull().default("standard"), // 'standard' | 'assignment'
+  confirmationMessage: text("confirmation_message"), // Shown to student after completing an assignment
   embedUrl: text("embed_url"), // Optional iframe embed URL (e.g. Google Form)
   muxPlaybackId: text("mux_playback_id"),
   muxAssetId: text("mux_asset_id"),

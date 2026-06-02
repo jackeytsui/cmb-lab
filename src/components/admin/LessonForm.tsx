@@ -18,6 +18,8 @@ const lessonSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   content: z.string().optional(),
+  lessonType: z.enum(["standard", "assignment"]).default("standard"),
+  confirmationMessage: z.string().optional(),
   embedUrl: z.string().optional(),
   muxPlaybackId: z.string().optional(),
   durationSeconds: z.coerce.number().int().min(0).optional().or(z.literal("")),
@@ -28,6 +30,8 @@ type LessonFormData = {
   title: string;
   description?: string;
   content?: string;
+  lessonType: "standard" | "assignment";
+  confirmationMessage?: string;
   embedUrl?: string;
   muxPlaybackId?: string;
   durationSeconds?: number | "";
@@ -77,6 +81,8 @@ export function LessonForm({
       title: lesson?.title || "",
       description: lesson?.description || "",
       content: lesson?.content || "",
+      lessonType: ((lesson as {lessonType?: string})?.lessonType === "assignment" ? "assignment" : "standard"),
+      confirmationMessage: (lesson as {confirmationMessage?: string})?.confirmationMessage || "",
       embedUrl: (lesson as {embedUrl?: string})?.embedUrl || "",
       muxPlaybackId: lesson?.muxPlaybackId || "",
       durationSeconds: lesson?.durationSeconds || "",
@@ -184,6 +190,8 @@ export function LessonForm({
           moduleId: isEditMode ? undefined : moduleId,
           description: data.description || null,
           content: data.content || null,
+          lessonType: data.lessonType || "standard",
+          confirmationMessage: data.confirmationMessage || null,
           embedUrl: data.embedUrl || null,
           muxPlaybackId: data.muxPlaybackId || null,
           durationSeconds:
@@ -254,6 +262,38 @@ export function LessonForm({
             placeholder="Write your lesson content here..."
             />
         </div>
+
+        <div className="space-y-2">
+            <Label className="text-zinc-300">Lesson Type</Label>
+            <div className="flex gap-4">
+              {(["standard", "assignment"] as const).map((type) => (
+                <label key={type} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    value={type}
+                    {...register("lessonType")}
+                    className="accent-blue-500"
+                  />
+                  <span className="text-sm text-zinc-300">
+                    {type === "standard" ? "Standard" : "Assignment (Vocal Hack / Challenge)"}
+                  </span>
+                </label>
+              ))}
+            </div>
+        </div>
+
+        {watch("lessonType") === "assignment" && (
+          <div className="space-y-2">
+              <Label className="text-zinc-300">Confirmation Message</Label>
+              <p className="text-xs text-zinc-500">Shown to the student in a green callout after they mark this lesson complete.</p>
+              <Textarea
+                {...register("confirmationMessage")}
+                placeholder="e.g. Great work! Your submission has been received. Your coach will review it and follow up shortly."
+                rows={3}
+                className="resize-y border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-400"
+              />
+          </div>
+        )}
 
         <div className="space-y-2">
             <Label className="text-zinc-300">Embed URL (Optional)</Label>
