@@ -101,12 +101,24 @@ export async function POST(req: NextRequest) {
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://cmb-lab.thecmblueprint.com";
 
-  await clerk.invitations.createInvitation({
-    emailAddress: normalizedEmail,
-    redirectUrl: `${appUrl}/sign-in`,
-    publicMetadata: accessMetadata,
-    notify: true,
-  });
+  try {
+    await clerk.invitations.createInvitation({
+      emailAddress: normalizedEmail,
+      redirectUrl: `${appUrl}/sign-in`,
+      publicMetadata: accessMetadata,
+      notify: true,
+    });
+  } catch (err: unknown) {
+    // Clerk returns 422 if a pending invitation already exists for this email.
+    // Treat that as success — the invite is already on its way.
+    const status = (err as { status?: number })?.status;
+    const clerkCode = (err as { errors?: { code?: string }[] })?.errors?.[0]?.code;
+    if (status === 422 || clerkCode === "duplicate_record") {
+      return NextResponse.json({ success: true, action: "invitation_already_pending", email: normalizedEmail });
+    }
+    console.error("[enroll] clerk.invitations.createInvitation failed:", err);
+    return NextResponse.json({ error: "Failed to send invitation" }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true, action: "invitation_sent", email: normalizedEmail });
 }
