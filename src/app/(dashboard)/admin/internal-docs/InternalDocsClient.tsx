@@ -7,6 +7,7 @@ import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import { Color } from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
+import Highlight from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
@@ -24,6 +25,12 @@ import {
   Plus,
   Check,
   X,
+  Highlighter,
+  List,
+  ListOrdered,
+  Paperclip,
+  FileText,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,10 +40,16 @@ import { cn } from "@/lib/utils";
 // Types
 // ---------------------------------------------------------------------------
 
+interface Attachment {
+  name: string;
+  url: string;
+}
+
 interface InternalDoc {
   id: string;
   title: string;
   content: Record<string, unknown> | null;
+  attachments: Attachment[] | null;
   order: number;
 }
 
@@ -130,6 +143,28 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
 
       <div className="mx-1 h-5 w-px bg-border" />
 
+      {/* Bullet list */}
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBulletList().run(); }}
+        className={cn(btnBase, editor.isActive("bulletList") ? btnActive : btnInactive)}
+        title="Bullet List"
+      >
+        <List className="h-3.5 w-3.5" />
+      </button>
+
+      {/* Ordered list */}
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleOrderedList().run(); }}
+        className={cn(btnBase, editor.isActive("orderedList") ? btnActive : btnInactive)}
+        title="Numbered List"
+      >
+        <ListOrdered className="h-3.5 w-3.5" />
+      </button>
+
+      <div className="mx-1 h-5 w-px bg-border" />
+
       {/* Font size select */}
       <select
         className="h-7 rounded border border-border bg-background px-1.5 text-xs text-foreground focus:outline-none"
@@ -165,6 +200,19 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
         />
       </label>
 
+      {/* Highlight color */}
+      <label className={cn(btnBase, "cursor-pointer", editor.isActive("highlight") ? btnActive : btnInactive)} title="Highlight">
+        <Highlighter className="h-3.5 w-3.5" />
+        <input
+          type="color"
+          className="sr-only"
+          defaultValue="#fef08a"
+          onInput={(e) => {
+            editor.chain().focus().setHighlight({ color: (e.target as HTMLInputElement).value }).run();
+          }}
+        />
+      </label>
+
       <div className="mx-1 h-5 w-px bg-border" />
 
       {/* Link */}
@@ -176,6 +224,148 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
       >
         <LinkIcon className="h-3.5 w-3.5" />
       </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PDF Attachments Panel (admin)
+// ---------------------------------------------------------------------------
+
+function PdfAttachmentsPanel({
+  docId,
+  attachments,
+  onUpdated,
+}: {
+  docId: string;
+  attachments: Attachment[];
+  onUpdated: (attachments: Attachment[]) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/admin/internal-docs/${docId}/attachments`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      onUpdated(data.doc.attachments ?? []);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDelete = async (url: string) => {
+    if (!confirm("Remove this PDF?")) return;
+    try {
+      const res = await fetch(
+        `/api/admin/internal-docs/${docId}/attachments?url=${encodeURIComponent(url)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Delete failed");
+      onUpdated(data.doc.attachments ?? []);
+      if (previewUrl === `/api/internal-docs/pdf?url=${encodeURIComponent(url)}`) {
+        setPreviewUrl(null);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+          <Paperclip className="h-4 w-4 text-muted-foreground" />
+          Attachments
+        </h3>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={handleUpload}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="gap-1.5 text-xs h-7"
+          >
+            {uploading ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
+            ) : (
+              <><Plus className="h-3.5 w-3.5" /> Upload PDF</>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {uploadError && (
+        <p className="text-xs text-destructive">{uploadError}</p>
+      )}
+
+      {attachments.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">No PDFs attached yet.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {attachments.map((att) => {
+            const proxyUrl = `/api/internal-docs/pdf?url=${encodeURIComponent(att.url)}`;
+            const isOpen = previewUrl === proxyUrl;
+            return (
+              <div key={att.url} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewUrl(isOpen ? null : proxyUrl)}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-xs text-left hover:bg-muted/50 transition-colors"
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate text-foreground">{att.name}</span>
+                    <span className="ml-auto shrink-0 text-muted-foreground text-[10px]">
+                      {isOpen ? "hide" : "preview"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(att.url)}
+                    className="rounded p-1 text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
+                    title="Remove"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {isOpen && (
+                  <iframe
+                    src={proxyUrl}
+                    className="w-full rounded border border-border"
+                    style={{ height: "600px" }}
+                    title={att.name}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -200,6 +390,7 @@ function DocEditor({
       Underline,
       TextStyle,
       Color,
+      Highlight.configure({ multicolor: true }),
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: "Start writing your document here…" }),
       Table.configure({ resizable: true }),
@@ -247,16 +438,33 @@ function DocEditor({
     }
   }, [doc.id, editor]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleAttachmentsUpdated = useCallback(
+    (attachments: Attachment[]) => {
+      onSaved({ ...doc, attachments });
+    },
+    [doc, onSaved]
+  );
+
   return (
-    <div className="relative rounded-md border border-border">
-      <EditorToolbar editor={editor} />
-      <EditorContent editor={editor} />
-      {savedIndicator && (
-        <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded bg-green-100 px-2 py-1 text-xs text-green-700 dark:bg-green-900/40 dark:text-green-400">
-          <Check className="h-3 w-3" />
-          Saved
-        </div>
-      )}
+    <div className="space-y-4">
+      <div className="relative rounded-md border border-border">
+        <EditorToolbar editor={editor} />
+        <EditorContent editor={editor} />
+        {savedIndicator && (
+          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded bg-green-100 px-2 py-1 text-xs text-green-700 dark:bg-green-900/40 dark:text-green-400">
+            <Check className="h-3 w-3" />
+            Saved
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-md border border-border bg-muted/20 p-3">
+        <PdfAttachmentsPanel
+          docId={doc.id}
+          attachments={doc.attachments ?? []}
+          onUpdated={handleAttachmentsUpdated}
+        />
+      </div>
     </div>
   );
 }

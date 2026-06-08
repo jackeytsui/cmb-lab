@@ -208,6 +208,7 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     minRole: "coach",
     items: [
       { title: "Students", url: "/coach/students", icon: Users },
+      { title: "Internal Docs", url: "/coach/internal-docs", icon: FileText },
     ],
   },
   {

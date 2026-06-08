@@ -104,6 +104,7 @@ export function ContentPageClient({
             controls
             playsInline
             preload="metadata"
+            controlsList="nodownload"
           >
             Your browser does not support the video tag.
           </video>

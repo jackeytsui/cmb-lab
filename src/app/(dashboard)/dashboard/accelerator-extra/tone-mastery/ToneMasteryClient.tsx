@@ -156,7 +156,7 @@ export function ToneMasteryClient() {
         </div>
       ) : heroVideoUrl ? (
         <div className="aspect-video w-full rounded-xl overflow-hidden border border-border bg-black">
-          <video src={heroVideoUrl} className="w-full h-full" controls playsInline preload="metadata">
+          <video src={heroVideoUrl} className="w-full h-full" controls playsInline preload="metadata" controlsList="nodownload">
             Your browser does not support the video tag.
           </video>
         </div>
@@ -216,6 +216,7 @@ export function ToneMasteryClient() {
                         controls
                         autoPlay
                         playsInline
+                        controlsList="nodownload"
                         onEnded={() => setPlayingClipId(null)}
                       />
                     ) : (

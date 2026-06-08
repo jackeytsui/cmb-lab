@@ -4,6 +4,7 @@ export const internalDocs = pgTable("internal_docs", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: text("title").notNull(),
   content: jsonb("content"),
+  attachments: jsonb("attachments").$type<{ name: string; url: string }[]>().default([]),
   order: integer("order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at")

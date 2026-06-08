@@ -11,12 +11,17 @@ import { eq, and, isNull, asc } from "drizzle-orm";
 import { resolvePermissions, canAccessLesson } from "@/lib/permissions";
 import { hasMinimumRole } from "@/lib/auth";
 import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
-import { ChevronLeft, BookOpenText, FileText, Link as LinkIcon, Download, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, BookOpenText, FileText, Link as LinkIcon, Download } from "lucide-react";
 import { checkLessonUnlock } from "@/lib/unlock";
 import { InteractiveVideoPlayer } from "@/components/video/InteractiveVideoPlayer";
 import { VoiceConversation } from "@/components/voice/VoiceConversation";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { LessonControls } from "@/components/lesson/LessonControls";
+import { ChallengeAssignment } from "@/components/assignments/ChallengeAssignment";
+import { ListeningPracticeAssignment } from "@/components/assignments/ListeningPracticeAssignment";
+import { VocalHackAssignment } from "@/components/assignments/VocalHackAssignment";
+import { DiaryChallenge } from "@/components/assignments/DiaryChallenge";
+import type { ChallengeConfig, ListeningPracticeConfig, VocalHackConfig } from "@/lib/assignment-types";
 
 // Demo playback ID for testing when lesson has no Mux playback ID
 const DEMO_PLAYBACK_ID = "a4nOgmxGWg6gULfcBbAa00gXyfcwPnAFldF8RdsNyk8M";
@@ -286,16 +291,50 @@ export default async function LessonPlayerPage({ params }: PageProps) {
           />
         </div>
 
-        {/* Assignment confirmation message — shown for assignment-type lessons */}
-        {(lesson as {lessonType?: string; confirmationMessage?: string | null}).lessonType === "assignment" &&
-          (lesson as {confirmationMessage?: string | null}).confirmationMessage && (
-          <div className="mt-6 flex items-start gap-3 rounded-lg border border-green-700/40 bg-green-950/30 p-4">
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-400 mt-0.5" />
-            <p className="text-sm text-green-200 whitespace-pre-wrap">
-              {(lesson as {confirmationMessage?: string | null}).confirmationMessage}
-            </p>
-          </div>
-        )}
+        {/* Assignment type UI — rendered per lesson type */}
+        {(() => {
+          const lt = (lesson as { lessonType?: string }).lessonType;
+          const rawConfig = (lesson as { assignmentConfig?: string | null }).assignmentConfig;
+          const confirmMsg = (lesson as { confirmationMessage?: string | null }).confirmationMessage;
+          let config: Record<string, unknown> = {};
+          try { if (rawConfig) config = JSON.parse(rawConfig); } catch { /* ignore */ }
+
+          if (lt === "challenge") {
+            return (
+              <ChallengeAssignment
+                lessonId={lessonId}
+                config={config as ChallengeConfig}
+                confirmationMessage={confirmMsg}
+              />
+            );
+          }
+          if (lt === "listening_practice") {
+            return (
+              <ListeningPracticeAssignment
+                lessonId={lessonId}
+                config={config as ListeningPracticeConfig}
+              />
+            );
+          }
+          if (lt === "vocal_hack") {
+            return (
+              <VocalHackAssignment
+                lessonId={lessonId}
+                config={config as VocalHackConfig}
+                confirmationMessage={confirmMsg}
+              />
+            );
+          }
+          if (lt === "diary_challenge") {
+            return (
+              <DiaryChallenge
+                lessonId={lessonId}
+                confirmationMessage={confirmMsg}
+              />
+            );
+          }
+          return null;
+        })()}
 
         {/* Lesson Controls (Mark Complete / Next Lesson) */}
         <LessonControls lessonId={lessonId} courseId={courseId} />

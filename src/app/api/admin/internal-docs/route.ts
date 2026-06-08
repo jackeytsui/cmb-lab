@@ -12,7 +12,7 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {

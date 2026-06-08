@@ -112,6 +112,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                   controls
                   playsInline
                   preload="metadata"
+                  controlsList="nodownload"
                   className="w-full h-full"
                 />
               </div>

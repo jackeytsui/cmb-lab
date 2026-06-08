@@ -6,6 +6,7 @@ import {
   coachingNotes,
   coachingSessions,
   savedVocabulary,
+  notepadNotes,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -88,7 +89,34 @@ export async function GET() {
     vocabId: row.id,
   }));
 
+  // 3. Starred notepad notes
+  const notepadRows = await db
+    .select()
+    .from(notepadNotes)
+    .where(eq(notepadNotes.userId, dbUser.id))
+    .orderBy(desc(notepadNotes.createdAt));
+
+  const notepadCards = notepadRows
+    .filter((row) => row.starred === 1)
+    .map((row) => {
+      const text = row.textOverride || row.text;
+      const isMandarin = row.pane === "mandarin";
+      return {
+        id: `notepad-${row.id}`,
+        source: "notepad" as const,
+        chinese: text,
+        simplified: isMandarin ? text : undefined,
+        romanization: row.romanizationOverride || "",
+        pinyin: isMandarin ? (row.romanizationOverride || "") : "",
+        jyutping: !isMandarin ? (row.romanizationOverride || "") : "",
+        english: row.translationOverride || "",
+        pane: row.pane,
+        createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+        noteId: row.id,
+      };
+    });
+
   return NextResponse.json({
-    cards: [...coachingCards, ...vocabCards],
+    cards: [...coachingCards, ...notepadCards, ...vocabCards],
   });
 }

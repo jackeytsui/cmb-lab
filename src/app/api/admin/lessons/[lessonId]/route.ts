@@ -75,6 +75,7 @@ export async function PUT(
       content: string | null;
       lessonType: string;
       confirmationMessage: string | null;
+      assignmentConfig: string | null;
       embedUrl: string | null;
       muxPlaybackId: string | null;
       muxAssetId: string | null;
@@ -98,11 +99,14 @@ export async function PUT(
       updateData.content = body.content?.trim() || null;
     }
     if (body.lessonType !== undefined) {
-      const validTypes = ["standard", "assignment"];
+      const validTypes = ["standard", "challenge", "listening_practice", "vocal_hack", "diary_challenge"];
       updateData.lessonType = validTypes.includes(body.lessonType) ? body.lessonType : "standard";
     }
     if (body.confirmationMessage !== undefined) {
       updateData.confirmationMessage = body.confirmationMessage?.trim() || null;
+    }
+    if (body.assignmentConfig !== undefined) {
+      updateData.assignmentConfig = body.assignmentConfig ?? null;
     }
     if (body.embedUrl !== undefined) {
       updateData.embedUrl = body.embedUrl?.trim() || null;

@@ -16,7 +16,7 @@ function pinyinToneColor(syllable: string): string {
 
 type FlashcardItem = {
   id: string;
-  source: "coaching" | "vocabulary";
+  source: "coaching" | "notepad" | "vocabulary";
   chinese: string;
   simplified?: string;
   pinyin?: string;
@@ -30,7 +30,7 @@ type FlashcardItem = {
 };
 
 type ScriptMode = "traditional" | "simplified";
-type SourceFilter = "all" | "coaching" | "vocabulary";
+type SourceFilter = "all" | "coaching" | "notepad" | "vocabulary";
 
 type TTSRate = TTSOptions["rate"];
 const RATE_OPTIONS: { value: NonNullable<TTSRate>; label: string }[] = [
@@ -394,6 +394,12 @@ export function FlashcardsClient() {
   const handleRemove = async (card: FlashcardItem) => {
     if (card.source === "coaching" && card.noteId) {
       await fetch(`/api/coaching/notes/${card.noteId}/star`, { method: "DELETE" });
+    } else if (card.source === "notepad" && card.noteId) {
+      await fetch(`/api/notepad/notes/${card.noteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ starred: 0 }),
+      });
     } else if (card.source === "vocabulary" && card.vocabId) {
       await fetch(`/api/vocabulary?id=${card.vocabId}`, { method: "DELETE" });
     }
@@ -465,7 +471,7 @@ export function FlashcardsClient() {
       <div className="rounded-lg border border-border bg-card p-8 text-center">
         <p className="text-lg font-medium text-foreground">No flashcards yet</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Star notes in your coaching sessions or save vocabulary from the AI Passage Reader and YouTube Listening Lab to build your flashcard deck.
+          Star notes in your Notepad or coaching sessions, or save vocabulary from the AI Passage Reader and YouTube Listening Lab to build your flashcard deck.
         </p>
       </div>
     );
@@ -663,6 +669,7 @@ export function FlashcardsClient() {
           {(
             [
               ["all", `All (${cards.length})`],
+              ["notepad", `Notepad`],
               ["coaching", `Coaching`],
               ["vocabulary", `Vocabulary`],
             ] as const

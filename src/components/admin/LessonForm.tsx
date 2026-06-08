@@ -10,15 +10,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
-import { Plus, Trash2, Link as LinkIcon, FileText, Download, Upload } from "lucide-react";
+import { Plus, Trash2, Link as LinkIcon, FileText, Upload, X } from "lucide-react";
 import type { Lesson } from "@/db/schema/courses";
 import type { LessonAttachment } from "@/db/schema/courses";
+import type { AssignmentLessonType, ChallengeConfig, ListeningPracticeConfig, VocalHackConfig } from "@/lib/assignment-types";
+import { ASSIGNMENT_TYPE_LABELS } from "@/lib/assignment-types";
+
+const ALL_LESSON_TYPES: AssignmentLessonType[] = [
+  "standard",
+  "challenge",
+  "listening_practice",
+  "vocal_hack",
+  "diary_challenge",
+];
 
 const lessonSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   content: z.string().optional(),
-  lessonType: z.enum(["standard", "assignment"]).default("standard"),
+  lessonType: z.enum(["standard", "challenge", "listening_practice", "vocal_hack", "diary_challenge"]).default("standard"),
   confirmationMessage: z.string().optional(),
   embedUrl: z.string().optional(),
   muxPlaybackId: z.string().optional(),
@@ -30,7 +40,7 @@ type LessonFormData = {
   title: string;
   description?: string;
   content?: string;
-  lessonType: "standard" | "assignment";
+  lessonType: AssignmentLessonType;
   confirmationMessage?: string;
   embedUrl?: string;
   muxPlaybackId?: string;
@@ -57,7 +67,7 @@ export function LessonForm({
 }: LessonFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Attachments state
   const [attachments, setAttachments] = useState<LessonAttachment[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
@@ -67,7 +77,21 @@ export function LessonForm({
   const [attachmentType, setAttachmentType] = useState<'link' | 'file'>('link');
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
 
+  // Assignment config state (parsed from lesson.assignmentConfig JSON)
+  const [challengeConfig, setChallengeConfig] = useState<ChallengeConfig>({ sentenceCount: 1 });
+  const [listeningConfig, setListeningConfig] = useState<ListeningPracticeConfig>({
+    audioBlobUrl: "",
+    sentences: [],
+  });
+  const [vocalConfig, setVocalConfig] = useState<VocalHackConfig>({ sentences: [] });
+  const [listeningAudioUploading, setListeningAudioUploading] = useState(false);
+
   const isEditMode = !!lesson;
+
+  const rawType = (lesson as { lessonType?: string })?.lessonType;
+  const initialType: AssignmentLessonType = (ALL_LESSON_TYPES as string[]).includes(rawType ?? "")
+    ? (rawType as AssignmentLessonType)
+    : "standard";
 
   const {
     register,
@@ -81,7 +105,7 @@ export function LessonForm({
       title: lesson?.title || "",
       description: lesson?.description || "",
       content: lesson?.content || "",
-      lessonType: ((lesson as {lessonType?: string})?.lessonType === "assignment" ? "assignment" : "standard"),
+      lessonType: initialType,
       confirmationMessage: (lesson as {confirmationMessage?: string})?.confirmationMessage || "",
       embedUrl: (lesson as {embedUrl?: string})?.embedUrl || "",
       muxPlaybackId: lesson?.muxPlaybackId || "",
@@ -89,6 +113,19 @@ export function LessonForm({
       sortOrder: lesson?.sortOrder || 0,
     },
   });
+
+  // Parse and seed per-type config from existing lesson
+  useEffect(() => {
+    const raw = (lesson as { assignmentConfig?: string | null })?.assignmentConfig;
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (initialType === "challenge") setChallengeConfig(parsed);
+      if (initialType === "listening_practice") setListeningConfig(parsed);
+      if (initialType === "vocal_hack") setVocalConfig(parsed);
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch attachments on mount if editing
   const fetchAttachments = useCallback(async () => {
@@ -172,6 +209,14 @@ export function LessonForm({
   const [showVideoPicker, setShowVideoPicker] = useState(false);
   const currentPlaybackId = watch("muxPlaybackId");
 
+  const buildAssignmentConfig = (lessonType: AssignmentLessonType): string | null => {
+    if (lessonType === "challenge") return JSON.stringify(challengeConfig);
+    if (lessonType === "listening_practice") return JSON.stringify(listeningConfig);
+    if (lessonType === "vocal_hack") return JSON.stringify(vocalConfig);
+    if (lessonType === "diary_challenge") return JSON.stringify({});
+    return null;
+  };
+
   const onSubmit = async (data: LessonFormData) => {
     setIsSubmitting(true);
     setError(null);
@@ -192,6 +237,7 @@ export function LessonForm({
           content: data.content || null,
           lessonType: data.lessonType || "standard",
           confirmationMessage: data.confirmationMessage || null,
+          assignmentConfig: buildAssignmentConfig(data.lessonType),
           embedUrl: data.embedUrl || null,
           muxPlaybackId: data.muxPlaybackId || null,
           durationSeconds:
@@ -264,34 +310,229 @@ export function LessonForm({
         </div>
 
         <div className="space-y-2">
-            <Label className="text-zinc-300">Lesson Type</Label>
-            <div className="flex gap-4">
-              {(["standard", "assignment"] as const).map((type) => (
-                <label key={type} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    value={type}
-                    {...register("lessonType")}
-                    className="accent-blue-500"
-                  />
-                  <span className="text-sm text-zinc-300">
-                    {type === "standard" ? "Standard" : "Assignment (Vocal Hack / Challenge)"}
-                  </span>
-                </label>
-              ))}
-            </div>
+          <Label className="text-zinc-300">Lesson Type</Label>
+          <select
+            {...register("lessonType")}
+            className="w-full rounded-md border border-zinc-600 bg-zinc-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+          >
+            {ALL_LESSON_TYPES.map((t) => (
+              <option key={t} value={t}>{ASSIGNMENT_TYPE_LABELS[t]}</option>
+            ))}
+          </select>
         </div>
 
-        {watch("lessonType") === "assignment" && (
-          <div className="space-y-2">
-              <Label className="text-zinc-300">Confirmation Message</Label>
-              <p className="text-xs text-zinc-500">Shown to the student in a green callout after they mark this lesson complete.</p>
-              <Textarea
-                {...register("confirmationMessage")}
-                placeholder="e.g. Great work! Your submission has been received. Your coach will review it and follow up shortly."
-                rows={3}
-                className="resize-y border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-400"
+        {/* Per-type assignment config panels */}
+        {watch("lessonType") === "challenge" && (
+          <div className="space-y-4 rounded-lg border border-zinc-700 bg-zinc-900/50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Challenge Config</p>
+            <div className="space-y-2">
+              <Label className="text-zinc-300">Number of sentence submission boxes</Label>
+              <Input
+                type="number"
+                min={1}
+                max={9}
+                value={challengeConfig.sentenceCount}
+                onChange={(e) =>
+                  setChallengeConfig({ sentenceCount: Math.min(9, Math.max(1, Number(e.target.value))) })
+                }
+                className="w-24 border-zinc-600 bg-zinc-700 text-white"
               />
+              <p className="text-xs text-zinc-500">Students see this many text boxes (1–9).</p>
+            </div>
+          </div>
+        )}
+
+        {watch("lessonType") === "listening_practice" && (
+          <div className="space-y-4 rounded-lg border border-zinc-700 bg-zinc-900/50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Listening Practice Config</p>
+            {/* Audio upload */}
+            <div className="space-y-2">
+              <Label className="text-zinc-300">Audio file</Label>
+              {listeningConfig.audioBlobUrl && (
+                <p className="text-xs text-green-400 break-all">{listeningConfig.audioBlobUrl}</p>
+              )}
+              <div className="flex items-center gap-2">
+                <label className="cursor-pointer flex items-center gap-2 rounded-lg border border-zinc-600 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors">
+                  <Upload className="w-4 h-4" />
+                  {listeningAudioUploading ? "Uploading…" : listeningConfig.audioBlobUrl ? "Replace audio" : "Upload audio"}
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    disabled={listeningAudioUploading}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setListeningAudioUploading(true);
+                      const form = new FormData();
+                      form.append("file", file);
+                      form.append("prefix", "listening-practice/");
+                      try {
+                        const res = await fetch("/api/assignments/upload-audio", { method: "POST", body: form });
+                        if (!res.ok) throw new Error("Upload failed");
+                        const { url } = await res.json();
+                        setListeningConfig((prev) => ({ ...prev, audioBlobUrl: url }));
+                      } catch {
+                        alert("Audio upload failed");
+                      } finally {
+                        setListeningAudioUploading(false);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            {/* Sentences */}
+            <div className="space-y-3">
+              <Label className="text-zinc-300">Sentences</Label>
+              {listeningConfig.sentences.map((s, i) => (
+                <div key={i} className="flex items-start gap-2 rounded-lg border border-zinc-700 bg-zinc-800 p-3">
+                  <div className="flex-1 space-y-2">
+                    <Input
+                      placeholder="Chinese characters e.g. 你吃饭了吗"
+                      value={s.chinese}
+                      onChange={(e) => {
+                        const next = [...listeningConfig.sentences];
+                        next[i] = { ...next[i], chinese: e.target.value };
+                        setListeningConfig((prev) => ({ ...prev, sentences: next }));
+                      }}
+                      className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-500"
+                    />
+                    <Input
+                      placeholder="Expected pinyin e.g. ni chi fan le ma"
+                      value={s.expectedPinyin}
+                      onChange={(e) => {
+                        const next = [...listeningConfig.sentences];
+                        next[i] = { ...next[i], expectedPinyin: e.target.value };
+                        setListeningConfig((prev) => ({ ...prev, sentences: next }));
+                      }}
+                      className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-500"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setListeningConfig((prev) => ({
+                        ...prev,
+                        sentences: prev.sentences.filter((_, idx) => idx !== i),
+                      }))
+                    }
+                    className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setListeningConfig((prev) => ({
+                    ...prev,
+                    sentences: [...prev.sentences, { chinese: "", expectedPinyin: "" }],
+                  }))
+                }
+                className="border-zinc-600 text-zinc-300 hover:bg-zinc-700"
+              >
+                <Plus className="w-4 h-4 mr-1" /> Add Sentence
+              </Button>
+              <p className="text-xs text-zinc-500">Tone marks optional — validation ignores them.</p>
+            </div>
+          </div>
+        )}
+
+        {watch("lessonType") === "vocal_hack" && (
+          <div className="space-y-4 rounded-lg border border-zinc-700 bg-zinc-900/50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Vocal Hack Config</p>
+            <div className="space-y-3">
+              {vocalConfig.sentences.map((s, i) => (
+                <div key={i} className="rounded-lg border border-zinc-700 bg-zinc-800 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-zinc-500 font-medium">Sentence {i + 1}</p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVocalConfig((prev) => ({
+                          sentences: prev.sentences.filter((_, idx) => idx !== i),
+                        }))
+                      }
+                      className="text-zinc-500 hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Chinese e.g. 你好"
+                      value={s.chinese}
+                      onChange={(e) => {
+                        const next = [...vocalConfig.sentences];
+                        next[i] = { ...next[i], chinese: e.target.value };
+                        setVocalConfig({ sentences: next });
+                      }}
+                      className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-500"
+                    />
+                    <Input
+                      placeholder="Pinyin e.g. nǐ hǎo"
+                      value={s.pinyin}
+                      onChange={(e) => {
+                        const next = [...vocalConfig.sentences];
+                        next[i] = { ...next[i], pinyin: e.target.value };
+                        setVocalConfig({ sentences: next });
+                      }}
+                      className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-500"
+                    />
+                    <Input
+                      placeholder="English e.g. Hello"
+                      value={s.english}
+                      onChange={(e) => {
+                        const next = [...vocalConfig.sentences];
+                        next[i] = { ...next[i], english: e.target.value };
+                        setVocalConfig({ sentences: next });
+                      }}
+                      className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-500"
+                    />
+                    <Input
+                      placeholder="Mux Playback ID (optional)"
+                      value={s.muxPlaybackId}
+                      onChange={(e) => {
+                        const next = [...vocalConfig.sentences];
+                        next[i] = { ...next[i], muxPlaybackId: e.target.value };
+                        setVocalConfig({ sentences: next });
+                      }}
+                      className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-500"
+                    />
+                  </div>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setVocalConfig((prev) => ({
+                    sentences: [...prev.sentences, { muxPlaybackId: "", pinyin: "", chinese: "", english: "" }],
+                  }))
+                }
+                className="border-zinc-600 text-zinc-300 hover:bg-zinc-700"
+              >
+                <Plus className="w-4 h-4 mr-1" /> Add Sentence
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {watch("lessonType") !== "standard" && (
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Confirmation Message</Label>
+            <p className="text-xs text-zinc-500">Shown to the student after they submit. Leave blank to use default.</p>
+            <Textarea
+              {...register("confirmationMessage")}
+              placeholder="e.g. Great work! Your submission has been received. Your coach will review it and follow up shortly."
+              rows={3}
+              className="resize-y border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-400"
+            />
           </div>
         )}
 
