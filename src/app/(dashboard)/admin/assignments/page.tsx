@@ -24,8 +24,7 @@ export default async function AssignmentSubmissionsPage() {
       student: {
         id: users.id,
         email: users.email,
-        firstName: users.firstName,
-        lastName: users.lastName,
+        name: users.name,
       },
     })
     .from(lessonSubmissions)
@@ -63,9 +62,7 @@ export default async function AssignmentSubmissionsPage() {
                   <div>
                     <p className="font-medium text-white">{lesson.title}</p>
                     <p className="text-sm text-zinc-400">
-                      {student.firstName || student.lastName
-                        ? `${student.firstName ?? ""} ${student.lastName ?? ""}`.trim()
-                        : student.email}
+                      {student.name || student.email}
                     </p>
                     <p className="text-xs text-zinc-500 mt-0.5">
                       {ASSIGNMENT_TYPE_LABELS[lesson.lessonType as AssignmentLessonType]} ·{" "}
@@ -100,9 +97,7 @@ export default async function AssignmentSubmissionsPage() {
                   <div>
                     <p className="font-medium text-white">{lesson.title}</p>
                     <p className="text-sm text-zinc-400">
-                      {student.firstName || student.lastName
-                        ? `${student.firstName ?? ""} ${student.lastName ?? ""}`.trim()
-                        : student.email}
+                      {student.name || student.email}
                     </p>
                     <p className="text-xs text-zinc-500 mt-0.5">
                       {ASSIGNMENT_TYPE_LABELS[lesson.lessonType as AssignmentLessonType]} ·{" "}
