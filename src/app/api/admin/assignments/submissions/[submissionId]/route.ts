@@ -19,7 +19,7 @@ export async function GET(
     where: eq(lessonSubmissions.id, submissionId),
     with: {
       lesson: { columns: { id: true, title: true, lessonType: true, assignmentConfig: true } },
-      user: { columns: { id: true, email: true, firstName: true, lastName: true } },
+      user: { columns: { id: true, email: true, name: true } },
       review: { columns: { reviewData: true, notifiedAt: true } },
     },
   });

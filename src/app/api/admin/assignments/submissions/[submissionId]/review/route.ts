@@ -38,7 +38,7 @@ export async function POST(
     where: eq(lessonSubmissions.id, submissionId),
     with: {
       lesson: { columns: { title: true, lessonType: true } },
-      user: { columns: { id: true, email: true, firstName: true, lastName: true } },
+      user: { columns: { id: true, email: true, name: true } },
     },
   });
 
@@ -90,7 +90,7 @@ export async function POST(
     try {
       await sendReviewNotification({
         studentEmail: submission.user.email,
-        studentName: [submission.user.firstName, submission.user.lastName].filter(Boolean).join(" ") || submission.user.email,
+        studentName: submission.user.name || submission.user.email,
         lessonTitle: (submission.lesson as { title: string }).title,
         loomUrl: loomUrl || null,
         overallFeedback: overallFeedback || null,

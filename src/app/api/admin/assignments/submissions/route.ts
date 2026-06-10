@@ -32,8 +32,7 @@ export async function GET(request: NextRequest) {
       student: {
         id: users.id,
         email: users.email,
-        firstName: users.firstName,
-        lastName: users.lastName,
+        name: users.name,
       },
     })
     .from(lessonSubmissions)
