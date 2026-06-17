@@ -7,7 +7,7 @@ import { z } from "zod";
 
 const createSchema = z.object({
   title: z.string().min(1).max(200),
-  lessonType: z.enum(["video", "text", "quiz", "download"]),
+  lessonType: z.enum(["video", "audio", "text", "quiz", "download"]),
   content: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -61,6 +61,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // Provide a sane default content shape per type
   const defaultContent: Record<string, Record<string, unknown>> = {
     video: { videoUrl: "", description: "" },
+    audio: { audioUrl: "", description: "" },
     text: { body: "" },
     quiz: { passingScore: 70, questions: [] },
     download: { fileUrl: "", fileName: "", sizeBytes: 0 },
