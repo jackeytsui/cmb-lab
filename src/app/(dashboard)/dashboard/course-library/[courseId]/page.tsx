@@ -6,6 +6,7 @@ import {
   FileText,
   HelpCircle,
   Download,
+  Music,
 } from "lucide-react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { db } from "@/db";
@@ -23,12 +24,14 @@ interface PageProps {
 
 const TYPE_ICON = {
   video: Video,
+  audio: Music,
   text: FileText,
   quiz: HelpCircle,
   download: Download,
 };
 const TYPE_COLOR = {
   video: "text-red-500",
+  audio: "text-purple-500",
   text: "text-blue-500",
   quiz: "text-amber-500",
   download: "text-emerald-500",
