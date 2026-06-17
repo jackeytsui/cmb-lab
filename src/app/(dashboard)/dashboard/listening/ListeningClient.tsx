@@ -280,6 +280,7 @@ export function ListeningClient() {
       setSessionId(null);
       setEnglishCaptions(null);
       setEnglishTranslations(null);
+      setTranslationFailed(false);
       setShowChineseSubs(false);
       setShowEnglishSubs(false);
       autoTranscribeAttemptedKeyRef.current = null;
@@ -519,6 +520,7 @@ export function ListeningClient() {
   // AI-generated English translations for transcript panel
   const [englishTranslations, setEnglishTranslations] = useState<string[] | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translationFailed, setTranslationFailed] = useState(false);
 
   // Toolbar state
   const [annotationMode, setAnnotationMode] = useState<AnnotationMode>("plain");
@@ -613,6 +615,7 @@ export function ListeningClient() {
 
     let cancelled = false;
     setIsTranslating(true);
+    setTranslationFailed(false);
 
     const textsToTranslate = displayTexts ?? captions.map((c) => c.text);
 
@@ -621,14 +624,19 @@ export function ListeningClient() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ texts: textsToTranslate }),
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("translation_failed");
+        return res.json();
+      })
       .then((data) => {
         if (!cancelled && data.translations) {
           setEnglishTranslations(data.translations);
+        } else if (!cancelled) {
+          setTranslationFailed(true);
         }
       })
       .catch(() => {
-        // Silently fail — user can retry by toggling off/on
+        if (!cancelled) setTranslationFailed(true);
       })
       .finally(() => {
         if (!cancelled) setIsTranslating(false);
@@ -776,6 +784,7 @@ export function ListeningClient() {
     setCaptions(ONBOARDING_FALLBACK_CAPTIONS);
     setEnglishCaptions(null);
     setEnglishTranslations(null);
+    setTranslationFailed(false);
     setCaptionStatus("success");
     setTranscribeError(null);
     return true;
@@ -853,6 +862,7 @@ export function ListeningClient() {
       setSessionId(null);
       setEnglishCaptions(null);
       setEnglishTranslations(null);
+      setTranslationFailed(false);
       setShowChineseSubs(false);
       setShowEnglishSubs(false);
       autoTranscribeAttemptedKeyRef.current = null;
@@ -1235,6 +1245,7 @@ export function ListeningClient() {
                   onToggleChineseSubs={() => setShowChineseSubs((p) => !p)}
                   onToggleEnglishSubs={() => setShowEnglishSubs((p) => !p)}
                   hasEnglishCaptions={true}
+                  isTranslating={isTranslating}
                   // Loop mode
                   loopModeActive={loopModeActive}
                   onToggleLoopMode={handleToggleLoopMode}
@@ -1270,6 +1281,11 @@ export function ListeningClient() {
                 firstLineTourId="listening-transcript-first-line"
                 firstLineTtsTourId="listening-transcript-first-line-audio"
               />
+              {showEnglishSubs && translationFailed && (
+                <div className="px-3 py-2 text-xs text-amber-400/80 border-t border-border">
+                  English translation unavailable for this video.
+                </div>
+              )}
             </div>
           </div>
         </div>

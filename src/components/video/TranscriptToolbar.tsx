@@ -46,6 +46,7 @@ export interface TranscriptToolbarProps {
   onToggleChineseSubs?: () => void;
   onToggleEnglishSubs?: () => void;
   hasEnglishCaptions?: boolean;
+  isTranslating?: boolean;
   // Loop mode
   loopModeActive?: boolean;
   onToggleLoopMode?: () => void;
@@ -85,6 +86,7 @@ export function TranscriptToolbar({
   onToggleChineseSubs,
   onToggleEnglishSubs,
   hasEnglishCaptions = false,
+  isTranslating = false,
   loopModeActive = false,
   onToggleLoopMode,
   loopRange,
@@ -217,12 +219,15 @@ export function TranscriptToolbar({
                 type="button"
                 onClick={onToggleEnglishSubs}
                 className={cn(
-                  "px-2 py-0.5 text-xs transition-colors",
+                  "flex items-center gap-1 px-2 py-0.5 text-xs transition-colors",
                   showEnglishSubs
                     ? "bg-cyan-700/50 text-cyan-300"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
               >
+                {isTranslating ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : null}
                 EN
               </button>
             </div>
