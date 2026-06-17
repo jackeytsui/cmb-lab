@@ -15,12 +15,13 @@ import {
   File as FileIcon,
   ImagePlus,
   Trash2,
+  Music,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { QuizBuilder } from "./QuizBuilder";
 
-type LessonType = "video" | "text" | "quiz" | "download";
+type LessonType = "video" | "audio" | "text" | "quiz" | "download";
 
 interface LessonData {
   id: string;
@@ -31,6 +32,7 @@ interface LessonData {
 
 const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: string }> = {
   video: { label: "Video Lesson", Icon: Video, color: "text-red-500" },
+  audio: { label: "Audio Lesson", Icon: Music, color: "text-purple-500" },
   text: { label: "Text Lesson", Icon: FileText, color: "text-blue-500" },
   quiz: { label: "Quiz Lesson", Icon: HelpCircle, color: "text-amber-500" },
   download: { label: "Download Lesson", Icon: Download, color: "text-emerald-500" },
@@ -43,7 +45,7 @@ const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: 
 const DIRECT_UPLOAD_THRESHOLD = 4 * 1024 * 1024;
 
 function uploadSimple(
-  kind: "video" | "file" | "image",
+  kind: "video" | "audio" | "file" | "image",
   file: File,
   abortSignal: AbortSignal,
   onProgress: (pct: number) => void,
@@ -87,7 +89,7 @@ function uploadSimple(
 }
 
 async function uploadDirect(
-  kind: "video" | "file" | "image",
+  kind: "video" | "audio" | "file" | "image",
   file: File,
   abortSignal: AbortSignal,
   onProgress: (pct: number) => void,
@@ -115,7 +117,7 @@ async function uploadDirect(
 }
 
 function uploadWithProgress(
-  kind: "video" | "file" | "image",
+  kind: "video" | "audio" | "file" | "image",
   file: File,
   abortSignal: AbortSignal,
   onProgress: (pct: number) => void,
@@ -221,6 +223,13 @@ export function LessonEditorClient({
       {/* Type-specific content editor */}
       {lesson.lessonType === "video" && (
         <VideoLessonForm
+          lessonId={lesson.id}
+          content={lesson.content}
+          onUpdate={updateContent}
+        />
+      )}
+      {lesson.lessonType === "audio" && (
+        <AudioLessonForm
           lessonId={lesson.id}
           content={lesson.content}
           onUpdate={updateContent}
@@ -472,6 +481,244 @@ function AttachmentsManager({
           />
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Audio Lesson Form
+// ---------------------------------------------------------------------------
+
+function AudioLessonForm({
+  lessonId,
+  content,
+  onUpdate,
+}: {
+  lessonId: string;
+  content: Record<string, unknown>;
+  onUpdate: (next: Record<string, unknown>) => void;
+}) {
+  const audioUrl = (content.audioUrl as string) ?? "";
+  const description = (content.description as string) ?? "";
+  const transcript = (content.transcript as string) ?? "";
+  const durationSeconds = (content.durationSeconds as number | undefined) ?? undefined;
+
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [desc, setDesc] = useState(description);
+  const [trans, setTrans] = useState(transcript);
+  const [duration, setDuration] = useState(durationSeconds?.toString() ?? "");
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const dirty =
+    desc !== description ||
+    trans !== transcript ||
+    duration !== (durationSeconds?.toString() ?? "");
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    setUploadPct(0);
+    setUploading(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const result = await uploadWithProgress(
+        "audio",
+        file,
+        controller.signal,
+        setUploadPct,
+      );
+      const nextContent = { ...content, audioUrl: result.url };
+      await saveLessonContent(lessonId, nextContent);
+      onUpdate(nextContent);
+    } catch (err) {
+      if (!(err instanceof Error && /abort/i.test(err.message))) {
+        setUploadError(err instanceof Error ? err.message : "Upload failed");
+      }
+    } finally {
+      setUploading(false);
+      setUploadPct(0);
+      abortRef.current = null;
+      e.target.value = "";
+    }
+  };
+
+  const handleCancelUpload = () => {
+    abortRef.current?.abort();
+    setUploading(false);
+  };
+
+  const handleSaveMeta = async () => {
+    setSaving(true);
+    try {
+      const durNum = duration ? parseInt(duration, 10) : undefined;
+      const nextContent: Record<string, unknown> = {
+        ...content,
+        description: desc,
+        transcript: trans,
+      };
+      if (durNum && !isNaN(durNum)) {
+        nextContent.durationSeconds = durNum;
+      } else {
+        delete nextContent.durationSeconds;
+      }
+      const ok = await saveLessonContent(lessonId, nextContent);
+      if (ok) {
+        onUpdate(nextContent);
+        setSavedAt(new Date());
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Audio upload area */}
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">Audio file</h3>
+        {audioUrl ? (
+          <div className="rounded-md border border-border bg-background p-3 flex items-center gap-3">
+            <Music className="w-5 h-5 text-purple-500" />
+            <span className="text-xs text-muted-foreground flex-1 truncate">
+              {audioUrl.split("/").pop()}
+            </span>
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept="audio/mpeg,audio/mp4,audio/m4a,audio/x-m4a,audio/wav,audio/ogg,audio/aac"
+                className="hidden"
+                onChange={handleUpload}
+                disabled={uploading}
+              />
+              <span className="text-xs text-primary hover:underline">Replace</span>
+            </label>
+          </div>
+        ) : (
+          <label className="cursor-pointer block">
+            <input
+              type="file"
+              accept="audio/mpeg,audio/mp4,audio/m4a,audio/x-m4a,audio/wav,audio/ogg,audio/aac"
+              className="hidden"
+              onChange={handleUpload}
+              disabled={uploading}
+            />
+            <div className="rounded-md border border-dashed border-border bg-muted/30 p-6 text-center hover:bg-muted/50 transition-colors">
+              <Upload className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Click to upload MP3, M4A, WAV, or AAC (up to 500MB)
+              </p>
+            </div>
+          </label>
+        )}
+
+        {uploading && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Uploading… {uploadPct}%</span>
+              <button
+                type="button"
+                onClick={handleCancelUpload}
+                className="text-red-500 hover:text-red-600 inline-flex items-center gap-1"
+              >
+                <XCircle className="w-3 h-3" />
+                Cancel
+              </button>
+            </div>
+            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${uploadPct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {uploadError && (
+          <p className="text-xs text-red-500">{uploadError}</p>
+        )}
+      </div>
+
+      {/* Thumbnail */}
+      <ThumbnailUploader
+        lessonId={lessonId}
+        thumbnailUrl={(content.thumbnailUrl as string) ?? ""}
+        content={content}
+        onUpdate={onUpdate}
+      />
+
+      {/* Attachments */}
+      <AttachmentsManager
+        lessonId={lessonId}
+        content={content}
+        onUpdate={onUpdate}
+      />
+
+      {/* Metadata */}
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">Metadata</h3>
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Description
+          </label>
+          <RichTextEditor
+            value={desc}
+            onChange={setDesc}
+            placeholder="What students will learn in this audio"
+            compact
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Transcript (optional)
+          </label>
+          <textarea
+            value={trans}
+            onChange={(e) => setTrans(e.target.value)}
+            rows={4}
+            placeholder="Full audio transcript"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Duration (seconds, optional)
+          </label>
+          <input
+            type="number"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            className="w-32 rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+        </div>
+        {dirty && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleSaveMeta}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Check className="w-3 h-3" />
+              )}
+              Save metadata
+            </button>
+          </div>
+        )}
+        {savedAt && !dirty && (
+          <p className="text-[10px] text-emerald-500 text-right">
+            Saved at {savedAt.toLocaleTimeString()}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

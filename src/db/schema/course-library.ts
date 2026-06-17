@@ -24,7 +24,7 @@ import { users } from "./users";
 
 export const courseLibraryLessonTypeEnum = pgEnum(
   "course_library_lesson_type",
-  ["video", "text", "quiz", "download"],
+  ["video", "text", "quiz", "download", "audio"],
 );
 
 // Top-level course container.
@@ -252,8 +252,18 @@ export interface CourseLibraryDownloadContent {
   description?: string;
 }
 
+export interface CourseLibraryAudioContent {
+  audioUrl: string;
+  thumbnailUrl?: string;
+  durationSeconds?: number;
+  transcript?: string;
+  description?: string;
+  attachments?: CourseLibraryAttachment[];
+}
+
 export type CourseLibraryLessonContent =
   | CourseLibraryVideoContent
   | CourseLibraryTextContent
   | CourseLibraryQuizContent
-  | CourseLibraryDownloadContent;
+  | CourseLibraryDownloadContent
+  | CourseLibraryAudioContent;

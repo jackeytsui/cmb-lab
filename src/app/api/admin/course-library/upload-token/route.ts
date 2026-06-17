@@ -24,6 +24,17 @@ const ALLOWED_CONTENT_TYPES = [
   "video/quicktime",
   "video/webm",
   "video/x-matroska",
+  // audio
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/mp4",
+  "audio/m4a",
+  "audio/x-m4a",
+  "audio/wav",
+  "audio/ogg",
+  "audio/aac",
+  "audio/flac",
+  "audio/webm",
   // image
   "image/jpeg",
   "image/png",

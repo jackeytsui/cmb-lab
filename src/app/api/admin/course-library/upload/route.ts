@@ -19,6 +19,18 @@ const VIDEO_MIME = new Set([
   "video/webm",
   "video/x-matroska",
 ]);
+const AUDIO_MIME = new Set([
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/mp4",
+  "audio/m4a",
+  "audio/x-m4a",
+  "audio/wav",
+  "audio/ogg",
+  "audio/aac",
+  "audio/flac",
+  "audio/webm",
+]);
 const IMAGE_MIME = new Set([
   "image/jpeg",
   "image/png",
@@ -42,6 +54,7 @@ const FILE_MIME = new Set([
 
 const MAX_SIZE = {
   video: 500 * 1024 * 1024, // 500MB
+  audio: 500 * 1024 * 1024, // 500MB
   file: 100 * 1024 * 1024, // 100MB
   image: 10 * 1024 * 1024, // 10MB
 } as const;
@@ -62,11 +75,12 @@ export async function POST(request: NextRequest) {
 
     const kind = (request.nextUrl.searchParams.get("kind") ?? "file") as
       | "video"
+      | "audio"
       | "file"
       | "image";
-    if (kind !== "video" && kind !== "file" && kind !== "image") {
+    if (kind !== "video" && kind !== "audio" && kind !== "file" && kind !== "image") {
       return NextResponse.json(
-        { error: "Invalid kind. Must be video, file, or image." },
+        { error: "Invalid kind. Must be video, audio, file, or image." },
         { status: 400 },
       );
     }
@@ -82,7 +96,10 @@ export async function POST(request: NextRequest) {
 
     // Validate content type
     const allowed =
-      kind === "video" ? VIDEO_MIME : kind === "image" ? IMAGE_MIME : FILE_MIME;
+      kind === "video" ? VIDEO_MIME
+      : kind === "audio" ? AUDIO_MIME
+      : kind === "image" ? IMAGE_MIME
+      : FILE_MIME;
     if (!allowed.has(file.type)) {
       return NextResponse.json(
         { error: `Unsupported content type for ${kind}: ${file.type}` },

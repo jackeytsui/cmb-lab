@@ -14,10 +14,11 @@ import {
   Download,
   Pencil,
   X,
+  Music,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type LessonType = "video" | "text" | "quiz" | "download";
+type LessonType = "video" | "audio" | "text" | "quiz" | "download";
 
 interface LessonRow {
   id: string;
@@ -47,6 +48,7 @@ const LESSON_TYPE_META: Record<
   { label: string; Icon: typeof Video; color: string }
 > = {
   video: { label: "Video", Icon: Video, color: "text-red-500" },
+  audio: { label: "Audio", Icon: Music, color: "text-purple-500" },
   text: { label: "Text", Icon: FileText, color: "text-blue-500" },
   quiz: { label: "Quiz", Icon: HelpCircle, color: "text-amber-500" },
   download: { label: "Download", Icon: Download, color: "text-emerald-500" },
@@ -419,6 +421,7 @@ export function CourseLibraryEditorClient({
                       className="rounded-md border border-border bg-background px-2 py-2 text-xs"
                     >
                       <option value="video">Video</option>
+                      <option value="audio">Audio</option>
                       <option value="text">Text</option>
                       <option value="quiz">Quiz</option>
                       <option value="download">Download</option>

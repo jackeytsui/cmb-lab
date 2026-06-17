@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Download as DownloadIcon, Paperclip } from "lucide-react";
+import { ChevronLeft, Download as DownloadIcon, Paperclip, Music } from "lucide-react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { QuizLessonViewer } from "./QuizLessonViewer";
 import { db } from "@/db";
@@ -194,6 +194,52 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 No file uploaded yet.
               </p>
             )}
+          </div>
+        )}
+
+        {row.lessonType === "audio" && (
+          <div className="space-y-4">
+            {content.audioUrl ? (
+              <div className="rounded-lg border border-border bg-card p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Music className="w-4 h-4 text-purple-500" />
+                  <span className="text-sm font-medium text-foreground">Audio</span>
+                </div>
+                <audio
+                  src={`/api/course-library/audio/${lessonId}`}
+                  controls
+                  preload="metadata"
+                  controlsList="nodownload"
+                  className="w-full"
+                />
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
+                <p className="text-sm text-muted-foreground">No audio uploaded yet.</p>
+              </div>
+            )}
+            {typeof content.description === "string" && content.description && (
+              <div className="rounded-lg border border-border bg-card p-5">
+                <h2 className="text-sm font-semibold text-foreground mb-2">About this lesson</h2>
+                <div
+                  className="prose prose-invert prose-sm max-w-none text-muted-foreground"
+                  dangerouslySetInnerHTML={{ __html: content.description as string }}
+                />
+              </div>
+            )}
+            {typeof content.transcript === "string" && content.transcript && (
+              <details className="rounded-lg border border-border bg-card">
+                <summary className="px-5 py-3 text-sm font-semibold text-foreground cursor-pointer">
+                  Transcript
+                </summary>
+                <div className="px-5 pb-5">
+                  <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground">
+                    {content.transcript as string}
+                  </pre>
+                </div>
+              </details>
+            )}
+            <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
           </div>
         )}
 
