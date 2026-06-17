@@ -648,6 +648,16 @@ export function ListeningClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showEnglishSubs, captions, englishCaptions]);
 
+  // When we have AI translations but no YouTube English track, build overlay-compatible captions
+  // by pairing each translation with the corresponding Chinese caption's timestamps.
+  const effectiveEnglishCaptions = useMemo(() => {
+    if (englishCaptions) return englishCaptions;
+    if (!englishTranslations || !captions) return null;
+    return captions
+      .map((c, i) => ({ ...c, text: englishTranslations[i] ?? "" }))
+      .filter((c) => c.text.length > 0);
+  }, [englishCaptions, englishTranslations, captions]);
+
   // Compute vocab stats from segmented display texts + savedVocabMap
   const vocabStats = useMemo(() => {
     if (!captions || captions.length === 0) return null;
@@ -1210,7 +1220,7 @@ export function ListeningClient() {
               <DualSubtitleOverlay
                 currentTimeMs={currentTimeMs}
                 chineseCaptions={captions}
-                englishCaptions={englishCaptions}
+                englishCaptions={effectiveEnglishCaptions}
                 showChinese={showChineseSubs}
                 showEnglish={showEnglishSubs}
               />
