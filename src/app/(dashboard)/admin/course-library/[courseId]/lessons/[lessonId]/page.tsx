@@ -10,6 +10,9 @@ import {
 } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { LessonEditorClient } from "./LessonEditorClient";
+import type { CourseLibraryLesson } from "@/db/schema/course-library";
+
+type LessonEditorLessonType = NonNullable<CourseLibraryLesson["lessonType"]>;
 
 interface PageProps {
   params: Promise<{ courseId: string; lessonId: string }>;
@@ -72,7 +75,7 @@ export default async function LessonEditorPage({ params }: PageProps) {
         initialLesson={{
           id: row.lessonId,
           title: row.lessonTitle,
-          lessonType: row.lessonType,
+          lessonType: row.lessonType as LessonEditorLessonType,
           content: (row.content ?? {}) as Record<string, unknown>,
         }}
       />
