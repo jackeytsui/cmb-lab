@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Download as DownloadIcon, Paperclip, Music } from "lucide-react";
+import { ChevronLeft, Download as DownloadIcon, Paperclip, Music, ExternalLink } from "lucide-react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { QuizLessonViewer } from "./QuizLessonViewer";
+import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
   courseLibraryModules,
   courseLibraryLessons,
+  courseLibraryLessonProgress,
 } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
 
 interface Attachment {
   url: string;
@@ -50,6 +53,7 @@ interface PageProps {
 
 export default async function CourseLibraryLessonViewerPage({ params }: PageProps) {
   const { courseId, lessonId } = await params;
+  const currentUser = await getCurrentUser();
 
   const [row] = await db
     .select({
@@ -82,6 +86,15 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
     .limit(1);
 
   if (!row) notFound();
+
+  const progress = currentUser
+    ? await db.query.courseLibraryLessonProgress.findFirst({
+        where: and(
+          eq(courseLibraryLessonProgress.userId, currentUser.id),
+          eq(courseLibraryLessonProgress.lessonId, lessonId),
+        ),
+      })
+    : null;
 
   const content = (row.content ?? {}) as Record<string, unknown>;
 
@@ -146,6 +159,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 </div>
               </details>
             )}
+            <CourseLibraryLessonControls
+              lessonId={lessonId}
+              initialCompleted={!!progress?.completedAt}
+            />
             <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
           </div>
         )}
@@ -168,6 +185,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 dangerouslySetInnerHTML={{ __html: (content.body as string) ?? "<p>(empty)</p>" }}
               />
             </div>
+            <CourseLibraryLessonControls
+              lessonId={lessonId}
+              initialCompleted={!!progress?.completedAt}
+            />
             <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
           </div>
         )}
@@ -194,6 +215,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 No file uploaded yet.
               </p>
             )}
+            <CourseLibraryLessonControls
+              lessonId={lessonId}
+              initialCompleted={!!progress?.completedAt}
+            />
           </div>
         )}
 
@@ -239,7 +264,47 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 </div>
               </details>
             )}
+            <CourseLibraryLessonControls
+              lessonId={lessonId}
+              initialCompleted={!!progress?.completedAt}
+            />
             <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
+          </div>
+        )}
+
+        {row.lessonType === "form" && (
+          <div className="space-y-4">
+            {typeof content.description === "string" && content.description && (
+              <div className="rounded-lg border border-border bg-card p-5">
+                <div
+                  className="prose prose-invert prose-sm max-w-none text-muted-foreground"
+                  dangerouslySetInnerHTML={{ __html: content.description as string }}
+                />
+              </div>
+            )}
+            {typeof content.embedUrl === "string" && content.embedUrl ? (
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/20">
+                  <ExternalLink className="w-3.5 h-3.5 text-pink-500" />
+                  <span className="text-xs text-muted-foreground">Interactive form</span>
+                </div>
+                <iframe
+                  src={content.embedUrl as string}
+                  style={{ height: `${typeof content.embedHeight === "number" ? content.embedHeight : 600}px` }}
+                  className="w-full"
+                  title={row.lessonTitle}
+                  allow="camera; microphone; geolocation"
+                />
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
+                <p className="text-sm text-muted-foreground">Form not available yet.</p>
+              </div>
+            )}
+            <CourseLibraryLessonControls
+              lessonId={lessonId}
+              initialCompleted={!!progress?.completedAt}
+            />
           </div>
         )}
 

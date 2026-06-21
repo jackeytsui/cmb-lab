@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, X, Loader2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +46,7 @@ export function QuizLessonViewer({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<GradeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [completionSaved, setCompletionSaved] = useState(false);
 
   const pickSingle = (qId: string, optId: string) => {
     setAnswers((prev) => ({ ...prev, [qId]: [optId] }));
@@ -94,7 +95,22 @@ export function QuizLessonViewer({
     setAnswers({});
     setResult(null);
     setError(null);
+    setCompletionSaved(false);
   };
+
+  useEffect(() => {
+    if (!result?.passed || completionSaved) return;
+
+    fetch(`/api/course-library/lessons/${lessonId}/progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed: true }),
+    })
+      .then((res) => {
+        if (res.ok) setCompletionSaved(true);
+      })
+      .catch(() => null);
+  }, [completionSaved, lessonId, result?.passed]);
 
   // Results view
   if (result) {
@@ -125,6 +141,11 @@ export function QuizLessonViewer({
               <p className="text-[10px] text-muted-foreground">
                 {result.earned} of {result.total} points
               </p>
+              {result.passed && (
+                <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+                  Completion will sync after save.
+                </p>
+              )}
             </div>
             <button
               type="button"
