@@ -14,7 +14,7 @@ import {
   practiceAttempts,
 } from "@/db/schema";
 import { eq, and, isNull, asc, inArray, sql, max } from "drizzle-orm";
-import { ChevronLeft, ClipboardList } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronLeft, ClipboardList } from "lucide-react";
 import { ModuleSection } from "@/components/course/ModuleSection";
 import { LessonCard } from "@/components/course/LessonCard";
 
@@ -188,6 +188,12 @@ export default async function CourseDetailPage({ params }: PageProps) {
       string,
       { isUnlocked: boolean; isCompleted: boolean; previousTitle?: string }
     >();
+    const orderedLessons: Array<{
+      lesson: (typeof course.modules)[number]["lessons"][number];
+      isUnlocked: boolean;
+      isCompleted: boolean;
+      previousTitle?: string;
+    }> = [];
 
     for (const mod of course.modules) {
       for (let i = 0; i < mod.lessons.length; i++) {
@@ -208,8 +214,20 @@ export default async function CourseDetailPage({ params }: PageProps) {
         }
 
         lessonStatuses.set(lesson.id, { isUnlocked, isCompleted, previousTitle });
+        orderedLessons.push({ lesson, isUnlocked, isCompleted, previousTitle });
       }
     }
+
+    const completedLessonsCount = orderedLessons.filter(
+      ({ isCompleted }) => isCompleted
+    ).length;
+    const totalLessonsCount = orderedLessons.length;
+    const currentLesson =
+      orderedLessons.find(
+        ({ isUnlocked, isCompleted }) => isUnlocked && !isCompleted
+      )?.lesson ??
+      orderedLessons.find(({ isUnlocked }) => isUnlocked)?.lesson ??
+      null;
 
     // 7. Fetch practice sets assigned to this course (non-blocking)
     let coursePracticeSets: Array<{
@@ -291,6 +309,64 @@ export default async function CourseDetailPage({ params }: PageProps) {
             )}
           </header>
 
+          <div
+            data-testid="course-progress-summary"
+            className="mb-6 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4 md:hidden"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-300/80">
+                  Course progress
+                </p>
+                <p className="mt-1 text-sm text-white">
+                  {completedLessonsCount} of {totalLessonsCount} lessons complete
+                </p>
+                {currentLesson ? (
+                  <p className="mt-1 text-sm text-zinc-300">
+                    Continue with <span className="font-medium text-white">{currentLesson.title}</span>
+                  </p>
+                ) : totalLessonsCount > 0 ? (
+                  <p className="mt-1 text-sm text-zinc-300">
+                    You have completed every lesson in this course.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-zinc-300">
+                    No lessons available yet.
+                  </p>
+                )}
+              </div>
+
+              {currentLesson ? (
+                <Link
+                  href={`#lesson-${currentLesson.id}`}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-400"
+                >
+                  Jump
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : null}
+            </div>
+
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-cyan-950/40">
+              <div
+                className="h-full rounded-full bg-cyan-400 transition-all"
+                style={{
+                  width:
+                    totalLessonsCount > 0
+                      ? `${Math.round((completedLessonsCount / totalLessonsCount) * 100)}%`
+                      : "0%",
+                }}
+              />
+            </div>
+
+            {currentLesson ? (
+              <div className="mt-3 flex items-center gap-2 text-xs text-cyan-200/90">
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Current lesson is marked in the list below.</span>
+              </div>
+            ) : null}
+          </div>
+
           {/* Modules and lessons */}
           {course.modules.length === 0 ? (
             <div className="text-center py-16">
@@ -308,15 +384,22 @@ export default async function CourseDetailPage({ params }: PageProps) {
                     <div className="space-y-4">
                       {mod.lessons.map((lesson) => {
                         const status = lessonStatuses.get(lesson.id)!;
+                        const isCurrent = currentLesson?.id === lesson.id;
                         return (
-                          <LessonCard
+                          <div
                             key={lesson.id}
-                            lesson={lesson}
-                            isUnlocked={status.isUnlocked}
-                            isCompleted={status.isCompleted}
-                            previousLessonTitle={status.previousTitle}
-                            quizzes={lessonQuizzesMap.get(lesson.id) || []}
-                          />
+                            id={isCurrent ? `lesson-${lesson.id}` : undefined}
+                            className={isCurrent ? "scroll-mt-24" : undefined}
+                          >
+                            <LessonCard
+                              lesson={lesson}
+                              isUnlocked={status.isUnlocked}
+                              isCompleted={status.isCompleted}
+                              isCurrent={isCurrent}
+                              previousLessonTitle={status.previousTitle}
+                              quizzes={lessonQuizzesMap.get(lesson.id) || []}
+                            />
+                          </div>
                         );
                       })}
                     </div>

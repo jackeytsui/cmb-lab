@@ -39,7 +39,7 @@ test.describe("Student lesson completion", () => {
 
     // Should have at least one lesson card (unlocked or completed)
     const lessonCards = studentPage.locator(
-      '[data-testid="lesson-card"], [data-testid="lesson-card-completed"]',
+      '[data-testid="lesson-card"], [data-testid="lesson-card-completed"], [data-testid="lesson-card-current"]',
     );
     await expect(lessonCards.first()).toBeVisible();
 
@@ -51,6 +51,27 @@ test.describe("Student lesson completion", () => {
       '[data-testid="video-player-area"]',
     );
     await expect(videoPlayerArea).toBeVisible();
+  });
+
+  test("mobile course page shows current lesson context", async ({
+    studentPage,
+  }) => {
+    await studentPage.setViewportSize({ width: 390, height: 844 });
+
+    const dashboard = new DashboardPage(studentPage);
+    await dashboard.goto();
+    await dashboard.clickCourse(0);
+
+    await expect(
+      studentPage.locator('[data-testid="course-progress-summary"]'),
+    ).toBeVisible();
+
+    const currentLessonCards = studentPage.locator(
+      '[data-testid="lesson-card-current"]',
+    );
+    if ((await currentLessonCards.count()) > 0) {
+      await expect(currentLessonCards.first()).toBeVisible();
+    }
   });
 
   test("student can complete a lesson with video progress and interaction pass", async ({
@@ -122,7 +143,7 @@ test.describe("Student lesson completion", () => {
 
     // Click the first unlocked lesson
     const firstLesson = studentPage.locator(
-      '[data-testid="lesson-card"], [data-testid="lesson-card-completed"]',
+      '[data-testid="lesson-card"], [data-testid="lesson-card-completed"], [data-testid="lesson-card-current"]',
     );
     await firstLesson.first().click();
 
@@ -208,7 +229,7 @@ test.describe("Student lesson completion", () => {
       // If no locked lessons (all completed or only one lesson),
       // verify the page structure is still correct
       const allLessons = studentPage.locator(
-        '[data-testid="lesson-card"], [data-testid="lesson-card-completed"], [data-testid="lesson-card-locked"]',
+        '[data-testid="lesson-card"], [data-testid="lesson-card-completed"], [data-testid="lesson-card-current"], [data-testid="lesson-card-locked"]',
       );
       const totalCount = await allLessons.count();
       expect(totalCount).toBeGreaterThan(0);

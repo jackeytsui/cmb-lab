@@ -20,6 +20,7 @@ interface LessonCardProps {
   };
   isUnlocked: boolean;
   isCompleted: boolean;
+  isCurrent?: boolean;
   previousLessonTitle?: string;
   quizzes?: AssociatedQuiz[];
 }
@@ -41,6 +42,7 @@ export function LessonCard({
   lesson,
   isUnlocked,
   isCompleted,
+  isCurrent = false,
   previousLessonTitle,
   quizzes = [],
 }: LessonCardProps) {
@@ -82,10 +84,22 @@ export function LessonCard({
       >
         <Link 
           href={isLocked ? "#" : `/lessons/${lesson.id}`} 
-          className={`flex items-center gap-4 p-4 rounded-lg bg-zinc-900/50 border border-zinc-800 transition-colors ${
+          className={`flex items-center gap-4 p-4 rounded-lg bg-zinc-900/50 border transition-colors ${
+            isCurrent
+              ? "border-cyan-500/60 bg-cyan-500/10 ring-1 ring-cyan-400/30"
+              : "border-zinc-800"
+          } ${
             isLocked ? "opacity-50" : "hover:bg-zinc-800/50 hover:border-zinc-700"
           }`}
-          data-testid={isLocked ? "lesson-card-locked" : isCompleted ? "lesson-card-completed" : "lesson-card"}
+          data-testid={
+            isCurrent
+              ? "lesson-card-current"
+              : isLocked
+                ? "lesson-card-locked"
+                : isCompleted
+                  ? "lesson-card-completed"
+                  : "lesson-card"
+          }
         >
           {/* Icon container */}
           <div
@@ -97,6 +111,11 @@ export function LessonCard({
           {/* Lesson info */}
           <div className="flex-1 min-w-0">
             <h4 className="font-medium truncate text-white">{lesson.title}</h4>
+            {isCurrent && (
+              <p className="mt-1 inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-cyan-300">
+                Current lesson
+              </p>
+            )}
             {lesson.description && (
               <p className="text-sm text-zinc-400 truncate">{lesson.description}</p>
             )}
