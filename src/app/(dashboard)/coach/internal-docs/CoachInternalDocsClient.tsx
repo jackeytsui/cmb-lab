@@ -5,8 +5,10 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
 import { Color } from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
+import FontSize from "@tiptap/extension-text-style/font-size";
 import Highlight from "@tiptap/extension-highlight";
 import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
@@ -41,8 +43,16 @@ function DocViewer({ doc }: { doc: InternalDoc }) {
       Underline,
       TextStyle,
       Color,
+      FontSize,
       Highlight.configure({ multicolor: true }),
       Link.configure({ openOnClick: true }),
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: "inline max-w-full align-middle rounded-md my-1",
+        },
+      }),
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,

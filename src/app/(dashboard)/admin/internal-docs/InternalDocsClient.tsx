@@ -5,8 +5,10 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
 import { Color } from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
+import FontSize from "@tiptap/extension-text-style/font-size";
 import Highlight from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Table } from "@tiptap/extension-table";
@@ -20,6 +22,7 @@ import {
   Link as LinkIcon,
   Heading1,
   Heading2,
+  Heading3,
   Trash2,
   Pencil,
   Plus,
@@ -28,6 +31,12 @@ import {
   Highlighter,
   List,
   ListOrdered,
+  Strikethrough,
+  Table2,
+  TableCellsMerge,
+  TableCellsSplit,
+  TableColumnsSplit,
+  TableRowsSplit,
   Paperclip,
   FileText,
   Loader2,
@@ -65,6 +74,69 @@ const SEED_TITLES = [
   "1-on-1 Questions",
 ];
 
+const FONT_SIZE_OPTIONS = [
+  { label: "Small", value: "0.875em" },
+  { label: "Normal", value: null },
+  { label: "Large", value: "1.125em" },
+  { label: "XL", value: "1.25em" },
+];
+
+const TABLE_COLORS = [
+  "#ffffff",
+  "#f8fafc",
+  "#e2e8f0",
+  "#cbd5e1",
+  "#fef3c7",
+  "#fde68a",
+  "#d1fae5",
+  "#bfdbfe",
+  "#fbcfe8",
+];
+
+const TableCellWithBackground = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: (element) =>
+          (element as HTMLElement).getAttribute("data-background-color") ||
+          (element as HTMLElement).style.backgroundColor ||
+          null,
+        renderHTML: (attributes) =>
+          attributes.backgroundColor
+            ? {
+                "data-background-color": attributes.backgroundColor,
+                style: `background-color: ${attributes.backgroundColor}`,
+              }
+            : {},
+      },
+    };
+  },
+});
+
+const TableHeaderWithBackground = TableHeader.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: (element) =>
+          (element as HTMLElement).getAttribute("data-background-color") ||
+          (element as HTMLElement).style.backgroundColor ||
+          null,
+        renderHTML: (attributes) =>
+          attributes.backgroundColor
+            ? {
+                "data-background-color": attributes.backgroundColor,
+                style: `background-color: ${attributes.backgroundColor}`,
+              }
+            : {},
+      },
+    };
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Toolbar
 // ---------------------------------------------------------------------------
@@ -86,77 +158,131 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
     "h-7 w-7 flex items-center justify-center rounded text-sm transition-colors hover:bg-muted";
   const btnActive = "bg-muted text-foreground";
   const btnInactive = "text-muted-foreground";
+  const isInTable = editor.isActive("table");
 
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b border-border bg-muted/30 px-2 py-1.5">
-      {/* Bold */}
+      {/* Inline formatting */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBold().run(); }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleBold().run();
+        }}
         className={cn(btnBase, editor.isActive("bold") ? btnActive : btnInactive)}
         title="Bold"
       >
         <Bold className="h-3.5 w-3.5" />
       </button>
 
-      {/* Italic */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleItalic().run(); }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleItalic().run();
+        }}
         className={cn(btnBase, editor.isActive("italic") ? btnActive : btnInactive)}
         title="Italic"
       >
         <Italic className="h-3.5 w-3.5" />
       </button>
 
-      {/* Underline */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleUnderline().run(); }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleUnderline().run();
+        }}
         className={cn(btnBase, editor.isActive("underline") ? btnActive : btnInactive)}
         title="Underline"
       >
         <UnderlineIcon className="h-3.5 w-3.5" />
       </button>
 
-      <div className="mx-1 h-5 w-px bg-border" />
-
-      {/* Heading 1 */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 1 }).run(); }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleStrike().run();
+        }}
+        className={cn(btnBase, editor.isActive("strike") ? btnActive : btnInactive)}
+        title="Strikethrough"
+      >
+        <Strikethrough className="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().unsetAllMarks().clearNodes().run();
+        }}
+        className={cn(btnBase, btnInactive)}
+        title="Clear formatting"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+
+      <div className="mx-1 h-5 w-px bg-border" />
+
+      {/* Headings */}
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleHeading({ level: 1 }).run();
+        }}
         className={cn(btnBase, editor.isActive("heading", { level: 1 }) ? btnActive : btnInactive)}
         title="Heading 1"
       >
         <Heading1 className="h-3.5 w-3.5" />
       </button>
 
-      {/* Heading 2 */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 2 }).run(); }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleHeading({ level: 2 }).run();
+        }}
         className={cn(btnBase, editor.isActive("heading", { level: 2 }) ? btnActive : btnInactive)}
         title="Heading 2"
       >
         <Heading2 className="h-3.5 w-3.5" />
       </button>
 
-      <div className="mx-1 h-5 w-px bg-border" />
-
-      {/* Bullet list */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBulletList().run(); }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleHeading({ level: 3 }).run();
+        }}
+        className={cn(btnBase, editor.isActive("heading", { level: 3 }) ? btnActive : btnInactive)}
+        title="Heading 3"
+      >
+        <Heading3 className="h-3.5 w-3.5" />
+      </button>
+
+      <div className="mx-1 h-5 w-px bg-border" />
+
+      {/* Lists */}
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleBulletList().run();
+        }}
         className={cn(btnBase, editor.isActive("bulletList") ? btnActive : btnInactive)}
         title="Bullet List"
       >
         <List className="h-3.5 w-3.5" />
       </button>
 
-      {/* Ordered list */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleOrderedList().run(); }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleOrderedList().run();
+        }}
         className={cn(btnBase, editor.isActive("orderedList") ? btnActive : btnInactive)}
         title="Numbered List"
       >
@@ -165,65 +291,273 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
 
       <div className="mx-1 h-5 w-px bg-border" />
 
-      {/* Font size select */}
       <select
         className="h-7 rounded border border-border bg-background px-1.5 text-xs text-foreground focus:outline-none"
         title="Font Size"
         onChange={(e) => {
           const val = e.target.value;
-          if (val === "small") {
-            editor.chain().focus().setMark("textStyle", { fontSize: "0.875em" }).run();
-          } else if (val === "large") {
-            editor.chain().focus().setMark("textStyle", { fontSize: "1.25em" }).run();
+          if (val === "normal") {
+            editor.chain().focus().unsetFontSize().run();
           } else {
-            editor.chain().focus().unsetMark("textStyle").run();
+            editor.chain().focus().setFontSize(val).run();
           }
         }}
         defaultValue="normal"
       >
-        <option value="small">Small</option>
+        <option value="0.875em">Small</option>
         <option value="normal">Normal</option>
-        <option value="large">Large</option>
+        <option value="1.125em">Large</option>
+        <option value="1.25em">XL</option>
       </select>
 
       <div className="mx-1 h-5 w-px bg-border" />
 
       {/* Text color */}
-      <label className={cn(btnBase, "cursor-pointer")} title="Text Color">
-        <span className="text-xs font-bold" style={{ borderBottom: "2px solid currentColor" }}>A</span>
-        <input
-          type="color"
-          className="sr-only"
-          onInput={(e) => {
-            editor.chain().focus().setColor((e.target as HTMLInputElement).value).run();
+      <div className="flex items-center gap-0.5">
+        <label className={cn(btnBase, "cursor-pointer")} title="Text Color">
+          <span className="text-xs font-bold" style={{ borderBottom: "2px solid currentColor" }}>
+            A
+          </span>
+          <input
+            type="color"
+            className="sr-only"
+            onInput={(e) => {
+              editor.chain().focus().setColor((e.target as HTMLInputElement).value).run();
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            editor.chain().focus().unsetColor().run();
           }}
-        />
-      </label>
+          className={cn("rounded px-2 py-1 text-[10px] uppercase tracking-wide", btnInactive)}
+          title="Remove text color"
+        >
+          None
+        </button>
+      </div>
 
       {/* Highlight color */}
-      <label className={cn(btnBase, "cursor-pointer", editor.isActive("highlight") ? btnActive : btnInactive)} title="Highlight">
-        <Highlighter className="h-3.5 w-3.5" />
-        <input
-          type="color"
-          className="sr-only"
-          defaultValue="#fef08a"
-          onInput={(e) => {
-            editor.chain().focus().setHighlight({ color: (e.target as HTMLInputElement).value }).run();
+      <div className="flex items-center gap-0.5">
+        <label
+          className={cn(
+            btnBase,
+            "cursor-pointer",
+            editor.isActive("highlight") ? btnActive : btnInactive,
+          )}
+          title="Highlight"
+        >
+          <Highlighter className="h-3.5 w-3.5" />
+          <input
+            type="color"
+            className="sr-only"
+            defaultValue="#fef08a"
+            onInput={(e) => {
+              editor.chain().focus().setHighlight({ color: (e.target as HTMLInputElement).value }).run();
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            editor.chain().focus().unsetHighlight().run();
           }}
-        />
-      </label>
+          className={cn("rounded px-2 py-1 text-[10px] uppercase tracking-wide", btnInactive)}
+          title="Remove highlight"
+        >
+          None
+        </button>
+      </div>
 
       <div className="mx-1 h-5 w-px bg-border" />
 
-      {/* Link */}
+      {/* Link + media */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); setLink(); }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setLink();
+        }}
         className={cn(btnBase, editor.isActive("link") ? btnActive : btnInactive)}
         title="Link"
       >
         <LinkIcon className="h-3.5 w-3.5" />
       </button>
+
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          const url = window.prompt("Image URL");
+          if (url) {
+            editor.chain().focus().setImage({ src: url, alt: "Inserted image" }).run();
+          }
+        }}
+        className={cn(btnBase, btnInactive)}
+        title="Insert image"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+
+      <div className="mx-1 h-5 w-px bg-border" />
+
+      {/* Tables */}
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        }}
+        className={cn(btnBase, editor.isActive("table") ? btnActive : btnInactive)}
+        title="Insert table"
+      >
+        <Table2 className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().toggleHeaderRow().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Toggle header row"
+      >
+        Hdr
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().addRowBefore().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Add row above"
+      >
+        <TableRowsSplit className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().addRowAfter().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Add row below"
+      >
+        <TableRowsSplit className="h-3.5 w-3.5 rotate-180" />
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().addColumnBefore().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Add column left"
+      >
+        <TableColumnsSplit className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().addColumnAfter().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Add column right"
+      >
+        <TableColumnsSplit className="h-3.5 w-3.5 rotate-180" />
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().mergeCells().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Merge cells"
+      >
+        <TableCellsMerge className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().splitCell().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Split cell"
+      >
+        <TableCellsSplit className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().deleteRow().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Delete row"
+      >
+        -R
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().deleteColumn().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Delete column"
+      >
+        -C
+      </button>
+      <button
+        type="button"
+        disabled={!isInTable}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          editor.chain().focus().deleteTable().run();
+        }}
+        className={cn(btnBase, isInTable ? btnInactive : "cursor-not-allowed opacity-40")}
+        title="Delete table"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+
+      {isInTable && (
+        <>
+          <div className="mx-1 h-5 w-px bg-border" />
+          <select
+            className="h-7 rounded border border-border bg-background px-1.5 text-xs text-foreground focus:outline-none"
+            title="Cell background"
+            onChange={(e) => {
+              const value = e.target.value;
+              editor.chain().focus().setCellAttribute("backgroundColor", value === "none" ? null : value).run();
+            }}
+            defaultValue="none"
+          >
+            <option value="none">Cell None</option>
+            {TABLE_COLORS.map((color) => (
+              <option key={color} value={color}>
+                {color}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
     </div>
   );
 }
@@ -390,13 +724,21 @@ function DocEditor({
       Underline,
       TextStyle,
       Color,
+      FontSize,
       Highlight.configure({ multicolor: true }),
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: "Start writing your document here…" }),
-      Table.configure({ resizable: true }),
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: "inline max-w-full align-middle rounded-md my-1",
+        },
+      }),
+      Table.configure({ resizable: true, cellMinWidth: 80 }),
       TableRow,
-      TableHeader,
-      TableCell,
+      TableHeaderWithBackground,
+      TableCellWithBackground,
     ],
     content: (doc.content as object) ?? { type: "doc", content: [] },
     onUpdate: ({ editor }) => {
@@ -424,6 +766,29 @@ function DocEditor({
       attributes: {
         class:
           "min-h-[400px] prose prose-sm dark:prose-invert max-w-none p-4 focus:outline-none",
+      },
+      handlePaste: (view, event) => {
+        const items = Array.from(event.clipboardData?.items ?? []);
+        const imageItem = items.find((item) => item.type.startsWith("image/"));
+        if (!imageItem) return false;
+        const file = imageItem.getAsFile();
+        if (!file) return false;
+
+        event.preventDefault();
+        const reader = new FileReader();
+        reader.onload = () => {
+          const src = typeof reader.result === "string" ? reader.result : "";
+          if (!src) return;
+          const image = view.state.schema.nodes.image.create({
+            src,
+            alt: file.name,
+            title: file.name,
+          });
+          const tr = view.state.tr.replaceSelectionWith(image);
+          view.dispatch(tr.scrollIntoView());
+        };
+        reader.readAsDataURL(file);
+        return true;
       },
     },
   });
