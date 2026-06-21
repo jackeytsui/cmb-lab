@@ -7,13 +7,14 @@ import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import { exportCoachingNotes } from "@/lib/coaching-export";
 import { ensureSimplifiedConverter } from "@/lib/chinese-convert";
 import { smartRomanise } from "@/lib/romanise";
+import { FlashcardStarButton } from "@/components/flashcards/FlashcardStarButton";
+import { notifyFlashcardsChanged } from "@/lib/flashcards";
 import {
   Minus,
   Plus,
   NotebookPen,
   Trash2,
   Pencil,
-  Star,
   Download,
   Loader2,
   Check,
@@ -283,19 +284,13 @@ function NoteRow({
         {/* Action row — inline, hidden during edit */}
         {!isEditing && (
           <div className="flex items-center justify-end gap-1 -mb-1">
-            <button
-              type="button"
-              onClick={onToggleStar}
-              title={note.starred === 1 ? "Unstar" : "Star note"}
-              className={cn(
-                "inline-flex size-6 items-center justify-center rounded transition-colors",
-                note.starred === 1
-                  ? "text-amber-500"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Star className={cn("size-3.5", note.starred === 1 && "fill-amber-400")} />
-            </button>
+            <FlashcardStarButton
+              isSaved={note.starred === 1}
+              onToggle={onToggleStar}
+              label={note.starred === 1 ? "Remove from flashcards" : "Save note to flashcards"}
+              compact
+              variant="star"
+            />
             <button
               type="button"
               onClick={handleCopyOver}
@@ -810,6 +805,7 @@ export function NotepadClient() {
       if (updated) {
         setNotes((prev) => prev.map((n) => (n.id === id ? (updated as NotepadNote) : n)));
         flashSaved();
+        notifyFlashcardsChanged();
       }
     },
     [],
@@ -819,6 +815,7 @@ export function NotepadClient() {
     const ok = await deleteNote(id);
     if (ok) {
       setNotes((prev) => prev.filter((n) => n.id !== id));
+      notifyFlashcardsChanged();
     }
   }, []);
 

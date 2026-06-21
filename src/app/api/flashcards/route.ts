@@ -5,10 +5,15 @@ import {
   coachingNoteStars,
   coachingNotes,
   coachingSessions,
+  flashcardSaves,
   savedVocabulary,
   notepadNotes,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  buildFlashcardContentKey,
+  normalizeFlashcardLanguage,
+} from "@/lib/flashcards";
 
 /**
  * GET /api/flashcards
@@ -85,9 +90,46 @@ export async function GET() {
       .filter(Boolean)
       .slice(0, 3)
       .join("; "),
+    pane: row.jyutping ? ("cantonese" as const) : ("mandarin" as const),
     createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
     vocabId: row.id,
   }));
+
+  // 2b. Generic flashcard saves from any LMS surface
+  const flashcardRows = await db
+    .select()
+    .from(flashcardSaves)
+    .where(eq(flashcardSaves.userId, dbUser.id))
+    .orderBy(desc(flashcardSaves.createdAt));
+
+  const savedCards = flashcardRows.map((row) => {
+    const normalizedLanguage = normalizeFlashcardLanguage(row.language);
+    const pane =
+      normalizedLanguage === "cantonese"
+        ? "cantonese"
+        : normalizedLanguage === "mandarin"
+          ? "mandarin"
+          : row.jyutping
+            ? "cantonese"
+            : "mandarin";
+    return {
+      id: `flashcard-${row.id}`,
+      source: "saved" as const,
+      chinese: row.chinese,
+      simplified: row.simplified ?? undefined,
+      pinyin: row.pinyin ?? undefined,
+      jyutping: row.jyutping ?? undefined,
+      romanization: [row.pinyin, row.jyutping].filter(Boolean).join(" / "),
+      english: row.english ?? "",
+      pane,
+      createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+      flashcardId: row.id,
+      sourceLabel: row.sourceLabel,
+      sourceType: row.sourceType,
+      sourceUrl: row.sourceUrl ?? undefined,
+      contentKey: row.contentKey,
+    };
+  });
 
   // 3. Starred notepad notes
   const notepadRows = await db
@@ -116,7 +158,25 @@ export async function GET() {
       };
     });
 
+  const allCards = [...savedCards, ...coachingCards, ...notepadCards, ...vocabCards];
+  const deduped = new Map<string, (typeof allCards)[number]>();
+  for (const card of allCards) {
+    const inferredLanguage =
+      card.pane === "cantonese" ? "cantonese" : "mandarin";
+    const key = buildFlashcardContentKey({
+      chinese: card.chinese,
+      simplified: card.simplified ?? null,
+      pinyin: card.pinyin ?? null,
+      jyutping: card.jyutping ?? null,
+      english: card.english ?? null,
+      language: inferredLanguage,
+    });
+    if (!deduped.has(key)) {
+      deduped.set(key, card);
+    }
+  }
+
   return NextResponse.json({
-    cards: [...coachingCards, ...notepadCards, ...vocabCards],
+    cards: [...deduped.values()],
   });
 }

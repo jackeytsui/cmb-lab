@@ -24,7 +24,7 @@ import { users } from "./users";
 
 export const courseLibraryLessonTypeEnum = pgEnum(
   "course_library_lesson_type",
-  ["video", "text", "quiz", "download", "audio"],
+  ["video", "text", "quiz", "download", "audio", "form"],
 );
 
 // Top-level course container.
@@ -129,6 +129,40 @@ export const courseLibraryLessonProgress = pgTable(
   ],
 );
 
+export const flashcardSaves = pgTable(
+  "flashcard_saves",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    contentKey: text("content_key").notNull(),
+    chinese: text("chinese").notNull(),
+    simplified: text("simplified"),
+    pinyin: text("pinyin"),
+    jyutping: text("jyutping"),
+    english: text("english"),
+    sourceType: text("source_type").notNull().default("other"),
+    sourceLabel: text("source_label").notNull().default("Flashcards"),
+    sourceId: text("source_id"),
+    sourceUrl: text("source_url"),
+    language: text("language").notNull().default("unknown"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("flashcard_saves_user_content_key_unique").on(
+      table.userId,
+      table.contentKey,
+    ),
+    index("flashcard_saves_user_id_idx").on(table.userId),
+    index("flashcard_saves_source_type_idx").on(table.sourceType),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
@@ -196,6 +230,9 @@ export type NewCourseLibraryLesson = typeof courseLibraryLessons.$inferInsert;
 export type CourseLibraryLessonProgress =
   typeof courseLibraryLessonProgress.$inferSelect;
 
+export type FlashcardSave = typeof flashcardSaves.$inferSelect;
+export type NewFlashcardSave = typeof flashcardSaves.$inferInsert;
+
 // ---------------------------------------------------------------------------
 // Content shapes per lesson type — kept as TS types, validated at the API layer
 // ---------------------------------------------------------------------------
@@ -261,9 +298,16 @@ export interface CourseLibraryAudioContent {
   attachments?: CourseLibraryAttachment[];
 }
 
+export interface CourseLibraryFormContent {
+  embedUrl: string;
+  embedHeight?: number;
+  description?: string;
+}
+
 export type CourseLibraryLessonContent =
   | CourseLibraryVideoContent
   | CourseLibraryTextContent
   | CourseLibraryQuizContent
   | CourseLibraryDownloadContent
-  | CourseLibraryAudioContent;
+  | CourseLibraryAudioContent
+  | CourseLibraryFormContent;

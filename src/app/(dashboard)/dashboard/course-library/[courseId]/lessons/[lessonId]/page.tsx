@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Download as DownloadIcon, Paperclip, Music, ExternalLink } from "lucide-react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
+import { FlashcardSaveButton } from "@/components/flashcards/FlashcardSaveButton";
 import { QuizLessonViewer } from "./QuizLessonViewer";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
 import { db } from "@/db";
@@ -45,6 +46,10 @@ function LessonAttachments({ attachments }: { attachments?: Attachment[] }) {
       ))}
     </div>
   );
+}
+
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 interface PageProps {
@@ -139,9 +144,20 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             )}
             {typeof content.description === "string" && content.description && (
               <div className="rounded-lg border border-border bg-card p-5">
-                <h2 className="text-sm font-semibold text-foreground mb-2">
-                  About this lesson
-                </h2>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-foreground">
+                    About this lesson
+                  </h2>
+                  <FlashcardSaveButton
+                    chinese={stripHtml(content.description as string)}
+                    english={row.lessonTitle}
+                    sourceLabel="Course lesson notes"
+                    sourceType="course_lesson"
+                    language="mixed"
+                    compact
+                    variant="bookmark"
+                  />
+                </div>
                 <div
                   className="prose prose-invert prose-sm max-w-none text-muted-foreground"
                   dangerouslySetInnerHTML={{ __html: content.description as string }}
@@ -154,6 +170,17 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                   Transcript
                 </summary>
                 <div className="px-5 pb-5">
+                  <div className="mb-3 flex items-center justify-end">
+                    <FlashcardSaveButton
+                      chinese={content.transcript as string}
+                      english={row.lessonTitle}
+                      sourceLabel="Course lesson transcript"
+                      sourceType="course_lesson"
+                      language="mixed"
+                      compact
+                      variant="bookmark"
+                    />
+                  </div>
                   <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground">
                     {content.transcript as string}
                   </pre>

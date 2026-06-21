@@ -16,6 +16,8 @@ import { smartRomanise } from "@/lib/romanise";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
 import { exportCoachingNotes } from "@/lib/coaching-export";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
+import { FlashcardStarButton } from "@/components/flashcards/FlashcardStarButton";
+import { notifyFlashcardsChanged } from "@/lib/flashcards";
 import {
   extractToneFromPinyin,
   extractToneFromJyutping,
@@ -603,18 +605,13 @@ function NoteCard({
           {(canEdit || canStar) && !isEditing && (
             <div className="flex items-center justify-end gap-1 -mt-0.5 -mb-1">
               {canStar && (
-                <button
-                  type="button"
-                  onClick={onToggleStar}
-                  className={cn(
-                    "inline-flex size-5 items-center justify-center rounded text-[11px] transition-colors",
-                    note.starred ? "text-amber-500" : "text-muted-foreground hover:text-foreground",
-                  )}
-                  aria-label="Star note"
-                  title="Star note"
-                >
-                  <Star className="size-3" />
-                </button>
+                <FlashcardStarButton
+                  isSaved={!!note.starred}
+                  onToggle={onToggleStar}
+                  label={note.starred ? "Remove from flashcards" : "Save note to flashcards"}
+                  compact
+                  variant="star"
+                />
               )}
               {canEdit && (
                 <>
@@ -1800,6 +1797,7 @@ function CoachingPanel({
       }
       trackAction("delete_note");
       await fetchSessions();
+      notifyFlashcardsChanged();
     },
     [canEditNotes, fetchSessions, trackAction],
   );
@@ -2663,7 +2661,10 @@ function CoachingPanel({
                         const method = note.starred === 1 ? "DELETE" : "POST";
                         fetch(`/api/coaching/notes/${note.id}/star`, {
                           method,
-                        }).then(() => fetchSessions());
+                        }).then(() => {
+                          fetchSessions();
+                          notifyFlashcardsChanged();
+                        });
                       }}
                       onSave={(updates) => {
                         if (!activeSession) return;
@@ -2671,7 +2672,10 @@ function CoachingPanel({
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify(updates),
-                        }).then(() => fetchSessions());
+                        }).then(() => {
+                          fetchSessions();
+                          notifyFlashcardsChanged();
+                        });
                       }}
                       onDelete={() => {
                         void handleDeleteNote(note.id);
@@ -2707,6 +2711,9 @@ function CoachingPanel({
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ explanation: explanation.trim() || null }),
+                        }).then(() => {
+                          fetchSessions();
+                          notifyFlashcardsChanged();
                         }).catch(() => null);
                       } : undefined}
                     />
@@ -2958,7 +2965,10 @@ function CoachingPanel({
                         const method = note.starred === 1 ? "DELETE" : "POST";
                         fetch(`/api/coaching/notes/${note.id}/star`, {
                           method,
-                        }).then(() => fetchSessions());
+                        }).then(() => {
+                          fetchSessions();
+                          notifyFlashcardsChanged();
+                        });
                       }}
                       onSave={(updates) => {
                         if (!activeSession) return;
@@ -2966,7 +2976,10 @@ function CoachingPanel({
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify(updates),
-                        }).then(() => fetchSessions());
+                        }).then(() => {
+                          fetchSessions();
+                          notifyFlashcardsChanged();
+                        });
                       }}
                       onDelete={() => {
                         void handleDeleteNote(note.id);
@@ -3002,6 +3015,9 @@ function CoachingPanel({
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ explanation: explanation.trim() || null }),
+                        }).then(() => {
+                          fetchSessions();
+                          notifyFlashcardsChanged();
                         }).catch(() => null);
                       } : undefined}
                     />

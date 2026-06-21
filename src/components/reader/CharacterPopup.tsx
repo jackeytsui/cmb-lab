@@ -5,7 +5,7 @@
  *
  * Composes all sub-components:
  *   - PopupHeader (word, pinyin, jyutping, definitions, source badge, TTS)
- *   - SaveVocabularyButton (bookmark toggle with optimistic UI)
+ *   - FlashcardSaveButton (bookmark toggle with optimistic UI)
  *   - ToneComparison (per-character Mandarin/Cantonese tone display)
  *   - RadicalBreakdown (radical, decomposition, etymology)
  *   - StrokeAnimation (HanziWriter with play/pause/replay)
@@ -31,8 +31,7 @@ import type {
   CharacterFallback,
 } from "@/hooks/useCharacterPopup";
 import { PopupHeader } from "./popup/PopupHeader";
-import { SaveVocabularyButton } from "./popup/SaveVocabularyButton";
-import { VocabularyListManager } from "./popup/VocabularyListManager";
+import { FlashcardStarButton } from "@/components/flashcards/FlashcardStarButton";
 import { AddToSRSButton } from "./popup/AddToSRSButton";
 import { ToneComparison } from "./popup/ToneComparison";
 import { RadicalBreakdown } from "./popup/RadicalBreakdown";
@@ -50,10 +49,10 @@ export interface CharacterPopupProps {
   characterFallbacks?: CharacterFallback[] | null;
   isLoading: boolean;
   error: string | null;
-  isSaved: boolean;
-  savedItemId: string | null;
-  onToggleSave: () => void;
-  onEnsureSaved: () => Promise<string | null>;
+  isSaved?: boolean;
+  savedItemId?: string | null;
+  onToggleSave?: () => void;
+  onEnsureSaved?: () => Promise<string | null>;
   onHide: () => void;
   onCancelHide: () => void;
   toneColorsEnabled?: boolean;
@@ -71,9 +70,7 @@ export function CharacterPopup({
   isLoading,
   error,
   isSaved,
-  savedItemId,
   onToggleSave,
-  onEnsureSaved,
   onHide,
   onCancelHide,
   toneColorsEnabled = false,
@@ -268,14 +265,12 @@ export function CharacterPopup({
                     meaning={entry.definitions.filter((d: string) => !d.startsWith("CL:")).slice(0, 3).join("; ") || "No definition"}
                   />
                 )}
-                <VocabularyListManager 
-                  savedItemId={savedItemId}
-                  onEnsureSaved={onEnsureSaved}
-                />
-                <SaveVocabularyButton
-                  isSaved={isSaved}
-                  isLoading={false}
-                  onToggle={onToggleSave}
+                <FlashcardStarButton
+                  isSaved={!!isSaved}
+                  onToggle={onToggleSave ?? (() => {})}
+                  label={isSaved ? "Remove from vocabulary" : "Save to vocabulary"}
+                  compact
+                  variant="bookmark"
                 />
               </div>
             </div>

@@ -19,6 +19,8 @@
 
 import { useState, useCallback } from "react";
 import { Play, Square, Loader2, Languages, RotateCcw } from "lucide-react";
+import { FlashcardSaveButton } from "@/components/flashcards/FlashcardSaveButton";
+import type { FlashcardSourceType } from "@/lib/flashcards";
 
 export interface SentenceControlsProps {
   /** The full text of this sentence */
@@ -43,6 +45,9 @@ export interface SentenceControlsProps {
   playButtonTourId?: string;
   /** Disable sentence play button (e.g. while Play All is active) */
   disableSentencePlayback?: boolean;
+  /** Optional flashcard metadata for the sentence save button */
+  flashcardSourceLabel?: string;
+  flashcardSourceType?: FlashcardSourceType;
 }
 
 export function SentenceControls({
@@ -57,6 +62,8 @@ export function SentenceControls({
   onPlayClick,
   playButtonTourId,
   disableSentencePlayback = false,
+  flashcardSourceLabel = "AI Passage Reader",
+  flashcardSourceType = "sentence",
 }: SentenceControlsProps) {
   // Suppress unused variable warning - language is part of the public API
   // and used by parent to determine which TTS voice to pass to onSpeak
@@ -174,6 +181,16 @@ export function SentenceControls({
             <Languages className="size-3.5" />
           )}
         </button>
+
+        <FlashcardSaveButton
+          chinese={sentenceText}
+          english={cachedTranslation ?? undefined}
+          sourceLabel={flashcardSourceLabel}
+          sourceType={flashcardSourceType}
+          language={language === "zh-HK" ? "cantonese" : "mandarin"}
+          compact
+          variant="bookmark"
+        />
       </span>
 
       {/* TTS errors hidden — fallback happens silently */}

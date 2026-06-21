@@ -7,6 +7,7 @@ import { ToneColoredText } from "@/components/ToneColoredText";
 import { pinyin } from "pinyin-pro";
 import { extractToneFromPinyin, getToneColorClass } from "@/lib/tone-colors";
 import { convertScript } from "@/lib/chinese-convert";
+import { FLASHCARDS_CHANGED_EVENT } from "@/lib/flashcards";
 
 /** Get Pleco-style tone color from pinyin syllable */
 function pinyinToneColor(syllable: string): string {
@@ -16,7 +17,7 @@ function pinyinToneColor(syllable: string): string {
 
 type FlashcardItem = {
   id: string;
-  source: "coaching" | "notepad" | "vocabulary";
+  source: "coaching" | "notepad" | "vocabulary" | "saved";
   chinese: string;
   simplified?: string;
   pinyin?: string;
@@ -27,10 +28,15 @@ type FlashcardItem = {
   createdAt: string;
   noteId?: string;
   vocabId?: string;
+  flashcardId?: string;
+  sourceLabel?: string;
+  sourceType?: string;
+  sourceUrl?: string;
+  contentKey?: string;
 };
 
 type ScriptMode = "traditional" | "simplified";
-type SourceFilter = "all" | "coaching" | "notepad" | "vocabulary";
+type SourceFilter = "all" | "coaching" | "notepad" | "vocabulary" | "saved";
 
 type TTSRate = TTSOptions["rate"];
 const RATE_OPTIONS: { value: NonNullable<TTSRate>; label: string }[] = [
@@ -99,6 +105,14 @@ function FlashCard({
     card.pane === "cantonese" ? "zh-HK" : "zh-CN";
 
   const hasJyutping = !!card.jyutping;
+  const sourceBadge =
+    card.source === "saved"
+      ? card.sourceLabel ?? "Flashcards"
+      : card.source === "coaching"
+        ? "Coaching"
+        : card.source === "notepad"
+          ? "Notepad"
+          : "Vocabulary";
 
   // Generate diacritical pinyin from the Chinese text (more reliable than stored number-tone)
   const pinyinDiacritical = useMemo(() => {
@@ -123,11 +137,11 @@ function FlashCard({
         onClick={onFlip}
         className="w-full cursor-pointer text-left"
         style={{ perspective: "800px" }}
-      >
-        <div
-          className={cn(
-            "relative min-h-[240px] w-full rounded-xl border border-border bg-card shadow-sm transition-transform duration-500",
-            isFlipped && "[transform:rotateY(180deg)]",
+        >
+          <div
+            className={cn(
+              "relative min-h-[240px] w-full rounded-xl border border-border bg-card shadow-sm transition-transform duration-500",
+              isFlipped && "[transform:rotateY(180deg)]",
           )}
           style={{ transformStyle: "preserve-3d" }}
         >
@@ -179,6 +193,9 @@ function FlashCard({
             ) : (
               <span className="text-4xl font-bold text-foreground">{displayChinese}</span>
             )}
+            <span className="rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground">
+              {sourceBadge}
+            </span>
             <span className="mt-3 text-[10px] text-muted-foreground/40">Tap to reveal</span>
           </div>
 
@@ -235,6 +252,9 @@ function FlashCard({
             ) : (
               <span className="text-xl font-bold text-foreground/70">{displayChinese}</span>
             )}
+            <span className="rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground">
+              {sourceBadge}
+            </span>
             <div className="mt-1" onClick={(e) => e.stopPropagation()}>
               <SpeakButton text={displayChinese} lang={lang} speak={speak} isLoading={ttsLoading} isPlaying={ttsPlaying} />
             </div>
@@ -297,6 +317,14 @@ export function FlashcardsClient() {
 
   useEffect(() => {
     fetchCards();
+  }, [fetchCards]);
+
+  useEffect(() => {
+    const handleChange = () => {
+      void fetchCards();
+    };
+    window.addEventListener(FLASHCARDS_CHANGED_EVENT, handleChange);
+    return () => window.removeEventListener(FLASHCARDS_CHANGED_EVENT, handleChange);
   }, [fetchCards]);
 
   // Re-compute display text whenever cards or the script toggle change.
@@ -402,6 +430,8 @@ export function FlashcardsClient() {
       });
     } else if (card.source === "vocabulary" && card.vocabId) {
       await fetch(`/api/vocabulary?id=${card.vocabId}`, { method: "DELETE" });
+    } else if (card.source === "saved" && card.flashcardId) {
+      await fetch(`/api/flashcards/items?id=${card.flashcardId}`, { method: "DELETE" });
     }
     setCards((prev) => prev.filter((c) => c.id !== card.id));
   };
@@ -471,7 +501,7 @@ export function FlashcardsClient() {
       <div className="rounded-lg border border-border bg-card p-8 text-center">
         <p className="text-lg font-medium text-foreground">No flashcards yet</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Star notes in your Notepad or coaching sessions, or save vocabulary from the AI Passage Reader and YouTube Listening Lab to build your flashcard deck.
+          Save words, phrases, or notes from the Reader, Notepad, coaching sessions, and lesson pages to build your flashcard deck.
         </p>
       </div>
     );
@@ -672,6 +702,7 @@ export function FlashcardsClient() {
               ["notepad", `Notepad`],
               ["coaching", `Coaching`],
               ["vocabulary", `Vocabulary`],
+              ["saved", `Saved`],
             ] as const
           ).map(([value, label]) => (
             <button
