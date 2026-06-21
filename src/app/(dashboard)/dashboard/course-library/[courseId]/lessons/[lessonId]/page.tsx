@@ -97,6 +97,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
     : null;
 
   const content = (row.content ?? {}) as Record<string, unknown>;
+  const lessonType = row.lessonType as string;
 
   return (
     <FeatureGate feature="course_library">
@@ -272,7 +273,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           </div>
         )}
 
-        {row.lessonType === "form" && (
+        {lessonType === "form" && (
           <div className="space-y-4">
             {typeof content.description === "string" && content.description && (
               <div className="rounded-lg border border-border bg-card p-5">

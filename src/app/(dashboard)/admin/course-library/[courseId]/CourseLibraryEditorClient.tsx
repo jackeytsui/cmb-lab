@@ -150,8 +150,8 @@ function SortableLessonList({
     setLocalLessons([...lessons].sort((a, b) => a.sortOrder - b.sortOrder));
   }, [lessons]);
 
-  const handleDragOver = (event: { operation: { source?: { id: string }; target?: { id: string } } }) => {
-    const { source, target } = event.operation;
+  const handleDragOver = (event: any) => {
+    const { source, target } = event.operation ?? {};
     if (!source || !target || source.id === target.id) return;
 
     const current = itemsRef.current;
@@ -166,7 +166,7 @@ function SortableLessonList({
     setLocalLessons(next);
   };
 
-  const handleDragEnd = async (event: { canceled?: boolean }) => {
+  const handleDragEnd = async (event: any) => {
     if (event.canceled) return;
     const final = itemsRef.current;
     const updates = final.map((l, i) => ({ id: l.id, sortOrder: i }));
