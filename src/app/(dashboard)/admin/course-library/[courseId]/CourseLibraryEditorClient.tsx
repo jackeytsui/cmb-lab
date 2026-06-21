@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -15,10 +15,14 @@ import {
   Pencil,
   X,
   Music,
+  ExternalLink,
+  GripVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DragDropProvider } from "@dnd-kit/react";
+import { useSortable } from "@dnd-kit/react/sortable";
 
-type LessonType = "video" | "audio" | "text" | "quiz" | "download";
+type LessonType = "video" | "audio" | "text" | "quiz" | "download" | "form";
 
 interface LessonRow {
   id: string;
@@ -52,7 +56,154 @@ const LESSON_TYPE_META: Record<
   text: { label: "Text", Icon: FileText, color: "text-blue-500" },
   quiz: { label: "Quiz", Icon: HelpCircle, color: "text-amber-500" },
   download: { label: "Download", Icon: Download, color: "text-emerald-500" },
+  form: { label: "Form", Icon: ExternalLink, color: "text-pink-500" },
 };
+
+// ---------------------------------------------------------------------------
+// Sortable lesson row (drag-and-drop handle)
+// ---------------------------------------------------------------------------
+
+function SortableLesson({
+  lesson,
+  index,
+  courseId,
+  moduleId,
+  onDelete,
+}: {
+  lesson: LessonRow;
+  index: number;
+  courseId: string;
+  moduleId: string;
+  onDelete: (lessonId: string, title: string, moduleId: string) => void;
+}) {
+  const { ref, isDragging } = useSortable({ id: lesson.id, index });
+  const meta = LESSON_TYPE_META[lesson.lessonType];
+
+  return (
+    <div
+      ref={ref}
+      data-dragging={isDragging}
+      className={cn(
+        "flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 group transition-all",
+        isDragging && "opacity-50 scale-[0.98] ring-1 ring-primary/40",
+      )}
+    >
+      <div className="cursor-grab text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing shrink-0">
+        <GripVertical className="w-3.5 h-3.5" />
+      </div>
+      <meta.Icon className={cn("w-4 h-4 shrink-0", meta.color)} />
+      <span className="text-xs text-muted-foreground uppercase font-medium w-16 shrink-0">
+        {meta.label}
+      </span>
+      <Link
+        href={`/admin/course-library/${courseId}/lessons/${lesson.id}`}
+        className="flex-1 text-sm text-foreground hover:text-primary"
+      >
+        {lesson.title}
+      </Link>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Link
+          href={`/admin/course-library/${courseId}/lessons/${lesson.id}`}
+          className="p-1 text-muted-foreground/50 hover:text-foreground"
+          title="Edit"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </Link>
+        <button
+          type="button"
+          onClick={() => onDelete(lesson.id, lesson.title, moduleId)}
+          className="p-1 text-muted-foreground/50 hover:text-red-500"
+          title="Delete"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sortable lesson list per module
+// ---------------------------------------------------------------------------
+
+function SortableLessonList({
+  moduleId,
+  lessons,
+  courseId,
+  onDelete,
+  onReorder,
+}: {
+  moduleId: string;
+  lessons: LessonRow[];
+  courseId: string;
+  onDelete: (lessonId: string, title: string, moduleId: string) => void;
+  onReorder: (moduleId: string, updates: { id: string; sortOrder: number }[]) => Promise<void>;
+}) {
+  const [localLessons, setLocalLessons] = useState<LessonRow[]>(lessons);
+  const itemsRef = useRef(localLessons);
+
+  useEffect(() => {
+    itemsRef.current = localLessons;
+  }, [localLessons]);
+
+  useEffect(() => {
+    setLocalLessons([...lessons].sort((a, b) => a.sortOrder - b.sortOrder));
+  }, [lessons]);
+
+  const handleDragOver = (event: { operation: { source?: { id: string }; target?: { id: string } } }) => {
+    const { source, target } = event.operation;
+    if (!source || !target || source.id === target.id) return;
+
+    const current = itemsRef.current;
+    const srcIdx = current.findIndex((l) => l.id === source.id);
+    const tgtIdx = current.findIndex((l) => l.id === target.id);
+    if (srcIdx === -1 || tgtIdx === -1) return;
+
+    const next = [...current];
+    const [moved] = next.splice(srcIdx, 1);
+    next.splice(tgtIdx, 0, moved);
+    itemsRef.current = next;
+    setLocalLessons(next);
+  };
+
+  const handleDragEnd = async (event: { canceled?: boolean }) => {
+    if (event.canceled) return;
+    const final = itemsRef.current;
+    const updates = final.map((l, i) => ({ id: l.id, sortOrder: i }));
+    itemsRef.current = final;
+    setLocalLessons(final.map((l, i) => ({ ...l, sortOrder: i })));
+    try {
+      await onReorder(moduleId, updates);
+    } catch (error) {
+      console.error("Failed to reorder course-library lessons:", error);
+      itemsRef.current = [...lessons].sort((a, b) => a.sortOrder - b.sortOrder);
+      setLocalLessons([...lessons].sort((a, b) => a.sortOrder - b.sortOrder));
+    }
+  };
+
+  if (localLessons.length === 0) return null;
+
+  return (
+    <DragDropProvider onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
+      <div className="space-y-2">
+        {localLessons.map((lesson, index) => (
+          <SortableLesson
+            key={lesson.id}
+            lesson={lesson}
+            index={index}
+            courseId={courseId}
+            moduleId={moduleId}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+    </DragDropProvider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main editor
+// ---------------------------------------------------------------------------
 
 export function CourseLibraryEditorClient({
   initialCourse,
@@ -147,8 +298,8 @@ export function CourseLibraryEditorClient({
     }
   };
 
-  const handleDeleteModule = async (moduleId: string, title: string) => {
-    if (!confirm(`Delete module "${title}" and all its lessons?`)) return;
+  const handleDeleteModule = async (moduleId: string, moduleTitle: string) => {
+    if (!confirm(`Delete module "${moduleTitle}" and all its lessons?`)) return;
     try {
       const res = await fetch(
         `/api/admin/course-library/modules/${moduleId}`,
@@ -233,6 +384,38 @@ export function CourseLibraryEditorClient({
     } catch {
       // ignore
     }
+  };
+
+  const handleReorderLessons = async (
+    moduleId: string,
+    updates: { id: string; sortOrder: number }[],
+  ) => {
+    const response = await fetch(
+      `/api/admin/course-library/modules/${moduleId}/lessons/reorder`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lessons: updates }),
+      },
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error || "Failed to reorder lessons");
+    }
+    setCourse((prev) => ({
+      ...prev,
+      modules: prev.modules.map((m) =>
+        m.id === moduleId
+          ? {
+              ...m,
+              lessons: m.lessons.map((l) => {
+                const upd = updates.find((u) => u.id === l.id);
+                return upd ? { ...l, sortOrder: upd.sortOrder } : l;
+              }),
+            }
+          : m,
+      ),
+    }));
   };
 
   return (
@@ -370,45 +553,14 @@ export function CourseLibraryEditorClient({
                   No lessons yet
                 </p>
               )}
-              {mod.lessons.map((lesson) => {
-                const meta = LESSON_TYPE_META[lesson.lessonType];
-                return (
-                  <div
-                    key={lesson.id}
-                    className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 group"
-                  >
-                    <meta.Icon className={cn("w-4 h-4 shrink-0", meta.color)} />
-                    <span className="text-xs text-muted-foreground uppercase font-medium w-16">
-                      {meta.label}
-                    </span>
-                    <Link
-                      href={`/admin/course-library/${course.id}/lessons/${lesson.id}`}
-                      className="flex-1 text-sm text-foreground hover:text-primary"
-                    >
-                      {lesson.title}
-                    </Link>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link
-                        href={`/admin/course-library/${course.id}/lessons/${lesson.id}`}
-                        className="p-1 text-muted-foreground/50 hover:text-foreground"
-                        title="Edit"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDeleteLesson(lesson.id, lesson.title, mod.id)
-                        }
-                        className="p-1 text-muted-foreground/50 hover:text-red-500"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+
+              <SortableLessonList
+                moduleId={mod.id}
+                lessons={mod.lessons}
+                courseId={course.id}
+                onDelete={handleDeleteLesson}
+                onReorder={handleReorderLessons}
+              />
 
               {addingLessonTo === mod.id ? (
                 <div className="rounded-md border border-dashed border-border bg-muted/30 p-3 space-y-2">
@@ -425,6 +577,7 @@ export function CourseLibraryEditorClient({
                       <option value="text">Text</option>
                       <option value="quiz">Quiz</option>
                       <option value="download">Download</option>
+                      <option value="form">Form Embed</option>
                     </select>
                     <input
                       type="text"
