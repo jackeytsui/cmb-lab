@@ -7,7 +7,7 @@ import { z } from "zod";
 
 const createSchema = z.object({
   title: z.string().min(1).max(200),
-  lessonType: z.enum(["video", "audio", "text", "quiz", "download"]),
+  lessonType: z.enum(["video", "audio", "text", "quiz", "download", "form"]),
   content: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -65,6 +65,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     text: { body: "" },
     quiz: { passingScore: 70, questions: [] },
     download: { fileUrl: "", fileName: "", sizeBytes: 0 },
+    form: { embedUrl: "", embedHeight: 600 },
   };
 
   // Next sort order

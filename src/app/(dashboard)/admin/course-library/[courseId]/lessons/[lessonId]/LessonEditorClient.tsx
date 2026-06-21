@@ -16,12 +16,13 @@ import {
   ImagePlus,
   Trash2,
   Music,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { QuizBuilder } from "./QuizBuilder";
 
-type LessonType = "video" | "audio" | "text" | "quiz" | "download";
+type LessonType = "video" | "audio" | "text" | "quiz" | "download" | "form";
 
 interface LessonData {
   id: string;
@@ -36,6 +37,7 @@ const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: 
   text: { label: "Text Lesson", Icon: FileText, color: "text-blue-500" },
   quiz: { label: "Quiz Lesson", Icon: HelpCircle, color: "text-amber-500" },
   download: { label: "Download Lesson", Icon: Download, color: "text-emerald-500" },
+  form: { label: "Form Embed", Icon: ExternalLink, color: "text-pink-500" },
 };
 
 // Vercel functions cap request bodies at ~4.5MB, so anything larger has
@@ -251,6 +253,13 @@ export function LessonEditorClient({
       )}
       {lesson.lessonType === "quiz" && (
         <QuizBuilder
+          lessonId={lesson.id}
+          content={lesson.content}
+          onUpdate={updateContent}
+        />
+      )}
+      {lesson.lessonType === "form" && (
+        <FormLessonForm
           lessonId={lesson.id}
           content={lesson.content}
           onUpdate={updateContent}
@@ -1051,6 +1060,133 @@ function TextLessonForm({
 // ---------------------------------------------------------------------------
 // Download Lesson Form
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Form Embed Lesson Form
+// ---------------------------------------------------------------------------
+
+function FormLessonForm({
+  lessonId,
+  content,
+  onUpdate,
+}: {
+  lessonId: string;
+  content: Record<string, unknown>;
+  onUpdate: (next: Record<string, unknown>) => void;
+}) {
+  const embedUrl = (content.embedUrl as string) ?? "";
+  const embedHeight = (content.embedHeight as number) ?? 600;
+  const description = (content.description as string) ?? "";
+
+  const [url, setUrl] = useState(embedUrl);
+  const [height, setHeight] = useState(String(embedHeight));
+  const [desc, setDesc] = useState(description);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+
+  const dirty =
+    url !== embedUrl ||
+    height !== String(embedHeight) ||
+    desc !== description;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const heightNum = parseInt(height, 10);
+      const nextContent: Record<string, unknown> = {
+        ...content,
+        embedUrl: url.trim(),
+        embedHeight: isNaN(heightNum) || heightNum < 100 ? 600 : heightNum,
+        description: desc,
+      };
+      const ok = await saveLessonContent(lessonId, nextContent);
+      if (ok) {
+        onUpdate(nextContent);
+        setSavedAt(new Date());
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-foreground">Form embed settings</h3>
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Embed URL
+          </label>
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://form.typeform.com/to/…  or  https://forms.gle/…"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Paste the shareable form URL (Typeform, JotForm, Google Forms, etc.)
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Embed height (px)
+          </label>
+          <input
+            type="number"
+            min={200}
+            max={2000}
+            value={height}
+            onChange={(e) => setHeight(e.target.value)}
+            className="w-28 rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Instructions (optional)
+          </label>
+          <RichTextEditor
+            value={desc}
+            onChange={setDesc}
+            placeholder="Tell students what this form is for and how to fill it in"
+            compact
+          />
+        </div>
+        {dirty && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !url.trim()}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Save
+            </button>
+          </div>
+        )}
+        {savedAt && !dirty && (
+          <p className="text-[10px] text-emerald-500 text-right">
+            Saved at {savedAt.toLocaleTimeString()}
+          </p>
+        )}
+      </div>
+
+      {url && (
+        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">Preview</h3>
+          <iframe
+            src={url}
+            style={{ height: `${parseInt(height, 10) || 600}px` }}
+            className="w-full rounded-md border border-border"
+            title="Form preview"
+            allow="camera; microphone; geolocation"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DownloadLessonForm({
   lessonId,
