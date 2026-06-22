@@ -50,11 +50,13 @@ const ToolbarButton = ({
   onClick,
   children,
   title,
+  className,
 }: {
   active?: boolean;
   onClick: () => void;
   children: React.ReactNode;
   title?: string;
+  className?: string;
 }) => (
   <button
     type="button"
@@ -62,6 +64,7 @@ const ToolbarButton = ({
     title={title}
     className={cn(
       "inline-flex items-center justify-center rounded-md p-2 text-sm font-medium transition-colors hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+      className,
       active ? "bg-zinc-700 text-white" : "text-zinc-400",
     )}
   >
@@ -206,6 +209,14 @@ export function RichTextEditor({
         </div>
         <div className="mx-1 h-6 w-px bg-zinc-700" />
 
+        <ToolbarButton
+          active={editor.isActive("heading", { level: 1 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          title="Lesson title"
+          className="px-3"
+        >
+          Title
+        </ToolbarButton>
         <ToolbarButton
           active={editor.isActive("heading", { level: 1 })}
           onClick={() =>
