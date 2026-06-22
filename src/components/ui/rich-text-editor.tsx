@@ -17,8 +17,10 @@ import {
   Image as ImageIcon,
   Heading1,
   Heading2,
+  Heading3,
   Quote,
   Palette,
+  X,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -205,22 +207,31 @@ export function RichTextEditor({
         <div className="mx-1 h-6 w-px bg-zinc-700" />
 
         <ToolbarButton
-          active={editor.isActive("heading", { level: 2 })}
+          active={editor.isActive("heading", { level: 1 })}
           onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
+            editor.chain().focus().toggleHeading({ level: 1 }).run()
           }
           title="Heading 1"
         >
           <Heading1 className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
-          active={editor.isActive("heading", { level: 3 })}
+          active={editor.isActive("heading", { level: 2 })}
           onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 3 }).run()
+            editor.chain().focus().toggleHeading({ level: 2 }).run()
           }
           title="Heading 2"
         >
           <Heading2 className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive("heading", { level: 3 })}
+          onClick={() =>
+            editor.chain().focus().toggleHeading({ level: 3 }).run()
+          }
+          title="Heading 3"
+        >
+          <Heading3 className="h-4 w-4" />
         </ToolbarButton>
         <div className="mx-1 h-6 w-px bg-zinc-700" />
         <ToolbarButton
@@ -255,6 +266,12 @@ export function RichTextEditor({
         </ToolbarButton>
         <ToolbarButton onClick={addImage} title="Image">
           <ImageIcon className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+          title="Clear formatting"
+        >
+          <X className="h-4 w-4" />
         </ToolbarButton>
       </div>
       <EditorContent editor={editor} />

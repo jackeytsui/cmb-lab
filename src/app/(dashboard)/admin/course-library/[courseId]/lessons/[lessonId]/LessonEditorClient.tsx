@@ -1113,6 +1113,15 @@ function FormLessonForm({
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-5 space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Form embed settings</h3>
+        <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground space-y-1">
+          <p className="font-medium text-foreground">How forms work</p>
+          <p>
+            Form lessons are external embeds stored as a URL in the lesson content.
+            There is no separate internal forms library. Create or copy the embed link
+            from Google Forms, Typeform, Jotform, or another iframe-compatible form provider,
+            then paste it here.
+          </p>
+        </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">
             Embed URL

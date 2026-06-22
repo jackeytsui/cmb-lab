@@ -221,6 +221,7 @@ export function CourseLibraryEditorClient({
   const [newLessonTitle, setNewLessonTitle] = useState("");
   const [newLessonType, setNewLessonType] = useState<LessonType>("video");
   const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const isDirty = title !== course.title || summary !== course.summary;
 
@@ -267,6 +268,7 @@ export function CourseLibraryEditorClient({
   const handleAddModule = async () => {
     if (!newModuleTitle.trim()) return;
     setSubmitting(true);
+    setActionError(null);
     try {
       const res = await fetch(
         `/api/admin/course-library/courses/${course.id}/modules`,
@@ -292,7 +294,12 @@ export function CourseLibraryEditorClient({
         }));
         setNewModuleTitle("");
         setAddingModule(false);
+      } else {
+        const data = await res.json().catch(() => null);
+        setActionError(data?.error || "Failed to create module");
       }
+    } catch {
+      setActionError("Failed to create module");
     } finally {
       setSubmitting(false);
     }
@@ -319,6 +326,7 @@ export function CourseLibraryEditorClient({
   const handleAddLesson = async (moduleId: string) => {
     if (!newLessonTitle.trim()) return;
     setSubmitting(true);
+    setActionError(null);
     try {
       const res = await fetch(
         `/api/admin/course-library/modules/${moduleId}/lessons`,
@@ -354,7 +362,21 @@ export function CourseLibraryEditorClient({
         }));
         setNewLessonTitle("");
         setAddingLessonTo(null);
+      } else {
+        const data = await res.json().catch(() => null);
+        setActionError(
+          data?.error ||
+            (newLessonType === "form"
+              ? "Failed to create Form Embed lesson. If this is a new lesson type, the database migration may not be deployed yet."
+              : "Failed to create lesson"),
+        );
       }
+    } catch {
+      setActionError(
+        newLessonType === "form"
+          ? "Failed to create Form Embed lesson. If this is a new lesson type, the database migration may not be deployed yet."
+          : "Failed to create lesson",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -481,6 +503,11 @@ export function CourseLibraryEditorClient({
 
       {/* Modules */}
       <div className="space-y-3">
+        {actionError && (
+          <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-500">
+            {actionError}
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">
             Modules ({course.modules.length})
@@ -571,14 +598,14 @@ export function CourseLibraryEditorClient({
                         setNewLessonType(e.target.value as LessonType)
                       }
                       className="rounded-md border border-border bg-background px-2 py-2 text-xs"
-                    >
-                      <option value="video">Video</option>
-                      <option value="audio">Audio</option>
-                      <option value="text">Text</option>
-                      <option value="quiz">Quiz</option>
-                      <option value="download">Download</option>
-                      <option value="form">Form Embed</option>
-                    </select>
+                      >
+                        <option value="video">Video</option>
+                        <option value="audio">Audio</option>
+                        <option value="text">Text</option>
+                        <option value="quiz">Quiz</option>
+                        <option value="download">Download</option>
+                        <option value="form">Form Embed</option>
+                      </select>
                     <input
                       type="text"
                       value={newLessonTitle}
@@ -591,12 +618,22 @@ export function CourseLibraryEditorClient({
                       autoFocus
                     />
                   </div>
+                  {newLessonType === "form" && (
+                    <div className="rounded-md border border-pink-500/20 bg-pink-500/5 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                      <p className="font-medium text-foreground">Form Embed lesson</p>
+                      <p>
+                        Create the lesson now, then paste an external embed URL in the lesson editor.
+                        Supported providers include Google Forms, Typeform, Jotform, and other iframe-compatible forms.
+                      </p>
+                    </div>
+                  )}
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => {
                         setAddingLessonTo(null);
                         setNewLessonTitle("");
+                        setActionError(null);
                       }}
                       className="text-xs text-muted-foreground hover:text-foreground"
                     >
@@ -621,6 +658,7 @@ export function CourseLibraryEditorClient({
                   onClick={() => {
                     setAddingLessonTo(mod.id);
                     setNewLessonTitle("");
+                    setActionError(null);
                   }}
                   className="w-full text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md py-2 hover:bg-muted/30 transition-colors inline-flex items-center justify-center gap-1"
                 >
