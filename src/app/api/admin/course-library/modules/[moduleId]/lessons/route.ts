@@ -81,16 +81,38 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const nextSort =
     siblings.length > 0 ? Math.max(...siblings.map((s) => s.sortOrder)) + 1 : 0;
 
-  const [lesson] = await db
-    .insert(courseLibraryLessons)
-    .values({
-      moduleId,
-      title: parsed.data.title,
-      lessonType: parsed.data.lessonType,
-      content: parsed.data.content ?? defaultContent[parsed.data.lessonType],
-      sortOrder: nextSort,
-    })
-    .returning();
+  let lesson;
+  try {
+    [lesson] = await db
+      .insert(courseLibraryLessons)
+      .values({
+        moduleId,
+        title: parsed.data.title,
+        lessonType: parsed.data.lessonType,
+        content: parsed.data.content ?? defaultContent[parsed.data.lessonType],
+        sortOrder: nextSort,
+      })
+      .returning();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      parsed.data.lessonType === "form" &&
+      (message.includes("course_library_lesson_type") || message.includes("form"))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Form Embed lesson type is not available yet. Run the course-library migration that adds the form enum value.",
+        },
+        { status: 409 },
+      );
+    }
+    console.error("Failed to create course-library lesson:", error);
+    return NextResponse.json(
+      { error: "Failed to create lesson" },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ lesson }, { status: 201 });
 }

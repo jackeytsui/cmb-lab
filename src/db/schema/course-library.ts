@@ -302,6 +302,7 @@ export interface CourseLibraryFormContent {
   embedUrl: string;
   embedHeight?: number;
   description?: string;
+  embedSource?: string;
 }
 
 export type CourseLibraryLessonContent =

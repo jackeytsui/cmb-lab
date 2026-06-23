@@ -19,6 +19,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { extractEmbedUrl, looksLikeIframeSnippet } from "@/lib/embed";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { QuizBuilder } from "./QuizBuilder";
 
@@ -1077,25 +1078,37 @@ function FormLessonForm({
   const embedUrl = (content.embedUrl as string) ?? "";
   const embedHeight = (content.embedHeight as number) ?? 600;
   const description = (content.description as string) ?? "";
+  const embedSource = (content.embedSource as string) ?? embedUrl;
 
-  const [url, setUrl] = useState(embedUrl);
+  const [source, setSource] = useState(embedSource);
   const [height, setHeight] = useState(String(embedHeight));
   const [desc, setDesc] = useState(description);
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   const dirty =
-    url !== embedUrl ||
+    source !== embedSource ||
     height !== String(embedHeight) ||
     desc !== description;
 
+  const resolvedEmbedUrl = extractEmbedUrl(source);
+  const isEmbedHtml = looksLikeIframeSnippet(source);
+
   const handleSave = async () => {
+    if (!resolvedEmbedUrl) {
+      setError("Paste a valid iframe embed snippet or direct embed URL.");
+      return;
+    }
+
     setSaving(true);
+    setError(null);
     try {
       const heightNum = parseInt(height, 10);
       const nextContent: Record<string, unknown> = {
         ...content,
-        embedUrl: url.trim(),
+        embedUrl: resolvedEmbedUrl,
+        embedSource: source.trim(),
         embedHeight: isNaN(heightNum) || heightNum < 100 ? 600 : heightNum,
         description: desc,
       };
@@ -1103,6 +1116,8 @@ function FormLessonForm({
       if (ok) {
         onUpdate(nextContent);
         setSavedAt(new Date());
+      } else {
+        setError("Failed to save form embed settings.");
       }
     } finally {
       setSaving(false);
@@ -1112,30 +1127,40 @@ function FormLessonForm({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Form embed settings</h3>
+        <h3 className="text-sm font-semibold text-foreground">HTML embed settings</h3>
         <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground space-y-1">
-          <p className="font-medium text-foreground">How forms work</p>
+          <p className="font-medium text-foreground">How embeds work</p>
           <p>
-            Form lessons are external embeds stored as a URL in the lesson content.
-            There is no separate internal forms library. Create or copy the embed link
-            from Google Forms, Typeform, Jotform, or another iframe-compatible form provider,
-            then paste it here.
+            Embed lessons are external iframe content stored as a URL in the lesson
+            content. Paste a direct embed URL or the full iframe HTML from Google
+            Forms, Typeform, Jotform, or another iframe-compatible provider.
           </p>
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Embed URL
+            Embed URL or iframe HTML
           </label>
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://form.typeform.com/to/…  or  https://forms.gle/…"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+          <textarea
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            placeholder={`https://form.typeform.com/to/…\n\n<iframe src="https://docs.google.com/forms/d/e/.../viewform?embedded=true" ...></iframe>`}
+            rows={5}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
           />
           <p className="mt-1 text-[10px] text-muted-foreground">
-            Paste the shareable form URL (Typeform, JotForm, Google Forms, etc.)
+            Paste the iframe code from the provider, or paste the embed URL directly.
           </p>
+          {resolvedEmbedUrl && (
+            <p className="mt-1 text-[10px] text-emerald-500 break-all">
+              Detected source: {isEmbedHtml ? "iframe HTML" : "URL"} · {resolvedEmbedUrl}
+            </p>
+          )}
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            We save the normalized `src` URL so the lesson can render the embed directly.
+          </p>
+          {error && (
+            <p className="mt-1 text-[10px] text-red-500">{error}</p>
+          )}
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">
@@ -1166,7 +1191,7 @@ function FormLessonForm({
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || !url.trim()}
+              disabled={saving || !source.trim()}
               className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
@@ -1181,16 +1206,19 @@ function FormLessonForm({
         )}
       </div>
 
-      {url && (
+      {resolvedEmbedUrl && (
         <div className="rounded-lg border border-border bg-card p-5 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Preview</h3>
           <iframe
-            src={url}
+            src={resolvedEmbedUrl}
             style={{ height: `${parseInt(height, 10) || 600}px` }}
             className="w-full rounded-md border border-border"
             title="Form preview"
             allow="camera; microphone; geolocation"
           />
+          <p className="text-[10px] text-muted-foreground">
+            Preview shows the stored iframe source, not the raw HTML wrapper.
+          </p>
         </div>
       )}
     </div>

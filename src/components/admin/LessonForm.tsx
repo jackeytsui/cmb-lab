@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
+import { extractEmbedUrl, looksLikeIframeSnippet } from "@/lib/embed";
 import { Plus, Trash2, Link as LinkIcon, FileText, Upload, X } from "lucide-react";
 import type { Lesson } from "@/db/schema/courses";
 import type { LessonAttachment } from "@/db/schema/courses";
@@ -220,6 +221,7 @@ export function LessonForm({
   const onSubmit = async (data: LessonFormData) => {
     setIsSubmitting(true);
     setError(null);
+    const normalizedEmbedUrl = extractEmbedUrl(data.embedUrl || "");
 
     try {
       const url = isEditMode
@@ -238,7 +240,7 @@ export function LessonForm({
           lessonType: data.lessonType || "standard",
           confirmationMessage: data.confirmationMessage || null,
           assignmentConfig: buildAssignmentConfig(data.lessonType),
-          embedUrl: data.embedUrl || null,
+          embedUrl: normalizedEmbedUrl,
           muxPlaybackId: data.muxPlaybackId || null,
           durationSeconds:
             data.durationSeconds !== "" && data.durationSeconds !== undefined
@@ -537,13 +539,23 @@ export function LessonForm({
         )}
 
         <div className="space-y-2">
-            <Label className="text-zinc-300">Embed URL (Optional)</Label>
-            <p className="text-xs text-zinc-500">Paste a Google Form or other iframe embed URL. Students will see it rendered inline below the lesson content.</p>
-            <Input
+          <Label className="text-zinc-300">HTML embed URL or iframe HTML (Optional)</Label>
+          <p className="text-xs text-zinc-500">
+            Paste a Google Form embed URL or full iframe HTML. The lesson stores only
+            the iframe source URL.
+          </p>
+          <Textarea
             {...register("embedUrl")}
-            placeholder="https://docs.google.com/forms/d/e/.../viewform?embedded=true"
-            className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-400"
-            />
+            placeholder={`https://docs.google.com/forms/d/e/.../viewform?embedded=true\n\n<iframe src="https://docs.google.com/forms/d/e/.../viewform?embedded=true" ...></iframe>`}
+            rows={4}
+            className="resize-y border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-400 font-mono"
+          />
+          {watch("embedUrl") && (
+            <p className="text-[10px] text-zinc-400 break-all">
+              Detected as{" "}
+              {looksLikeIframeSnippet(watch("embedUrl") || "") ? "iframe HTML" : "URL"}
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">

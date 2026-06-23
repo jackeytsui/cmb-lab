@@ -5,6 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
+import Placeholder from "@tiptap/extension-placeholder";
 import { TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import {
@@ -87,6 +88,9 @@ export function RichTextEditor({
       Underline,
       TextStyle,
       Color,
+      Placeholder.configure({
+        placeholder: placeholder ?? "Write your lesson content here...",
+      }),
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
@@ -102,9 +106,9 @@ export function RichTextEditor({
     content: value,
     immediatelyRender: false,
     editorProps: {
-      attributes: {
-        class: cn(
-          "prose prose-invert max-w-none w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm ring-offset-background placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+        attributes: {
+          class: cn(
+          "prose prose-invert max-w-none w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm ring-offset-background placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 prose-headings:text-white prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold",
           compact ? "min-h-[100px]" : "min-h-[200px]",
         ),
       },

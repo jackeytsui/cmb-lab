@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -56,7 +56,7 @@ const LESSON_TYPE_META: Record<
   text: { label: "Text", Icon: FileText, color: "text-blue-500" },
   quiz: { label: "Quiz", Icon: HelpCircle, color: "text-amber-500" },
   download: { label: "Download", Icon: Download, color: "text-emerald-500" },
-  form: { label: "Form", Icon: ExternalLink, color: "text-pink-500" },
+  form: { label: "HTML Embed", Icon: ExternalLink, color: "text-pink-500" },
 };
 
 // ---------------------------------------------------------------------------
@@ -139,18 +139,17 @@ function SortableLessonList({
   onDelete: (lessonId: string, title: string, moduleId: string) => void;
   onReorder: (moduleId: string, updates: { id: string; sortOrder: number }[]) => Promise<void>;
 }) {
-  const [localLessons, setLocalLessons] = useState<LessonRow[]>(lessons);
+  const [localLessons, setLocalLessons] = useState<LessonRow[]>(
+    () => [...lessons].sort((a, b) => a.sortOrder - b.sortOrder),
+  );
   const itemsRef = useRef(localLessons);
 
-  useEffect(() => {
-    itemsRef.current = localLessons;
-  }, [localLessons]);
-
-  useEffect(() => {
-    setLocalLessons([...lessons].sort((a, b) => a.sortOrder - b.sortOrder));
-  }, [lessons]);
-
-  const handleDragOver = (event: any) => {
+  const handleDragOver = (event: {
+    operation?: {
+      source?: { id: string };
+      target?: { id: string };
+    };
+  }) => {
     const { source, target } = event.operation ?? {};
     if (!source || !target || source.id === target.id) return;
 
@@ -166,7 +165,7 @@ function SortableLessonList({
     setLocalLessons(next);
   };
 
-  const handleDragEnd = async (event: any) => {
+  const handleDragEnd = async (event: { canceled?: boolean }) => {
     if (event.canceled) return;
     const final = itemsRef.current;
     const updates = final.map((l, i) => ({ id: l.id, sortOrder: i }));
@@ -363,12 +362,20 @@ export function CourseLibraryEditorClient({
         setNewLessonTitle("");
         setAddingLessonTo(null);
       } else {
-        const data = await res.json().catch(() => null);
+        const raw = await res.text().catch(() => "");
+        let data: { error?: string } | null = null;
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch {
+          data = null;
+        }
         setActionError(
           data?.error ||
-            (newLessonType === "form"
-              ? "Failed to create Form Embed lesson. If this is a new lesson type, the database migration may not be deployed yet."
-              : "Failed to create lesson"),
+            (res.status === 409 && newLessonType === "form"
+              ? "Form Embed lesson type is not available yet. Deploy the course-library migration first."
+              : newLessonType === "form"
+                ? "Failed to create Form Embed lesson. If this is a new lesson type, the database migration may not be deployed yet."
+                : "Failed to create lesson"),
         );
       }
     } catch {
@@ -582,6 +589,9 @@ export function CourseLibraryEditorClient({
               )}
 
               <SortableLessonList
+                key={`${mod.id}:${mod.lessons
+                  .map((l) => `${l.id}:${l.sortOrder}`)
+                  .join("|")}`}
                 moduleId={mod.id}
                 lessons={mod.lessons}
                 courseId={course.id}
@@ -604,7 +614,7 @@ export function CourseLibraryEditorClient({
                         <option value="text">Text</option>
                         <option value="quiz">Quiz</option>
                         <option value="download">Download</option>
-                        <option value="form">Form Embed</option>
+                        <option value="form">HTML Embed</option>
                       </select>
                     <input
                       type="text"
@@ -620,10 +630,10 @@ export function CourseLibraryEditorClient({
                   </div>
                   {newLessonType === "form" && (
                     <div className="rounded-md border border-pink-500/20 bg-pink-500/5 px-3 py-2 text-xs text-muted-foreground space-y-1">
-                      <p className="font-medium text-foreground">Form Embed lesson</p>
+                      <p className="font-medium text-foreground">HTML Embed lesson</p>
                       <p>
-                        Create the lesson now, then paste an external embed URL in the lesson editor.
-                        Supported providers include Google Forms, Typeform, Jotform, and other iframe-compatible forms.
+                        Create the lesson now, then paste Google Forms, Typeform, Jotform,
+                        or another approved iframe embed in the lesson editor.
                       </p>
                     </div>
                   )}

@@ -159,7 +159,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                   />
                 </div>
                 <div
-                  className="prose prose-invert prose-sm max-w-none text-muted-foreground"
+                  className="prose prose-invert prose-sm max-w-none text-muted-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
                   dangerouslySetInnerHTML={{ __html: content.description as string }}
                 />
               </div>
@@ -209,7 +209,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             )}
             <div className="rounded-lg border border-border bg-card p-6">
               <div
-                className="prose prose-invert max-w-none text-foreground"
+                className="prose prose-invert max-w-none text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
                 dangerouslySetInnerHTML={{ __html: (content.body as string) ?? "<p>(empty)</p>" }}
               />
             </div>
@@ -225,7 +225,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="rounded-lg border border-border bg-card p-6 space-y-4">
             {content.description ? (
               <div
-                className="prose prose-invert prose-sm max-w-none text-muted-foreground"
+                className="prose prose-invert prose-sm max-w-none text-muted-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
                 dangerouslySetInnerHTML={{ __html: content.description as string }}
               />
             ) : null}
@@ -274,10 +274,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             {typeof content.description === "string" && content.description && (
               <div className="rounded-lg border border-border bg-card p-5">
                 <h2 className="text-sm font-semibold text-foreground mb-2">About this lesson</h2>
-                <div
-                  className="prose prose-invert prose-sm max-w-none text-muted-foreground"
-                  dangerouslySetInnerHTML={{ __html: content.description as string }}
-                />
+              <div
+                className="prose prose-invert prose-sm max-w-none text-muted-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
+                dangerouslySetInnerHTML={{ __html: content.description as string }}
+              />
               </div>
             )}
             {typeof content.transcript === "string" && content.transcript && (
@@ -304,23 +304,24 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="space-y-4">
             {typeof content.description === "string" && content.description && (
               <div className="rounded-lg border border-border bg-card p-5">
-                <div
-                  className="prose prose-invert prose-sm max-w-none text-muted-foreground"
-                  dangerouslySetInnerHTML={{ __html: content.description as string }}
-                />
+              <div
+                className="prose prose-invert prose-sm max-w-none text-muted-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
+                dangerouslySetInnerHTML={{ __html: content.description as string }}
+              />
               </div>
             )}
             {typeof content.embedUrl === "string" && content.embedUrl ? (
               <div className="rounded-lg border border-border bg-card overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/20">
                   <ExternalLink className="w-3.5 h-3.5 text-pink-500" />
-                  <span className="text-xs text-muted-foreground">Interactive form</span>
+                  <span className="text-xs text-muted-foreground">Embedded content</span>
                 </div>
                 <iframe
                   src={content.embedUrl as string}
                   style={{ height: `${typeof content.embedHeight === "number" ? content.embedHeight : 600}px` }}
                   className="w-full"
                   title={row.lessonTitle}
+                  loading="lazy"
                   allow="camera; microphone; geolocation"
                 />
               </div>

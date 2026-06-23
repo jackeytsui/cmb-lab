@@ -23,9 +23,6 @@ import { VocalHackAssignment } from "@/components/assignments/VocalHackAssignmen
 import { DiaryChallenge } from "@/components/assignments/DiaryChallenge";
 import type { ChallengeConfig, ListeningPracticeConfig, VocalHackConfig } from "@/lib/assignment-types";
 
-// Demo playback ID for testing when lesson has no Mux playback ID
-const DEMO_PLAYBACK_ID = "a4nOgmxGWg6gULfcBbAa00gXyfcwPnAFldF8RdsNyk8M";
-
 const AUDIO_EXTENSIONS = new Set([".mp3", ".m4a", ".mp4", ".wav", ".ogg", ".aac", ".flac", ".webm", ".opus"]);
 function isAudioUrl(url: string) {
   try {
@@ -220,7 +217,7 @@ export default async function LessonPlayerPage({ params }: PageProps) {
         {/* Rich Text Content */}
         {lesson.content && (
           <div className="mt-8 prose prose-invert max-w-none">
-            <div dangerouslySetInnerHTML={{ __html: lesson.content }} />
+            <div className="prose-headings:text-white prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold" dangerouslySetInnerHTML={{ __html: lesson.content }} />
           </div>
         )}
 
@@ -232,6 +229,7 @@ export default async function LessonPlayerPage({ params }: PageProps) {
               className="w-full rounded-lg border border-zinc-800"
               style={{ minHeight: "600px" }}
               title="Embedded content"
+              loading="lazy"
               allowFullScreen
             />
           </div>
@@ -248,7 +246,6 @@ export default async function LessonPlayerPage({ params }: PageProps) {
                   return (
                     <div key={att.id} className="rounded-lg bg-zinc-900/50 border border-zinc-800 p-4">
                       <p className="text-sm font-medium text-white mb-3">{att.title}</p>
-                      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                       <audio controls className="w-full" preload="metadata">
                         <source src={att.url} />
                         Your browser does not support audio playback.
