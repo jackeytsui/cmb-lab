@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import type { ComponentProps } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -139,23 +140,22 @@ function SortableLessonList({
   onDelete: (lessonId: string, title: string, moduleId: string) => void;
   onReorder: (moduleId: string, updates: { id: string; sortOrder: number }[]) => Promise<void>;
 }) {
+  type DragDropProviderProps = ComponentProps<typeof DragDropProvider>;
   const [localLessons, setLocalLessons] = useState<LessonRow[]>(
     () => [...lessons].sort((a, b) => a.sortOrder - b.sortOrder),
   );
   const itemsRef = useRef(localLessons);
 
-  const handleDragOver = (event: {
-    operation?: {
-      source?: { id: string };
-      target?: { id: string };
-    };
-  }) => {
-    const { source, target } = event.operation ?? {};
-    if (!source || !target || source.id === target.id) return;
+  const handleDragOver: NonNullable<DragDropProviderProps["onDragOver"]> = (
+    event,
+  ) => {
+    const sourceId = event.operation.source?.id;
+    const targetId = event.operation.target?.id;
+    if (!sourceId || !targetId || sourceId === targetId) return;
 
     const current = itemsRef.current;
-    const srcIdx = current.findIndex((l) => l.id === source.id);
-    const tgtIdx = current.findIndex((l) => l.id === target.id);
+    const srcIdx = current.findIndex((l) => l.id === sourceId);
+    const tgtIdx = current.findIndex((l) => l.id === targetId);
     if (srcIdx === -1 || tgtIdx === -1) return;
 
     const next = [...current];
@@ -165,7 +165,9 @@ function SortableLessonList({
     setLocalLessons(next);
   };
 
-  const handleDragEnd = async (event: { canceled?: boolean }) => {
+  const handleDragEnd: NonNullable<DragDropProviderProps["onDragEnd"]> = async (
+    event,
+  ) => {
     if (event.canceled) return;
     const final = itemsRef.current;
     const updates = final.map((l, i) => ({ id: l.id, sortOrder: i }));
