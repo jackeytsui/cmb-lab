@@ -13,7 +13,7 @@ export function extractEmbedUrl(input: string): string | null {
 
   try {
     const direct = new URL(trimmed);
-    return direct.toString();
+    return normalizeEmbedUrl(direct);
   } catch {
     // Fall through to iframe parsing.
   }
@@ -22,12 +22,12 @@ export function extractEmbedUrl(input: string): string | null {
     /<iframe\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/i,
   );
   if (iframeSrc?.[1]) {
-    return iframeSrc[1].trim() || null;
+    return normalizeEmbedUrl(iframeSrc[1].trim());
   }
 
   const looseSrc = trimmed.match(/\bsrc\s*=\s*["']?([^"'\s>]+)["']?/i);
   if (looseSrc?.[1]) {
-    return looseSrc[1].trim() || null;
+    return normalizeEmbedUrl(looseSrc[1].trim());
   }
 
   return null;
@@ -35,4 +35,22 @@ export function extractEmbedUrl(input: string): string | null {
 
 export function looksLikeIframeSnippet(input: string): boolean {
   return /<iframe\b/i.test(input);
+}
+
+function normalizeEmbedUrl(input: string | URL): string {
+  const url = input instanceof URL ? input : new URL(input);
+
+  // Google Forms will render in an iframe with a plain view URL, but the
+  // embedded presentation is the intended preview/student experience and is
+  // what creators usually expect when pasting a share link.
+  if (
+    url.hostname === "docs.google.com" &&
+    url.pathname.startsWith("/forms/d/e/") &&
+    url.pathname.endsWith("/viewform") &&
+    url.searchParams.get("embedded") !== "true"
+  ) {
+    url.searchParams.set("embedded", "true");
+  }
+
+  return url.toString();
 }

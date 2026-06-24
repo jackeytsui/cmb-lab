@@ -1094,6 +1094,20 @@ function FormLessonForm({
 
   const resolvedEmbedUrl = extractEmbedUrl(source);
   const isEmbedHtml = looksLikeIframeSnippet(source);
+  const isGoogleForms = resolvedEmbedUrl
+    ? (() => {
+        try {
+          const url = new URL(resolvedEmbedUrl);
+          return (
+            url.hostname === "docs.google.com" &&
+            url.pathname.startsWith("/forms/d/e/") &&
+            url.pathname.endsWith("/viewform")
+          );
+        } catch {
+          return false;
+        }
+      })()
+    : false;
 
   const handleSave = async () => {
     if (!resolvedEmbedUrl) {
@@ -1153,6 +1167,12 @@ function FormLessonForm({
           {resolvedEmbedUrl && (
             <p className="mt-1 text-[10px] text-emerald-500 break-all">
               Detected source: {isEmbedHtml ? "iframe HTML" : "URL"} · {resolvedEmbedUrl}
+            </p>
+          )}
+          {isGoogleForms && (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Google Forms URLs are normalized to the embedded `viewform?embedded=true`
+              version so preview and student view use the same iframe source.
             </p>
           )}
           <p className="mt-1 text-[10px] text-muted-foreground">
