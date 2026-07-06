@@ -13,6 +13,7 @@ import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, S
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { smartRomanise } from "@/lib/romanise";
+import { fetchProperTranslations } from "@/lib/mandarin-generation";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
 import { exportCoachingNotes } from "@/lib/coaching-export";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
@@ -64,32 +65,6 @@ async function fetchJiebaSegments(
   }
 }
 
-async function fetchProperTranslations(
-  texts: string[],
-  language: "zh-CN" | "zh-HK",
-): Promise<string[] | null> {
-  try {
-    const cleanTexts = texts
-      .map((t) => t.replace(/[\uFFFD\u200B\u200C\u200D\uFEFF]/g, "").trim())
-      .filter((t) => t.length > 0);
-    if (cleanTexts.length === 0) return null;
-
-    const res = await fetch("/api/reader/translate-batch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ texts: cleanTexts, mode: "proper", language }),
-    });
-    if (!res.ok) {
-      console.error("Batch translate failed:", res.status);
-      return null;
-    }
-    const data = await res.json();
-    return data.translations ?? null;
-  } catch (err) {
-    console.error("Batch translate error:", err);
-    return null;
-  }
-}
 
 type ScriptMode = "simplified" | "traditional";
 type PaneDraft = {

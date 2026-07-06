@@ -8,6 +8,7 @@ import {
   Download,
   Music,
   ExternalLink,
+  ClipboardList,
 } from "lucide-react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { db } from "@/db";
@@ -32,6 +33,7 @@ const TYPE_ICON = {
   quiz: HelpCircle,
   download: Download,
   form: ExternalLink,
+  text_assignment: ClipboardList,
 };
 const TYPE_COLOR = {
   video: "text-red-500",
@@ -40,6 +42,10 @@ const TYPE_COLOR = {
   quiz: "text-amber-500",
   download: "text-emerald-500",
   form: "text-pink-500",
+  text_assignment: "text-teal-500",
+};
+const TYPE_LABEL: Partial<Record<keyof typeof TYPE_ICON, string>> = {
+  text_assignment: "Task",
 };
 
 export default async function CourseLibraryCourseDetailPage({ params }: PageProps) {
@@ -220,7 +226,7 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
                           >
                             <Icon className={cn("w-4 h-4 shrink-0", color)} />
                             <span className="text-xs text-muted-foreground uppercase font-medium w-16">
-                              {lesson.lessonType}
+                              {TYPE_LABEL[lesson.lessonType] ?? lesson.lessonType}
                             </span>
                             <span className="flex-1 text-sm text-foreground">
                               {lesson.title}

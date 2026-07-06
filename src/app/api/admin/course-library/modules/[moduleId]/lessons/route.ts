@@ -7,7 +7,15 @@ import { z } from "zod";
 
 const createSchema = z.object({
   title: z.string().min(1).max(200),
-  lessonType: z.enum(["video", "audio", "text", "quiz", "download", "form"]),
+  lessonType: z.enum([
+    "video",
+    "audio",
+    "text",
+    "quiz",
+    "download",
+    "form",
+    "text_assignment",
+  ]),
   content: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -66,6 +74,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     quiz: { passingScore: 70, questions: [] },
     download: { fileUrl: "", fileName: "", sizeBytes: 0 },
     form: { embedUrl: "", embedHeight: 600 },
+    text_assignment: {
+      description: "",
+      sentencePrompts: [
+        {
+          id: crypto.randomUUID(),
+          label: "Sentence 1",
+          description: "",
+          order: 0,
+        },
+      ],
+    },
   };
 
   // Next sort order
@@ -103,6 +122,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         {
           error:
             "Form Embed lesson type is not available yet. Run the course-library migration that adds the form enum value.",
+        },
+        { status: 409 },
+      );
+    }
+    if (
+      parsed.data.lessonType === "text_assignment" &&
+      (message.includes("course_library_lesson_type") ||
+        message.includes("text_assignment"))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Text Assignment lesson type is not available yet. Run the migration that adds the text_assignment enum value.",
         },
         { status: 409 },
       );

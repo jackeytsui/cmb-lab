@@ -49,7 +49,8 @@ type FeatureKey =
   | "audio_accelerator_edition"
   | "tone_mastery"
   | "listening_training"
-  | "notepad";
+  | "notepad"
+  | "assignment_review_text";
 
 type NavItemWithFeature = NavSection["items"][number] & {
   featureKey?: FeatureKey;
@@ -116,6 +117,11 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         url: "/dashboard/coaching/inner-circle",
         icon: UsersRound,
         featureKey: "coaching_material",
+      },
+      {
+        title: "Assignment Feedback",
+        url: "/dashboard/assignment-feedback",
+        icon: ClipboardList,
       },
     ],
   },
@@ -225,9 +231,12 @@ const roleHierarchy: Roles[] = ["student", "coach", "admin"];
 export function AppSidebar({
   role,
   enabledFeatures,
+  assignmentFeedbackUnread = 0,
 }: {
   role: Roles;
   enabledFeatures?: string[];
+  /** Unread reviewed-assignment count shown beside "Assignment Feedback". */
+  assignmentFeedbackUnread?: number;
 }) {
   const userLevel = roleHierarchy.indexOf(role);
   const featureSet = new Set(enabledFeatures ?? []);
@@ -237,9 +246,13 @@ export function AppSidebar({
       (section) => userLevel >= roleHierarchy.indexOf(section.minRole)
     )
     .map(({ minRole, ...section }) => {
-      const items = section.items.filter(
-        (item) => !item.featureKey || featureSet.has(item.featureKey)
-      );
+      const items = section.items
+        .filter((item) => !item.featureKey || featureSet.has(item.featureKey))
+        .map((item) =>
+          item.url === "/dashboard/assignment-feedback"
+            ? { ...item, badge: assignmentFeedbackUnread }
+            : item,
+        );
       return { ...section, items };
     })
     .filter((section) => section.items.length > 0);

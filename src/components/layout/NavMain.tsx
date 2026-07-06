@@ -10,6 +10,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarMenuBadge,
 } from "@/components/ui/sidebar";
 
 export type NavItem = {
@@ -17,6 +18,8 @@ export type NavItem = {
   url: string;
   icon: LucideIcon;
   featureKey?: string;
+  /** Optional unread count rendered as a badge next to the item. */
+  badge?: number;
 };
 
 export type NavSection = {
@@ -55,6 +58,11 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
                       <span>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
+                  {typeof item.badge === "number" && item.badge > 0 && (
+                    <SidebarMenuBadge className="rounded-full bg-blue-500 px-1.5 text-[10px] font-semibold text-white">
+                      {item.badge > 99 ? "99+" : item.badge}
+                    </SidebarMenuBadge>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

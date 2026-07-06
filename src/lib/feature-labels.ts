@@ -10,4 +10,5 @@ export const FEATURE_LABELS: Record<string, string> = {
   video_threads: "Video Threads",
   certificates: "Certificates",
   ai_chat: "AI Chat",
+  assignment_review_text: "Assignment Review (Text)",
 };

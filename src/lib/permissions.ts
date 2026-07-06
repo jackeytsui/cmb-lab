@@ -36,6 +36,11 @@ export const FEATURE_KEYS = [
   "tone_mastery",
   "listening_training",
   "notepad",
+  // Reviewer capability: grants access to Admin > Content > Assignment
+  // Submissions for text assignments ("Challenge Reviewer" role bundle).
+  // Future reviewer capabilities follow the same pattern, e.g.
+  // "assignment_review_audio".
+  "assignment_review_text",
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];

@@ -18,12 +18,20 @@ import {
   Music,
   ExternalLink,
   GripVertical,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DragDropProvider } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 
-type LessonType = "video" | "audio" | "text" | "quiz" | "download" | "form";
+type LessonType =
+  | "video"
+  | "audio"
+  | "text"
+  | "quiz"
+  | "download"
+  | "form"
+  | "text_assignment";
 
 interface LessonRow {
   id: string;
@@ -58,6 +66,11 @@ const LESSON_TYPE_META: Record<
   quiz: { label: "Quiz", Icon: HelpCircle, color: "text-amber-500" },
   download: { label: "Download", Icon: Download, color: "text-emerald-500" },
   form: { label: "HTML Embed", Icon: ExternalLink, color: "text-pink-500" },
+  text_assignment: {
+    label: "Text Assignment",
+    Icon: ClipboardList,
+    color: "text-teal-500",
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -617,6 +630,7 @@ export function CourseLibraryEditorClient({
                         <option value="quiz">Quiz</option>
                         <option value="download">Download</option>
                         <option value="form">HTML Embed</option>
+                        <option value="text_assignment">Text Assignment</option>
                       </select>
                     <input
                       type="text"

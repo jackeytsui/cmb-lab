@@ -17,13 +17,24 @@ import {
   Trash2,
   Music,
   ExternalLink,
+  ClipboardList,
+  Plus,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { extractEmbedUrl, looksLikeIframeSnippet } from "@/lib/embed";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { QuizBuilder } from "./QuizBuilder";
 
-type LessonType = "video" | "audio" | "text" | "quiz" | "download" | "form";
+type LessonType =
+  | "video"
+  | "audio"
+  | "text"
+  | "quiz"
+  | "download"
+  | "form"
+  | "text_assignment";
 
 interface LessonData {
   id: string;
@@ -39,6 +50,11 @@ const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: 
   quiz: { label: "Quiz Lesson", Icon: HelpCircle, color: "text-amber-500" },
   download: { label: "Download Lesson", Icon: Download, color: "text-emerald-500" },
   form: { label: "Form Embed", Icon: ExternalLink, color: "text-pink-500" },
+  text_assignment: {
+    label: "Text Assignment",
+    Icon: ClipboardList,
+    color: "text-teal-500",
+  },
 };
 
 // Vercel functions cap request bodies at ~4.5MB, so anything larger has
@@ -261,6 +277,13 @@ export function LessonEditorClient({
       )}
       {lesson.lessonType === "form" && (
         <FormLessonForm
+          lessonId={lesson.id}
+          content={lesson.content}
+          onUpdate={updateContent}
+        />
+      )}
+      {lesson.lessonType === "text_assignment" && (
+        <TextAssignmentLessonForm
           lessonId={lesson.id}
           content={lesson.content}
           onUpdate={updateContent}
@@ -1410,6 +1433,261 @@ function DownloadLessonForm({
           <p className="text-[10px] text-emerald-500 text-right">
             Saved at {savedAt.toLocaleTimeString()}
           </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Text Assignment Lesson Form
+// ---------------------------------------------------------------------------
+
+interface SentencePromptDraft {
+  id: string;
+  label: string;
+  description: string;
+  order: number;
+}
+
+function normalizeSentencePrompts(raw: unknown): SentencePromptDraft[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((p, idx) => {
+      const prompt = (p ?? {}) as Record<string, unknown>;
+      return {
+        id: typeof prompt.id === "string" && prompt.id ? prompt.id : crypto.randomUUID(),
+        label: typeof prompt.label === "string" ? prompt.label : `Sentence ${idx + 1}`,
+        description: typeof prompt.description === "string" ? prompt.description : "",
+        order: typeof prompt.order === "number" ? prompt.order : idx,
+      };
+    })
+    .sort((a, b) => a.order - b.order);
+}
+
+function TextAssignmentLessonForm({
+  lessonId,
+  content,
+  onUpdate,
+}: {
+  lessonId: string;
+  content: Record<string, unknown>;
+  onUpdate: (next: Record<string, unknown>) => void;
+}) {
+  const savedDescription = (content.description as string) ?? "";
+  const savedPrompts = normalizeSentencePrompts(content.sentencePrompts);
+
+  const [description, setDescription] = useState(savedDescription);
+  const [prompts, setPrompts] = useState<SentencePromptDraft[]>(
+    savedPrompts.length > 0
+      ? savedPrompts
+      : [{ id: crypto.randomUUID(), label: "Sentence 1", description: "", order: 0 }],
+  );
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty =
+    description !== savedDescription ||
+    JSON.stringify(prompts) !== JSON.stringify(savedPrompts);
+
+  const updatePrompt = (id: string, patch: Partial<SentencePromptDraft>) => {
+    setPrompts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    );
+  };
+
+  const addPrompt = () => {
+    setPrompts((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        label: `Sentence ${prev.length + 1}`,
+        description: "",
+        order: prev.length,
+      },
+    ]);
+  };
+
+  const removePrompt = (id: string) => {
+    setPrompts((prev) =>
+      prev
+        .filter((p) => p.id !== id)
+        .map((p, idx) => ({ ...p, order: idx })),
+    );
+  };
+
+  const movePrompt = (id: string, direction: -1 | 1) => {
+    setPrompts((prev) => {
+      const idx = prev.findIndex((p) => p.id === id);
+      const target = idx + direction;
+      if (idx < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next.map((p, i) => ({ ...p, order: i }));
+    });
+  };
+
+  const handleSave = async () => {
+    if (prompts.length === 0) {
+      setError("A text assignment needs at least one sentence box.");
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      const nextContent = {
+        ...content,
+        description,
+        sentencePrompts: prompts.map((p, idx) => ({ ...p, order: idx })),
+      };
+      const ok = await saveLessonContent(lessonId, nextContent);
+      if (ok) {
+        onUpdate(nextContent);
+        setSavedAt(new Date());
+      } else {
+        setError("Failed to save assignment settings.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">
+          Assignment Description
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Instructions students see above the sentence boxes. Supports bold,
+          bullet points, links, and images.
+        </p>
+        <RichTextEditor
+          value={description}
+          onChange={setDescription}
+          placeholder="Write the assignment instructions here..."
+        />
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Sentence Boxes ({prompts.length})
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              One Mandarin submission box per prompt. Students type a sentence
+              and press Enter to generate pinyin + English.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addPrompt}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add sentence box
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {prompts.map((prompt, idx) => (
+            <div
+              key={prompt.id}
+              className="rounded-md border border-border bg-background p-3 space-y-2"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Box {idx + 1}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => movePrompt(prompt.id, -1)}
+                    disabled={idx === 0}
+                    className="p-1 text-muted-foreground/60 hover:text-foreground disabled:opacity-30"
+                    title="Move up"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => movePrompt(prompt.id, 1)}
+                    disabled={idx === prompts.length - 1}
+                    className="p-1 text-muted-foreground/60 hover:text-foreground disabled:opacity-30"
+                    title="Move down"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removePrompt(prompt.id)}
+                    disabled={prompts.length <= 1}
+                    className="p-1 text-muted-foreground/60 hover:text-red-500 disabled:opacity-30"
+                    title="Remove sentence box"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Label
+                </label>
+                <input
+                  type="text"
+                  value={prompt.label}
+                  onChange={(e) => updatePrompt(prompt.id, { label: e.target.value })}
+                  placeholder={`Sentence ${idx + 1}`}
+                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  value={prompt.description}
+                  onChange={(e) =>
+                    updatePrompt(prompt.id, { description: e.target.value })
+                  }
+                  placeholder="e.g. Describe where you went."
+                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-500">
+          {error}
+        </div>
+      )}
+
+      <div className="flex items-center justify-end gap-3">
+        {savedAt && !dirty && (
+          <span className="text-[10px] text-emerald-500">
+            Saved at {savedAt.toLocaleTimeString()}
+          </span>
+        )}
+        {dirty && (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {saving ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Check className="w-3 h-3" />
+            )}
+            Save assignment
+          </button>
         )}
       </div>
     </div>

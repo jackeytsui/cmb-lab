@@ -34,6 +34,7 @@ const allSections: PortalSection[] = [
       { id: "accelerator", title: "Mandarin Accelerator", href: "/admin/accelerator/typing", description: "Typing drills, conversation scripts, and curated passages for LTO students." },
       { id: "tone-mastery", title: "Tone Mastery Clips", href: "/admin/accelerator-extra/tone-mastery", description: "Upload and manage video clips for the Advanced Tone Mastery System." },
       { id: "internal-docs", title: "Internal Docs", href: "/admin/internal-docs", description: "Rich-text internal documentation for admin and team reference." },
+      { id: "assignment-submissions", title: "Assignment Submissions", href: "/admin/content/assignment-submissions", description: "Review and grade student assignment submissions." },
     ],
   },
   {
