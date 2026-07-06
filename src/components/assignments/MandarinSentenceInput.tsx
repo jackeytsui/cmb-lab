@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Pencil, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateMandarinAnnotation } from "@/lib/mandarin-generation";
+import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
 import { useTTS } from "@/hooks/useTTS";
 
 // ---------------------------------------------------------------------------
@@ -107,14 +108,12 @@ export function MandarinSentenceInput({
         )}
       >
         <div className="flex items-start justify-between gap-3">
-          <p
-            className={cn(
-              "text-foreground",
-              compact ? "text-base" : "text-lg",
-            )}
-          >
-            {value.chineseText}
-          </p>
+          {/* Pinyin-on-top, tone-colored Chinese — same format as coaching notes */}
+          <AnnotatedSentence
+            text={value.chineseText}
+            fontSize={compact ? 20 : 26}
+            className="text-foreground"
+          />
           <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
@@ -143,11 +142,8 @@ export function MandarinSentenceInput({
             )}
           </div>
         </div>
-        {value.pinyin && (
-          <p className="text-sm text-muted-foreground">{value.pinyin}</p>
-        )}
         {value.english && (
-          <p className="text-sm text-muted-foreground italic">
+          <p className="text-base text-muted-foreground italic">
             {value.english}
           </p>
         )}
