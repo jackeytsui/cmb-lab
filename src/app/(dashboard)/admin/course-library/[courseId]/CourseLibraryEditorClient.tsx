@@ -106,7 +106,7 @@ function SortableLesson({
         <GripVertical className="w-3.5 h-3.5" />
       </div>
       <meta.Icon className={cn("w-4 h-4 shrink-0", meta.color)} />
-      <span className="text-xs text-muted-foreground uppercase font-medium w-16 shrink-0">
+      <span className="text-xs text-muted-foreground uppercase font-medium w-32 shrink-0 whitespace-nowrap">
         {meta.label}
       </span>
       <Link
