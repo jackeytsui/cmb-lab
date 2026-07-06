@@ -111,7 +111,7 @@ export function MandarinSentenceInput({
           {/* Pinyin-on-top, tone-colored Chinese — same format as coaching notes */}
           <AnnotatedSentence
             text={value.chineseText}
-            fontSize={compact ? 20 : 26}
+            fontSize={compact ? 22 : 30}
             className="text-foreground"
           />
           <div className="flex items-center gap-1 shrink-0">
