@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 // primary text.
 // ---------------------------------------------------------------------------
 
-const PINYIN_RATIO = 0.5; // pinyin height relative to the Chinese character
+const PINYIN_RATIO = 0.42; // pinyin height relative to the Chinese character
 
 function pinyinForWord(text: string): string[] {
   // Always derive pinyin from the Simplified form (source of truth), matching
