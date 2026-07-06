@@ -497,10 +497,7 @@ export function ReviewClient({
                   }
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                {sentence.generatedPinyin}
-              </p>
-              <p className="text-xs text-muted-foreground italic">
+              <p className="text-sm text-muted-foreground italic">
                 {sentence.generatedEnglish}
               </p>
               <p className="text-[11px] text-muted-foreground/70">

@@ -4,18 +4,26 @@ import { useMemo } from "react";
 import { Loader2, Play, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTTS } from "@/hooks/useTTS";
+import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
+import {
+  annotateSentence,
+  ASSIGNMENT_CHAR_SIZE,
+  type CharAnnotation,
+} from "@/lib/mandarin-annotate";
 
 // ---------------------------------------------------------------------------
-// Offset-based correction rendering.
+// Offset-based correction rendering, in the coaching-notes style.
 //
-// Renders a submitted Chinese sentence from structured correction ranges:
-// untouched text renders normally, corrected ranges render with a red
-// strikethrough and a green speech bubble (corrected Chinese + pinyin +
-// English) inline underneath, tail pointing at the corrected part.
+// Every character — plain or struck-through — renders as a stacked column
+// (pinyin on top of the character), so the pinyin always sits above its
+// character and moves with it, including inside corrected ranges. Corrected
+// ranges render the original text in red strikethrough with a green speech
+// bubble hanging beneath (corrected Chinese + pinyin + English), tail pointing
+// up at the corrected part.
 //
-// Every character is wrapped in a span carrying its exact string offset
-// (data-offset) so the reviewer UI can turn DOM selections back into
-// [startOffset, endOffset) ranges.
+// Each character span carries its exact UTF-16 offset (data-offset) so the
+// reviewer UI can turn DOM selections back into [startOffset, endOffset)
+// ranges; the pinyin above is select-none so it never enters the selection.
 // ---------------------------------------------------------------------------
 
 export interface RenderableCorrection {
@@ -30,6 +38,8 @@ export interface RenderableCorrection {
 interface CorrectedSentenceProps {
   text: string;
   corrections: RenderableCorrection[];
+  /** Base Chinese character size in px (pinyin scales at ~half). */
+  fontSize?: number;
   /** Show a remove (×) button on each bubble — reviewer editing mode. */
   onRemoveCorrection?: (correctionId: string) => void;
   className?: string;
@@ -106,102 +116,76 @@ function CorrectionBubble({
   );
 }
 
-/** One character span carrying its exact offset for selection mapping. */
-function CharSpans({
-  text,
-  baseOffset,
-  className,
-}: {
-  text: string;
-  baseOffset: number;
-  className?: string;
-}) {
-  const chars: Array<{ char: string; offset: number }> = [];
-  let i = 0;
-  while (i < text.length) {
-    const code = text.codePointAt(i)!;
-    const size = code > 0xffff ? 2 : 1;
-    chars.push({ char: text.slice(i, i + size), offset: baseOffset + i });
-    i += size;
-  }
-  return (
-    <>
-      {chars.map(({ char, offset }) => (
-        <span key={offset} data-offset={offset} className={className}>
-          {char}
-        </span>
-      ))}
-    </>
-  );
+interface RenderGroup {
+  correction: RenderableCorrection | null;
+  chars: CharAnnotation[];
 }
 
 export function CorrectedSentence({
   text,
   corrections,
+  fontSize = ASSIGNMENT_CHAR_SIZE,
   onRemoveCorrection,
   className,
 }: CorrectedSentenceProps) {
-  // Render segments in offset order; overlaps are prevented upstream.
-  const segments = useMemo(() => {
+  // Group consecutive characters by the correction they fall in (or none).
+  // Corrections don't overlap (enforced upstream), so a correction's chars are
+  // always contiguous in offset order.
+  const groups = useMemo<RenderGroup[]>(() => {
+    const annotations = annotateSentence(text);
     const sorted = [...corrections].sort(
       (a, b) => a.startOffset - b.startOffset,
     );
-    const result: Array<
-      | { kind: "plain"; start: number; text: string }
-      | { kind: "corrected"; start: number; text: string; correction: RenderableCorrection }
-    > = [];
-    let cursor = 0;
-    for (const correction of sorted) {
-      const start = Math.max(0, Math.min(correction.startOffset, text.length));
-      const end = Math.max(start, Math.min(correction.endOffset, text.length));
-      if (start > cursor) {
-        result.push({
-          kind: "plain",
-          start: cursor,
-          text: text.slice(cursor, start),
-        });
+    const correctionAt = (offset: number) =>
+      sorted.find((c) => offset >= c.startOffset && offset < c.endOffset) ??
+      null;
+
+    const result: RenderGroup[] = [];
+    for (const ann of annotations) {
+      const corr = correctionAt(ann.offset);
+      const last = result[result.length - 1];
+      if (last && (last.correction?.id ?? null) === (corr?.id ?? null)) {
+        last.chars.push(ann);
+      } else {
+        result.push({ correction: corr, chars: [ann] });
       }
-      result.push({
-        kind: "corrected",
-        start,
-        text: text.slice(start, end),
-        correction,
-      });
-      cursor = end;
-    }
-    if (cursor < text.length) {
-      result.push({ kind: "plain", start: cursor, text: text.slice(cursor) });
     }
     return result;
   }, [text, corrections]);
 
   return (
-    <div className={cn("leading-loose", className)}>
-      {segments.map((segment) =>
-        segment.kind === "plain" ? (
-          <CharSpans
-            key={`plain-${segment.start}`}
-            text={segment.text}
-            baseOffset={segment.start}
-            className="text-lg text-foreground"
-          />
-        ) : (
+    <div className={cn("leading-relaxed", className)}>
+      {groups.map((group, gi) =>
+        group.correction ? (
           <span
-            key={`corrected-${segment.correction.id}`}
+            key={`corrected-${group.correction.id}-${gi}`}
             className="mx-0.5 inline-flex flex-col items-center align-top"
           >
-            <span>
-              <CharSpans
-                text={segment.text}
-                baseOffset={segment.start}
-                className="text-lg text-red-500 line-through decoration-red-500 decoration-2"
-              />
+            <span className="inline-flex items-end">
+              {group.chars.map((ann) => (
+                <AnnotatedChar
+                  key={ann.offset}
+                  ann={ann}
+                  fontSize={fontSize}
+                  struck
+                  dataOffset={ann.offset}
+                />
+              ))}
             </span>
             <CorrectionBubble
-              correction={segment.correction}
+              correction={group.correction}
               onRemove={onRemoveCorrection}
             />
           </span>
+        ) : (
+          group.chars.map((ann) => (
+            <AnnotatedChar
+              key={ann.offset}
+              ann={ann}
+              fontSize={fontSize}
+              dataOffset={ann.offset}
+            />
+          ))
         ),
       )}
     </div>

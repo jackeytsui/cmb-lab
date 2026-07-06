@@ -223,10 +223,7 @@ export default async function AssignmentFeedbackDetailPage({
                   suggestedEnglish: c.suggestedEnglish,
                 }))}
             />
-            <p className="text-xs text-muted-foreground">
-              {sentence.generatedPinyin}
-            </p>
-            <p className="text-xs text-muted-foreground italic">
+            <p className="text-sm text-muted-foreground italic">
               {sentence.generatedEnglish}
             </p>
           </div>
