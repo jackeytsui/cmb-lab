@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { extractToneFromPinyin, getToneColorStyle } from "@/lib/tone-colors";
-import type { CharAnnotation } from "@/lib/mandarin-annotate";
+import { PINYIN_RATIO, type CharAnnotation } from "@/lib/mandarin-annotate";
 
 // ---------------------------------------------------------------------------
 // One stacked character column: pinyin on top, character below. Shared by the
@@ -28,7 +28,7 @@ export function AnnotatedChar({
   /** UTF-16 offset to expose for selection mapping; omit for read-only views. */
   dataOffset?: number;
 }) {
-  const pinyinSize = Math.round(fontSize * 0.42);
+  const pinyinSize = Math.round(fontSize * PINYIN_RATIO);
   const toneStyle = ann.pinyin
     ? getToneColorStyle(extractToneFromPinyin(ann.pinyin), "mandarin")
     : undefined;

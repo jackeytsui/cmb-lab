@@ -5,6 +5,10 @@ import { Loader2, Pencil, Play, Sparkles, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateMandarinAnnotation } from "@/lib/mandarin-generation";
 import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
+import {
+  ASSIGNMENT_CHAR_SIZE,
+  ASSIGNMENT_CHAR_SIZE_COMPACT,
+} from "@/lib/mandarin-annotate";
 import { useTTS } from "@/hooks/useTTS";
 
 // ---------------------------------------------------------------------------
@@ -111,7 +115,7 @@ export function MandarinSentenceInput({
           {/* Pinyin-on-top, tone-colored Chinese — same format as coaching notes */}
           <AnnotatedSentence
             text={value.chineseText}
-            fontSize={compact ? 24 : 34}
+            fontSize={compact ? ASSIGNMENT_CHAR_SIZE_COMPACT : ASSIGNMENT_CHAR_SIZE}
             className="text-foreground"
           />
           <div className="flex items-center gap-1 shrink-0">
@@ -143,7 +147,7 @@ export function MandarinSentenceInput({
           </div>
         </div>
         {value.english && (
-          <p className="text-base text-muted-foreground italic">
+          <p className="text-lg text-muted-foreground italic">
             {value.english}
           </p>
         )}

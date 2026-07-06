@@ -24,11 +24,13 @@ export interface CharAnnotation {
 }
 
 /** Base character size (px) for assignment Mandarin displays. */
-export const ASSIGNMENT_CHAR_SIZE = 34;
+export const ASSIGNMENT_CHAR_SIZE = 26;
 /** Compact character size (px) for tighter contexts. */
-export const ASSIGNMENT_CHAR_SIZE_COMPACT = 24;
-/** Pinyin size relative to the character size. */
-export const PINYIN_RATIO = 0.42;
+export const ASSIGNMENT_CHAR_SIZE_COMPACT = 20;
+/** Pinyin size relative to the character size (~18px at the base size). */
+export const PINYIN_RATIO = 0.69;
+/** English translation size (px) shown beneath each sentence. */
+export const ASSIGNMENT_ENGLISH_SIZE = 18;
 
 export function annotateSentence(text: string): CharAnnotation[] {
   const segments = segmentText(text);
