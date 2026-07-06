@@ -5,6 +5,7 @@ import { Loader2, Play, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTTS } from "@/hooks/useTTS";
 import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
+import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
 import {
   annotateSentence,
   ASSIGNMENT_CHAR_SIZE,
@@ -66,7 +67,7 @@ function CorrectionBubble({
   };
 
   return (
-    <span className="relative mt-2.5 block w-max max-w-[280px] select-none rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-left">
+    <span className="relative mt-2.5 block w-max max-w-[340px] select-none rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-left">
       {/* Tail pointing up at the middle of the corrected part */}
       <span
         aria-hidden
@@ -83,14 +84,13 @@ function CorrectionBubble({
           <X className="h-2.5 w-2.5" />
         </button>
       )}
-      <span className="flex items-center gap-1.5">
-        <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-          {correction.suggestedChinese}
-        </span>
+      <span className="flex items-start gap-1.5">
+        {/* Suggested correction with pinyin stacked on top of each character */}
+        <AnnotatedSentence text={correction.suggestedChinese} fontSize={20} />
         <button
           type="button"
           onClick={handleSpeak}
-          className="p-0.5 text-emerald-700/70 hover:text-emerald-700 dark:text-emerald-400/70 dark:hover:text-emerald-400"
+          className="mt-1 shrink-0 p-0.5 text-emerald-700/70 hover:text-emerald-700 dark:text-emerald-400/70 dark:hover:text-emerald-400"
           title={isPlaying ? "Stop audio" : "Play audio"}
         >
           {isLoading ? (
@@ -102,13 +102,8 @@ function CorrectionBubble({
           )}
         </button>
       </span>
-      {correction.suggestedPinyin && (
-        <span className="block text-xs text-emerald-700/80 dark:text-emerald-400/80">
-          {correction.suggestedPinyin}
-        </span>
-      )}
       {correction.suggestedEnglish && (
-        <span className="block text-xs text-muted-foreground">
+        <span className="mt-0.5 block text-sm text-muted-foreground">
           {correction.suggestedEnglish}
         </span>
       )}
