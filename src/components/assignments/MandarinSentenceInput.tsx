@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Pencil, Play, Square } from "lucide-react";
+import { Loader2, Pencil, Play, Sparkles, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateMandarinAnnotation } from "@/lib/mandarin-generation";
 import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
@@ -111,7 +111,7 @@ export function MandarinSentenceInput({
           {/* Pinyin-on-top, tone-colored Chinese — same format as coaching notes */}
           <AnnotatedSentence
             text={value.chineseText}
-            fontSize={compact ? 22 : 30}
+            fontSize={compact ? 24 : 34}
             className="text-foreground"
           />
           <div className="flex items-center gap-1 shrink-0">
@@ -185,12 +185,22 @@ export function MandarinSentenceInput({
           )}
         </button>
       </div>
-      {generating && (
-        <p className="text-xs text-muted-foreground">
+      {generating ? (
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
           Generating pinyin and English translation...
         </p>
+      ) : (
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Sparkles className="w-3.5 h-3.5 text-primary" />
+          Type your sentence in Chinese, then press{" "}
+          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground">
+            Enter
+          </kbd>{" "}
+          to generate pinyin and English.
+        </p>
       )}
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
   );
 }
