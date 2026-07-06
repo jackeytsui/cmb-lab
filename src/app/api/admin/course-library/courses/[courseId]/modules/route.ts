@@ -7,6 +7,9 @@ import { z } from "zod";
 
 const createSchema = z.object({
   title: z.string().min(1).max(200),
+  shortTitle: z.string().max(80).nullable().optional(),
+  mapStyle: z.enum(["lesson", "cm_school", "custom_goal"]).optional(),
+  weekLabel: z.string().max(60).nullable().optional(),
 });
 
 interface RouteParams {
@@ -73,6 +76,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     .values({
       courseId,
       title: parsed.data.title,
+      shortTitle: parsed.data.shortTitle ?? null,
+      mapStyle: parsed.data.mapStyle ?? "lesson",
+      weekLabel: parsed.data.weekLabel ?? null,
       sortOrder: nextSort,
     })
     .returning();

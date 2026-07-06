@@ -27,6 +27,13 @@ export const courseLibraryLessonTypeEnum = pgEnum(
   ["video", "text", "quiz", "download", "audio", "form", "text_assignment"],
 );
 
+// Visual style of a module's stop on the student roadmap:
+// lesson = dark blue, cm_school = light blue, custom_goal = yellow.
+export const courseLibraryModuleMapStyleEnum = pgEnum(
+  "course_library_module_map_style",
+  ["lesson", "cm_school", "custom_goal"],
+);
+
 // Top-level course container.
 export const courseLibraryCourses = pgTable(
   "course_library_courses",
@@ -60,6 +67,14 @@ export const courseLibraryModules = pgTable(
       .notNull()
       .references(() => courseLibraryCourses.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
+    // Shortened title shown on the student roadmap stop; falls back to title.
+    shortTitle: text("short_title"),
+    mapStyle: courseLibraryModuleMapStyleEnum("map_style")
+      .notNull()
+      .default("lesson"),
+    // Optional section band label (e.g. "Week 1"); a new band starts on the
+    // map whenever this differs from the previous module's label.
+    weekLabel: text("week_label"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at")
@@ -223,6 +238,8 @@ export type NewCourseLibraryCourse = typeof courseLibraryCourses.$inferInsert;
 
 export type CourseLibraryModule = typeof courseLibraryModules.$inferSelect;
 export type NewCourseLibraryModule = typeof courseLibraryModules.$inferInsert;
+export type CourseLibraryModuleMapStyle =
+  (typeof courseLibraryModuleMapStyleEnum.enumValues)[number];
 
 export type CourseLibraryLesson = typeof courseLibraryLessons.$inferSelect;
 export type NewCourseLibraryLesson = typeof courseLibraryLessons.$inferInsert;

@@ -80,6 +80,9 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
     modules: modules.map((m) => ({
       id: m.id,
       title: m.title,
+      shortTitle: m.shortTitle,
+      mapStyle: m.mapStyle,
+      weekLabel: m.weekLabel,
       sortOrder: m.sortOrder,
       lessons: (lessonsByModule.get(m.id) ?? []).map((l) => ({
         id: l.id,

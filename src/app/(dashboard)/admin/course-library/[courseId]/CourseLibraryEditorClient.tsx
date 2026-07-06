@@ -19,6 +19,8 @@ import {
   ExternalLink,
   GripVertical,
   ClipboardList,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DragDropProvider } from "@dnd-kit/react";
@@ -40,9 +42,14 @@ interface LessonRow {
   sortOrder: number;
 }
 
+type ModuleMapStyle = "lesson" | "cm_school" | "custom_goal";
+
 interface ModuleRow {
   id: string;
   title: string;
+  shortTitle: string | null;
+  mapStyle: ModuleMapStyle;
+  weekLabel: string | null;
   sortOrder: number;
   lessons: LessonRow[];
 }
@@ -55,6 +62,13 @@ interface CourseData {
   isPublished: boolean;
   modules: ModuleRow[];
 }
+
+// Mirrors the stop colors on the student course map.
+const MAP_STYLE_META: Record<ModuleMapStyle, { label: string; dot: string }> = {
+  lesson: { label: "Lesson (dark blue)", dot: "#2e3a97" },
+  cm_school: { label: "CM School (light blue)", dot: "#4a9fe3" },
+  custom_goal: { label: "Custom Goal (yellow)", dot: "#f2b705" },
+};
 
 const LESSON_TYPE_META: Record<
   LessonType,
@@ -236,6 +250,14 @@ export function CourseLibraryEditorClient({
   const [newLessonType, setNewLessonType] = useState<LessonType>("video");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
+  const [moduleDraft, setModuleDraft] = useState({
+    title: "",
+    shortTitle: "",
+    mapStyle: "lesson" as ModuleMapStyle,
+    weekLabel: "",
+  });
+  const [savingModule, setSavingModule] = useState(false);
 
   const isDirty = title !== course.title || summary !== course.summary;
 
@@ -301,6 +323,9 @@ export function CourseLibraryEditorClient({
             {
               id: data.module.id,
               title: data.module.title,
+              shortTitle: data.module.shortTitle ?? null,
+              mapStyle: data.module.mapStyle ?? "lesson",
+              weekLabel: data.module.weekLabel ?? null,
               sortOrder: data.module.sortOrder,
               lessons: [],
             },
@@ -334,6 +359,104 @@ export function CourseLibraryEditorClient({
       }
     } catch {
       // ignore
+    }
+  };
+
+  const startEditModule = (mod: ModuleRow) => {
+    setEditingModuleId(mod.id);
+    setModuleDraft({
+      title: mod.title,
+      shortTitle: mod.shortTitle ?? "",
+      mapStyle: mod.mapStyle,
+      weekLabel: mod.weekLabel ?? "",
+    });
+    setActionError(null);
+  };
+
+  const handleSaveModule = async (moduleId: string) => {
+    if (!moduleDraft.title.trim()) return;
+    setSavingModule(true);
+    setActionError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/course-library/modules/${moduleId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: moduleDraft.title.trim(),
+            shortTitle: moduleDraft.shortTitle.trim() || null,
+            mapStyle: moduleDraft.mapStyle,
+            weekLabel: moduleDraft.weekLabel.trim() || null,
+          }),
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setCourse((prev) => ({
+          ...prev,
+          modules: prev.modules.map((m) =>
+            m.id === moduleId
+              ? {
+                  ...m,
+                  title: data.module.title,
+                  shortTitle: data.module.shortTitle,
+                  mapStyle: data.module.mapStyle,
+                  weekLabel: data.module.weekLabel,
+                }
+              : m,
+          ),
+        }));
+        setEditingModuleId(null);
+      } else {
+        const data = await res.json().catch(() => null);
+        setActionError(data?.error || "Failed to update module");
+      }
+    } catch {
+      setActionError("Failed to update module");
+    } finally {
+      setSavingModule(false);
+    }
+  };
+
+  const handleMoveModule = async (moduleId: string, direction: -1 | 1) => {
+    const ordered = [...course.modules].sort((a, b) => a.sortOrder - b.sortOrder);
+    const idx = ordered.findIndex((m) => m.id === moduleId);
+    const swapIdx = idx + direction;
+    if (idx === -1 || swapIdx < 0 || swapIdx >= ordered.length) return;
+
+    const a = ordered[idx];
+    const b = ordered[swapIdx];
+    setActionError(null);
+    try {
+      const [resA, resB] = await Promise.all([
+        fetch(`/api/admin/course-library/modules/${a.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sortOrder: b.sortOrder }),
+        }),
+        fetch(`/api/admin/course-library/modules/${b.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sortOrder: a.sortOrder }),
+        }),
+      ]);
+      if (!resA.ok || !resB.ok) {
+        setActionError("Failed to reorder modules");
+        return;
+      }
+      setCourse((prev) => ({
+        ...prev,
+        modules: prev.modules.map((m) =>
+          m.id === a.id
+            ? { ...m, sortOrder: b.sortOrder }
+            : m.id === b.id
+              ? { ...m, sortOrder: a.sortOrder }
+              : m,
+        ),
+      }));
+    } catch {
+      setActionError("Failed to reorder modules");
     }
   };
 
@@ -572,20 +695,73 @@ export function CourseLibraryEditorClient({
           </div>
         )}
 
-        {course.modules.map((mod) => (
+        {[...course.modules]
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((mod, modIndex, orderedModules) => (
           <div
             key={mod.id}
             className="rounded-lg border border-border bg-card overflow-hidden"
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/20">
-              <h3 className="text-sm font-semibold text-foreground">
-                {mod.title}
-              </h3>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border bg-muted/20">
+              <div className="flex min-w-0 items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: MAP_STYLE_META[mod.mapStyle].dot }}
+                  title={MAP_STYLE_META[mod.mapStyle].label}
+                />
+                {mod.weekLabel && (
+                  <span className="shrink-0 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {mod.weekLabel}
+                  </span>
+                )}
+                <h3 className="truncate text-sm font-semibold text-foreground">
+                  {mod.title}
+                </h3>
+                {mod.shortTitle && (
+                  <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+                    (map: {mod.shortTitle})
+                  </span>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <span className="mr-1 text-[10px] text-muted-foreground">
                   {mod.lessons.length} lesson
                   {mod.lessons.length === 1 ? "" : "s"}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => handleMoveModule(mod.id, -1)}
+                  disabled={modIndex === 0}
+                  className="p-1 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
+                  title="Move up"
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMoveModule(mod.id, 1)}
+                  disabled={modIndex === orderedModules.length - 1}
+                  className="p-1 text-muted-foreground/50 hover:text-foreground disabled:opacity-20"
+                  title="Move down"
+                >
+                  <ArrowDown className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    editingModuleId === mod.id
+                      ? setEditingModuleId(null)
+                      : startEditModule(mod)
+                  }
+                  className="p-1 text-muted-foreground/50 hover:text-foreground"
+                  title="Edit module & map settings"
+                >
+                  {editingModuleId === mod.id ? (
+                    <X className="w-3.5 h-3.5" />
+                  ) : (
+                    <Pencil className="w-3.5 h-3.5" />
+                  )}
+                </button>
                 <button
                   type="button"
                   onClick={() => handleDeleteModule(mod.id, mod.title)}
@@ -596,6 +772,110 @@ export function CourseLibraryEditorClient({
                 </button>
               </div>
             </div>
+            {editingModuleId === mod.id && (
+              <div className="border-b border-border bg-muted/10 p-3 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      Module title
+                    </label>
+                    <input
+                      type="text"
+                      value={moduleDraft.title}
+                      onChange={(e) =>
+                        setModuleDraft((d) => ({ ...d, title: e.target.value }))
+                      }
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      Short title{" "}
+                      <span className="font-normal">
+                        (shown on the student map — e.g. &ldquo;Pronouns&rdquo;)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      value={moduleDraft.shortTitle}
+                      onChange={(e) =>
+                        setModuleDraft((d) => ({
+                          ...d,
+                          shortTitle: e.target.value,
+                        }))
+                      }
+                      placeholder="Falls back to module title"
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      Map stop style
+                    </label>
+                    <select
+                      value={moduleDraft.mapStyle}
+                      onChange={(e) =>
+                        setModuleDraft((d) => ({
+                          ...d,
+                          mapStyle: e.target.value as ModuleMapStyle,
+                        }))
+                      }
+                      className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                    >
+                      {(
+                        Object.keys(MAP_STYLE_META) as ModuleMapStyle[]
+                      ).map((style) => (
+                        <option key={style} value={style}>
+                          {MAP_STYLE_META[style].label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      Week label{" "}
+                      <span className="font-normal">
+                        (e.g. &ldquo;Week 1&rdquo; — starts a new band on the map)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      value={moduleDraft.weekLabel}
+                      onChange={(e) =>
+                        setModuleDraft((d) => ({
+                          ...d,
+                          weekLabel: e.target.value,
+                        }))
+                      }
+                      placeholder="Leave blank to continue previous band"
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingModuleId(null)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveModule(mod.id)}
+                    disabled={savingModule || !moduleDraft.title.trim()}
+                    className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                  >
+                    {savingModule ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Check className="w-3 h-3" />
+                    )}
+                    Save module
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="p-3 space-y-2">
               {mod.lessons.length === 0 && addingLessonTo !== mod.id && (
                 <p className="text-xs text-muted-foreground italic py-2 text-center">
