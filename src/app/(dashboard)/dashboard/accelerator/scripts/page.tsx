@@ -20,71 +20,120 @@ export default async function ScriptsPage() {
   );
 }
 
-async function ScriptsContent() {
-  const { userId: clerkId } = await auth();
-  let dbUserId: string | null = null;
+type ScriptCard = {
+  id: string;
+  title: string;
+  description: string | null;
+  speakerRole: string;
+  responderRole: string;
+  lines: { id: string }[];
+};
 
-  if (clerkId) {
-    const user = await db.query.users.findFirst({
-      where: eq(users.clerkId, clerkId),
-      columns: { id: true },
-    });
-    dbUserId = user?.id ?? null;
-  }
+async function loadScriptsData(): Promise<
+  | { ok: true; scripts: ScriptCard[]; goodCountMap: Map<string, number> }
+  | { ok: false }
+> {
+  try {
+    const { userId: clerkId } = await auth();
+    let dbUserId: string | null = null;
 
-  // Fetch all scripts with line counts (only columns this page uses)
-  const scripts = await db.query.conversationScripts.findMany({
-    orderBy: [asc(conversationScripts.sortOrder)],
-    columns: {
-      id: true,
-      title: true,
-      description: true,
-      speakerRole: true,
-      responderRole: true,
-    },
-    with: {
-      lines: {
+    if (clerkId) {
+      const user = await db.query.users.findFirst({
+        where: eq(users.clerkId, clerkId),
         columns: { id: true },
-      },
-    },
-  });
-
-  // Fetch user progress for good-rated lines
-  let goodCountMap: Map<string, number> = new Map();
-  if (dbUserId) {
-    const progress = await db
-      .select({
-        scriptId: scriptLines.scriptId,
-        goodCount: sql<number>`count(*)`.as("good_count"),
-      })
-      .from(scriptLineProgress)
-      .innerJoin(scriptLines, eq(scriptLineProgress.lineId, scriptLines.id))
-      .where(
-        and(
-          eq(scriptLineProgress.userId, dbUserId),
-          eq(scriptLineProgress.selfRating, "good")
-        )
-      )
-      .groupBy(scriptLines.scriptId);
-
-    for (const row of progress) {
-      goodCountMap.set(row.scriptId, Number(row.goodCount));
+      });
+      dbUserId = user?.id ?? null;
     }
+
+    // Fetch all scripts with line counts (only columns this page uses)
+    const scripts = await db.query.conversationScripts.findMany({
+      orderBy: [asc(conversationScripts.sortOrder)],
+      columns: {
+        id: true,
+        title: true,
+        description: true,
+        speakerRole: true,
+        responderRole: true,
+      },
+      with: {
+        lines: {
+          columns: { id: true },
+        },
+      },
+    });
+
+    // Fetch user progress for good-rated lines
+    const goodCountMap = new Map<string, number>();
+    if (dbUserId) {
+      const progress = await db
+        .select({
+          scriptId: scriptLines.scriptId,
+          goodCount: sql<number>`count(*)`.as("good_count"),
+        })
+        .from(scriptLineProgress)
+        .innerJoin(scriptLines, eq(scriptLineProgress.lineId, scriptLines.id))
+        .where(
+          and(
+            eq(scriptLineProgress.userId, dbUserId),
+            eq(scriptLineProgress.selfRating, "good")
+          )
+        )
+        .groupBy(scriptLines.scriptId);
+
+      for (const row of progress) {
+        goodCountMap.set(row.scriptId, Number(row.goodCount));
+      }
+    }
+
+    return { ok: true, scripts, goodCountMap };
+  } catch (error) {
+    // Surface the real cause in server logs (Vercel) without crashing the
+    // whole route with an opaque Server Components error for the student.
+    console.error("Conversation Scripts page failed to load:", error);
+    return { ok: false };
   }
+}
+
+async function ScriptsContent() {
+  const result = await loadScriptsData();
+
+  const header = (
+    <div className="flex items-start justify-between">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">
+          The Conversation Confidence Starter Scripts
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Practice speaking with real-life dialogue scenarios.
+        </p>
+      </div>
+      <AdminEditLink href="/admin/accelerator/scripts" />
+    </div>
+  );
+
+  if (!result.ok) {
+    return (
+      <div className="container mx-auto px-4 py-8 space-y-6">
+        {header}
+        <div className="rounded-xl border border-border bg-card p-10 text-center">
+          <MessageSquare className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+          <h2 className="text-lg font-semibold text-foreground">
+            We couldn&apos;t load the conversation scripts
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+            Something went wrong loading this page. Please refresh in a moment —
+            if it keeps happening, let the team know.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const { scripts, goodCountMap } = result;
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            The Conversation Confidence Starter Scripts
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Practice speaking with real-life dialogue scenarios.
-          </p>
-        </div>
-        <AdminEditLink href="/admin/accelerator/scripts" />
-      </div>
+      {header}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {scripts.map((script) => {
