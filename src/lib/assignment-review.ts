@@ -66,6 +66,47 @@ export interface EligibleReviewer {
 }
 
 /**
+ * List users who hold an assignment-review capability through a role bundle
+ * (e.g. the "Challenge Reviewer" role) — excluding admins, who have the
+ * capability implicitly but aren't the intended default assignees. Used to
+ * auto-assign new submissions on submit.
+ */
+export async function listChallengeReviewers(
+  assignmentType: ReviewableAssignmentType = "text_assignment",
+): Promise<EligibleReviewer[]> {
+  const now = new Date();
+
+  const rows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+    })
+    .from(userRoles)
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .innerJoin(roleFeatures, eq(roleFeatures.roleId, roles.id))
+    .innerJoin(users, eq(userRoles.userId, users.id))
+    .where(
+      and(
+        eq(
+          roleFeatures.featureKey,
+          ASSIGNMENT_REVIEW_FEATURE_KEYS[assignmentType],
+        ),
+        isNull(roles.deletedAt),
+        isNull(users.deletedAt),
+        or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, now)),
+      ),
+    );
+
+  const byId = new Map<string, EligibleReviewer>();
+  for (const reviewer of rows) byId.set(reviewer.id, reviewer);
+  return Array.from(byId.values()).sort((a, b) =>
+    (a.name ?? a.email).localeCompare(b.name ?? b.email),
+  );
+}
+
+/**
  * List users who can be assigned as assignment reviewers: all admins plus
  * every user holding an active role bundle with a review capability.
  */

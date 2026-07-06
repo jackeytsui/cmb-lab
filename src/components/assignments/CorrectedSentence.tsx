@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 import { useTTS } from "@/hooks/useTTS";
 import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
 import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
+import { useSentenceAnnotations } from "@/components/assignments/useSentenceAnnotations";
 import {
-  annotateSentence,
   ASSIGNMENT_CHAR_SIZE,
   type CharAnnotation,
 } from "@/lib/mandarin-annotate";
@@ -123,11 +123,14 @@ export function CorrectedSentence({
   onRemoveCorrection,
   className,
 }: CorrectedSentenceProps) {
+  // Jieba-backed per-character annotations (same pipeline as the coaching
+  // page), with a synchronous fallback for first paint.
+  const annotations = useSentenceAnnotations(text);
+
   // Group consecutive characters by the correction they fall in (or none).
   // Corrections don't overlap (enforced upstream), so a correction's chars are
   // always contiguous in offset order.
   const groups = useMemo<RenderGroup[]>(() => {
-    const annotations = annotateSentence(text);
     const sorted = [...corrections].sort(
       (a, b) => a.startOffset - b.startOffset,
     );
@@ -146,7 +149,7 @@ export function CorrectedSentence({
       }
     }
     return result;
-  }, [text, corrections]);
+  }, [annotations, corrections]);
 
   return (
     <div className={cn("leading-relaxed", className)}>

@@ -11,6 +11,7 @@ import {
   courseLibraryModules,
 } from "@/db/schema";
 import { getRealUser } from "@/lib/auth";
+import { listChallengeReviewers } from "@/lib/assignment-review";
 import type { CourseLibraryTextAssignmentContent } from "@/db/schema/course-library";
 
 interface RouteParams {
@@ -18,7 +19,10 @@ interface RouteParams {
 }
 
 // Statuses in which the student may still create/replace their submission.
-const EDITABLE_STATUSES = ["draft", "submitted"] as const;
+// "assigned" is included: a submission is auto-assigned to a reviewer on
+// submit, but the student can keep editing until review actually starts
+// (in_review) or completes (reviewed).
+const EDITABLE_STATUSES = ["draft", "submitted", "assigned"] as const;
 
 const sentenceSchema = z.object({
   promptId: z.string().min(1).max(100),
@@ -186,6 +190,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 
   const now = new Date();
+
+  // Auto-assign to a Challenge Reviewer on submission so it lands in their
+  // "Assigned to Me" queue without manual triage. Keep any existing assignee
+  // (e.g. an admin reassigned it) rather than overwriting. Being "assigned"
+  // does NOT lock the student — editing is locked only once review starts.
+  const reviewers = await listChallengeReviewers("text_assignment");
+  const assignedReviewerId =
+    existing?.assignedReviewerId ?? reviewers[0]?.id ?? null;
+  const status = assignedReviewerId ? "assigned" : "submitted";
+
   let submissionId: string;
 
   if (existing) {
@@ -193,7 +207,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     await db
       .update(assignmentSubmissions)
       .set({
-        status: "submitted",
+        status,
+        assignedReviewerId,
         submittedAt: now,
         moduleId: lesson.moduleId,
         courseId: lesson.courseId,
@@ -213,7 +228,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         courseId: lesson.courseId,
         studentId: user.id,
         assignmentType: "text_assignment",
-        status: "submitted",
+        status,
+        assignedReviewerId,
         submittedAt: now,
       })
       .returning({ id: assignmentSubmissions.id });
