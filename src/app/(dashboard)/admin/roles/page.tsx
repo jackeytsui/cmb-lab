@@ -44,6 +44,18 @@ interface RoleWithCount {
   sortOrder: number;
   studentCount: number;
   createdAt: string;
+  featureKeys?: string[];
+}
+
+/**
+ * Role bundles granting a reviewer/staff capability (e.g. Challenge Reviewer)
+ * are listed under "Team Roles" instead of "Student Tiers". They stay
+ * additive: a Coach can hold one alongside their platform role.
+ */
+function isTeamRole(role: RoleWithCount): boolean {
+  return (role.featureKeys ?? []).some((key) =>
+    key.startsWith("assignment_review_"),
+  );
 }
 
 interface PlatformRole {
@@ -400,6 +412,91 @@ export default function AdminRolesPage() {
     fetchRoles(search || undefined);
   };
 
+  const teamRoles = roles.filter(isTeamRole);
+  const tierRoles = roles.filter((role) => !isTeamRole(role));
+
+  const renderRoleRow = (role: RoleWithCount, countNoun: string) => (
+    <div
+      key={role.id}
+      onClick={() => router.push(`/admin/roles/${role.id}`)}
+      className="flex cursor-pointer items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50"
+    >
+      {/* Badge + name */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <Badge
+            style={{
+              backgroundColor: role.color + "20",
+              color: role.color,
+              borderColor: role.color + "40",
+            }}
+          >
+            {role.name}
+          </Badge>
+        </div>
+        {role.description && (
+          <p className="mt-1 truncate text-sm text-muted-foreground">
+            {role.description}
+          </p>
+        )}
+      </div>
+
+      {/* Assigned count */}
+      <div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
+        <Users className="h-4 w-4" />
+        <span>
+          {role.studentCount} {countNoun}
+          {role.studentCount !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {/* Created date */}
+      <span className="hidden shrink-0 text-sm text-muted-foreground sm:block">
+        {formatDistanceToNow(new Date(role.createdAt), {
+          addSuffix: true,
+        })}
+      </span>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            router.push(`/admin/roles/${role.id}`);
+          }}
+          className="h-8 w-8 text-muted-foreground hover:text-primary"
+          title="Configure permissions"
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            openEditDialog(role);
+          }}
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeleteConfirmRole(role);
+          }}
+          className="h-8 w-8 text-muted-foreground hover:text-red-500"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="mx-auto max-w-4xl space-y-8 p-6">
       {/* Page header */}
@@ -437,7 +534,26 @@ export default function AdminRolesPage() {
       </section>
 
       {/* ================================================================= */}
-      {/* Section 2: Student Tiers */}
+      {/* Section 2: Team Roles (staff capabilities, additive with the       */}
+      {/* platform role — e.g. a Coach can also be a Challenge Reviewer)     */}
+      {/* ================================================================= */}
+      {teamRoles.length > 0 && (
+        <section>
+          <h2 className="mb-1 text-lg font-semibold text-foreground">
+            Team Roles
+          </h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Capability roles for team members, such as reviewing assignment
+            submissions. Assignable alongside any platform role.
+          </p>
+          <div className="space-y-2">
+            {teamRoles.map((role) => renderRoleRow(role, "user"))}
+          </div>
+        </section>
+      )}
+
+      {/* ================================================================= */}
+      {/* Section 3: Student Tiers */}
       {/* ================================================================= */}
       <section>
         <h2 className="mb-4 text-lg font-semibold text-foreground">
@@ -466,7 +582,7 @@ export default function AdminRolesPage() {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
           </div>
-        ) : roles.length === 0 ? (
+        ) : tierRoles.length === 0 ? (
           <div className="text-center py-16">
             <Shield className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
             <h3 className="text-xl font-semibold text-foreground">
@@ -480,87 +596,7 @@ export default function AdminRolesPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {roles.map((role) => (
-              <div
-                key={role.id}
-                onClick={() => router.push(`/admin/roles/${role.id}`)}
-                className="flex cursor-pointer items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50"
-              >
-                {/* Badge + name */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      style={{
-                        backgroundColor: role.color + "20",
-                        color: role.color,
-                        borderColor: role.color + "40",
-                      }}
-                    >
-                      {role.name}
-                    </Badge>
-                  </div>
-                  {role.description && (
-                    <p className="mt-1 truncate text-sm text-muted-foreground">
-                      {role.description}
-                    </p>
-                  )}
-                </div>
-
-                {/* Student count */}
-                <div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
-                  <Users className="h-4 w-4" />
-                  <span>
-                    {role.studentCount} student
-                    {role.studentCount !== 1 ? "s" : ""}
-                  </span>
-                </div>
-
-                {/* Created date */}
-                <span className="hidden shrink-0 text-sm text-muted-foreground sm:block">
-                  {formatDistanceToNow(new Date(role.createdAt), {
-                    addSuffix: true,
-                  })}
-                </span>
-
-                {/* Actions */}
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      router.push(`/admin/roles/${role.id}`);
-                    }}
-                    className="h-8 w-8 text-muted-foreground hover:text-primary"
-                    title="Configure permissions"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEditDialog(role);
-                    }}
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteConfirmRole(role);
-                    }}
-                    className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+            {tierRoles.map((role) => renderRoleRow(role, "student"))}
           </div>
         )}
       </section>

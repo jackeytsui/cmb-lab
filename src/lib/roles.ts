@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { roles, userRoles } from "@/db/schema";
+import { roles, roleFeatures, userRoles } from "@/db/schema";
 import { eq, and, isNull, ilike, asc, count, sql, max } from "drizzle-orm";
 import type { Role } from "@/db/schema";
 
@@ -7,7 +7,7 @@ import type { Role } from "@/db/schema";
 
 export async function getRoles(
   filters?: { search?: string }
-): Promise<(Role & { studentCount: number })[]> {
+): Promise<(Role & { studentCount: number; featureKeys: string[] })[]> {
   const conditions = [isNull(roles.deletedAt)];
 
   const trimmedSearch = filters?.search?.trim();
@@ -34,9 +34,26 @@ export async function getRoles(
     studentCounts.map((sc) => [sc.roleId, sc.count])
   );
 
+  // Feature keys per role (lets the UI distinguish team/reviewer roles
+  // from student tiers).
+  const featureRows = await db
+    .select({
+      roleId: roleFeatures.roleId,
+      featureKey: roleFeatures.featureKey,
+    })
+    .from(roleFeatures);
+
+  const featureMap = new Map<string, string[]>();
+  for (const row of featureRows) {
+    const list = featureMap.get(row.roleId) ?? [];
+    list.push(row.featureKey);
+    featureMap.set(row.roleId, list);
+  }
+
   return allRoles.map((role) => ({
     ...role,
     studentCount: countMap.get(role.id) ?? 0,
+    featureKeys: featureMap.get(role.id) ?? [],
   }));
 }
 
