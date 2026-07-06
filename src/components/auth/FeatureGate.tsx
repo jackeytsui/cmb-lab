@@ -30,6 +30,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   tone_mastery: "Advanced Tone Mastery System",
   listening_training: "Native Speed Listening Comprehension Training",
   notepad: "Notepad",
+  assignment_review_text: "Assignment Review (Text)",
 };
 
 // ---------------------------------------------------------------------------

@@ -4,15 +4,21 @@ import { ChevronLeft, Download as DownloadIcon, Paperclip, Music, ExternalLink }
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { FlashcardSaveButton } from "@/components/flashcards/FlashcardSaveButton";
 import { QuizLessonViewer } from "./QuizLessonViewer";
+import {
+  TextAssignmentViewer,
+  type TextAssignmentSubmissionDto,
+} from "./TextAssignmentViewer";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
 import { db } from "@/db";
 import {
+  assignmentSubmissions,
+  assignmentSubmissionSentences,
   courseLibraryCourses,
   courseLibraryModules,
   courseLibraryLessons,
   courseLibraryLessonProgress,
 } from "@/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 
 interface Attachment {
@@ -103,6 +109,59 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   const content = (row.content ?? {}) as Record<string, unknown>;
   const lessonType = row.lessonType as string;
+
+  // Text assignment data is fetched ahead of the JSX below.
+  let textAssignmentPrompts: Array<{
+    id: string;
+    label: string;
+    description: string;
+  }> = [];
+  let textAssignmentSubmission: TextAssignmentSubmissionDto | null = null;
+  if (row.lessonType === "text_assignment") {
+    const rawPrompts = Array.isArray(content.sentencePrompts)
+      ? (content.sentencePrompts as Array<Record<string, unknown>>)
+      : [];
+    textAssignmentPrompts = rawPrompts
+      .map((p, idx) => ({
+        id: String(p.id ?? `prompt-${idx}`),
+        label: typeof p.label === "string" ? p.label : `Sentence ${idx + 1}`,
+        description: typeof p.description === "string" ? p.description : "",
+        order: typeof p.order === "number" ? p.order : idx,
+      }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ id, label, description }) => ({ id, label, description }));
+
+    if (currentUser) {
+      const submission = await db.query.assignmentSubmissions.findFirst({
+        where: and(
+          eq(assignmentSubmissions.lessonId, lessonId),
+          eq(assignmentSubmissions.studentId, currentUser.id),
+        ),
+      });
+      if (submission) {
+        const sentences =
+          await db.query.assignmentSubmissionSentences.findMany({
+            where: eq(
+              assignmentSubmissionSentences.submissionId,
+              submission.id,
+            ),
+            orderBy: [asc(assignmentSubmissionSentences.sortOrder)],
+          });
+        textAssignmentSubmission = {
+          id: submission.id,
+          status: submission.status,
+          submittedAt: submission.submittedAt?.toISOString() ?? null,
+          finalScore: submission.finalScore,
+          sentences: sentences.map((s) => ({
+            promptId: s.promptId,
+            chineseText: s.chineseText,
+            generatedPinyin: s.generatedPinyin,
+            generatedEnglish: s.generatedEnglish,
+          })),
+        };
+      }
+    }
+  }
 
   return (
     <FeatureGate feature="course_library">
@@ -334,6 +393,33 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
             />
+          </div>
+        )}
+
+        {row.lessonType === "text_assignment" && (
+          <div className="space-y-5">
+            {typeof content.description === "string" &&
+              content.description && (
+                <div
+                  className="prose prose-invert max-w-none text-foreground prose-p:text-foreground prose-li:text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
+                  dangerouslySetInnerHTML={{
+                    __html: content.description as string,
+                  }}
+                />
+              )}
+            {textAssignmentPrompts.length > 0 ? (
+              <TextAssignmentViewer
+                lessonId={lessonId}
+                prompts={textAssignmentPrompts}
+                initialSubmission={textAssignmentSubmission}
+              />
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  This assignment has no sentence prompts yet.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

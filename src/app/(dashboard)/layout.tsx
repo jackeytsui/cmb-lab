@@ -12,8 +12,8 @@ import { NotificationBellClient } from "@/components/notifications/NotificationB
 import { RouteThemeScope } from "@/components/layout/RouteThemeScope";
 import type { Roles } from "@/types/globals";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { assignmentSubmissions, users } from "@/db/schema";
+import { and, count, eq, isNull } from "drizzle-orm";
 import { FEATURE_KEYS, resolvePermissions } from "@/lib/permissions";
 import { DEFAULT_STUDENT_FEATURES, ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { resolveRoleFromEmail } from "@/lib/access-control";
@@ -191,6 +191,27 @@ export default async function DashboardLayout({
     enabledFeatures = Array.from(applyFeatureTagOverrides(enabledFeatures, overrides));
   }
 
+  // Unread reviewed-assignment feedback count for the sidebar badge.
+  let assignmentFeedbackUnread = 0;
+  if (dbUser) {
+    try {
+      const [unread] = await db
+        .select({ value: count() })
+        .from(assignmentSubmissions)
+        .where(
+          and(
+            eq(assignmentSubmissions.studentId, dbUser.id),
+            eq(assignmentSubmissions.status, "reviewed"),
+            isNull(assignmentSubmissions.studentViewedAt),
+          ),
+        );
+      assignmentFeedbackUnread = unread?.value ?? 0;
+    } catch {
+      // Table may not exist yet before the migration is deployed.
+      assignmentFeedbackUnread = 0;
+    }
+  }
+
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
   return (
@@ -203,7 +224,11 @@ export default async function DashboardLayout({
         />
       )}
       <SidebarProvider defaultOpen={defaultOpen}>
-        <AppSidebar role={role} enabledFeatures={enabledFeatures} />
+        <AppSidebar
+          role={role}
+          enabledFeatures={enabledFeatures}
+          assignmentFeedbackUnread={assignmentFeedbackUnread}
+        />
         <SidebarInset>
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-3 sm:px-4">
           {/* Mobile hamburger - only visible on small screens where sidebar is a drawer */}

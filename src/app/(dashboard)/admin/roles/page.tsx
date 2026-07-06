@@ -99,6 +99,12 @@ const FEATURES = [
     label: "AI Chat",
     description: "Text-based AI conversation assistant",
   },
+  {
+    key: "assignment_review_text",
+    label: "Assignment Review (Text)",
+    description:
+      "Challenge Reviewer capability: review text assignment submissions",
+  },
 ];
 
 // ---------------------------------------------------------------------------

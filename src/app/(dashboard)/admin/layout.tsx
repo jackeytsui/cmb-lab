@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { resolveRoleFromEmail } from "@/lib/access-control";
+import { resolvePermissions } from "@/lib/permissions";
 
 type Role = "student" | "coach" | "admin";
 
@@ -61,7 +62,19 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       : effectiveRole;
 
   if (elevatedRole !== "admin" && elevatedRole !== "coach") {
-    redirect("/dashboard");
+    // Assignment reviewers (e.g. the "Challenge Reviewer" role bundle) may
+    // access admin content such as Assignment Submissions without being
+    // coach/admin. Individual admin pages still enforce their own checks.
+    const reviewerUser = await db.query.users.findFirst({
+      where: eq(users.clerkId, userId),
+      columns: { id: true },
+    });
+    const canReview = reviewerUser
+      ? (await resolvePermissions(reviewerUser.id)).canUseFeature(
+          "assignment_review_text",
+        )
+      : false;
+    if (!canReview) redirect("/dashboard");
   }
 
   return <>{children}</>;

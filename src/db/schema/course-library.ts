@@ -24,7 +24,7 @@ import { users } from "./users";
 
 export const courseLibraryLessonTypeEnum = pgEnum(
   "course_library_lesson_type",
-  ["video", "text", "quiz", "download", "audio", "form"],
+  ["video", "text", "quiz", "download", "audio", "form", "text_assignment"],
 );
 
 // Top-level course container.
@@ -305,10 +305,24 @@ export interface CourseLibraryFormContent {
   embedSource?: string;
 }
 
+export interface CourseLibraryTextAssignmentSentencePrompt {
+  id: string;
+  label: string;
+  description: string;
+  order: number;
+}
+
+export interface CourseLibraryTextAssignmentContent {
+  /** Assignment instructions — rich text HTML (same editor format as other lessons). */
+  description: string;
+  sentencePrompts: CourseLibraryTextAssignmentSentencePrompt[];
+}
+
 export type CourseLibraryLessonContent =
   | CourseLibraryVideoContent
   | CourseLibraryTextContent
   | CourseLibraryQuizContent
   | CourseLibraryDownloadContent
   | CourseLibraryAudioContent
-  | CourseLibraryFormContent;
+  | CourseLibraryFormContent
+  | CourseLibraryTextAssignmentContent;
