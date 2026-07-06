@@ -164,9 +164,10 @@ export function TextAssignmentViewer({
               "Your submission is currently being reviewed and can no longer be edited."
             ) : (
               <>
-                <span className="font-medium">Submitted!</span> You&apos;ll
-                receive personalised feedback from our coaching team very soon.
-                You can still edit and resubmit until it has been reviewed.
+                <span className="font-medium">Submitted!</span>{" "}
+                You&apos;ll receive personalised feedback from our coaching team
+                very soon. You can still edit and resubmit until it has been
+                reviewed.
               </>
             )}
           </div>
