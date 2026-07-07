@@ -18,14 +18,21 @@ import {
   Music,
   ExternalLink,
   ClipboardList,
+  Headphones,
   Plus,
   ArrowUp,
   ArrowDown,
+  Sparkles,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { extractEmbedUrl, looksLikeIframeSnippet } from "@/lib/embed";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { QuizBuilder } from "./QuizBuilder";
+import {
+  generateModelPinyin,
+  countHanCharacters,
+} from "@/lib/generate-model-pinyin";
 
 type LessonType =
   | "video"
@@ -34,7 +41,8 @@ type LessonType =
   | "quiz"
   | "download"
   | "form"
-  | "text_assignment";
+  | "text_assignment"
+  | "listening_practice";
 
 interface LessonData {
   id: string;
@@ -54,6 +62,11 @@ const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: 
     label: "Text Assignment",
     Icon: ClipboardList,
     color: "text-teal-500",
+  },
+  listening_practice: {
+    label: "Listening Practice",
+    Icon: Headphones,
+    color: "text-indigo-500",
   },
 };
 
@@ -284,6 +297,13 @@ export function LessonEditorClient({
       )}
       {lesson.lessonType === "text_assignment" && (
         <TextAssignmentLessonForm
+          lessonId={lesson.id}
+          content={lesson.content}
+          onUpdate={updateContent}
+        />
+      )}
+      {lesson.lessonType === "listening_practice" && (
+        <ListeningPracticeLessonForm
           lessonId={lesson.id}
           content={lesson.content}
           onUpdate={updateContent}
@@ -1690,6 +1710,523 @@ function TextAssignmentLessonForm({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Listening Practice Lesson Form
+// ---------------------------------------------------------------------------
+
+interface ListeningSentenceDraft {
+  id: string;
+  chinese: string;
+  pinyin: string;
+  audioUrl: string | null;
+}
+
+function normalizeListeningSentences(raw: unknown): ListeningSentenceDraft[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((s, idx) => {
+      const sentence = (s ?? {}) as Record<string, unknown>;
+      return {
+        id:
+          typeof sentence.id === "string" && sentence.id
+            ? sentence.id
+            : crypto.randomUUID(),
+        order: typeof sentence.order === "number" ? sentence.order : idx,
+        chinese: typeof sentence.chinese === "string" ? sentence.chinese : "",
+        pinyin: typeof sentence.pinyin === "string" ? sentence.pinyin : "",
+        audioUrl:
+          typeof sentence.audioUrl === "string" ? sentence.audioUrl : null,
+      };
+    })
+    .sort((a, b) => a.order - b.order)
+    .map(({ id, chinese, pinyin, audioUrl }) => ({
+      id,
+      chinese,
+      pinyin,
+      audioUrl,
+    }));
+}
+
+interface ListeningResultRow {
+  userId: string;
+  name: string | null;
+  email: string;
+  score: number;
+  correct: number;
+  resolved: number;
+  total: number;
+  completedAt: string | null;
+}
+
+function ListeningPracticeLessonForm({
+  lessonId,
+  content,
+  onUpdate,
+}: {
+  lessonId: string;
+  content: Record<string, unknown>;
+  onUpdate: (next: Record<string, unknown>) => void;
+}) {
+  const savedDescription = (content.description as string) ?? "";
+  const savedSentences = normalizeListeningSentences(content.sentences);
+
+  const [description, setDescription] = useState(savedDescription);
+  const [sentences, setSentences] = useState<ListeningSentenceDraft[]>(
+    savedSentences.length > 0
+      ? savedSentences
+      : [{ id: crypto.randomUUID(), chinese: "", pinyin: "", audioUrl: null }],
+  );
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadPct, setUploadPct] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Student results panel.
+  const [showResults, setShowResults] = useState(false);
+  const [results, setResults] = useState<ListeningResultRow[] | null>(null);
+  const [loadingResults, setLoadingResults] = useState(false);
+
+  const dirty =
+    description !== savedDescription ||
+    JSON.stringify(sentences) !== JSON.stringify(savedSentences);
+
+  const updateSentence = (id: string, patch: Partial<ListeningSentenceDraft>) => {
+    setSentences((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    );
+  };
+
+  const addSentence = () => {
+    setSentences((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), chinese: "", pinyin: "", audioUrl: null },
+    ]);
+  };
+
+  const removeSentence = (id: string) => {
+    setSentences((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const moveSentence = (id: string, direction: -1 | 1) => {
+    setSentences((prev) => {
+      const idx = prev.findIndex((s) => s.id === id);
+      const target = idx + direction;
+      if (idx < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  };
+
+  const generatePinyin = async (id: string, chinese: string) => {
+    if (!chinese.trim()) return;
+    setGeneratingId(id);
+    try {
+      const pinyin = await generateModelPinyin(chinese);
+      updateSentence(id, { pinyin });
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const handleUploadOverride = async (
+    id: string,
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingId(id);
+    setUploadPct(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const result = await uploadWithProgress(
+        "audio",
+        file,
+        controller.signal,
+        setUploadPct,
+      );
+      updateSentence(id, { audioUrl: result.url });
+    } catch {
+      // ignore — admin can retry
+    } finally {
+      setUploadingId(null);
+      setUploadPct(0);
+      abortRef.current = null;
+      e.target.value = "";
+    }
+  };
+
+  const handleSave = async () => {
+    const cleaned = sentences.filter((s) => s.chinese.trim());
+    if (cleaned.length === 0) {
+      setError("Add at least one sentence with Chinese text.");
+      return;
+    }
+    const missingPinyin = cleaned.find((s) => !s.pinyin.trim());
+    if (missingPinyin) {
+      setError(
+        "Every sentence needs a pinyin model answer. Type the Chinese and it auto-generates.",
+      );
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      const nextContent = {
+        ...content,
+        description,
+        sentences: cleaned.map((s, idx) => ({
+          id: s.id,
+          order: idx,
+          chinese: s.chinese.trim(),
+          pinyin: s.pinyin.trim(),
+          audioUrl: s.audioUrl || null,
+        })),
+      };
+      const ok = await saveLessonContent(lessonId, nextContent);
+      if (ok) {
+        onUpdate(nextContent);
+        setSavedAt(new Date());
+      } else {
+        setError("Failed to save listening practice.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadResults = async () => {
+    setShowResults(true);
+    setLoadingResults(true);
+    try {
+      const res = await fetch(
+        `/api/admin/course-library/lessons/${lessonId}/listening-results`,
+      );
+      const data = await res.json();
+      if (res.ok) setResults(data.results ?? []);
+      else setResults([]);
+    } catch {
+      setResults([]);
+    } finally {
+      setLoadingResults(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">Instructions</h3>
+        <p className="text-xs text-muted-foreground">
+          Shown above the sentences. Tell students to listen and type the pinyin.
+        </p>
+        <RichTextEditor
+          value={description}
+          onChange={setDescription}
+          placeholder="e.g. Listen to each clip and type the pinyin. Tones and spaces don't matter."
+        />
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Sentences ({sentences.length})
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Type the Chinese — audio is auto-generated and the pinyin model
+              answer is filled in for you (editable). Optionally upload your own
+              recording to replace the generated audio.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addSentence}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add sentence
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {sentences.map((sentence, idx) => {
+            const hanCount = countHanCharacters(sentence.chinese);
+            const syllableCount = sentence.pinyin.trim()
+              ? sentence.pinyin.trim().split(/\s+/).length
+              : 0;
+            const mismatch =
+              sentence.chinese.trim() &&
+              sentence.pinyin.trim() &&
+              hanCount !== syllableCount;
+
+            return (
+              <div
+                key={sentence.id}
+                className="rounded-md border border-border bg-background p-3 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Sentence {idx + 1}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveSentence(sentence.id, -1)}
+                      disabled={idx === 0}
+                      className="p-1 text-muted-foreground/60 hover:text-foreground disabled:opacity-30"
+                      title="Move up"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveSentence(sentence.id, 1)}
+                      disabled={idx === sentences.length - 1}
+                      className="p-1 text-muted-foreground/60 hover:text-foreground disabled:opacity-30"
+                      title="Move down"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeSentence(sentence.id)}
+                      disabled={sentences.length <= 1}
+                      className="p-1 text-muted-foreground/60 hover:text-red-500 disabled:opacity-30"
+                      title="Remove sentence"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    Chinese sentence
+                  </label>
+                  <input
+                    type="text"
+                    value={sentence.chinese}
+                    onChange={(e) =>
+                      updateSentence(sentence.id, { chinese: e.target.value })
+                    }
+                    onBlur={() => {
+                      if (sentence.chinese.trim() && !sentence.pinyin.trim()) {
+                        generatePinyin(sentence.id, sentence.chinese);
+                      }
+                    }}
+                    placeholder="例如：你吃饭了吗"
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-base"
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      Pinyin model answer
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        generatePinyin(sentence.id, sentence.chinese)
+                      }
+                      disabled={
+                        !sentence.chinese.trim() || generatingId === sentence.id
+                      }
+                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline disabled:opacity-40"
+                    >
+                      {generatingId === sentence.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      Regenerate
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={sentence.pinyin}
+                    onChange={(e) =>
+                      updateSentence(sentence.id, { pinyin: e.target.value })
+                    }
+                    placeholder="nǐ chī fàn le ma"
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Checking ignores tones and spaces — this is only used to
+                    grade and to reveal the pinyin after a correct answer.
+                  </p>
+                  {mismatch ? (
+                    <p className="mt-1 text-[10px] text-amber-500">
+                      {syllableCount} syllables for {hanCount} characters — the
+                      reveal aligns one syllable per character, so double-check
+                      the spacing.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    Audio
+                  </label>
+                  {sentence.audioUrl ? (
+                    <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+                      <Music className="w-4 h-4 text-purple-500" />
+                      <span className="flex-1 truncate text-xs text-muted-foreground">
+                        Custom recording uploaded
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateSentence(sentence.id, { audioUrl: null })
+                        }
+                        className="text-xs text-red-500 hover:text-red-400"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/10 px-2 py-1 text-[11px] text-indigo-500">
+                        <Sparkles className="w-3 h-3" />
+                        Auto-generated (TTS)
+                      </span>
+                      <label className="cursor-pointer text-[11px] text-primary hover:underline">
+                        <input
+                          type="file"
+                          accept="audio/mpeg,audio/mp4,audio/m4a,audio/x-m4a,audio/wav,audio/ogg,audio/aac"
+                          className="hidden"
+                          onChange={(e) => handleUploadOverride(sentence.id, e)}
+                          disabled={uploadingId === sentence.id}
+                        />
+                        {uploadingId === sentence.id
+                          ? `Uploading… ${uploadPct}%`
+                          : "Upload your own recording"}
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-500">
+          {error}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={loadResults}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          View student results
+        </button>
+        <div className="flex items-center gap-3">
+          {savedAt && !dirty && (
+            <span className="text-[10px] text-emerald-500">
+              Saved at {savedAt.toLocaleTimeString()}
+            </span>
+          )}
+          {dirty && (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Check className="w-3 h-3" />
+              )}
+              Save listening practice
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showResults && (
+        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">
+              Student results
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowResults(false)}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Hide
+            </button>
+          </div>
+          {loadingResults ? (
+            <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading…
+            </div>
+          ) : !results || results.length === 0 ? (
+            <p className="py-2 text-sm text-muted-foreground">
+              No students have attempted this yet. Save your changes first if you
+              just edited the sentences.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Student</th>
+                    <th className="py-2 pr-3 font-medium">Score</th>
+                    <th className="py-2 pr-3 font-medium">Correct</th>
+                    <th className="py-2 pr-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r) => (
+                    <tr key={r.userId} className="border-b border-border/50">
+                      <td className="py-2 pr-3">
+                        <div className="font-medium text-foreground">
+                          {r.name || "Unnamed"}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {r.email}
+                        </div>
+                      </td>
+                      <td className="py-2 pr-3 font-semibold text-foreground">
+                        {r.score}%
+                      </td>
+                      <td className="py-2 pr-3 text-muted-foreground">
+                        {r.correct}/{r.total}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {r.completedAt ? (
+                          <span className="text-emerald-500">Completed</span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            In progress ({r.resolved}/{r.total})
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

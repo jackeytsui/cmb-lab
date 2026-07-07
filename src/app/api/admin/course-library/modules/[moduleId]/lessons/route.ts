@@ -15,6 +15,7 @@ const createSchema = z.object({
     "download",
     "form",
     "text_assignment",
+    "listening_practice",
   ]),
   content: z.record(z.string(), z.unknown()).optional(),
 });
