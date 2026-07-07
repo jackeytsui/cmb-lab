@@ -190,6 +190,10 @@ export function ProductWalkthrough({
     const bubbleWidth = 320;
     const margin = 12;
     const gap = 14; // gap between target highlight border and bubble
+    const vh = window.innerHeight;
+    // Largest top that still keeps the whole bubble (incl. its buttons) on-screen.
+    const maxTop = Math.max(margin, vh - bubbleHeight - margin);
+
     const left = clamp(
       targetRect.left + targetRect.width / 2 - bubbleWidth / 2,
       margin,
@@ -199,31 +203,31 @@ export function ProductWalkthrough({
     const offsetY = currentStep.bubbleOffsetY ?? 0;
     const wantsTop = currentStep.placement === "top";
 
-    // Calculate both positions
-    const topAbove = targetRect.top - gap - bubbleHeight + offsetY;
-    const topBelow = targetRect.top + targetRect.height + gap + offsetY;
-
-    // Check if each position fits without overlapping the target or going off-screen
+    // Non-overlapping anchor positions (fully above / fully below the target).
+    const topAbove = targetRect.top - gap - bubbleHeight;
+    const topBelow = targetRect.top + targetRect.height + gap;
     const fitsAbove = topAbove >= margin;
-    const fitsBelow = topBelow + bubbleHeight <= window.innerHeight - margin;
+    const fitsBelow = topBelow <= maxTop;
 
     let top: number;
-    if (wantsTop && fitsAbove) {
-      top = topAbove;
-    } else if (!wantsTop && fitsBelow) {
-      top = topBelow;
+    if ((wantsTop && fitsAbove) || (fitsAbove && !fitsBelow)) {
+      // Above the target. Apply the tuned offset but never let it slide down
+      // far enough to cover the target, and keep it on-screen.
+      top = clamp(topAbove + offsetY, margin, topAbove);
     } else if (fitsBelow) {
-      // Preferred didn't fit, try below
-      top = topBelow;
-    } else if (fitsAbove) {
-      // Try above
-      top = topAbove;
-    } else {
-      // Neither fits perfectly — place below and clamp, but ensure no overlap with target
-      top = Math.max(
-        targetRect.top + targetRect.height + gap,
-        margin,
+      // Below the target — never above its top edge, and keep it on-screen.
+      top = clamp(
+        topBelow + offsetY,
+        topBelow,
+        maxTop,
       );
+    } else {
+      // Target too large for any non-overlapping spot (e.g. the reading area).
+      // Pin the bubble to whichever side has more room so it stays fully
+      // visible and its Skip/Next buttons remain reachable.
+      const roomAbove = targetRect.top;
+      const roomBelow = vh - (targetRect.top + targetRect.height);
+      top = clamp((roomAbove >= roomBelow ? margin : maxTop) + offsetY, margin, maxTop);
     }
 
     return { top, left };

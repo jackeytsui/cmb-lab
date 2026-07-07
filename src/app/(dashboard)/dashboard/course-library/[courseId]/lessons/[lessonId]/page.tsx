@@ -18,8 +18,9 @@ import {
   courseLibraryLessons,
   courseLibraryLessonProgress,
 } from "@/db/schema";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
+import { visibleCourseStatuses } from "@/lib/course-library-access";
 
 interface Attachment {
   url: string;
@@ -91,7 +92,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
         isNull(courseLibraryLessons.deletedAt),
         isNull(courseLibraryModules.deletedAt),
         isNull(courseLibraryCourses.deletedAt),
-        eq(courseLibraryCourses.isPublished, true),
+        inArray(
+          courseLibraryCourses.status,
+          visibleCourseStatuses(currentUser?.role),
+        ),
       ),
     )
     .limit(1);

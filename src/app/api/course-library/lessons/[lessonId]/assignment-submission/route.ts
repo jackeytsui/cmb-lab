@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, and, eq, isNull } from "drizzle-orm";
+import { asc, and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
@@ -11,6 +11,7 @@ import {
   courseLibraryModules,
 } from "@/db/schema";
 import { getRealUser } from "@/lib/auth";
+import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { listChallengeReviewers } from "@/lib/assignment-review";
 import type { CourseLibraryTextAssignmentContent } from "@/db/schema/course-library";
 
@@ -35,7 +36,10 @@ const submitSchema = z.object({
   sentences: z.array(sentenceSchema).min(1).max(50),
 });
 
-async function getPublishedTextAssignmentLesson(lessonId: string) {
+async function getAccessibleTextAssignmentLesson(
+  lessonId: string,
+  role: string,
+) {
   const [row] = await db
     .select({
       lessonId: courseLibraryLessons.id,
@@ -59,7 +63,7 @@ async function getPublishedTextAssignmentLesson(lessonId: string) {
         isNull(courseLibraryLessons.deletedAt),
         isNull(courseLibraryModules.deletedAt),
         isNull(courseLibraryCourses.deletedAt),
-        eq(courseLibraryCourses.isPublished, true),
+        inArray(courseLibraryCourses.status, visibleCourseStatuses(role)),
       ),
     )
     .limit(1);
@@ -96,7 +100,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   }
 
   const { lessonId } = await params;
-  const lesson = await getPublishedTextAssignmentLesson(lessonId);
+  const lesson = await getAccessibleTextAssignmentLesson(lessonId, user.role);
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
@@ -117,7 +121,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 
   const { lessonId } = await params;
-  const lesson = await getPublishedTextAssignmentLesson(lessonId);
+  const lesson = await getAccessibleTextAssignmentLesson(lessonId, user.role);
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
