@@ -217,44 +217,76 @@ export async function synthesizeSpeechElevenLabs(
   const similarityBoost = 0.75;
   const speed = rate === "x-slow" ? 0.6 : rate === "slow" ? 0.8 : rate === "fast" ? 1.3 : 1.0;
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  // Cantonese TTS: ElevenLabs' Multilingual v2 model auto-detects the language
+  // from the text and, paired with a Cantonese voice, renders Cantonese. The
+  // turbo/flash v2.5 models accept a `language_code`, but their TTS language
+  // list does NOT include Cantonese ("yue") — sending it 400s the request.
+  // ("yue" is only a valid code for ElevenLabs' speech-to-TEXT models.) So we
+  // do not send a language_code by default. Both the model and, if a supported
+  // combination ever exists, the language code are overridable via env.
+  const modelId = process.env.ELEVENLABS_CANTONESE_MODEL || "eleven_multilingual_v2";
+  const configuredLanguageCode =
+    process.env.ELEVENLABS_CANTONESE_LANGUAGE_CODE?.trim() || "";
+  const modelSupportsLanguageCode = /v2_5|flash|_v3/i.test(modelId);
+  const languageCode = modelSupportsLanguageCode ? configuredLanguageCode : "";
 
-  // Default to turbo_v2_5 — it accepts `language_code: "yue"`, which is the
-  // only ElevenLabs configuration that properly routes Cantonese text
-  // (without it, multilingual_v2 produces a Mandarin-inflected accent).
-  // Override via ELEVENLABS_CANTONESE_MODEL env if the configured voice_id
-  // needs a different model.
-  const modelId = process.env.ELEVENLABS_CANTONESE_MODEL || "eleven_turbo_v2_5";
-  const supportsLanguageCode = /v2_5|turbo|flash/i.test(modelId);
+  const callElevenLabs = async (withLanguageCode: string) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      return await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+        {
+          method: "POST",
+          headers: {
+            "xi-api-key": apiKey,
+            "Content-Type": "application/json",
+            Accept: "audio/mpeg",
+          },
+          body: JSON.stringify({
+            text,
+            model_id: modelId,
+            ...(withLanguageCode ? { language_code: withLanguageCode } : {}),
+            voice_settings: {
+              stability,
+              similarity_boost: similarityBoost,
+              speed,
+            },
+          }),
+          signal: controller.signal,
+        },
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
 
   try {
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": apiKey,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: JSON.stringify({
-          text,
-          model_id: modelId,
-          ...(supportsLanguageCode ? { language_code: "yue" } : {}),
-          voice_settings: { stability, similarity_boost: similarityBoost, speed },
-        }),
-        signal: controller.signal,
-      }
-    );
-
-    clearTimeout(timeoutId);
+    let response = await callElevenLabs(languageCode);
 
     if (!response.ok) {
       const errorText = await response.text();
+      // Self-heal: if ElevenLabs rejects the language_code for this model,
+      // retry once without it so Cantonese TTS falls back to auto-detection
+      // instead of hard-failing.
+      if (languageCode && response.status === 400 && /language_code/i.test(errorText)) {
+        console.warn(
+          `ElevenLabs TTS: model "${modelId}" rejected language_code "${languageCode}", retrying without it`,
+        );
+        response = await callElevenLabs("");
+        if (response.ok) {
+          return Buffer.from(await response.arrayBuffer());
+        }
+        const retryText = await response.text();
+        console.error(`ElevenLabs TTS: API error ${response.status}:`, retryText);
+        const retrySnippet = retryText.slice(0, 300).replace(/\s+/g, " ").trim();
+        throw new Error(
+          `ElevenLabs TTS error: ${response.status}${retrySnippet ? ` — ${retrySnippet}` : ""}`,
+        );
+      }
+
       console.error(`ElevenLabs TTS: API error ${response.status}:`, errorText);
-      // Include a snippet of the response body so callers can diagnose
-      // (e.g. "language_code 'yue' not supported for this model").
+      // Include a snippet of the response body so callers can diagnose.
       const snippet = errorText.slice(0, 300).replace(/\s+/g, " ").trim();
       throw new Error(
         `ElevenLabs TTS error: ${response.status}${snippet ? ` — ${snippet}` : ""}`,
@@ -263,7 +295,6 @@ export async function synthesizeSpeechElevenLabs(
 
     return Buffer.from(await response.arrayBuffer());
   } catch (error) {
-    clearTimeout(timeoutId);
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error("ElevenLabs TTS request timed out");
     }

@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
     }
 
     const provider: "openai" | "azure" | "elevenlabs" = (() => {
-      // Cantonese: ElevenLabs with language_code "yue" > Azure zh-HK-HiuMaanNeural
+      // Cantonese: ElevenLabs (Multilingual v2 + Cantonese voice) > Azure zh-HK-HiuMaanNeural
       if (isCantonese) {
         if (hasElevenLabs) return "elevenlabs" as const;
         if (hasAzure) return "azure" as const;
