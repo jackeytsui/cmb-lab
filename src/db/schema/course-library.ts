@@ -373,6 +373,8 @@ export interface CourseLibraryListeningPracticeSentence {
   chinese: string;
   /** Model-answer pinyin (space-separated, one syllable per character). */
   pinyin: string;
+  /** English translation shown beneath the Chinese (auto-generated, editable). */
+  english?: string;
   /** Optional human-recording override URL; when absent, audio is TTS. */
   audioUrl?: string | null;
 }
