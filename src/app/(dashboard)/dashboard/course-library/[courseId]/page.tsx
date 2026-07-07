@@ -1,16 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ChevronLeft,
-  Video,
-  FileText,
-  HelpCircle,
-  Download,
-  Music,
-  ExternalLink,
-  ClipboardList,
-} from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
+import { CourseMap, type CourseMapStop } from "@/components/course-library/CourseMap";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -18,36 +10,13 @@ import {
   courseLibraryLessons,
   courseLibraryLessonProgress,
 } from "@/db/schema";
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
-import { cn } from "@/lib/utils";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
 }
-
-const TYPE_ICON = {
-  video: Video,
-  audio: Music,
-  text: FileText,
-  quiz: HelpCircle,
-  download: Download,
-  form: ExternalLink,
-  text_assignment: ClipboardList,
-};
-const TYPE_COLOR = {
-  video: "text-red-500",
-  audio: "text-purple-500",
-  text: "text-blue-500",
-  quiz: "text-amber-500",
-  download: "text-emerald-500",
-  form: "text-pink-500",
-  text_assignment: "text-teal-500",
-};
-const TYPE_LABEL: Partial<Record<keyof typeof TYPE_ICON, string>> = {
-  text_assignment: "Task",
-};
 
 export default async function CourseLibraryCourseDetailPage({ params }: PageProps) {
   const { courseId } = await params;
@@ -85,7 +54,10 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
   const lessons =
     moduleIds.length > 0
       ? await db
-          .select()
+          .select({
+            id: courseLibraryLessons.id,
+            moduleId: courseLibraryLessons.moduleId,
+          })
           .from(courseLibraryLessons)
           .where(
             and(
@@ -102,7 +74,6 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
           .select({
             lessonId: courseLibraryLessonProgress.lessonId,
             completedAt: courseLibraryLessonProgress.completedAt,
-            updatedAt: courseLibraryLessonProgress.updatedAt,
           })
           .from(courseLibraryLessonProgress)
           .where(
@@ -114,26 +85,42 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
               ),
             ),
           )
-          .orderBy(desc(courseLibraryLessonProgress.updatedAt))
       : [];
 
-  const progressMap = new Map(
-    progressRows.map((row) => [row.lessonId, row]),
-  );
   const completedLessonIds = new Set(
     progressRows.filter((row) => row.completedAt).map((row) => row.lessonId),
   );
-  const currentLessonId =
-    progressRows.find((row) => !row.completedAt)?.lessonId ??
-    lessons.find((lesson) => !completedLessonIds.has(lesson.id))?.id ??
-    null;
 
-  const lessonsByModule = new Map<string, typeof lessons>();
+  const lessonsByModule = new Map<string, string[]>();
   for (const l of lessons) {
     const list = lessonsByModule.get(l.moduleId) ?? [];
-    list.push(l);
+    list.push(l.id);
     lessonsByModule.set(l.moduleId, list);
   }
+
+  const stops: CourseMapStop[] = modules.map((mod) => {
+    const modLessonIds = lessonsByModule.get(mod.id) ?? [];
+    const completedCount = modLessonIds.filter((id) =>
+      completedLessonIds.has(id),
+    ).length;
+    return {
+      id: mod.id,
+      title: mod.title,
+      shortTitle: mod.shortTitle,
+      mapStyle: mod.mapStyle,
+      weekLabel: mod.weekLabel,
+      lessonCount: modLessonIds.length,
+      completedCount,
+      isComplete: modLessonIds.length > 0 && completedCount === modLessonIds.length,
+    };
+  });
+
+  // The stop the student should do next: first stop with unfinished subpages.
+  const currentIndex = stops.findIndex(
+    (stop) => stop.lessonCount > 0 && !stop.isComplete,
+  );
+  const completedStops = stops.filter((stop) => stop.isComplete).length;
+  const totalTrackedStops = stops.filter((stop) => stop.lessonCount > 0).length;
 
   return (
     <FeatureGate feature="course_library">
@@ -146,113 +133,53 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
           Back to courses
         </Link>
 
-        <header className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground">{course.title}</h1>
-          {course.summary && (
-            <p className="mt-2 text-sm text-muted-foreground">{course.summary}</p>
-          )}
+        <header className="mx-auto mb-2 max-w-md">
+          <div
+            className="rounded-2xl px-5 py-4 text-white"
+            style={{
+              background: "linear-gradient(135deg, #2e3a97 0%, #3d4bb8 100%)",
+              boxShadow: "0 4px 0 #1f2870",
+            }}
+          >
+            <h1 className="text-xl font-extrabold">{course.title}</h1>
+            {course.summary && (
+              <p className="mt-1 text-sm text-white/80">{course.summary}</p>
+            )}
+            {totalTrackedStops > 0 && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-xs font-semibold text-white/90">
+                  <span>
+                    {completedStops} of {totalTrackedStops} stops complete
+                  </span>
+                  <span>
+                    {Math.round((completedStops / totalTrackedStops) * 100)}%
+                  </span>
+                </div>
+                <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-white/25">
+                  <div
+                    className="h-full rounded-full bg-amber-400 transition-all"
+                    style={{
+                      width: `${Math.round((completedStops / totalTrackedStops) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </header>
 
-        <div className="mb-6 rounded-xl border border-border bg-card p-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                Progress
-              </p>
-              <p className="mt-1 text-sm text-foreground">
-                {completedLessonIds.size} of {lessons.length} lessons complete
-              </p>
-              {currentLessonId ? (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Resume from the current lesson below.
-                </p>
-              ) : lessons.length > 0 ? (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  You have completed this course.
-                </p>
-              ) : null}
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted sm:w-64">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{
-                  width:
-                    lessons.length > 0
-                      ? `${Math.round((completedLessonIds.size / lessons.length) * 100)}%`
-                      : "0%",
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {modules.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
+        {stops.length === 0 ? (
+          <div className="mx-auto mt-6 max-w-md rounded-lg border border-dashed border-border bg-card p-8 text-center">
             <p className="text-sm text-muted-foreground">
               This course has no lessons yet.
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {modules.map((mod) => {
-              const modLessons = lessonsByModule.get(mod.id) ?? [];
-              return (
-                <div
-                  key={mod.id}
-                  className="rounded-lg border border-border bg-card overflow-hidden"
-                >
-                  <div className="px-4 py-3 border-b border-border bg-muted/20">
-                    <h2 className="text-sm font-semibold text-foreground">
-                      {mod.title}
-                    </h2>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {modLessons.length === 0 ? (
-                      <p className="px-4 py-3 text-xs text-muted-foreground italic">
-                        No lessons in this module yet.
-                      </p>
-                    ) : (
-                      modLessons.map((lesson) => {
-                        const Icon = TYPE_ICON[lesson.lessonType];
-                        const color = TYPE_COLOR[lesson.lessonType];
-                        const progress = progressMap.get(lesson.id);
-                        const isCompleted = !!progress?.completedAt;
-                        const isCurrent = currentLessonId === lesson.id && !isCompleted;
-                        return (
-                          <Link
-                            key={lesson.id}
-                            href={`/dashboard/course-library/${courseId}/lessons/${lesson.id}`}
-                            className={cn(
-                              "flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors",
-                              isCompleted && "bg-emerald-500/5",
-                              isCurrent && "bg-primary/5 ring-1 ring-primary/20",
-                            )}
-                          >
-                            <Icon className={cn("w-4 h-4 shrink-0", color)} />
-                            <span className="text-xs text-muted-foreground uppercase font-medium w-16">
-                              {TYPE_LABEL[lesson.lessonType] ?? lesson.lessonType}
-                            </span>
-                            <span className="flex-1 text-sm text-foreground">
-                              {lesson.title}
-                            </span>
-                            {isCurrent ? (
-                              <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                                Current
-                              </span>
-                            ) : isCompleted ? (
-                              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                                Done
-                              </span>
-                            ) : null}
-                          </Link>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <CourseMap
+            courseId={courseId}
+            stops={stops}
+            currentIndex={currentIndex}
+          />
         )}
       </div>
     </FeatureGate>

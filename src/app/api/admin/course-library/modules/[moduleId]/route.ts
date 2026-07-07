@@ -7,6 +7,9 @@ import { z } from "zod";
 
 const updateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
+  shortTitle: z.string().max(80).nullable().optional(),
+  mapStyle: z.enum(["lesson", "cm_school", "custom_goal"]).optional(),
+  weekLabel: z.string().max(60).nullable().optional(),
   sortOrder: z.number().int().optional(),
 });
 

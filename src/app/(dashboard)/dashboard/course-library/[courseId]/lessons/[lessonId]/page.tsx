@@ -73,6 +73,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
       lessonTitle: courseLibraryLessons.title,
       lessonType: courseLibraryLessons.lessonType,
       content: courseLibraryLessons.content,
+      moduleId: courseLibraryModules.id,
       moduleTitle: courseLibraryModules.title,
       courseTitle: courseLibraryCourses.title,
     })
@@ -171,11 +172,11 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
     <FeatureGate feature="course_library">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Link
-          href={`/dashboard/course-library/${courseId}`}
+          href={`/dashboard/course-library/${courseId}/modules/${row.moduleId}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ChevronLeft className="w-4 h-4" />
-          Back to {row.courseTitle}
+          Back to {row.moduleTitle}
         </Link>
 
         <div className="mb-2 text-xs text-muted-foreground">
