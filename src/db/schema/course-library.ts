@@ -34,6 +34,15 @@ export const courseLibraryModuleMapStyleEnum = pgEnum(
   ["lesson", "cm_school", "custom_goal"],
 );
 
+// Course visibility:
+// - draft:     work in progress; not visible on the student-facing library
+// - preview:   visible only to staff (admin/coach) for review before launch
+// - published: visible to everyone with the course_library feature
+export const courseLibraryCourseStatusEnum = pgEnum(
+  "course_library_course_status",
+  ["draft", "preview", "published"],
+);
+
 // Top-level course container.
 export const courseLibraryCourses = pgTable(
   "course_library_courses",
@@ -42,7 +51,10 @@ export const courseLibraryCourses = pgTable(
     title: text("title").notNull(),
     summary: text("summary").notNull().default(""),
     coverImageUrl: text("cover_image_url"),
+    // Kept in sync with `status` (isPublished === status === "published") for
+    // backward compatibility; `status` is the source of truth for visibility.
     isPublished: boolean("is_published").notNull().default(false),
+    status: courseLibraryCourseStatusEnum("status").notNull().default("draft"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -55,6 +67,7 @@ export const courseLibraryCourses = pgTable(
   (table) => [
     index("course_library_courses_sort_idx").on(table.sortOrder),
     index("course_library_courses_published_idx").on(table.isPublished),
+    index("course_library_courses_status_idx").on(table.status),
   ],
 );
 
@@ -235,6 +248,9 @@ export const courseLibraryLessonProgressRelations = relations(
 
 export type CourseLibraryCourse = typeof courseLibraryCourses.$inferSelect;
 export type NewCourseLibraryCourse = typeof courseLibraryCourses.$inferInsert;
+
+export type CourseLibraryCourseStatus =
+  (typeof courseLibraryCourseStatusEnum.enumValues)[number];
 
 export type CourseLibraryModule = typeof courseLibraryModules.$inferSelect;
 export type NewCourseLibraryModule = typeof courseLibraryModules.$inferInsert;

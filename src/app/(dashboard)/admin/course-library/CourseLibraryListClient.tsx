@@ -6,15 +6,24 @@ import { useRouter } from "next/navigation";
 import { Plus, Loader2, BookOpen, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type CourseStatus = "draft" | "preview" | "published";
+
 interface CourseRow {
   id: string;
   title: string;
   summary: string;
   coverImageUrl: string | null;
   isPublished: boolean;
+  status: CourseStatus;
   sortOrder: number;
   createdAt: string;
 }
+
+const STATUS_BADGE: Record<CourseStatus, { label: string; className: string }> = {
+  draft: { label: "Draft", className: "bg-zinc-700/80 text-white" },
+  preview: { label: "Preview", className: "bg-amber-500/90 text-white" },
+  published: { label: "Published", className: "bg-emerald-500/90 text-white" },
+};
 
 export function CourseLibraryListClient({
   initialCourses,
@@ -177,12 +186,10 @@ export function CourseLibraryListClient({
                   <span
                     className={cn(
                       "absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                      course.isPublished
-                        ? "bg-emerald-500/90 text-white"
-                        : "bg-zinc-700/80 text-white",
+                      STATUS_BADGE[course.status].className,
                     )}
                   >
-                    {course.isPublished ? "Published" : "Draft"}
+                    {STATUS_BADGE[course.status].label}
                   </span>
                 </div>
                 <div className="p-3">

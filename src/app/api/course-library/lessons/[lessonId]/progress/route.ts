@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
@@ -10,6 +10,7 @@ import {
   courseLibraryLessonProgress,
   users,
 } from "@/db/schema";
+import { visibleCourseStatuses } from "@/lib/course-library-access";
 
 interface RouteParams {
   params: Promise<{ lessonId: string }>;
@@ -26,11 +27,11 @@ async function getCourseLibraryUser() {
 
   return db.query.users.findFirst({
     where: eq(users.clerkId, clerkId),
-    columns: { id: true },
+    columns: { id: true, role: true },
   });
 }
 
-async function getLessonAccess(lessonId: string) {
+async function getLessonAccess(lessonId: string, role: string) {
   return db
     .select({
       lessonId: courseLibraryLessons.id,
@@ -51,7 +52,7 @@ async function getLessonAccess(lessonId: string) {
         isNull(courseLibraryLessons.deletedAt),
         isNull(courseLibraryModules.deletedAt),
         isNull(courseLibraryCourses.deletedAt),
-        eq(courseLibraryCourses.isPublished, true),
+        inArray(courseLibraryCourses.status, visibleCourseStatuses(role)),
       ),
     )
     .limit(1);
@@ -64,7 +65,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   }
 
   const { lessonId } = await params;
-  const [access] = await getLessonAccess(lessonId);
+  const [access] = await getLessonAccess(lessonId, user.role);
   if (!access) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const { lessonId } = await params;
-  const [access] = await getLessonAccess(lessonId);
+  const [access] = await getLessonAccess(lessonId, user.role);
   if (!access) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }

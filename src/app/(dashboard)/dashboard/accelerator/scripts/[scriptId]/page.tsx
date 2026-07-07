@@ -27,22 +27,37 @@ export default async function ScriptPracticePage({
 
 async function ScriptPracticeContent({ scriptId }: { scriptId: string }) {
   // Fetch script with lines (only columns this page uses)
-  const script = await db.query.conversationScripts.findFirst({
-    where: eq(conversationScripts.id, scriptId),
-    columns: {
-      id: true,
-      title: true,
-      description: true,
-      speakerRole: true,
-      responderRole: true,
-      sortOrder: true,
-    },
-    with: {
-      lines: {
-        orderBy: [asc(scriptLines.sortOrder)],
+  let script;
+  try {
+    script = await db.query.conversationScripts.findFirst({
+      where: eq(conversationScripts.id, scriptId),
+      columns: {
+        id: true,
+        title: true,
+        description: true,
+        speakerRole: true,
+        responderRole: true,
+        sortOrder: true,
       },
-    },
-  });
+      with: {
+        lines: {
+          orderBy: [asc(scriptLines.sortOrder)],
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Conversation Script practice page failed to load:", error);
+    return (
+      <div className="container mx-auto px-4 py-16 text-center">
+        <h1 className="text-lg font-semibold text-foreground">
+          We couldn&apos;t load this script
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Please refresh in a moment. If it keeps happening, let the team know.
+        </p>
+      </div>
+    );
+  }
 
   if (!script) return notFound();
 

@@ -231,13 +231,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       where: eq(courseLibraryLessons.id, submission.lessonId),
       columns: { title: true },
     });
+    const lessonTitle = lesson?.title ?? "Your assignment";
     try {
       await createNotification({
         userId: submission.studentId,
         type: "submission_graded",
         category: "feedback",
-        title: "Your Text Assignment has been reviewed",
-        body: `"${lesson?.title ?? "Text Assignment"}" has been reviewed${
+        title: `"${lessonTitle}" has been reviewed`,
+        body: `Your submission for "${lessonTitle}" has been reviewed${
           typeof finalScore === "number" ? ` — score ${finalScore}%` : ""
         }. Tap to see your feedback.`,
         linkUrl: `/dashboard/assignment-feedback/${submissionId}`,

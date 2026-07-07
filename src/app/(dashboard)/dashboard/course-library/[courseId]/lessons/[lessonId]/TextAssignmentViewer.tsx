@@ -29,7 +29,10 @@ export interface TextAssignmentSubmissionDto {
   }>;
 }
 
-const LOCKED_STATUSES = new Set(["assigned", "in_review", "reviewed"]);
+// Editing is locked only once a reviewer actually starts (in_review) or
+// finishes (reviewed). A submission is auto-assigned to a reviewer on submit,
+// but "assigned" still lets the student edit/resubmit until review begins.
+const LOCKED_STATUSES = new Set(["in_review", "reviewed"]);
 
 function buildInitialValues(
   prompts: TextAssignmentPrompt[],
@@ -68,7 +71,8 @@ export function TextAssignmentViewer({
   const [submitting, setSubmitting] = useState(false);
 
   const locked = submission ? LOCKED_STATUSES.has(submission.status) : false;
-  const isResubmit = submission?.status === "submitted";
+  // Any prior, still-editable submission means the next action is a resubmit.
+  const isResubmit = !!submission && !locked && submission.status !== "reviewed";
 
   const allReady = useMemo(
     () =>
@@ -113,6 +117,10 @@ export function TextAssignmentViewer({
       setSubmission(data.submission);
       toast.success(
         isResubmit ? "Assignment resubmitted!" : "Assignment submitted!",
+        {
+          description:
+            "You'll receive personalised feedback from our coaching team very soon.",
+        },
       );
     } catch {
       toast.error("Failed to submit assignment");
@@ -155,7 +163,12 @@ export function TextAssignmentViewer({
             ) : locked ? (
               "Your submission is currently being reviewed and can no longer be edited."
             ) : (
-              "Submitted. You can edit and resubmit as long as it has not been reviewed."
+              <>
+                <span className="font-medium">Submitted!</span>{" "}
+                You&apos;ll receive personalised feedback from our coaching team
+                very soon. You can still edit and resubmit until it has been
+                reviewed.
+              </>
             )}
           </div>
         </div>

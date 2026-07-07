@@ -21,6 +21,7 @@ import {
 } from "@/db/schema";
 import { and, asc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
+import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { cn } from "@/lib/utils";
 
 interface PageProps {
@@ -81,7 +82,10 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
         eq(courseLibraryCourses.id, courseId),
         isNull(courseLibraryModules.deletedAt),
         isNull(courseLibraryCourses.deletedAt),
-        eq(courseLibraryCourses.isPublished, true),
+        inArray(
+          courseLibraryCourses.status,
+          visibleCourseStatuses(currentUser?.role),
+        ),
       ),
     )
     .limit(1);

@@ -14,6 +14,7 @@ const updateSchema = z.object({
   summary: z.string().max(1000).optional(),
   coverImageUrl: z.string().url().nullable().optional(),
   isPublished: z.boolean().optional(),
+  status: z.enum(["draft", "preview", "published"]).optional(),
   sortOrder: z.number().int().optional(),
 });
 
@@ -113,9 +114,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     );
   }
 
+  // Keep `status` (source of truth for visibility) and the legacy
+  // `isPublished` boolean in sync.
+  const data = { ...parsed.data };
+  if (data.status !== undefined) {
+    data.isPublished = data.status === "published";
+  } else if (data.isPublished !== undefined) {
+    data.status = data.isPublished ? "published" : "draft";
+  }
+
   const [updated] = await db
     .update(courseLibraryCourses)
-    .set(parsed.data)
+    .set(data)
     .where(
       and(
         eq(courseLibraryCourses.id, courseId),

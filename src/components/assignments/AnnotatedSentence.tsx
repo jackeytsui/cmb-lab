@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
 import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
-import { annotateSentence, ASSIGNMENT_CHAR_SIZE } from "@/lib/mandarin-annotate";
+import { useSentenceAnnotations } from "@/components/assignments/useSentenceAnnotations";
+import { ASSIGNMENT_CHAR_SIZE } from "@/lib/mandarin-annotate";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -22,7 +22,7 @@ export function AnnotatedSentence({
   fontSize?: number;
   className?: string;
 }) {
-  const annotations = useMemo(() => annotateSentence(text), [text]);
+  const annotations = useSentenceAnnotations(text);
 
   return (
     <span

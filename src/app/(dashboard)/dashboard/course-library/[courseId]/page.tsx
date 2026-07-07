@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
+import { visibleCourseStatuses } from "@/lib/course-library-access";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
@@ -28,7 +29,10 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
       and(
         eq(courseLibraryCourses.id, courseId),
         isNull(courseLibraryCourses.deletedAt),
-        eq(courseLibraryCourses.isPublished, true),
+        inArray(
+          courseLibraryCourses.status,
+          visibleCourseStatuses(currentUser?.role),
+        ),
       ),
     )
     .limit(1);

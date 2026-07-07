@@ -54,12 +54,15 @@ interface ModuleRow {
   lessons: LessonRow[];
 }
 
+type CourseStatus = "draft" | "preview" | "published";
+
 interface CourseData {
   id: string;
   title: string;
   summary: string;
   coverImageUrl: string | null;
   isPublished: boolean;
+  status: CourseStatus;
   modules: ModuleRow[];
 }
 
@@ -68,6 +71,12 @@ const MAP_STYLE_META: Record<ModuleMapStyle, { label: string; dot: string }> = {
   lesson: { label: "Lesson (dark blue)", dot: "#2e3a97" },
   cm_school: { label: "CM School (light blue)", dot: "#4a9fe3" },
   custom_goal: { label: "Custom Goal (yellow)", dot: "#f2b705" },
+};
+
+const STATUS_HINT: Record<CourseStatus, string> = {
+  draft: "Not visible to anyone yet.",
+  preview: "Visible to admins & coaches only, for review.",
+  published: "Visible to all students with access.",
 };
 
 const LESSON_TYPE_META: Record<
@@ -281,7 +290,7 @@ export function CourseLibraryEditorClient({
     }
   };
 
-  const handleTogglePublish = async () => {
+  const handleStatusChange = async (status: CourseStatus) => {
     setSavingHeader(true);
     try {
       const res = await fetch(
@@ -289,12 +298,16 @@ export function CourseLibraryEditorClient({
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isPublished: !course.isPublished }),
+          body: JSON.stringify({ status }),
         },
       );
       if (res.ok) {
         const data = await res.json();
-        setCourse((prev) => ({ ...prev, isPublished: data.course.isPublished }));
+        setCourse((prev) => ({
+          ...prev,
+          status: data.course.status,
+          isPublished: data.course.isPublished,
+        }));
       }
     } finally {
       setSavingHeader(false);
@@ -601,20 +614,33 @@ export function CourseLibraryEditorClient({
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-lg font-semibold"
             />
           </div>
-          <button
-            type="button"
-            onClick={handleTogglePublish}
-            disabled={savingHeader}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50",
-              course.isPublished
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "border-zinc-500/30 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400",
-            )}
-          >
-            {course.isPublished ? "Published" : "Draft"}
-            <span className="text-[10px] underline">click to toggle</span>
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <label className="block text-xs font-medium text-muted-foreground">
+              Visibility
+            </label>
+            <select
+              value={course.status}
+              onChange={(e) =>
+                handleStatusChange(e.target.value as CourseStatus)
+              }
+              disabled={savingHeader}
+              className={cn(
+                "rounded-md border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50",
+                course.status === "published"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : course.status === "preview"
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    : "border-zinc-500/30 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400",
+              )}
+            >
+              <option value="draft">Draft</option>
+              <option value="preview">Preview (staff only)</option>
+              <option value="published">Published</option>
+            </select>
+            <span className="text-[10px] text-muted-foreground text-right max-w-[180px]">
+              {STATUS_HINT[course.status]}
+            </span>
+          </div>
         </div>
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">

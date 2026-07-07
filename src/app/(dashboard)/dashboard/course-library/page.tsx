@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
+import { visibleCourseStatuses } from "@/lib/course-library-access";
 
 export const metadata = {
   title: "Course Library",
@@ -17,6 +18,7 @@ export const metadata = {
 
 export default async function CourseLibraryStudentPage() {
   const currentUser = await getCurrentUser();
+  const statuses = visibleCourseStatuses(currentUser?.role);
 
   const courses = await db
     .select()
@@ -24,7 +26,7 @@ export default async function CourseLibraryStudentPage() {
     .where(
       and(
         isNull(courseLibraryCourses.deletedAt),
-        eq(courseLibraryCourses.isPublished, true),
+        inArray(courseLibraryCourses.status, statuses),
       ),
     )
     .orderBy(asc(courseLibraryCourses.sortOrder));
@@ -65,7 +67,7 @@ export default async function CourseLibraryStudentPage() {
       .where(
         and(
           isNull(courseLibraryCourses.deletedAt),
-          eq(courseLibraryCourses.isPublished, true),
+          inArray(courseLibraryCourses.status, statuses),
           inArray(courseLibraryCourses.id, courseIds),
         ),
       )

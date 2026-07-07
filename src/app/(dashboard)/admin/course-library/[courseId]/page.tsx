@@ -77,6 +77,7 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
     summary: course.summary,
     coverImageUrl: course.coverImageUrl,
     isPublished: course.isPublished,
+    status: course.status,
     modules: modules.map((m) => ({
       id: m.id,
       title: m.title,
