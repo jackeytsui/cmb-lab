@@ -42,6 +42,7 @@ export default async function CourseLibraryAdminPage() {
           summary: c.summary,
           coverImageUrl: c.coverImageUrl,
           isPublished: c.isPublished,
+          status: c.status,
           sortOrder: c.sortOrder,
           createdAt: c.createdAt.toISOString(),
         }))}
