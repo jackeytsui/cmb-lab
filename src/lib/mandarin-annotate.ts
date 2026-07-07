@@ -76,6 +76,35 @@ export function annotateFromWords(words: WordToken[]): CharAnnotation[] {
 }
 
 /**
+ * Build per-character annotations from an EXPLICIT pinyin model answer, aligning
+ * one space-separated syllable to each Han character (punctuation/other chars
+ * get none). Used by Listening Practice to reveal the admin's (possibly edited)
+ * model answer above the characters with tone colors — rather than
+ * re-generating pinyin from the characters, which could differ from what was
+ * marked correct. If the syllable count doesn't match the Han-character count,
+ * it aligns best-effort in order and leaves any leftover characters blank.
+ */
+export function annotateFromModelAnswer(
+  chinese: string,
+  pinyin: string,
+): CharAnnotation[] {
+  const syllables = pinyin.trim().length ? pinyin.trim().split(/\s+/) : [];
+  const result: CharAnnotation[] = [];
+  let utf16 = 0;
+  let si = 0;
+  for (const ch of [...chinese]) {
+    const isHan = /\p{Script=Han}/u.test(ch);
+    result.push({
+      char: ch,
+      offset: utf16,
+      pinyin: isHan ? (syllables[si++] ?? "") : "",
+    });
+    utf16 += ch.length;
+  }
+  return result;
+}
+
+/**
  * Synchronous annotation using Intl.Segmenter. Used as the first-paint
  * fallback; the jieba-backed result (from useSentenceAnnotations) replaces it
  * for full coaching-grade accuracy.

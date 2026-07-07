@@ -8,6 +8,10 @@ import {
   TextAssignmentViewer,
   type TextAssignmentSubmissionDto,
 } from "./TextAssignmentViewer";
+import {
+  ListeningPracticeViewer,
+  type ListeningSentenceDto,
+} from "./ListeningPracticeViewer";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
 import { db } from "@/db";
 import {
@@ -114,6 +118,50 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   const content = (row.content ?? {}) as Record<string, unknown>;
   const lessonType = row.lessonType as string;
+
+  // Listening Practice: build the student DTOs. Model-answer pinyin is only
+  // included for sentences the student has already resolved (correct/gaveup),
+  // so unanswered answers never reach the client.
+  let listeningSentences: ListeningSentenceDto[] = [];
+  if (row.lessonType === "listening_practice") {
+    const rawSentences = Array.isArray(content.sentences)
+      ? (content.sentences as Array<Record<string, unknown>>)
+      : [];
+    const answers =
+      (progress?.quizAnswers as Record<
+        string,
+        { status: string; attempts: number }
+      > | null) ?? {};
+    listeningSentences = rawSentences
+      .map((s, idx) => ({
+        id: String(s.id ?? `sentence-${idx}`),
+        order: typeof s.order === "number" ? s.order : idx,
+        chinese: typeof s.chinese === "string" ? s.chinese : "",
+        pinyin: typeof s.pinyin === "string" ? s.pinyin : "",
+        hasOverride:
+          typeof s.audioUrl === "string" && s.audioUrl.trim().length > 0,
+      }))
+      .sort((a, b) => a.order - b.order)
+      .map((s) => {
+        const raw = answers[s.id]?.status;
+        const status =
+          raw === "correct"
+            ? "correct"
+            : raw === "gaveup"
+              ? "gaveup"
+              : raw === "incorrect"
+                ? "incorrect"
+                : "unanswered";
+        const resolved = status === "correct" || status === "gaveup";
+        return {
+          id: s.id,
+          chinese: s.chinese,
+          hasOverride: s.hasOverride,
+          initialStatus: status as ListeningSentenceDto["initialStatus"],
+          revealedPinyin: resolved ? s.pinyin : null,
+        };
+      });
+  }
 
   // Text assignment data is fetched ahead of the JSX below.
   let textAssignmentPrompts: Array<{
@@ -422,6 +470,32 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
                 <p className="text-sm text-muted-foreground">
                   This assignment has no sentence prompts yet.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {row.lessonType === "listening_practice" && (
+          <div className="space-y-5">
+            {typeof content.description === "string" &&
+              content.description && (
+                <div
+                  className="prose prose-invert max-w-none text-foreground prose-p:text-foreground prose-li:text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
+                  dangerouslySetInnerHTML={{
+                    __html: content.description as string,
+                  }}
+                />
+              )}
+            {listeningSentences.length > 0 ? (
+              <ListeningPracticeViewer
+                lessonId={lessonId}
+                sentences={listeningSentences}
+              />
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  This listening practice has no sentences yet.
                 </p>
               </div>
             )}

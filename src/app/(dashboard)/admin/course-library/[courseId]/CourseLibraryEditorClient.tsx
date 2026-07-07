@@ -21,6 +21,7 @@ import {
   ClipboardList,
   ArrowUp,
   ArrowDown,
+  Headphones,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DragDropProvider } from "@dnd-kit/react";
@@ -33,7 +34,8 @@ type LessonType =
   | "quiz"
   | "download"
   | "form"
-  | "text_assignment";
+  | "text_assignment"
+  | "listening_practice";
 
 interface LessonRow {
   id: string;
@@ -93,6 +95,11 @@ const LESSON_TYPE_META: Record<
     label: "Text Assignment",
     Icon: ClipboardList,
     color: "text-teal-500",
+  },
+  listening_practice: {
+    label: "Listening Practice",
+    Icon: Headphones,
+    color: "text-indigo-500",
   },
 };
 
@@ -937,6 +944,7 @@ export function CourseLibraryEditorClient({
                         <option value="download">Download</option>
                         <option value="form">HTML Embed</option>
                         <option value="text_assignment">Text Assignment</option>
+                        <option value="listening_practice">Listening Practice</option>
                       </select>
                     <input
                       type="text"

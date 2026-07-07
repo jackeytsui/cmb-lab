@@ -24,7 +24,16 @@ import { users } from "./users";
 
 export const courseLibraryLessonTypeEnum = pgEnum(
   "course_library_lesson_type",
-  ["video", "text", "quiz", "download", "audio", "form", "text_assignment"],
+  [
+    "video",
+    "text",
+    "quiz",
+    "download",
+    "audio",
+    "form",
+    "text_assignment",
+    "listening_practice",
+  ],
 );
 
 // Visual style of a module's stop on the student roadmap:
@@ -351,6 +360,29 @@ export interface CourseLibraryTextAssignmentContent {
   sentencePrompts: CourseLibraryTextAssignmentSentencePrompt[];
 }
 
+/**
+ * One sentence in a Listening Practice lesson. Students hear the audio (either
+ * auto-generated TTS from `chinese`, or the optional `audioUrl` override) and
+ * type its pinyin; the `pinyin` model answer (auto-generated on input, but
+ * admin-editable) is the source of truth for auto-checking.
+ */
+export interface CourseLibraryListeningPracticeSentence {
+  id: string;
+  order: number;
+  /** Chinese characters read aloud. Drives both TTS and the reveal display. */
+  chinese: string;
+  /** Model-answer pinyin (space-separated, one syllable per character). */
+  pinyin: string;
+  /** Optional human-recording override URL; when absent, audio is TTS. */
+  audioUrl?: string | null;
+}
+
+export interface CourseLibraryListeningPracticeContent {
+  /** Instructions shown above the sentences — rich text HTML. */
+  description: string;
+  sentences: CourseLibraryListeningPracticeSentence[];
+}
+
 export type CourseLibraryLessonContent =
   | CourseLibraryVideoContent
   | CourseLibraryTextContent
@@ -358,4 +390,5 @@ export type CourseLibraryLessonContent =
   | CourseLibraryDownloadContent
   | CourseLibraryAudioContent
   | CourseLibraryFormContent
-  | CourseLibraryTextAssignmentContent;
+  | CourseLibraryTextAssignmentContent
+  | CourseLibraryListeningPracticeContent;
