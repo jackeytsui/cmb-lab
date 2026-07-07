@@ -7,6 +7,7 @@ import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
 import {
   annotateFromModelAnswer,
   ASSIGNMENT_CHAR_SIZE,
+  ASSIGNMENT_ENGLISH_SIZE,
 } from "@/lib/mandarin-annotate";
 import { ListeningAudioPlayer } from "./ListeningAudioPlayer";
 
@@ -21,6 +22,8 @@ type Status = "unanswered" | "incorrect" | "correct" | "gaveup";
 export interface ListeningSentenceDto {
   id: string;
   chinese: string;
+  /** English translation, shown beneath the Chinese before and after answering. */
+  english: string;
   hasOverride: boolean;
   /** Prior status restored from saved progress. */
   initialStatus: Status;
@@ -210,7 +213,8 @@ export function ListeningPracticeViewer({
               hasOverride={sentence.hasOverride}
             />
 
-            {/* Chinese: reveal pinyin-on-top once resolved, else plain chars. */}
+            {/* Chinese: reveal pinyin-on-top once resolved, else plain chars.
+                English translation is shown beneath in both states. */}
             <div className="rounded-md bg-background px-3 py-3">
               {showReveal ? (
                 <RevealedSentence
@@ -224,6 +228,14 @@ export function ListeningPracticeViewer({
                 >
                   {sentence.chinese}
                 </span>
+              )}
+              {sentence.english && (
+                <p
+                  className="mt-1.5 text-muted-foreground"
+                  style={{ fontSize: `${ASSIGNMENT_ENGLISH_SIZE}px` }}
+                >
+                  {sentence.english}
+                </p>
               )}
             </div>
 
