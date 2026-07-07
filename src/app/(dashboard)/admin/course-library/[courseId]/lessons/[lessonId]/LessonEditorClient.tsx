@@ -33,6 +33,7 @@ import {
   generateModelPinyin,
   countHanCharacters,
 } from "@/lib/generate-model-pinyin";
+import { fetchProperTranslations } from "@/lib/mandarin-generation";
 
 type LessonType =
   | "video"
@@ -1722,6 +1723,7 @@ interface ListeningSentenceDraft {
   id: string;
   chinese: string;
   pinyin: string;
+  english: string;
   audioUrl: string | null;
 }
 
@@ -1738,15 +1740,17 @@ function normalizeListeningSentences(raw: unknown): ListeningSentenceDraft[] {
         order: typeof sentence.order === "number" ? sentence.order : idx,
         chinese: typeof sentence.chinese === "string" ? sentence.chinese : "",
         pinyin: typeof sentence.pinyin === "string" ? sentence.pinyin : "",
+        english: typeof sentence.english === "string" ? sentence.english : "",
         audioUrl:
           typeof sentence.audioUrl === "string" ? sentence.audioUrl : null,
       };
     })
     .sort((a, b) => a.order - b.order)
-    .map(({ id, chinese, pinyin, audioUrl }) => ({
+    .map(({ id, chinese, pinyin, english, audioUrl }) => ({
       id,
       chinese,
       pinyin,
+      english,
       audioUrl,
     }));
 }
@@ -1778,12 +1782,21 @@ function ListeningPracticeLessonForm({
   const [sentences, setSentences] = useState<ListeningSentenceDraft[]>(
     savedSentences.length > 0
       ? savedSentences
-      : [{ id: crypto.randomUUID(), chinese: "", pinyin: "", audioUrl: null }],
+      : [
+          {
+            id: crypto.randomUUID(),
+            chinese: "",
+            pinyin: "",
+            english: "",
+            audioUrl: null,
+          },
+        ],
   );
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [translatingId, setTranslatingId] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadPct, setUploadPct] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -1806,7 +1819,13 @@ function ListeningPracticeLessonForm({
   const addSentence = () => {
     setSentences((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), chinese: "", pinyin: "", audioUrl: null },
+      {
+        id: crypto.randomUUID(),
+        chinese: "",
+        pinyin: "",
+        english: "",
+        audioUrl: null,
+      },
     ]);
   };
 
@@ -1834,6 +1853,26 @@ function ListeningPracticeLessonForm({
     } finally {
       setGeneratingId(null);
     }
+  };
+
+  const generateEnglish = async (id: string, chinese: string) => {
+    if (!chinese.trim()) return;
+    setTranslatingId(id);
+    try {
+      const translations = await fetchProperTranslations([chinese], "zh-CN");
+      const english = translations?.join(" ").trim();
+      if (english) updateSentence(id, { english });
+    } finally {
+      setTranslatingId(null);
+    }
+  };
+
+  // On Chinese blur, auto-fill any empty pinyin / English so admins usually
+  // just type the sentence and correct the rest.
+  const handleChineseBlur = (sentence: ListeningSentenceDraft) => {
+    if (!sentence.chinese.trim()) return;
+    if (!sentence.pinyin.trim()) generatePinyin(sentence.id, sentence.chinese);
+    if (!sentence.english.trim()) generateEnglish(sentence.id, sentence.chinese);
   };
 
   const handleUploadOverride = async (
@@ -1888,6 +1927,7 @@ function ListeningPracticeLessonForm({
           order: idx,
           chinese: s.chinese.trim(),
           pinyin: s.pinyin.trim(),
+          english: s.english.trim(),
           audioUrl: s.audioUrl || null,
         })),
       };
@@ -2017,11 +2057,7 @@ function ListeningPracticeLessonForm({
                     onChange={(e) =>
                       updateSentence(sentence.id, { chinese: e.target.value })
                     }
-                    onBlur={() => {
-                      if (sentence.chinese.trim() && !sentence.pinyin.trim()) {
-                        generatePinyin(sentence.id, sentence.chinese);
-                      }
-                    }}
+                    onBlur={() => handleChineseBlur(sentence)}
                     placeholder="例如：你吃饭了吗"
                     className="w-full rounded-md border border-border bg-card px-3 py-2 text-base"
                   />
@@ -2070,6 +2106,45 @@ function ListeningPracticeLessonForm({
                       the spacing.
                     </p>
                   ) : null}
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      English translation
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        generateEnglish(sentence.id, sentence.chinese)
+                      }
+                      disabled={
+                        !sentence.chinese.trim() ||
+                        translatingId === sentence.id
+                      }
+                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline disabled:opacity-40"
+                    >
+                      {translatingId === sentence.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      Regenerate
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={sentence.english}
+                    onChange={(e) =>
+                      updateSentence(sentence.id, { english: e.target.value })
+                    }
+                    placeholder="Have you eaten yet?"
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Shown beneath the Chinese for students, before and after they
+                    answer.
+                  </p>
                 </div>
 
                 <div>

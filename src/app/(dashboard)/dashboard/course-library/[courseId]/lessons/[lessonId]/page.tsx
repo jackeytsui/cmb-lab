@@ -138,6 +138,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
         order: typeof s.order === "number" ? s.order : idx,
         chinese: typeof s.chinese === "string" ? s.chinese : "",
         pinyin: typeof s.pinyin === "string" ? s.pinyin : "",
+        english: typeof s.english === "string" ? s.english : "",
         hasOverride:
           typeof s.audioUrl === "string" && s.audioUrl.trim().length > 0,
       }))
@@ -156,6 +157,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
         return {
           id: s.id,
           chinese: s.chinese,
+          english: s.english,
           hasOverride: s.hasOverride,
           initialStatus: status as ListeningSentenceDto["initialStatus"],
           revealedPinyin: resolved ? s.pinyin : null,
