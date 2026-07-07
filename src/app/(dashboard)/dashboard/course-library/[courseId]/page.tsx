@@ -124,7 +124,7 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
 
   return (
     <FeatureGate feature="course_library">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
         <Link
           href="/dashboard/course-library"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
