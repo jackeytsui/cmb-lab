@@ -180,31 +180,44 @@ export function ListeningPracticeViewer({
           <div
             key={sentence.id}
             className={cn(
-              "rounded-lg border bg-card p-4 space-y-3",
+              "overflow-hidden rounded-lg border bg-card p-4 space-y-3",
               st.status === "correct"
-                ? "border-emerald-500/40"
+                ? "border-emerald-500/50"
                 : st.status === "gaveup"
-                  ? "border-red-500/40"
+                  ? "border-red-500/50"
                   : "border-border",
             )}
           >
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                {idx + 1}
-              </span>
-              {st.status === "correct" && (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-500">
-                  <Check className="h-3.5 w-3.5" />
-                  Correct
+            {resolved ? (
+              // Full-width success / revealed banner across the top of the card.
+              <div
+                className={cn(
+                  "-mx-4 -mt-4 flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white",
+                  st.status === "correct" ? "bg-emerald-600" : "bg-red-600",
+                )}
+              >
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/25 text-xs font-bold">
+                  {idx + 1}
                 </span>
-              )}
-              {st.status === "gaveup" && (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-500">
-                  <X className="h-3.5 w-3.5" />
-                  Answer revealed
+                {st.status === "correct" ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Correct!
+                  </>
+                ) : (
+                  <>
+                    <X className="h-4 w-4" />
+                    Answer revealed
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                  {idx + 1}
                 </span>
-              )}
-            </div>
+              </div>
+            )}
 
             <ListeningAudioPlayer
               lessonId={lessonId}
