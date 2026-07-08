@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { ComponentProps } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -102,6 +102,53 @@ const LESSON_TYPE_META: Record<
     color: "text-indigo-500",
   },
 };
+
+// ---------------------------------------------------------------------------
+// Inline week-label editor shown on every module row, so the team can
+// distribute the map's week bands across a course at a glance (a module keeps
+// the week above it when left blank). Saves on blur / Enter.
+// ---------------------------------------------------------------------------
+
+function WeekLabelInput({
+  initial,
+  onSave,
+}: {
+  initial: string;
+  onSave: (value: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState(initial);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setValue(initial);
+  }, [initial]);
+
+  const commit = async () => {
+    if (value.trim() === initial.trim()) return;
+    setSaving(true);
+    try {
+      await onSave(value.trim());
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      disabled={saving}
+      placeholder="Week"
+      title="Week label — groups modules into a week band on the student map (e.g. &quot;Week 1&quot;). Leave blank to stay in the week above."
+      className="w-[84px] shrink-0 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
+    />
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Sortable lesson row (drag-and-drop handle)
@@ -439,6 +486,34 @@ export function CourseLibraryEditorClient({
     }
   };
 
+  const handleSaveWeekLabel = async (moduleId: string, weekLabel: string) => {
+    setActionError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/course-library/modules/${moduleId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ weekLabel: weekLabel || null }),
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setCourse((prev) => ({
+          ...prev,
+          modules: prev.modules.map((m) =>
+            m.id === moduleId ? { ...m, weekLabel: data.module.weekLabel } : m,
+          ),
+        }));
+      } else {
+        const data = await res.json().catch(() => null);
+        setActionError(data?.error || "Failed to update week label");
+      }
+    } catch {
+      setActionError("Failed to update week label");
+    }
+  };
+
   const handleMoveModule = async (moduleId: string, direction: -1 | 1) => {
     const ordered = [...course.modules].sort((a, b) => a.sortOrder - b.sortOrder);
     const idx = ordered.findIndex((m) => m.id === moduleId);
@@ -687,9 +762,16 @@ export function CourseLibraryEditorClient({
           </div>
         )}
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">
-            Modules ({course.modules.length})
-          </h2>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">
+              Modules ({course.modules.length})
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Set the <span className="font-medium text-foreground">Week</span> field on the
+              first module of each week to group the map into week bands (e.g.
+              &ldquo;Day 1-3&rdquo;, &ldquo;Week 1&rdquo;). Blank modules stay in the week above.
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => setAddingModule(!addingModule)}
@@ -742,11 +824,11 @@ export function CourseLibraryEditorClient({
                   style={{ background: MAP_STYLE_META[mod.mapStyle].dot }}
                   title={MAP_STYLE_META[mod.mapStyle].label}
                 />
-                {mod.weekLabel && (
-                  <span className="shrink-0 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    {mod.weekLabel}
-                  </span>
-                )}
+                <WeekLabelInput
+                  key={`${mod.id}-week`}
+                  initial={mod.weekLabel ?? ""}
+                  onSave={(value) => handleSaveWeekLabel(mod.id, value)}
+                />
                 <h3 className="truncate text-sm font-semibold text-foreground">
                   {mod.title}
                 </h3>
