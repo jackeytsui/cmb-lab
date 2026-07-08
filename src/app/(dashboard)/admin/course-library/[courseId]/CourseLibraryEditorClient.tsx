@@ -23,6 +23,7 @@ import {
   ArrowDown,
   Headphones,
   Mic,
+  NotebookPen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DragDropProvider } from "@dnd-kit/react";
@@ -37,7 +38,8 @@ type LessonType =
   | "form"
   | "text_assignment"
   | "listening_practice"
-  | "vocal_hack";
+  | "vocal_hack"
+  | "diary";
 
 interface LessonRow {
   id: string;
@@ -107,6 +109,11 @@ const LESSON_TYPE_META: Record<
     label: "Vocal Hack",
     Icon: Mic,
     color: "text-rose-500",
+  },
+  diary: {
+    label: "Diary",
+    Icon: NotebookPen,
+    color: "text-sky-500",
   },
 };
 
@@ -1035,6 +1042,7 @@ export function CourseLibraryEditorClient({
                         <option value="text_assignment">Text Assignment</option>
                         <option value="listening_practice">Listening Practice</option>
                         <option value="vocal_hack">Vocal Hack</option>
+                        <option value="diary">Diary</option>
                       </select>
                     <input
                       type="text"

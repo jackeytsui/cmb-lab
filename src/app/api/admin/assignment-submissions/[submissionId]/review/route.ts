@@ -8,7 +8,11 @@ import {
   assignmentSubmissionSentences,
   courseLibraryLessons,
 } from "@/db/schema";
-import { getAssignmentReviewer } from "@/lib/assignment-review";
+import {
+  getAnyAssignmentReviewer,
+  userCanReviewAssignments,
+  type ReviewableAssignmentType,
+} from "@/lib/assignment-review";
 import {
   calculateTextAssignmentScore,
   hasOverlappingRanges,
@@ -60,7 +64,7 @@ function normalizeExtraComment(html: string | undefined): string | null {
  * corrections, auto/final score, extra comment, recording link.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const reviewer = await getAssignmentReviewer();
+  const reviewer = await getAnyAssignmentReviewer();
   if (!reviewer) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -86,6 +90,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   });
   if (!submission) {
     return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+  }
+  // Authorize against THIS submission's type (text_assignment / diary / ...).
+  const canReview = await userCanReviewAssignments(
+    reviewer,
+    submission.assignmentType as ReviewableAssignmentType,
+  );
+  if (!canReview) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (submission.status === "draft") {
     return NextResponse.json(

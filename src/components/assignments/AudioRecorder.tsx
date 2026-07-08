@@ -2,6 +2,20 @@
 
 import { useState, useRef, useCallback } from "react";
 import { Mic, Square, Play, Pause, RotateCcw, Loader2, Upload } from "lucide-react";
+import { upload } from "@vercel/blob/client";
+
+// Upload a recording straight to Vercel Blob (private). Direct-to-blob avoids
+// the ~4.5MB serverless request-body cap, so long recordings (e.g. a 5-minute
+// diary read) and large uploaded files don't 413.
+async function uploadRecording(blob: Blob, filename: string): Promise<string> {
+  const result = await upload(`assignment-recordings/${filename}`, blob, {
+    access: "private",
+    contentType: blob.type || "audio/webm",
+    handleUploadUrl: "/api/assignments/recording-upload-token",
+    multipart: true,
+  });
+  return result.url;
+}
 
 interface AudioRecorderProps {
   onUpload: (blobUrl: string) => void;
@@ -37,6 +51,13 @@ export function AudioRecorder({
     }
   }, []);
 
+  const stopRecording = useCallback(() => {
+    stopTimer();
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+  }, [stopTimer]);
+
   const startRecording = useCallback(async () => {
     setError(null);
     try {
@@ -57,22 +78,9 @@ export function AudioRecorder({
         setAudioUrl(localUrl);
         setState("uploading");
 
-        // Upload to Blob store
-        const form = new FormData();
-        form.append("file", blob, "recording.webm");
-        form.append("prefix", "assignment-recordings/");
+        // Upload straight to Blob (direct-to-blob; no 4.5MB serverless cap).
         try {
-          const res = await fetch("/api/assignments/upload-audio", {
-            method: "POST",
-            body: form,
-          });
-          if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            throw new Error(
-              (data as { error?: string }).error || "Upload failed",
-            );
-          }
-          const { url } = await res.json();
+          const url = await uploadRecording(blob, "recording.webm");
           onUpload(url);
           setState("recorded");
         } catch (err) {
@@ -90,7 +98,12 @@ export function AudioRecorder({
       timerRef.current = setInterval(() => {
         setElapsed((s) => {
           if (s + 1 >= maxSeconds) {
-            stopRecording();
+            // Inline stop (rather than calling stopRecording) so this callback
+            // has no forward reference and a clean dependency list.
+            stopTimer();
+            if (mediaRecorderRef.current?.state === "recording") {
+              mediaRecorderRef.current.stop();
+            }
             return maxSeconds;
           }
           return s + 1;
@@ -99,14 +112,7 @@ export function AudioRecorder({
     } catch {
       setError("Microphone access denied. Please allow microphone use.");
     }
-  }, [maxSeconds, stopTimer]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const stopRecording = useCallback(() => {
-    stopTimer();
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
-  }, [stopTimer]);
+  }, [maxSeconds, stopTimer, onUpload]);
 
   const reset = useCallback(() => {
     stopTimer();
@@ -136,21 +142,8 @@ export function AudioRecorder({
       const localUrl = URL.createObjectURL(file);
       setAudioUrl(localUrl);
       setState("uploading");
-      const form = new FormData();
-      form.append("file", file, file.name || "recording.m4a");
-      form.append("prefix", "assignment-recordings/");
       try {
-        const res = await fetch("/api/assignments/upload-audio", {
-          method: "POST",
-          body: form,
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(
-            (data as { error?: string }).error || "Upload failed",
-          );
-        }
-        const { url } = await res.json();
+        const url = await uploadRecording(file, file.name || "recording.m4a");
         onUpload(url);
         setState("recorded");
       } catch (err) {

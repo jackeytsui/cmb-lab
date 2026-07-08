@@ -34,6 +34,7 @@ export const courseLibraryLessonTypeEnum = pgEnum(
     "text_assignment",
     "listening_practice",
     "vocal_hack",
+    "diary",
   ],
 );
 
@@ -408,6 +409,17 @@ export interface CourseLibraryVocalHackContent {
   sentences: CourseLibraryVocalHackSentence[];
 }
 
+/**
+ * Diary lesson: the student writes a short paragraph (segmented into sentences
+ * for the pinyin/English display + reviewer corrections) and submits an audio
+ * recording of themselves reading it. Only instructions are configured; there
+ * are no per-sentence prompts.
+ */
+export interface CourseLibraryDiaryContent {
+  /** Instructions shown above the diary box — rich text HTML. */
+  description: string;
+}
+
 export type CourseLibraryLessonContent =
   | CourseLibraryVideoContent
   | CourseLibraryTextContent
@@ -417,4 +429,5 @@ export type CourseLibraryLessonContent =
   | CourseLibraryFormContent
   | CourseLibraryTextAssignmentContent
   | CourseLibraryListeningPracticeContent
-  | CourseLibraryVocalHackContent;
+  | CourseLibraryVocalHackContent
+  | CourseLibraryDiaryContent;

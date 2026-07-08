@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Headphones,
   Mic,
+  NotebookPen,
 } from "lucide-react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { db } from "@/db";
@@ -40,6 +41,7 @@ const TYPE_ICON = {
   text_assignment: ClipboardList,
   listening_practice: Headphones,
   vocal_hack: Mic,
+  diary: NotebookPen,
 };
 const TYPE_COLOR = {
   video: "text-red-500",
@@ -51,11 +53,13 @@ const TYPE_COLOR = {
   text_assignment: "text-teal-500",
   listening_practice: "text-indigo-500",
   vocal_hack: "text-rose-500",
+  diary: "text-sky-500",
 };
 const TYPE_LABEL: Partial<Record<keyof typeof TYPE_ICON, string>> = {
   text_assignment: "Task",
   listening_practice: "Listening",
   vocal_hack: "Vocal Hack",
+  diary: "Diary",
 };
 
 const MAP_STYLE_CHIP: Record<string, { label: string; className: string } | null> = {

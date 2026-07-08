@@ -51,6 +51,8 @@ export interface ReviewSubmissionDto {
   moduleTitle: string;
   courseTitle: string;
   assignmentDescription: string;
+  /** Student's own recording (Diary reads their entry aloud); URL to play. */
+  studentAudioUrl?: string | null;
   sentences: ReviewSentenceDto[];
 }
 
@@ -440,6 +442,22 @@ export function ReviewClient({
             dangerouslySetInnerHTML={{
               __html: submission.assignmentDescription,
             }}
+          />
+        </div>
+      )}
+
+      {submission.studentAudioUrl && (
+        <div className="rounded-lg border border-border bg-card p-5 space-y-2">
+          <h2 className="text-sm font-semibold text-foreground">
+            Student&apos;s recording
+          </h2>
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio
+            controls
+            preload="metadata"
+            controlsList="nodownload"
+            src={submission.studentAudioUrl}
+            className="w-full"
           />
         </div>
       )}
