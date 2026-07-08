@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Send, Sparkles, Trash2 } from "lucide-react";
+import { CheckCircle2, Loader2, Plus, Send, Sparkles, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
@@ -12,11 +12,17 @@ import { generateModelPinyin } from "@/lib/generate-model-pinyin";
 import { fetchProperTranslations } from "@/lib/mandarin-generation";
 
 // ---------------------------------------------------------------------------
-// Vocal Hack review: listen to each recording (seekable), optionally write a
-// corrected sentence per recording — pinyin + English auto-generate from the
-// Chinese and stay editable — then add an extra comment and a Loom link.
-// No score: pronunciation review is qualitative.
+// Vocal Hack review: listen to each recording (seekable) and, per sentence,
+// write ONE OR MORE alternative correct phrasings — each with pinyin + English
+// auto-generated from the Chinese and editable — then add an extra comment and
+// a Loom link. No score: pronunciation review is qualitative.
 // ---------------------------------------------------------------------------
+
+export interface VocalHackCorrection {
+  chinese: string;
+  pinyin: string;
+  english: string;
+}
 
 export interface VocalHackReviewSentenceDto {
   id: string;
@@ -26,9 +32,7 @@ export interface VocalHackReviewSentenceDto {
   generatedEnglish: string;
   hasVideo: boolean;
   hasRecording: boolean;
-  correctedChinese: string | null;
-  correctedPinyin: string | null;
-  correctedEnglish: string | null;
+  corrections: VocalHackCorrection[];
 }
 
 export interface VocalHackReviewDto {
@@ -48,11 +52,19 @@ export interface VocalHackReviewDto {
   sentences: VocalHackReviewSentenceDto[];
 }
 
-interface CorrectionDraft {
+interface CorrectionEntry {
+  key: string;
   chinese: string;
   pinyin: string;
   english: string;
   generating: boolean;
+}
+
+let keyCounter = 0;
+const nextKey = () => `c${keyCounter++}`;
+
+function toEntry(c: VocalHackCorrection): CorrectionEntry {
+  return { key: nextKey(), ...c, generating: false };
 }
 
 export function VocalHackReviewClient({
@@ -61,18 +73,15 @@ export function VocalHackReviewClient({
   submission: VocalHackReviewDto;
 }) {
   const router = useRouter();
-  const [drafts, setDrafts] = useState<Record<string, CorrectionDraft>>(() => {
-    const initial: Record<string, CorrectionDraft> = {};
-    for (const s of submission.sentences) {
-      initial[s.id] = {
-        chinese: s.correctedChinese ?? "",
-        pinyin: s.correctedPinyin ?? "",
-        english: s.correctedEnglish ?? "",
-        generating: false,
-      };
-    }
-    return initial;
-  });
+  const [entries, setEntries] = useState<Record<string, CorrectionEntry[]>>(
+    () => {
+      const initial: Record<string, CorrectionEntry[]> = {};
+      for (const s of submission.sentences) {
+        initial[s.id] = s.corrections.map(toEntry);
+      }
+      return initial;
+    },
+  );
   const [extraComment, setExtraComment] = useState(
     submission.extraComment ?? "",
   );
@@ -82,25 +91,50 @@ export function VocalHackReviewClient({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const patch = (id: string, next: Partial<CorrectionDraft>) =>
-    setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...next } }));
+  const patchEntry = (
+    sentenceId: string,
+    key: string,
+    next: Partial<CorrectionEntry>,
+  ) =>
+    setEntries((prev) => ({
+      ...prev,
+      [sentenceId]: prev[sentenceId].map((e) =>
+        e.key === key ? { ...e, ...next } : e,
+      ),
+    }));
 
-  const generateForDraft = async (id: string) => {
-    const chinese = drafts[id]?.chinese.trim();
+  const addEntry = (sentenceId: string) =>
+    setEntries((prev) => ({
+      ...prev,
+      [sentenceId]: [
+        ...prev[sentenceId],
+        { key: nextKey(), chinese: "", pinyin: "", english: "", generating: false },
+      ],
+    }));
+
+  const removeEntry = (sentenceId: string, key: string) =>
+    setEntries((prev) => ({
+      ...prev,
+      [sentenceId]: prev[sentenceId].filter((e) => e.key !== key),
+    }));
+
+  const generateEntry = async (sentenceId: string, key: string) => {
+    const entry = entries[sentenceId]?.find((e) => e.key === key);
+    const chinese = entry?.chinese.trim();
     if (!chinese) return;
-    patch(id, { generating: true });
+    patchEntry(sentenceId, key, { generating: true });
     try {
       const [pinyin, translations] = await Promise.all([
         generateModelPinyin(chinese),
         fetchProperTranslations([chinese], "zh-CN"),
       ]);
-      patch(id, {
+      patchEntry(sentenceId, key, {
         pinyin,
-        english: translations?.join(" ").trim() || drafts[id]?.english || "",
+        english: translations?.join(" ").trim() || entry?.english || "",
         generating: false,
       });
     } catch {
-      patch(id, { generating: false });
+      patchEntry(sentenceId, key, { generating: false });
     }
   };
 
@@ -111,15 +145,14 @@ export function VocalHackReviewClient({
     recordingTrimmed !== "" && recordingValid && !isLoomUrl(recordingTrimmed);
 
   const handleSubmit = async () => {
-    // A correction with Chinese but no generated pinyin is probably a missed
-    // generate click — generate silently on the way out is too magic; block.
     for (const s of submission.sentences) {
-      const draft = drafts[s.id];
-      if (draft.chinese.trim() && !draft.pinyin.trim()) {
-        setError(
-          `Sentence "${s.chineseText}" has a correction without pinyin — click Generate first.`,
-        );
-        return;
+      for (const entry of entries[s.id]) {
+        if (entry.chinese.trim() && !entry.pinyin.trim()) {
+          setError(
+            `A correction for "${s.chineseText}" has no pinyin — click Generate first.`,
+          );
+          return;
+        }
       }
     }
     if (!recordingValid) {
@@ -137,9 +170,13 @@ export function VocalHackReviewClient({
           body: JSON.stringify({
             sentences: submission.sentences.map((s) => ({
               sentenceId: s.id,
-              correctedChinese: drafts[s.id].chinese,
-              correctedPinyin: drafts[s.id].pinyin,
-              correctedEnglish: drafts[s.id].english,
+              corrections: entries[s.id]
+                .filter((e) => e.chinese.trim())
+                .map((e) => ({
+                  chinese: e.chinese,
+                  pinyin: e.pinyin,
+                  english: e.english,
+                })),
             })),
             extraComment,
             recordingUrl: recordingTrimmed || undefined,
@@ -197,8 +234,7 @@ export function VocalHackReviewClient({
 
       <div className="space-y-5">
         {submission.sentences.map((sentence, idx) => {
-          const draft = drafts[sentence.id];
-          const hasCorrection = draft.chinese.trim().length > 0;
+          const sentenceEntries = entries[sentence.id];
           return (
             <div
               key={sentence.id}
@@ -252,94 +288,112 @@ export function VocalHackReviewClient({
               <div className="space-y-2 rounded-md border border-border bg-background p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Correction (optional — leave empty if well read)
+                    Corrections (add one or more correct ways to say it)
                   </p>
-                  {hasCorrection && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        patch(sentence.id, {
-                          chinese: "",
-                          pinyin: "",
-                          english: "",
-                        })
-                      }
-                      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-red-500"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={draft.chinese}
-                    onChange={(e) =>
-                      patch(sentence.id, { chinese: e.target.value })
-                    }
-                    onBlur={() => {
-                      if (draft.chinese.trim() && !draft.pinyin.trim()) {
-                        generateForDraft(sentence.id);
-                      }
-                    }}
-                    placeholder="Corrected sentence in Chinese"
-                    className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-base"
-                  />
                   <button
                     type="button"
-                    onClick={() => generateForDraft(sentence.id)}
-                    disabled={!draft.chinese.trim() || draft.generating}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium hover:bg-accent disabled:opacity-40"
+                    onClick={() => addEntry(sentence.id)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
                   >
-                    {draft.generating ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5" />
-                    )}
-                    Generate
+                    <Plus className="h-3 w-3" />
+                    Add correction
                   </button>
                 </div>
-                {hasCorrection && (
-                  <>
-                    <input
-                      type="text"
-                      value={draft.pinyin}
-                      onChange={(e) =>
-                        patch(sentence.id, { pinyin: e.target.value })
-                      }
-                      placeholder="Pinyin (auto-generated, editable)"
-                      className="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={draft.english}
-                      onChange={(e) =>
-                        patch(sentence.id, { english: e.target.value })
-                      }
-                      placeholder="English (auto-generated, editable)"
-                      className="w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm"
-                    />
-                    {draft.pinyin.trim() && (
-                      <div className="rounded-md bg-card px-3 py-2">
-                        <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Student will see
-                        </p>
-                        <ModelAnnotatedSentence
-                          chinese={draft.chinese}
-                          pinyin={draft.pinyin}
-                          english={draft.english}
-                          fontSize={20}
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-                {!hasCorrection && (
+
+                {sentenceEntries.length === 0 ? (
                   <p className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 className="h-3 w-3" />
-                    Will be marked as well read (no correction).
+                    No corrections — will be marked as well read.
                   </p>
+                ) : (
+                  <div className="space-y-3">
+                    {sentenceEntries.map((entry, entryIdx) => (
+                      <div
+                        key={entry.key}
+                        className="space-y-2 rounded-md border border-border/70 bg-card p-2.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Option {entryIdx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeEntry(sentence.id, entry.key)}
+                            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-red-500"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Remove
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={entry.chinese}
+                            onChange={(e) =>
+                              patchEntry(sentence.id, entry.key, {
+                                chinese: e.target.value,
+                              })
+                            }
+                            onBlur={() => {
+                              if (entry.chinese.trim() && !entry.pinyin.trim()) {
+                                generateEntry(sentence.id, entry.key);
+                              }
+                            }}
+                            placeholder="Correct sentence in Chinese"
+                            className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-base"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => generateEntry(sentence.id, entry.key)}
+                            disabled={!entry.chinese.trim() || entry.generating}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-accent disabled:opacity-40"
+                          >
+                            {entry.generating ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-3.5 w-3.5" />
+                            )}
+                            Generate
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={entry.pinyin}
+                          onChange={(e) =>
+                            patchEntry(sentence.id, entry.key, {
+                              pinyin: e.target.value,
+                            })
+                          }
+                          placeholder="Pinyin (auto-generated, editable)"
+                          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={entry.english}
+                          onChange={(e) =>
+                            patchEntry(sentence.id, entry.key, {
+                              english: e.target.value,
+                            })
+                          }
+                          placeholder="English (auto-generated, editable)"
+                          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                        />
+                        {entry.chinese.trim() && entry.pinyin.trim() && (
+                          <div className="rounded-md bg-background px-3 py-2">
+                            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              Student will see
+                            </p>
+                            <ModelAnnotatedSentence
+                              chinese={entry.chinese}
+                              pinyin={entry.pinyin}
+                              english={entry.english}
+                              fontSize={20}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

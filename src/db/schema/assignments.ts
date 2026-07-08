@@ -133,9 +133,14 @@ export const assignmentSubmissionSentences = pgTable(
     audioUrl: text("audio_url"),
     // Vocal hack review: the reviewer's corrected/model sentence for this
     // recording (free text, with generated-then-editable pinyin + English).
+    // Legacy single-value columns; kept in sync with the first alternative.
     correctedChinese: text("corrected_chinese"),
     correctedPinyin: text("corrected_pinyin"),
     correctedEnglish: text("corrected_english"),
+    // Vocal hack review: one or more alternative correct phrasings per sentence.
+    correctedAlternatives: jsonb("corrected_alternatives").$type<
+      { chinese: string; pinyin: string; english: string }[]
+    >(),
     // Reviewer's per-sentence correctness verdict (null until reviewed).
     reviewVerdict: assignmentSentenceVerdictEnum("review_verdict"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

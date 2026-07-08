@@ -112,9 +112,17 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
         generatedEnglish: sentence.generatedEnglish,
         hasVideo: videoByPrompt.get(sentence.promptId) ?? false,
         hasRecording: Boolean(sentence.audioUrl),
-        correctedChinese: sentence.correctedChinese,
-        correctedPinyin: sentence.correctedPinyin,
-        correctedEnglish: sentence.correctedEnglish,
+        corrections:
+          sentence.correctedAlternatives ??
+          (sentence.correctedChinese
+            ? [
+                {
+                  chinese: sentence.correctedChinese,
+                  pinyin: sentence.correctedPinyin ?? "",
+                  english: sentence.correctedEnglish ?? "",
+                },
+              ]
+            : []),
       })),
     };
 
