@@ -240,6 +240,12 @@ span[data-tc="o"] { color: #f97316 !important; }
 span[data-tc="t"] { color: #14b8a6 !important; }
 span[data-tc="m"] { color: var(--muted-foreground) !important; }
 
+/* Preserve blank lines the author added in the TipTap editor. Empty paragraphs
+   render as <p></p>, which `prose` otherwise collapses to zero height — so
+   spacing between sections vanished in the rendered view. Give them a
+   non-breaking space so an authored blank line shows as a blank line. */
+.prose p:empty::before { content: "\00a0"; }
+
 /* TipTap table styles for Internal Docs editor */
 .prose table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
 .prose table td,
