@@ -7,6 +7,7 @@ import { CheckCircle2, Loader2, Plus, Send, Sparkles, Trash2 } from "lucide-reac
 import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
+import { SentenceVideo } from "@/components/assignments/SentenceVideo";
 import { isLoomUrl, sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { generateModelPinyin } from "@/lib/generate-model-pinyin";
 import { fetchProperTranslations } from "@/lib/mandarin-generation";
@@ -244,45 +245,43 @@ export function VocalHackReviewClient({
                 {idx + 1}. {sentence.promptLabel || `Sentence ${idx + 1}`}
               </p>
 
-              {sentence.hasVideo && (
-                <div className="overflow-hidden rounded-lg bg-black">
-                  <video
-                    src={`/api/course-library/vocal-hack-video/${submission.lessonId}?sentence=${encodeURIComponent(sentence.id)}#t=0.1`}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    controlsList="nodownload"
-                    className="mx-auto max-h-64 w-full"
-                  />
-                </div>
-              )}
-
-              <div className="rounded-md bg-background px-3 py-3">
-                <ModelAnnotatedSentence
-                  chinese={sentence.chineseText}
-                  pinyin={sentence.generatedPinyin}
-                  english={sentence.generatedEnglish}
-                />
-              </div>
-
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">
-                  Student&apos;s recording
-                </p>
-                {sentence.hasRecording ? (
-                   
-                  <audio
-                    controls
-                    preload="metadata"
-                    controlsList="nodownload"
-                    src={`/api/course-library/assignment-recordings/${sentence.id}`}
-                    className="w-full"
-                  />
-                ) : (
-                  <p className="text-sm italic text-muted-foreground">
-                    No recording submitted.
-                  </p>
+              {/* Video left, sentence + student recording right. */}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                {sentence.hasVideo && (
+                  <div className="flex justify-center sm:block sm:shrink-0">
+                    <SentenceVideo
+                      src={`/api/course-library/vocal-hack-video/${submission.lessonId}?sentence=${encodeURIComponent(sentence.id)}#t=0.1`}
+                    />
+                  </div>
                 )}
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div className="rounded-md bg-background px-3 py-3">
+                    <ModelAnnotatedSentence
+                      chinese={sentence.chineseText}
+                      pinyin={sentence.generatedPinyin}
+                      english={sentence.generatedEnglish}
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">
+                      Student&apos;s recording
+                    </p>
+                    {sentence.hasRecording ? (
+                       
+                      <audio
+                        controls
+                        preload="metadata"
+                        controlsList="nodownload"
+                        src={`/api/course-library/assignment-recordings/${sentence.id}`}
+                        className="w-full"
+                      />
+                    ) : (
+                      <p className="text-sm italic text-muted-foreground">
+                        No recording submitted.
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2 rounded-md border border-border bg-background p-3">
