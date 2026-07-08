@@ -66,12 +66,19 @@ export function AudioRecorder({
             method: "POST",
             body: form,
           });
-          if (!res.ok) throw new Error("Upload failed");
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(
+              (data as { error?: string }).error || "Upload failed",
+            );
+          }
           const { url } = await res.json();
           onUpload(url);
           setState("recorded");
-        } catch {
-          setError("Upload failed. Please try again.");
+        } catch (err) {
+          setError(
+            err instanceof Error ? err.message : "Upload failed. Please try again.",
+          );
           setState("recorded");
         }
       };

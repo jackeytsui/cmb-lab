@@ -59,7 +59,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "File exceeds 50 MB" }, { status: 413 });
   }
 
-  const contentType = file.type || "audio/webm";
+  // MediaRecorder reports the codec too (e.g. "audio/webm;codecs=opus"), so
+  // strip parameters and normalise before the allow-list check.
+  const contentType = (file.type || "audio/webm")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
   if (!ALLOWED_TYPES.has(contentType)) {
     return NextResponse.json(
       { error: `Unsupported content type: ${contentType}` },
