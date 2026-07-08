@@ -48,7 +48,9 @@ const STYLE_META: Record<
 };
 
 const BRAND = "#2e3a97";
-const MARK_URL = "/cmb-mark-white.png";
+// Versioned filename so browsers/CDN/PWA fetch the corrected (uncut) mark
+// instead of a cached copy of the old clipped one.
+const MARK_URL = "/cmb-mark-white-v2.png";
 
 // Layout geometry (px).
 const ROW_H = 128;
