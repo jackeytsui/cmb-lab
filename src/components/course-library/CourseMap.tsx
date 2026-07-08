@@ -110,6 +110,51 @@ function BrandMark({ color, className }: { color: string; className?: string }) 
   );
 }
 
+// Extract the week number from a band label like "Week 1" → 1. Non-week labels
+// (e.g. "Day 1-3", "Bonus") return null and keep the logo chip header.
+function parseWeekNumber(label: string): number | null {
+  const m = /^\s*week\s*(\d+)\b/i.exec(label);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Section header: a bold brand number token for numbered weeks, or a
+// logo-marked chip for non-numbered labels (e.g. "Day 1-3").
+function BandHeader({ label }: { label: string }) {
+  const weekNumber = parseWeekNumber(label);
+  return (
+    <div className="mb-1 mt-6 flex items-center gap-3">
+      {weekNumber !== null ? (
+        <div
+          className="flex h-14 w-14 flex-col items-center justify-center rounded-2xl text-white"
+          style={{
+            background: "linear-gradient(135deg, #2e3a97 0%, #3d4bb8 100%)",
+            boxShadow: "0 4px 0 #1f2870",
+          }}
+        >
+          <span className="text-[8px] font-extrabold uppercase tracking-[0.14em] text-white/80">
+            Week
+          </span>
+          <span className="text-2xl font-black leading-none">{weekNumber}</span>
+        </div>
+      ) : (
+        <div
+          className="flex items-center gap-2 rounded-xl px-4 py-2 text-white"
+          style={{
+            background: "linear-gradient(135deg, #2e3a97 0%, #3d4bb8 100%)",
+            boxShadow: "0 3px 0 #1f2870",
+          }}
+        >
+          <BrandMark color="#ffffff" className="h-4 w-4" />
+          <h2 className="text-sm font-extrabold uppercase tracking-wide">
+            {label}
+          </h2>
+        </div>
+      )}
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
 function StopNode({
   stop,
   courseId,
@@ -350,23 +395,7 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
     <div ref={containerRef} className="mx-auto w-full max-w-5xl">
       {bands.map((band, bandIdx) => (
         <section key={bandIdx}>
-          {band.label && (
-            <div className="mb-1 mt-6 flex items-center gap-3">
-              <div
-                className="flex items-center gap-2 rounded-xl px-4 py-2 text-white"
-                style={{
-                  background: "linear-gradient(135deg, #2e3a97 0%, #3d4bb8 100%)",
-                  boxShadow: "0 3px 0 #1f2870",
-                }}
-              >
-                <BrandMark color="#ffffff" className="h-4 w-4" />
-                <h2 className="text-sm font-extrabold uppercase tracking-wide">
-                  {band.label}
-                </h2>
-              </div>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-          )}
+          {band.label && <BandHeader label={band.label} />}
           <BandGrid
             band={band}
             columns={columns}
