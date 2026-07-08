@@ -19,6 +19,7 @@ import { resolvePermissions } from "@/lib/permissions";
 export const ASSIGNMENT_REVIEW_FEATURE_KEYS = {
   text_assignment: "assignment_review_text",
   vocal_hack: "assignment_review_vocal",
+  diary: "assignment_review_diary",
 } as const;
 
 export type ReviewableAssignmentType =

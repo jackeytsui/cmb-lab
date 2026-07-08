@@ -17,6 +17,7 @@ import {
   type VocalHackSentenceDto,
   type VocalHackSubmissionDto,
 } from "./VocalHackViewer";
+import { DiaryViewer, type DiarySubmissionDto } from "./DiaryViewer";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
 import { db } from "@/db";
 import {
@@ -285,6 +286,36 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
     }
   }
 
+  // Diary: the student's existing submission (segmented lines + recording).
+  let diarySubmission: DiarySubmissionDto | null = null;
+  if (row.lessonType === "diary" && currentUser) {
+    const submission = await db.query.assignmentSubmissions.findFirst({
+      where: and(
+        eq(assignmentSubmissions.lessonId, lessonId),
+        eq(assignmentSubmissions.studentId, currentUser.id),
+      ),
+    });
+    if (submission) {
+      const sentenceRows = await db.query.assignmentSubmissionSentences.findMany(
+        {
+          where: eq(assignmentSubmissionSentences.submissionId, submission.id),
+          orderBy: [asc(assignmentSubmissionSentences.sortOrder)],
+        },
+      );
+      diarySubmission = {
+        id: submission.id,
+        status: submission.status,
+        submittedAt: submission.submittedAt?.toISOString() ?? null,
+        lines: sentenceRows.map((s) => ({
+          chineseText: s.chineseText,
+          pinyin: s.generatedPinyin,
+          english: s.generatedEnglish,
+        })),
+        hasRecording: Boolean(submission.studentAudioUrl),
+      };
+    }
+  }
+
   return (
     <FeatureGate feature="course_library">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -542,6 +573,24 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 </p>
               </div>
             )}
+          </div>
+        )}
+
+        {row.lessonType === "diary" && (
+          <div className="space-y-5">
+            {typeof content.description === "string" &&
+              content.description && (
+                <div
+                  className="prose prose-invert max-w-none text-foreground prose-p:text-foreground prose-li:text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
+                  dangerouslySetInnerHTML={{
+                    __html: content.description as string,
+                  }}
+                />
+              )}
+            <DiaryViewer
+              lessonId={lessonId}
+              initialSubmission={diarySubmission}
+            />
           </div>
         )}
 

@@ -31,6 +31,7 @@ import {
 export const assignmentTypeEnum = pgEnum("assignment_type_kind", [
   "text_assignment",
   "vocal_hack",
+  "diary",
 ]);
 
 export const assignmentSubmissionStatusEnum = pgEnum(
@@ -81,6 +82,10 @@ export const assignmentSubmissions = pgTable(
     finalScore: integer("final_score"),
     scoreOverridden: boolean("score_overridden").notNull().default(false),
     recordingUrl: text("recording_url"),
+    // Student's own audio recording for the whole submission (diary: reads their
+    // paragraph aloud). Distinct from recordingUrl, which is the reviewer's
+    // Loom/feedback link. Private blob URL; streamed via authenticated proxy.
+    studentAudioUrl: text("student_audio_url"),
     // Optional reviewer comment (rich text HTML, same convention as lesson content).
     extraComment: text("extra_comment"),
     // When the student first opened the reviewed feedback (unread badge state).

@@ -199,6 +199,23 @@ export default async function AssignmentFeedbackDetailPage({
         </div>
       )}
 
+      {row.submission.assignmentType === "diary" &&
+        row.submission.studentAudioUrl && (
+          <div className="rounded-lg border border-border bg-card p-5 space-y-2">
+            <h2 className="text-sm font-semibold text-foreground">
+              Your recording
+            </h2>
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <audio
+              controls
+              preload="none"
+              controlsList="nodownload"
+              src={`/api/course-library/submission-recording/${row.submission.id}`}
+              className="w-full"
+            />
+          </div>
+        )}
+
       <div className="space-y-4">
         {sentences.map((sentence, idx) =>
           row.submission.assignmentType === "vocal_hack" ? (

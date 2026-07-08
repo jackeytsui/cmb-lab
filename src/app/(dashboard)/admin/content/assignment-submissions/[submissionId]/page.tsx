@@ -156,6 +156,9 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
     extraComment: row.submission.extraComment,
     studentName: row.studentName,
     studentEmail: row.studentEmail,
+    studentAudioUrl: row.submission.studentAudioUrl
+      ? `/api/course-library/submission-recording/${row.submission.id}`
+      : null,
     lessonTitle: row.lessonTitle,
     moduleTitle: row.moduleTitle,
     courseTitle: row.courseTitle,

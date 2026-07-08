@@ -17,6 +17,7 @@ const createSchema = z.object({
     "text_assignment",
     "listening_practice",
     "vocal_hack",
+    "diary",
   ]),
   content: z.record(z.string(), z.unknown()).optional(),
 });

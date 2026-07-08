@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Headphones,
   Mic,
+  NotebookPen,
   Plus,
   ArrowUp,
   ArrowDown,
@@ -45,7 +46,8 @@ type LessonType =
   | "form"
   | "text_assignment"
   | "listening_practice"
-  | "vocal_hack";
+  | "vocal_hack"
+  | "diary";
 
 interface LessonData {
   id: string;
@@ -75,6 +77,11 @@ const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: 
     label: "Vocal Hack",
     Icon: Mic,
     color: "text-rose-500",
+  },
+  diary: {
+    label: "Diary",
+    Icon: NotebookPen,
+    color: "text-sky-500",
   },
 };
 
@@ -319,6 +326,13 @@ export function LessonEditorClient({
       )}
       {lesson.lessonType === "vocal_hack" && (
         <VocalHackLessonForm
+          lessonId={lesson.id}
+          content={lesson.content}
+          onUpdate={updateContent}
+        />
+      )}
+      {lesson.lessonType === "diary" && (
+        <DiaryLessonForm
           lessonId={lesson.id}
           content={lesson.content}
           onUpdate={updateContent}
@@ -2810,6 +2824,81 @@ function VocalHackLessonForm({
             Save Vocal Hack
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Diary Lesson Form — instructions only. Students write a paragraph and record
+// themselves reading it; there's no per-sentence config to author.
+// ---------------------------------------------------------------------------
+
+function DiaryLessonForm({
+  lessonId,
+  content,
+  onUpdate,
+}: {
+  lessonId: string;
+  content: Record<string, unknown>;
+  onUpdate: (next: Record<string, unknown>) => void;
+}) {
+  const savedDescription = (content.description as string) ?? "";
+  const [description, setDescription] = useState(savedDescription);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+
+  const dirty = description !== savedDescription;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const nextContent = { ...content, description };
+      const ok = await saveLessonContent(lessonId, nextContent);
+      if (ok) {
+        onUpdate(nextContent);
+        setSavedAt(new Date());
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">Instructions</h3>
+        <p className="text-xs text-muted-foreground">
+          Shown above the diary box. Tell students what to write about, then that
+          they should record themselves reading their entry aloud.
+        </p>
+        <RichTextEditor
+          value={description}
+          onChange={setDescription}
+          placeholder="e.g. Write a short diary entry (3–5 sentences) about your day, then record yourself reading it aloud."
+        />
+        <div className="flex items-center justify-end gap-3">
+          {savedAt && !dirty && (
+            <span className="text-[10px] text-emerald-500">
+              Saved at {savedAt.toLocaleTimeString()}
+            </span>
+          )}
+          {dirty && (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Check className="w-3 h-3" />
+              )}
+              Save Diary
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
