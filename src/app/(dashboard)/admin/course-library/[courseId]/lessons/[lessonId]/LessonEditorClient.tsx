@@ -892,21 +892,32 @@ function VideoLessonForm({
       <div className="rounded-lg border border-border bg-card p-5 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Video file</h3>
         {videoUrl ? (
-          <div className="rounded-md border border-border bg-background p-3 flex items-center gap-3">
-            <Video className="w-5 h-5 text-red-500" />
-            <span className="text-xs text-muted-foreground flex-1 truncate">
-              {videoUrl.split("/").pop()}
-            </span>
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                accept="video/mp4,video/quicktime,video/webm"
-                className="hidden"
-                onChange={handleUpload}
-                disabled={uploading}
+          <div className="space-y-2">
+            <div className="overflow-hidden rounded-md bg-black">
+              <video
+                key={videoUrl}
+                src={`/api/admin/course-library/blob-preview?url=${encodeURIComponent(videoUrl)}`}
+                controls
+                preload="metadata"
+                className="mx-auto max-h-72 w-full"
               />
-              <span className="text-xs text-primary hover:underline">Replace</span>
-            </label>
+            </div>
+            <div className="rounded-md border border-border bg-background p-3 flex items-center gap-3">
+              <Video className="w-5 h-5 text-red-500" />
+              <span className="text-xs text-muted-foreground flex-1 truncate">
+                {videoUrl.split("/").pop()}
+              </span>
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/webm"
+                  className="hidden"
+                  onChange={handleUpload}
+                  disabled={uploading}
+                />
+                <span className="text-xs text-primary hover:underline">Replace</span>
+              </label>
+            </div>
           </div>
         ) : (
           <label className="cursor-pointer block">
@@ -2625,23 +2636,34 @@ function VocalHackLessonForm({
                     Coach video
                   </label>
                   {sentence.videoUrl ? (
-                    <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
-                      <Video className="w-4 h-4 text-red-500" />
-                      <span className="flex-1 truncate text-xs text-muted-foreground">
-                        Video uploaded
-                      </span>
-                      <label className="cursor-pointer text-xs text-primary hover:underline">
-                        <input
-                          type="file"
-                          accept="video/mp4,video/quicktime,video/webm"
-                          className="hidden"
-                          onChange={(e) => handleUploadVideo(sentence.id, e)}
-                          disabled={uploadingId === sentence.id}
+                    <div className="space-y-2">
+                      <div className="overflow-hidden rounded-md bg-black">
+                        <video
+                          key={sentence.videoUrl}
+                          src={`/api/admin/course-library/blob-preview?url=${encodeURIComponent(sentence.videoUrl)}`}
+                          controls
+                          preload="metadata"
+                          className="mx-auto max-h-56 w-full"
                         />
-                        {uploadingId === sentence.id
-                          ? `Uploading… ${uploadPct}%`
-                          : "Replace"}
-                      </label>
+                      </div>
+                      <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+                        <Video className="w-4 h-4 text-red-500" />
+                        <span className="flex-1 truncate text-xs text-muted-foreground">
+                          Video uploaded — preview above
+                        </span>
+                        <label className="cursor-pointer text-xs text-primary hover:underline">
+                          <input
+                            type="file"
+                            accept="video/mp4,video/quicktime,video/webm"
+                            className="hidden"
+                            onChange={(e) => handleUploadVideo(sentence.id, e)}
+                            disabled={uploadingId === sentence.id}
+                          />
+                          {uploadingId === sentence.id
+                            ? `Uploading… ${uploadPct}%`
+                            : "Replace"}
+                        </label>
+                      </div>
                     </div>
                   ) : (
                     <label className="block cursor-pointer">
