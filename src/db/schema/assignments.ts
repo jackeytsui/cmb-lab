@@ -27,9 +27,10 @@ import {
 // plus the jsonb `metadata` escape hatch.
 // ---------------------------------------------------------------------------
 
-// Future values: "audio_assignment", "video_assignment", ...
+// Future values: "video_assignment", ...
 export const assignmentTypeEnum = pgEnum("assignment_type_kind", [
   "text_assignment",
+  "vocal_hack",
 ]);
 
 export const assignmentSubmissionStatusEnum = pgEnum(
@@ -122,6 +123,14 @@ export const assignmentSubmissionSentences = pgTable(
     chineseText: text("chinese_text").notNull(),
     generatedPinyin: text("generated_pinyin").notNull().default(""),
     generatedEnglish: text("generated_english").notNull().default(""),
+    // Vocal hack: the student's audio recording for this sentence (private
+    // blob URL; always streamed through the authenticated recordings proxy).
+    audioUrl: text("audio_url"),
+    // Vocal hack review: the reviewer's corrected/model sentence for this
+    // recording (free text, with generated-then-editable pinyin + English).
+    correctedChinese: text("corrected_chinese"),
+    correctedPinyin: text("corrected_pinyin"),
+    correctedEnglish: text("corrected_english"),
     // Reviewer's per-sentence correctness verdict (null until reviewed).
     reviewVerdict: assignmentSentenceVerdictEnum("review_verdict"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

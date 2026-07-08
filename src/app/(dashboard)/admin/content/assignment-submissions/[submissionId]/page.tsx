@@ -12,15 +12,19 @@ import {
   courseLibraryModules,
   users,
 } from "@/db/schema";
-import { getAssignmentReviewer } from "@/lib/assignment-review";
+import { getAnyAssignmentReviewer } from "@/lib/assignment-review";
 import { ReviewClient, type ReviewSubmissionDto } from "./ReviewClient";
+import {
+  VocalHackReviewClient,
+  type VocalHackReviewDto,
+} from "./VocalHackReviewClient";
 
 interface PageProps {
   params: Promise<{ submissionId: string }>;
 }
 
 export default async function AssignmentReviewPage({ params }: PageProps) {
-  const reviewer = await getAssignmentReviewer();
+  const reviewer = await getAnyAssignmentReviewer();
   if (!reviewer) redirect("/dashboard");
 
   const { submissionId } = await params;
@@ -71,6 +75,63 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
     where: eq(assignmentSubmissionSentences.submissionId, submissionId),
     orderBy: [asc(assignmentSubmissionSentences.sortOrder)],
   });
+
+  // Vocal Hack reviews use their own client (audio + corrected-sentence boxes).
+  if (row.submission.assignmentType === "vocal_hack") {
+    const vhContent = (row.lessonContent ?? {}) as Record<string, unknown>;
+    const configured = Array.isArray(vhContent.sentences)
+      ? (vhContent.sentences as Array<Record<string, unknown>>)
+      : [];
+    const videoByPrompt = new Map(
+      configured.map((s) => [
+        String(s.id ?? ""),
+        typeof s.videoUrl === "string" && s.videoUrl.trim().length > 0,
+      ]),
+    );
+
+    const vocalDto: VocalHackReviewDto = {
+      id: row.submission.id,
+      lessonId: row.submission.lessonId,
+      status: row.submission.status,
+      submittedAt: row.submission.submittedAt?.toISOString() ?? null,
+      reviewedAt: row.submission.reviewedAt?.toISOString() ?? null,
+      recordingUrl: row.submission.recordingUrl,
+      extraComment: row.submission.extraComment,
+      studentName: row.studentName,
+      studentEmail: row.studentEmail,
+      lessonTitle: row.lessonTitle,
+      moduleTitle: row.moduleTitle,
+      courseTitle: row.courseTitle,
+      assignmentDescription:
+        typeof vhContent.description === "string" ? vhContent.description : "",
+      sentences: sentences.map((sentence) => ({
+        id: sentence.id,
+        promptLabel: sentence.promptLabel,
+        chineseText: sentence.chineseText,
+        generatedPinyin: sentence.generatedPinyin,
+        generatedEnglish: sentence.generatedEnglish,
+        hasVideo: videoByPrompt.get(sentence.promptId) ?? false,
+        hasRecording: Boolean(sentence.audioUrl),
+        correctedChinese: sentence.correctedChinese,
+        correctedPinyin: sentence.correctedPinyin,
+        correctedEnglish: sentence.correctedEnglish,
+      })),
+    };
+
+    return (
+      <div className="mx-auto max-w-5xl space-y-6 p-6">
+        <Link
+          href="/admin/content/assignment-submissions"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Back to Submissions
+        </Link>
+        <VocalHackReviewClient submission={vocalDto} />
+      </div>
+    );
+  }
+
   const corrections = sentences.length
     ? await db.query.assignmentCorrections.findMany({
         where: inArray(

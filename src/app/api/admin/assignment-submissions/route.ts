@@ -9,10 +9,10 @@ import {
   courseLibraryModules,
   users,
 } from "@/db/schema";
-import { getAssignmentReviewer } from "@/lib/assignment-review";
+import { getAnyAssignmentReviewer } from "@/lib/assignment-review";
 
 const STATUSES = ["submitted", "assigned", "in_review", "reviewed"] as const;
-const TYPES = ["text_assignment"] as const;
+const TYPES = ["text_assignment", "vocal_hack"] as const;
 
 /**
  * GET /api/admin/assignment-submissions
@@ -20,7 +20,7 @@ const TYPES = ["text_assignment"] as const;
  * Query params: tab=all|assigned, status, type, reviewerId, courseId
  */
 export async function GET(request: NextRequest) {
-  const reviewerUser = await getAssignmentReviewer();
+  const reviewerUser = await getAnyAssignmentReviewer();
   if (!reviewerUser) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

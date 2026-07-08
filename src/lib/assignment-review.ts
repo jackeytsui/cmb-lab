@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { roleFeatures, roles, userRoles, users } from "@/db/schema";
 import { getRealUser } from "@/lib/auth";
@@ -18,6 +18,7 @@ import { resolvePermissions } from "@/lib/permissions";
 
 export const ASSIGNMENT_REVIEW_FEATURE_KEYS = {
   text_assignment: "assignment_review_text",
+  vocal_hack: "assignment_review_vocal",
 } as const;
 
 export type ReviewableAssignmentType =
@@ -55,6 +56,22 @@ export async function getAssignmentReviewer(
   const user = await getRealUser();
   if (!user) return null;
   const allowed = await userCanReviewAssignments(user, assignmentType);
+  return allowed ? user : null;
+}
+
+/**
+ * Resolve the real authenticated user if they can review ANY assignment type
+ * (admin, Challenge Reviewer, Vocal Hack Reviewer, ...). Use for the shared
+ * submissions dashboard; per-type authorization stays in the review routes.
+ */
+export async function getAnyAssignmentReviewer() {
+  const user = await getRealUser();
+  if (!user) return null;
+  if (user.role === "admin") return user;
+  const permissions = await resolvePermissions(user.id);
+  const allowed = ALL_ASSIGNMENT_REVIEW_FEATURE_KEYS.some((key) =>
+    permissions.canUseFeature(key),
+  );
   return allowed ? user : null;
 }
 
@@ -136,7 +153,7 @@ export async function listEligibleReviewers(): Promise<EligibleReviewer[]> {
       .innerJoin(users, eq(userRoles.userId, users.id))
       .where(
         and(
-          eq(roleFeatures.featureKey, ASSIGNMENT_REVIEW_FEATURE_KEYS.text_assignment),
+          inArray(roleFeatures.featureKey, ALL_ASSIGNMENT_REVIEW_FEATURE_KEYS),
           isNull(roles.deletedAt),
           isNull(users.deletedAt),
           or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, now)),

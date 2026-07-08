@@ -12,6 +12,11 @@ import {
   ListeningPracticeViewer,
   type ListeningSentenceDto,
 } from "./ListeningPracticeViewer";
+import {
+  VocalHackViewer,
+  type VocalHackSentenceDto,
+  type VocalHackSubmissionDto,
+} from "./VocalHackViewer";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
 import { db } from "@/db";
 import {
@@ -213,6 +218,68 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             generatedPinyin: s.generatedPinyin,
             generatedEnglish: s.generatedEnglish,
           })),
+        };
+      }
+    }
+  }
+
+  // Vocal Hack: sentence config + the student's existing submission.
+  let vocalHackSentences: VocalHackSentenceDto[] = [];
+  let vocalHackSubmission: VocalHackSubmissionDto | null = null;
+  if (row.lessonType === "vocal_hack") {
+    const rawSentences = Array.isArray(content.sentences)
+      ? (content.sentences as Array<Record<string, unknown>>)
+      : [];
+    vocalHackSentences = rawSentences
+      .map((s, idx) => ({
+        id: String(s.id ?? `sentence-${idx}`),
+        order: typeof s.order === "number" ? s.order : idx,
+        chinese: typeof s.chinese === "string" ? s.chinese : "",
+        pinyin: typeof s.pinyin === "string" ? s.pinyin : "",
+        english: typeof s.english === "string" ? s.english : "",
+        hasVideo:
+          typeof s.videoUrl === "string" && s.videoUrl.trim().length > 0,
+      }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ id, chinese, pinyin, english, hasVideo }) => ({
+        id,
+        chinese,
+        pinyin,
+        english,
+        hasVideo,
+      }));
+
+    if (currentUser) {
+      const submission = await db.query.assignmentSubmissions.findFirst({
+        where: and(
+          eq(assignmentSubmissions.lessonId, lessonId),
+          eq(assignmentSubmissions.studentId, currentUser.id),
+        ),
+      });
+      if (submission) {
+        const sentenceRows =
+          await db.query.assignmentSubmissionSentences.findMany({
+            where: eq(
+              assignmentSubmissionSentences.submissionId,
+              submission.id,
+            ),
+            orderBy: [asc(assignmentSubmissionSentences.sortOrder)],
+          });
+        const recordings: Record<string, string> = {};
+        const playbackUrls: Record<string, string> = {};
+        for (const s of sentenceRows) {
+          if (s.audioUrl) {
+            recordings[s.promptId] = s.audioUrl;
+            playbackUrls[s.promptId] =
+              `/api/course-library/assignment-recordings/${s.id}`;
+          }
+        }
+        vocalHackSubmission = {
+          id: submission.id,
+          status: submission.status,
+          submittedAt: submission.submittedAt?.toISOString() ?? null,
+          recordings,
+          playbackUrls,
         };
       }
     }
@@ -472,6 +539,33 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
                 <p className="text-sm text-muted-foreground">
                   This assignment has no sentence prompts yet.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {row.lessonType === "vocal_hack" && (
+          <div className="space-y-5">
+            {typeof content.description === "string" &&
+              content.description && (
+                <div
+                  className="prose prose-invert max-w-none text-foreground prose-p:text-foreground prose-li:text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
+                  dangerouslySetInnerHTML={{
+                    __html: content.description as string,
+                  }}
+                />
+              )}
+            {vocalHackSentences.length > 0 ? (
+              <VocalHackViewer
+                lessonId={lessonId}
+                sentences={vocalHackSentences}
+                initialSubmission={vocalHackSubmission}
+              />
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  This Vocal Hack has no sentences yet.
                 </p>
               </div>
             )}

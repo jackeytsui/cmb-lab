@@ -1,17 +1,24 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Mic, Square, Play, Pause, RotateCcw, Loader2 } from "lucide-react";
+import { Mic, Square, Play, Pause, RotateCcw, Loader2, Upload } from "lucide-react";
 
 interface AudioRecorderProps {
   onUpload: (blobUrl: string) => void;
   existingUrl?: string | null;
   maxSeconds?: number; // default 60
+  /** Show an "upload a file instead" fallback next to the mic recorder. */
+  allowFileUpload?: boolean;
 }
 
 type RecorderState = "idle" | "recording" | "recorded" | "uploading";
 
-export function AudioRecorder({ onUpload, existingUrl, maxSeconds = 60 }: AudioRecorderProps) {
+export function AudioRecorder({
+  onUpload,
+  existingUrl,
+  maxSeconds = 60,
+  allowFileUpload = false,
+}: AudioRecorderProps) {
   const [state, setState] = useState<RecorderState>(existingUrl ? "recorded" : "idle");
   const [audioUrl, setAudioUrl] = useState<string | null>(existingUrl ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -109,6 +116,45 @@ export function AudioRecorder({ onUpload, existingUrl, maxSeconds = 60 }: AudioR
     setError(null);
   }, [stopTimer]);
 
+  const handleFileUpload = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      setError(null);
+      if (file.size > 50_000_000) {
+        setError("File exceeds 50 MB.");
+        return;
+      }
+      const localUrl = URL.createObjectURL(file);
+      setAudioUrl(localUrl);
+      setState("uploading");
+      const form = new FormData();
+      form.append("file", file, file.name || "recording.m4a");
+      form.append("prefix", "assignment-recordings/");
+      try {
+        const res = await fetch("/api/assignments/upload-audio", {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(
+            (data as { error?: string }).error || "Upload failed",
+          );
+        }
+        const { url } = await res.json();
+        onUpload(url);
+        setState("recorded");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
+        setAudioUrl(null);
+        setState("idle");
+      }
+    },
+    [onUpload],
+  );
+
   const togglePlay = useCallback(() => {
     if (!audioRef.current || !audioUrl) return;
     if (isPlaying) {
@@ -127,7 +173,7 @@ export function AudioRecorder({ onUpload, existingUrl, maxSeconds = 60 }: AudioR
       {error && <p className="text-xs text-red-400">{error}</p>}
 
       {audioUrl && (
-        // eslint-disable-next-line jsx-a11y/media-has-caption
+         
         <audio
           ref={audioRef}
           src={audioUrl}
@@ -138,14 +184,28 @@ export function AudioRecorder({ onUpload, existingUrl, maxSeconds = 60 }: AudioR
 
       <div className="flex items-center gap-3">
         {state === "idle" && (
-          <button
-            type="button"
-            onClick={startRecording}
-            className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
-          >
-            <Mic className="w-4 h-4" />
-            Record
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={startRecording}
+              className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+            >
+              <Mic className="w-4 h-4" />
+              Record
+            </button>
+            {allowFileUpload && (
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700 transition-colors">
+                <input
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+                <Upload className="w-4 h-4" />
+                Upload a file
+              </label>
+            )}
+          </>
         )}
 
         {state === "recording" && (

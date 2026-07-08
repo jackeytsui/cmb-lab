@@ -11,6 +11,7 @@ import {
   ExternalLink,
   ClipboardList,
   Headphones,
+  Mic,
 } from "lucide-react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { db } from "@/db";
@@ -38,6 +39,7 @@ const TYPE_ICON = {
   form: ExternalLink,
   text_assignment: ClipboardList,
   listening_practice: Headphones,
+  vocal_hack: Mic,
 };
 const TYPE_COLOR = {
   video: "text-red-500",
@@ -48,10 +50,12 @@ const TYPE_COLOR = {
   form: "text-pink-500",
   text_assignment: "text-teal-500",
   listening_practice: "text-indigo-500",
+  vocal_hack: "text-rose-500",
 };
 const TYPE_LABEL: Partial<Record<keyof typeof TYPE_ICON, string>> = {
   text_assignment: "Task",
   listening_practice: "Listening",
+  vocal_hack: "Vocal Hack",
 };
 
 const MAP_STYLE_CHIP: Record<string, { label: string; className: string } | null> = {
