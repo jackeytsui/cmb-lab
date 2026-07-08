@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { assignmentSubmissions } from "@/db/schema";
 import {
-  getAssignmentReviewer,
+  getAnyAssignmentReviewer,
   listEligibleReviewers,
 } from "@/lib/assignment-review";
 
@@ -22,7 +22,7 @@ const assignSchema = z.object({
  * Assign or reassign a submission to an eligible reviewer.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const reviewerUser = await getAssignmentReviewer();
+  const reviewerUser = await getAnyAssignmentReviewer();
   if (!reviewerUser) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

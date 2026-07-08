@@ -14,6 +14,7 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { parseRecordingEmbed } from "@/lib/recording-embed";
 import { CorrectedSentence } from "@/components/assignments/CorrectedSentence";
+import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 
 export const dynamic = "force-dynamic";
 
@@ -171,16 +172,18 @@ export default async function AssignmentFeedbackDetailPage({
               )}
             </p>
           </div>
-          <div className="rounded-lg border border-border bg-card px-5 py-3 text-center">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Score
+          {row.submission.assignmentType !== "vocal_hack" && (
+            <div className="rounded-lg border border-border bg-card px-5 py-3 text-center">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Score
+              </div>
+              <div className="text-2xl font-bold text-foreground">
+                {typeof row.submission.finalScore === "number"
+                  ? `${row.submission.finalScore}%`
+                  : "—"}
+              </div>
             </div>
-            <div className="text-2xl font-bold text-foreground">
-              {typeof row.submission.finalScore === "number"
-                ? `${row.submission.finalScore}%`
-                : "—"}
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -197,37 +200,83 @@ export default async function AssignmentFeedbackDetailPage({
       )}
 
       <div className="space-y-4">
-        {sentences.map((sentence, idx) => (
-          <div
-            key={sentence.id}
-            className="rounded-lg border border-border bg-card p-5 space-y-2"
-          >
-            <p className="text-sm font-semibold text-foreground">
-              {idx + 1}. {sentence.promptLabel || `Sentence ${idx + 1}`}
-            </p>
-            {sentence.promptDescription && (
-              <p className="text-sm text-muted-foreground">
-                {sentence.promptDescription}
+        {sentences.map((sentence, idx) =>
+          row.submission.assignmentType === "vocal_hack" ? (
+            <div
+              key={sentence.id}
+              className="rounded-lg border border-border bg-card p-5 space-y-3"
+            >
+              <p className="text-sm font-semibold text-foreground">
+                {idx + 1}. {sentence.promptLabel || `Sentence ${idx + 1}`}
               </p>
-            )}
-            <CorrectedSentence
-              text={sentence.chineseText}
-              corrections={corrections
-                .filter((c) => c.sentenceId === sentence.id)
-                .map((c) => ({
-                  id: c.id,
-                  startOffset: c.startOffset,
-                  endOffset: c.endOffset,
-                  suggestedChinese: c.suggestedChinese,
-                  suggestedPinyin: c.suggestedPinyin,
-                  suggestedEnglish: c.suggestedEnglish,
-                }))}
-            />
-            <p className="text-lg text-muted-foreground italic">
-              {sentence.generatedEnglish}
-            </p>
-          </div>
-        ))}
+              <ModelAnnotatedSentence
+                chinese={sentence.chineseText}
+                pinyin={sentence.generatedPinyin}
+                english={sentence.generatedEnglish}
+              />
+              {sentence.audioUrl && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    Your recording
+                  </p>
+                  <audio
+                    controls
+                    preload="none"
+                    controlsList="nodownload"
+                    src={`/api/course-library/assignment-recordings/${sentence.id}`}
+                    className="w-full"
+                  />
+                </div>
+              )}
+              {sentence.correctedChinese ? (
+                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
+                  <p className="mb-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    Coach&apos;s correction
+                  </p>
+                  <ModelAnnotatedSentence
+                    chinese={sentence.correctedChinese}
+                    pinyin={sentence.correctedPinyin ?? ""}
+                    english={sentence.correctedEnglish}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                  ✓ Well read — no correction needed.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div
+              key={sentence.id}
+              className="rounded-lg border border-border bg-card p-5 space-y-2"
+            >
+              <p className="text-sm font-semibold text-foreground">
+                {idx + 1}. {sentence.promptLabel || `Sentence ${idx + 1}`}
+              </p>
+              {sentence.promptDescription && (
+                <p className="text-sm text-muted-foreground">
+                  {sentence.promptDescription}
+                </p>
+              )}
+              <CorrectedSentence
+                text={sentence.chineseText}
+                corrections={corrections
+                  .filter((c) => c.sentenceId === sentence.id)
+                  .map((c) => ({
+                    id: c.id,
+                    startOffset: c.startOffset,
+                    endOffset: c.endOffset,
+                    suggestedChinese: c.suggestedChinese,
+                    suggestedPinyin: c.suggestedPinyin,
+                    suggestedEnglish: c.suggestedEnglish,
+                  }))}
+              />
+              <p className="text-lg text-muted-foreground italic">
+                {sentence.generatedEnglish}
+              </p>
+            </div>
+          ),
+        )}
       </div>
 
       {row.submission.extraComment && (

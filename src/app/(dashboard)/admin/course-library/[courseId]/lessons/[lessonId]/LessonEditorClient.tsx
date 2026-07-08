@@ -19,6 +19,7 @@ import {
   ExternalLink,
   ClipboardList,
   Headphones,
+  Mic,
   Plus,
   ArrowUp,
   ArrowDown,
@@ -43,7 +44,8 @@ type LessonType =
   | "download"
   | "form"
   | "text_assignment"
-  | "listening_practice";
+  | "listening_practice"
+  | "vocal_hack";
 
 interface LessonData {
   id: string;
@@ -68,6 +70,11 @@ const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: 
     label: "Listening Practice",
     Icon: Headphones,
     color: "text-indigo-500",
+  },
+  vocal_hack: {
+    label: "Vocal Hack",
+    Icon: Mic,
+    color: "text-rose-500",
   },
 };
 
@@ -305,6 +312,13 @@ export function LessonEditorClient({
       )}
       {lesson.lessonType === "listening_practice" && (
         <ListeningPracticeLessonForm
+          lessonId={lesson.id}
+          content={lesson.content}
+          onUpdate={updateContent}
+        />
+      )}
+      {lesson.lessonType === "vocal_hack" && (
+        <VocalHackLessonForm
           lessonId={lesson.id}
           content={lesson.content}
           onUpdate={updateContent}
@@ -2302,6 +2316,479 @@ function ListeningPracticeLessonForm({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Vocal Hack Lesson Form
+// ---------------------------------------------------------------------------
+
+interface VocalHackSentenceDraft {
+  id: string;
+  videoUrl: string | null;
+  chinese: string;
+  pinyin: string;
+  english: string;
+}
+
+function normalizeVocalHackSentences(raw: unknown): VocalHackSentenceDraft[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((s, idx) => {
+      const sentence = (s ?? {}) as Record<string, unknown>;
+      return {
+        id:
+          typeof sentence.id === "string" && sentence.id
+            ? sentence.id
+            : crypto.randomUUID(),
+        order: typeof sentence.order === "number" ? sentence.order : idx,
+        videoUrl:
+          typeof sentence.videoUrl === "string" ? sentence.videoUrl : null,
+        chinese: typeof sentence.chinese === "string" ? sentence.chinese : "",
+        pinyin: typeof sentence.pinyin === "string" ? sentence.pinyin : "",
+        english: typeof sentence.english === "string" ? sentence.english : "",
+      };
+    })
+    .sort((a, b) => a.order - b.order)
+    .map(({ id, videoUrl, chinese, pinyin, english }) => ({
+      id,
+      videoUrl,
+      chinese,
+      pinyin,
+      english,
+    }));
+}
+
+function VocalHackLessonForm({
+  lessonId,
+  content,
+  onUpdate,
+}: {
+  lessonId: string;
+  content: Record<string, unknown>;
+  onUpdate: (next: Record<string, unknown>) => void;
+}) {
+  const savedDescription = (content.description as string) ?? "";
+  const savedSentences = normalizeVocalHackSentences(content.sentences);
+
+  const [description, setDescription] = useState(savedDescription);
+  const [sentences, setSentences] = useState<VocalHackSentenceDraft[]>(
+    savedSentences.length > 0
+      ? savedSentences
+      : [
+          {
+            id: crypto.randomUUID(),
+            videoUrl: null,
+            chinese: "",
+            pinyin: "",
+            english: "",
+          },
+        ],
+  );
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [translatingId, setTranslatingId] = useState<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadPct, setUploadPct] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const dirty =
+    description !== savedDescription ||
+    JSON.stringify(sentences) !== JSON.stringify(savedSentences);
+
+  const updateSentence = (
+    id: string,
+    patch: Partial<VocalHackSentenceDraft>,
+  ) => {
+    setSentences((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    );
+  };
+
+  const addSentence = () => {
+    setSentences((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        videoUrl: null,
+        chinese: "",
+        pinyin: "",
+        english: "",
+      },
+    ]);
+  };
+
+  const removeSentence = (id: string) => {
+    setSentences((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const moveSentence = (id: string, direction: -1 | 1) => {
+    setSentences((prev) => {
+      const idx = prev.findIndex((s) => s.id === id);
+      const target = idx + direction;
+      if (idx < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  };
+
+  const generatePinyin = async (id: string, chinese: string) => {
+    if (!chinese.trim()) return;
+    setGeneratingId(id);
+    try {
+      const pinyin = await generateModelPinyin(chinese);
+      updateSentence(id, { pinyin });
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const generateEnglish = async (id: string, chinese: string) => {
+    if (!chinese.trim()) return;
+    setTranslatingId(id);
+    try {
+      const translations = await fetchProperTranslations([chinese], "zh-CN");
+      const english = translations?.join(" ").trim();
+      if (english) updateSentence(id, { english });
+    } finally {
+      setTranslatingId(null);
+    }
+  };
+
+  const handleChineseBlur = (sentence: VocalHackSentenceDraft) => {
+    if (!sentence.chinese.trim()) return;
+    if (!sentence.pinyin.trim()) generatePinyin(sentence.id, sentence.chinese);
+    if (!sentence.english.trim())
+      generateEnglish(sentence.id, sentence.chinese);
+  };
+
+  const handleUploadVideo = async (
+    id: string,
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingId(id);
+    setUploadPct(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const result = await uploadWithProgress(
+        "video",
+        file,
+        controller.signal,
+        setUploadPct,
+      );
+      updateSentence(id, { videoUrl: result.url });
+    } catch {
+      // ignore — admin can retry
+    } finally {
+      setUploadingId(null);
+      setUploadPct(0);
+      abortRef.current = null;
+      e.target.value = "";
+    }
+  };
+
+  const handleSave = async () => {
+    const cleaned = sentences.filter((s) => s.chinese.trim());
+    if (cleaned.length === 0) {
+      setError("Add at least one sentence with Chinese text.");
+      return;
+    }
+    const missingVideo = cleaned.find((s) => !s.videoUrl);
+    if (missingVideo) {
+      setError("Every sentence needs a coach video.");
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      const nextContent = {
+        ...content,
+        description,
+        sentences: cleaned.map((s, idx) => ({
+          id: s.id,
+          order: idx,
+          videoUrl: s.videoUrl,
+          chinese: s.chinese.trim(),
+          pinyin: s.pinyin.trim(),
+          english: s.english.trim(),
+        })),
+      };
+      const ok = await saveLessonContent(lessonId, nextContent);
+      if (ok) {
+        onUpdate(nextContent);
+        setSavedAt(new Date());
+      } else {
+        setError("Failed to save Vocal Hack.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">Instructions</h3>
+        <p className="text-xs text-muted-foreground">
+          Shown above the sentences. Tell students to watch each video, then
+          record themselves reading the sentence.
+        </p>
+        <RichTextEditor
+          value={description}
+          onChange={setDescription}
+          placeholder="e.g. Watch the coach read each sentence, then record yourself imitating it as closely as you can."
+        />
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Sentences ({sentences.length})
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Upload the coach video and type the Chinese — pinyin and English
+              auto-generate (editable). Students record themselves reading each
+              sentence and submit for review.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addSentence}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add sentence
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {sentences.map((sentence, idx) => {
+            const hanCount = countHanCharacters(sentence.chinese);
+            const syllableCount = sentence.pinyin.trim()
+              ? sentence.pinyin.trim().split(/\s+/).length
+              : 0;
+            const mismatch =
+              sentence.chinese.trim() &&
+              sentence.pinyin.trim() &&
+              hanCount !== syllableCount;
+
+            return (
+              <div
+                key={sentence.id}
+                className="rounded-md border border-border bg-background p-3 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Sentence {idx + 1}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveSentence(sentence.id, -1)}
+                      disabled={idx === 0}
+                      className="p-1 text-muted-foreground/60 hover:text-foreground disabled:opacity-30"
+                      title="Move up"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveSentence(sentence.id, 1)}
+                      disabled={idx === sentences.length - 1}
+                      className="p-1 text-muted-foreground/60 hover:text-foreground disabled:opacity-30"
+                      title="Move down"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeSentence(sentence.id)}
+                      disabled={sentences.length <= 1}
+                      className="p-1 text-muted-foreground/60 hover:text-red-500 disabled:opacity-30"
+                      title="Remove sentence"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    Coach video
+                  </label>
+                  {sentence.videoUrl ? (
+                    <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+                      <Video className="w-4 h-4 text-red-500" />
+                      <span className="flex-1 truncate text-xs text-muted-foreground">
+                        Video uploaded
+                      </span>
+                      <label className="cursor-pointer text-xs text-primary hover:underline">
+                        <input
+                          type="file"
+                          accept="video/mp4,video/quicktime,video/webm"
+                          className="hidden"
+                          onChange={(e) => handleUploadVideo(sentence.id, e)}
+                          disabled={uploadingId === sentence.id}
+                        />
+                        {uploadingId === sentence.id
+                          ? `Uploading… ${uploadPct}%`
+                          : "Replace"}
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="block cursor-pointer">
+                      <input
+                        type="file"
+                        accept="video/mp4,video/quicktime,video/webm"
+                        className="hidden"
+                        onChange={(e) => handleUploadVideo(sentence.id, e)}
+                        disabled={uploadingId === sentence.id}
+                      />
+                      <div className="rounded-md border border-dashed border-border bg-muted/30 p-4 text-center hover:bg-muted/50 transition-colors">
+                        <Upload className="mx-auto mb-1 h-5 w-5 text-muted-foreground/40" />
+                        <p className="text-xs text-muted-foreground">
+                          {uploadingId === sentence.id
+                            ? `Uploading… ${uploadPct}%`
+                            : "Upload coach video (MP4, MOV, WebM)"}
+                        </p>
+                      </div>
+                    </label>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    Chinese sentence
+                  </label>
+                  <input
+                    type="text"
+                    value={sentence.chinese}
+                    onChange={(e) =>
+                      updateSentence(sentence.id, { chinese: e.target.value })
+                    }
+                    onBlur={() => handleChineseBlur(sentence)}
+                    placeholder="例如：这是例句"
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-base"
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      Pinyin
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        generatePinyin(sentence.id, sentence.chinese)
+                      }
+                      disabled={
+                        !sentence.chinese.trim() || generatingId === sentence.id
+                      }
+                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline disabled:opacity-40"
+                    >
+                      {generatingId === sentence.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      Regenerate
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={sentence.pinyin}
+                    onChange={(e) =>
+                      updateSentence(sentence.id, { pinyin: e.target.value })
+                    }
+                    placeholder="zhè shì lì jù"
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+                  />
+                  {mismatch ? (
+                    <p className="mt-1 text-[10px] text-amber-500">
+                      {syllableCount} syllables for {hanCount} characters — the
+                      display aligns one syllable per character, so double-check
+                      the spacing.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      English translation
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        generateEnglish(sentence.id, sentence.chinese)
+                      }
+                      disabled={
+                        !sentence.chinese.trim() ||
+                        translatingId === sentence.id
+                      }
+                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline disabled:opacity-40"
+                    >
+                      {translatingId === sentence.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      Regenerate
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={sentence.english}
+                    onChange={(e) =>
+                      updateSentence(sentence.id, { english: e.target.value })
+                    }
+                    placeholder="This is an example sentence"
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-500">
+          {error}
+        </div>
+      )}
+
+      <div className="flex items-center justify-end gap-3">
+        {savedAt && !dirty && (
+          <span className="text-[10px] text-emerald-500">
+            Saved at {savedAt.toLocaleTimeString()}
+          </span>
+        )}
+        {dirty && (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {saving ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Check className="w-3 h-3" />
+            )}
+            Save Vocal Hack
+          </button>
+        )}
+      </div>
     </div>
   );
 }

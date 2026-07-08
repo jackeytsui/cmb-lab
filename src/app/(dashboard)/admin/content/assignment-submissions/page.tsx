@@ -2,11 +2,11 @@ import { redirect } from "next/navigation";
 import { asc, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { courseLibraryCourses } from "@/db/schema";
-import { getAssignmentReviewer } from "@/lib/assignment-review";
+import { getAnyAssignmentReviewer } from "@/lib/assignment-review";
 import { AssignmentSubmissionsClient } from "./AssignmentSubmissionsClient";
 
 export default async function AssignmentSubmissionsPage() {
-  const reviewer = await getAssignmentReviewer();
+  const reviewer = await getAnyAssignmentReviewer();
   if (!reviewer) {
     redirect("/dashboard");
   }

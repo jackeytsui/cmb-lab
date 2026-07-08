@@ -33,6 +33,7 @@ export const courseLibraryLessonTypeEnum = pgEnum(
     "form",
     "text_assignment",
     "listening_practice",
+    "vocal_hack",
   ],
 );
 
@@ -385,6 +386,28 @@ export interface CourseLibraryListeningPracticeContent {
   sentences: CourseLibraryListeningPracticeSentence[];
 }
 
+/**
+ * One sentence in a Vocal Hack lesson: students watch the coach video, then
+ * record themselves reading the same sentence. Pinyin/English are
+ * auto-generated from the Chinese when the admin types it, but stay editable.
+ */
+export interface CourseLibraryVocalHackSentence {
+  id: string;
+  order: number;
+  /** Coach demonstration video (private blob URL; streamed via proxy). */
+  videoUrl?: string | null;
+  chinese: string;
+  /** Display pinyin (space-separated, one syllable per character). */
+  pinyin: string;
+  english: string;
+}
+
+export interface CourseLibraryVocalHackContent {
+  /** Instructions shown above the sentences — rich text HTML. */
+  description: string;
+  sentences: CourseLibraryVocalHackSentence[];
+}
+
 export type CourseLibraryLessonContent =
   | CourseLibraryVideoContent
   | CourseLibraryTextContent
@@ -393,4 +416,5 @@ export type CourseLibraryLessonContent =
   | CourseLibraryAudioContent
   | CourseLibraryFormContent
   | CourseLibraryTextAssignmentContent
-  | CourseLibraryListeningPracticeContent;
+  | CourseLibraryListeningPracticeContent
+  | CourseLibraryVocalHackContent;

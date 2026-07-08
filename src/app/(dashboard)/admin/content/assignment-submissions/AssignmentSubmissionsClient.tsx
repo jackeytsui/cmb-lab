@@ -56,6 +56,7 @@ const STATUS_META: Record<
 
 const TYPE_LABELS: Record<string, string> = {
   text_assignment: "Text Assignment",
+  vocal_hack: "Vocal Hack",
 };
 
 function formatDate(value: string | null): string {
@@ -177,6 +178,7 @@ export function AssignmentSubmissionsClient({
         >
           <option value="">All Types</option>
           <option value="text_assignment">Text Assignment</option>
+          <option value="vocal_hack">Vocal Hack</option>
         </select>
         <select
           value={statusFilter}

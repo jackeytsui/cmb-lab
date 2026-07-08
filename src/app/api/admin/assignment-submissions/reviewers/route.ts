@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  getAssignmentReviewer,
+  getAnyAssignmentReviewer,
   listEligibleReviewers,
 } from "@/lib/assignment-review";
 
@@ -10,7 +10,7 @@ import {
  * (admins + Challenge Reviewer capability holders).
  */
 export async function GET() {
-  const reviewerUser = await getAssignmentReviewer();
+  const reviewerUser = await getAnyAssignmentReviewer();
   if (!reviewerUser) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
