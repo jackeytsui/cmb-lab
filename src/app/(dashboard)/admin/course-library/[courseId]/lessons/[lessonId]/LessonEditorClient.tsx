@@ -2645,21 +2645,20 @@ function VocalHackLessonForm({
                   </div>
                 </div>
 
-                <div>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                <div className="sm:shrink-0">
                   <label className="block text-xs font-medium text-muted-foreground mb-1">
                     Coach video
                   </label>
                   {sentence.videoUrl ? (
                     <div className="space-y-2">
-                      <div className="overflow-hidden rounded-md bg-black">
-                        <video
-                          key={sentence.videoUrl}
-                          src={`/api/admin/course-library/blob-preview?url=${encodeURIComponent(sentence.videoUrl)}`}
-                          controls
-                          preload="metadata"
-                          className="mx-auto max-h-56 w-full"
-                        />
-                      </div>
+                      <video
+                        key={sentence.videoUrl}
+                        src={`/api/admin/course-library/blob-preview?url=${encodeURIComponent(sentence.videoUrl)}`}
+                        controls
+                        preload="metadata"
+                        className="h-auto max-h-72 w-auto max-w-[240px] rounded-md bg-black"
+                      />
                       <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
                         <Video className="w-4 h-4 text-red-500" />
                         <span className="flex-1 truncate text-xs text-muted-foreground">
@@ -2700,6 +2699,7 @@ function VocalHackLessonForm({
                   )}
                 </div>
 
+                <div className="min-w-0 flex-1 space-y-2">
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1">
                     Chinese sentence
@@ -2790,6 +2790,8 @@ function VocalHackLessonForm({
                     placeholder="This is an example sentence"
                     className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
                   />
+                </div>
+                </div>
                 </div>
               </div>
             );

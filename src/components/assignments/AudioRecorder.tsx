@@ -8,9 +8,13 @@ import { upload } from "@vercel/blob/client";
 // the ~4.5MB serverless request-body cap, so long recordings (e.g. a 5-minute
 // diary read) and large uploaded files don't 413.
 async function uploadRecording(blob: Blob, filename: string): Promise<string> {
+  // MediaRecorder blobs are typed "audio/webm;codecs=opus"; the upload
+  // allow-list matches base MIME types, so strip the codecs parameter or the
+  // content type is rejected ("Upload failed").
+  const contentType = (blob.type || "audio/webm").split(";")[0].trim();
   const result = await upload(`assignment-recordings/${filename}`, blob, {
     access: "private",
-    contentType: blob.type || "audio/webm",
+    contentType,
     handleUploadUrl: "/api/assignments/recording-upload-token",
     multipart: true,
   });

@@ -3,15 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Lock, Pencil, Send, Sparkles } from "lucide-react";
+import { CheckCircle2, Loader2, Lock, Pencil, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AudioRecorder } from "@/components/assignments/AudioRecorder";
 import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
-import {
-  ASSIGNMENT_CHAR_SIZE,
-  ASSIGNMENT_ENGLISH_SIZE,
-} from "@/lib/mandarin-annotate";
 import { generateMandarinAnnotation } from "@/lib/mandarin-generation";
+
+// Diary entries run long, so the post-generation text is a touch smaller than
+// the default assignment sizes (26 / 18) while keeping the same
+// pinyin : chinese : english ratio (pinyin is derived at ~0.69× the char size,
+// and english tracks the char size at the same 0.69× proportion).
+const DIARY_CHAR_SIZE = 22;
+const DIARY_ENGLISH_SIZE = 15;
 
 // ---------------------------------------------------------------------------
 // Diary lesson: student writes a paragraph (left) and records themselves
@@ -216,7 +219,7 @@ export function DiaryViewer({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.8fr_1fr]">
         {/* Left: diary entry */}
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-foreground">
@@ -230,13 +233,13 @@ export function DiaryViewer({
                     <div key={i} className="space-y-0.5">
                       <AnnotatedSentence
                         text={line.chineseText}
-                        fontSize={ASSIGNMENT_CHAR_SIZE}
+                        fontSize={DIARY_CHAR_SIZE}
                         className="text-foreground"
                       />
                       {line.english && (
                         <p
                           className="text-muted-foreground italic"
-                          style={{ fontSize: `${ASSIGNMENT_ENGLISH_SIZE}px` }}
+                          style={{ fontSize: `${DIARY_ENGLISH_SIZE}px` }}
                         >
                           {line.english}
                         </p>
@@ -306,7 +309,7 @@ export function DiaryViewer({
           </h3>
           {locked ? (
             existingPlayback && (
-              /* eslint-disable-next-line jsx-a11y/media-has-caption */
+               
               <audio
                 controls
                 preload="none"

@@ -7,6 +7,7 @@ import { CheckCircle2, Loader2, Lock, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AudioRecorder } from "@/components/assignments/AudioRecorder";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
+import { SentenceVideo } from "@/components/assignments/SentenceVideo";
 
 // ---------------------------------------------------------------------------
 // Student-facing Vocal Hack: watch the coach video for each sentence, record
@@ -186,51 +187,50 @@ export function VocalHackViewer({
               )}
             </div>
 
-            {sentence.hasVideo && (
-              <div className="overflow-hidden rounded-lg bg-black">
-                <video
-                  src={`/api/course-library/vocal-hack-video/${lessonId}?sentence=${encodeURIComponent(sentence.id)}#t=0.1`}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  controlsList="nodownload noremoteplayback"
-                  disablePictureInPicture
-                  onContextMenu={(e) => e.preventDefault()}
-                  className="mx-auto max-h-72 w-full"
-                />
+            {/* Video left, sentence + recorder right (stacks on mobile). */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              {sentence.hasVideo && (
+                <div className="flex justify-center sm:block sm:shrink-0">
+                  <SentenceVideo
+                    src={`/api/course-library/vocal-hack-video/${lessonId}?sentence=${encodeURIComponent(sentence.id)}#t=0.1`}
+                  />
+                </div>
+              )}
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="rounded-md bg-background px-3 py-3">
+                  <ModelAnnotatedSentence
+                    chinese={sentence.chinese}
+                    pinyin={sentence.pinyin}
+                    english={sentence.english}
+                  />
+                </div>
+                {!locked ? (
+                  <AudioRecorder
+                    existingUrl={playbackUrls[sentence.id] ?? null}
+                    allowFileUpload
+                    maxSeconds={60}
+                    onUpload={(url) =>
+                      setRecordings((prev) => ({
+                        ...prev,
+                        [sentence.id]: url,
+                      }))
+                    }
+                  />
+                ) : (
+                  playbackUrls[sentence.id] && (
+                     
+                    <audio
+                      controls
+                      preload="none"
+                      controlsList="nodownload"
+                      onContextMenu={(e) => e.preventDefault()}
+                      src={playbackUrls[sentence.id]}
+                      className="w-full"
+                    />
+                  )
+                )}
               </div>
-            )}
-
-            <div className="rounded-md bg-background px-3 py-3">
-              <ModelAnnotatedSentence
-                chinese={sentence.chinese}
-                pinyin={sentence.pinyin}
-                english={sentence.english}
-              />
             </div>
-
-            {!locked ? (
-              <AudioRecorder
-                existingUrl={playbackUrls[sentence.id] ?? null}
-                allowFileUpload
-                maxSeconds={60}
-                onUpload={(url) =>
-                  setRecordings((prev) => ({ ...prev, [sentence.id]: url }))
-                }
-              />
-            ) : (
-              playbackUrls[sentence.id] && (
-                 
-                <audio
-                  controls
-                  preload="none"
-                  controlsList="nodownload"
-                  onContextMenu={(e) => e.preventDefault()}
-                  src={playbackUrls[sentence.id]}
-                  className="w-full"
-                />
-              )
-            )}
           </div>
         ))}
       </div>
