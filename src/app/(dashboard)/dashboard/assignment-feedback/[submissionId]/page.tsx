@@ -205,7 +205,6 @@ export default async function AssignmentFeedbackDetailPage({
             <h2 className="text-sm font-semibold text-foreground">
               Your recording
             </h2>
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <audio
               controls
               preload="none"
@@ -245,22 +244,43 @@ export default async function AssignmentFeedbackDetailPage({
                   />
                 </div>
               )}
-              {sentence.correctedChinese ? (
-                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
-                  <p className="mb-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                    Coach&apos;s correction
-                  </p>
-                  <ModelAnnotatedSentence
-                    chinese={sentence.correctedChinese}
-                    pinyin={sentence.correctedPinyin ?? ""}
-                    english={sentence.correctedEnglish}
-                  />
-                </div>
-              ) : (
-                <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                  ✓ Well read — no correction needed.
-                </p>
-              )}
+              {(() => {
+                const alternatives =
+                  sentence.correctedAlternatives ??
+                  (sentence.correctedChinese
+                    ? [
+                        {
+                          chinese: sentence.correctedChinese,
+                          pinyin: sentence.correctedPinyin ?? "",
+                          english: sentence.correctedEnglish ?? "",
+                        },
+                      ]
+                    : []);
+                if (alternatives.length === 0) {
+                  return (
+                    <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                      ✓ Well read — no correction needed.
+                    </p>
+                  );
+                }
+                return (
+                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 space-y-3">
+                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      {alternatives.length > 1
+                        ? "Coach's corrections (any of these work)"
+                        : "Coach's correction"}
+                    </p>
+                    {alternatives.map((alt, i) => (
+                      <ModelAnnotatedSentence
+                        key={i}
+                        chinese={alt.chinese}
+                        pinyin={alt.pinyin}
+                        english={alt.english}
+                      />
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <div

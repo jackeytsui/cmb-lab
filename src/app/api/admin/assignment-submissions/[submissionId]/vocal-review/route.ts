@@ -15,12 +15,16 @@ interface RouteParams {
   params: Promise<{ submissionId: string }>;
 }
 
+const correctionEntrySchema = z.object({
+  chinese: z.string().max(2000),
+  pinyin: z.string().max(4000).default(""),
+  english: z.string().max(4000).default(""),
+});
+
 const sentenceReviewSchema = z.object({
   sentenceId: z.string().uuid(),
-  // Empty corrected fields mean "no correction — well read".
-  correctedChinese: z.string().max(2000).default(""),
-  correctedPinyin: z.string().max(4000).default(""),
-  correctedEnglish: z.string().max(4000).default(""),
+  // Zero or more alternative correct phrasings. Empty array = "well read".
+  corrections: z.array(correctionEntrySchema).max(20).default([]),
 });
 
 const reviewSchema = z.object({
@@ -114,13 +118,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const wasReviewed = submission.status === "reviewed";
 
   for (const review of parsed.data.sentences) {
-    const hasCorrection = review.correctedChinese.trim().length > 0;
+    // Keep only entries with actual Chinese text.
+    const alternatives = review.corrections
+      .map((c) => ({
+        chinese: c.chinese.trim(),
+        pinyin: c.pinyin.trim(),
+        english: c.english.trim(),
+      }))
+      .filter((c) => c.chinese.length > 0);
+    const hasCorrection = alternatives.length > 0;
+    const first = alternatives[0];
     await db
       .update(assignmentSubmissionSentences)
       .set({
-        correctedChinese: hasCorrection ? review.correctedChinese.trim() : null,
-        correctedPinyin: hasCorrection ? review.correctedPinyin.trim() : null,
-        correctedEnglish: hasCorrection ? review.correctedEnglish.trim() : null,
+        correctedAlternatives: hasCorrection ? alternatives : null,
+        // Legacy single columns mirror the first alternative.
+        correctedChinese: first ? first.chinese : null,
+        correctedPinyin: first ? first.pinyin : null,
+        correctedEnglish: first ? first.english : null,
         reviewVerdict: hasCorrection ? "needs_correction" : "correct",
       })
       .where(eq(assignmentSubmissionSentences.id, review.sentenceId));
