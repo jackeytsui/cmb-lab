@@ -213,7 +213,7 @@ export function VocalHackViewer({
               <AudioRecorder
                 existingUrl={playbackUrls[sentence.id] ?? null}
                 allowFileUpload
-                maxSeconds={120}
+                maxSeconds={60}
                 onUpload={(url) =>
                   setRecordings((prev) => ({ ...prev, [sentence.id]: url }))
                 }
