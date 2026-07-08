@@ -121,6 +121,22 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
   );
   const completedStops = stops.filter((stop) => stop.isComplete).length;
   const totalTrackedStops = stops.filter((stop) => stop.lessonCount > 0).length;
+  const percentComplete =
+    totalTrackedStops > 0
+      ? Math.round((completedStops / totalTrackedStops) * 100)
+      : 0;
+  // Progress-ring geometry (r = 34, stroke = 8 inside a 76×76 viewBox).
+  const RING_CIRCUMFERENCE = 2 * Math.PI * 34;
+  const MARK_MASK = {
+    WebkitMaskImage: "url(/cmb-mark-white-v2.png)",
+    maskImage: "url(/cmb-mark-white-v2.png)",
+    WebkitMaskRepeat: "no-repeat",
+    maskRepeat: "no-repeat",
+    WebkitMaskPosition: "center",
+    maskPosition: "center",
+    WebkitMaskSize: "contain",
+    maskSize: "contain",
+  } as const;
 
   return (
     <FeatureGate feature="course_library">
@@ -133,38 +149,83 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
           Back to courses
         </Link>
 
-        <header className="mx-auto mb-2 max-w-md">
+        <header className="mb-5">
           <div
-            className="rounded-2xl px-5 py-4 text-white"
+            className="relative overflow-hidden rounded-2xl px-6 py-6 sm:px-8"
             style={{
-              background: "linear-gradient(135deg, #2e3a97 0%, #3d4bb8 100%)",
-              boxShadow: "0 4px 0 #1f2870",
+              background: "linear-gradient(120deg, #26307f 0%, #3a49b8 100%)",
             }}
           >
-            <h1 className="text-xl font-extrabold">{course.title}</h1>
-            {course.summary && (
-              <p className="mt-1 text-sm text-white/80">{course.summary}</p>
-            )}
-            {totalTrackedStops > 0 && (
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs font-semibold text-white/90">
-                  <span>
-                    {completedStops} of {totalTrackedStops} stops complete
-                  </span>
-                  <span>
-                    {Math.round((completedStops / totalTrackedStops) * 100)}%
-                  </span>
-                </div>
-                <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-white/25">
-                  <div
-                    className="h-full rounded-full bg-amber-400 transition-all"
-                    style={{
-                      width: `${Math.round((completedStops / totalTrackedStops) * 100)}%`,
-                    }}
+            {/* Faint brand watermark */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -top-10 right-28 hidden h-64 w-64 sm:block"
+              style={{ ...MARK_MASK, backgroundColor: "rgba(255,255,255,0.06)" }}
+            />
+            <div className="relative flex items-center justify-between gap-6">
+              <div className="min-w-0">
+                <div className="mb-2.5 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1">
+                  <span
+                    aria-hidden
+                    className="h-3.5 w-3.5"
+                    style={{ ...MARK_MASK, backgroundColor: "#ffffff" }}
                   />
+                  <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white">
+                    Course Roadmap
+                  </span>
                 </div>
+                <h1 className="text-2xl font-extrabold leading-tight text-white sm:text-[28px]">
+                  {course.title}
+                </h1>
+                {course.summary && (
+                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/80">
+                    {course.summary}
+                  </p>
+                )}
               </div>
-            )}
+              {totalTrackedStops > 0 && (
+                <div className="flex shrink-0 flex-col items-center gap-1.5">
+                  <svg width="76" height="76" viewBox="0 0 76 76">
+                    <circle
+                      cx="38"
+                      cy="38"
+                      r="34"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.28)"
+                      strokeWidth="8"
+                    />
+                    <circle
+                      cx="38"
+                      cy="38"
+                      r="34"
+                      fill="none"
+                      stroke="#f2b705"
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray={RING_CIRCUMFERENCE}
+                      strokeDashoffset={
+                        RING_CIRCUMFERENCE * (1 - percentComplete / 100)
+                      }
+                      transform="rotate(-90 38 38)"
+                    />
+                    <text
+                      x="50%"
+                      y="50%"
+                      dominantBaseline="central"
+                      textAnchor="middle"
+                      fontSize="17"
+                      fontWeight="800"
+                      fill="#ffffff"
+                    >
+                      {percentComplete}%
+                    </text>
+                  </svg>
+                  <span className="whitespace-nowrap text-xs font-semibold text-white/85">
+                    {completedStops} / {totalTrackedStops} stops
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
