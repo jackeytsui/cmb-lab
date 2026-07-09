@@ -31,6 +31,33 @@ interface RouteParams {
 }
 
 /**
+ * Default instructions pre-filled into a newly-created Diary lesson so the team
+ * doesn't retype them every time. Rich-text HTML (bold phrases + a bulleted
+ * idea list), matching the editor's format. `language` is the language named in
+ * the last idea (Mandarin vs Cantonese).
+ */
+function diaryDefaultDescription(language: string): string {
+  return [
+    "<p>Writing a diary is a great way to express yourself. Using Chinese to write one can also improve your sentence structure, word choice, and pronunciation! It might seem challenging at first, but I am sure you'll improve with practice. Start with <strong>3-4 short sentences</strong>, then try more complex structures and content later.</p>",
+    "<p>*Keep it to a <strong>maximum of 15 sentences</strong> as you only have <strong>5 minutes to record</strong> your diary.</p>",
+    "<p>Here are some ideas/ inspirations for you to write your diary:</p>",
+    "<ul>",
+    "<li>What did you eat today?</li>",
+    "<li>Describe your morning routine.</li>",
+    "<li>Talk about your favorite hobby.</li>",
+    "<li>Share a memorable moment from last week.</li>",
+    "<li>Describe a place you visited recently.</li>",
+    "<li>Discuss a book or movie you enjoyed.</li>",
+    "<li>Describe your plans for the upcoming weekend.</li>",
+    "<li>Talk about a goal you've set for yourself.</li>",
+    "<li>Describe a recent challenge you've overcome.</li>",
+    `<li>Share your thoughts on learning ${language}.</li>`,
+    "</ul>",
+    "<p>Our coaches will provide feedback!</p>",
+  ].join("");
+}
+
+/**
  * POST /api/admin/course-library/modules/[moduleId]/lessons
  * Create a new lesson inside a module. Content may be empty initially;
  * the admin fills it in via the lesson editor form.
@@ -103,6 +130,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
       ],
     },
+    diary: { description: diaryDefaultDescription("Mandarin") },
+    diary_canto: { description: diaryDefaultDescription("Cantonese") },
   };
 
   // Next sort order
