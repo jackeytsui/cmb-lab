@@ -7,7 +7,8 @@ import { CheckCircle2, Loader2, Lock, Pencil, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AudioRecorder } from "@/components/assignments/AudioRecorder";
 import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
-import { generateMandarinAnnotation } from "@/lib/mandarin-generation";
+import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
+import { generateAnnotation } from "@/lib/mandarin-generation";
 
 // Diary entries run long, so the post-generation text is a touch smaller than
 // the default assignment sizes (26 / 18) while keeping the same
@@ -52,9 +53,11 @@ function splitIntoSentences(text: string): string[] {
 export function DiaryViewer({
   lessonId,
   initialSubmission,
+  lang = "mandarin",
 }: {
   lessonId: string;
   initialSubmission: DiarySubmissionDto | null;
+  lang?: "mandarin" | "cantonese";
 }) {
   const [submission, setSubmission] = useState<DiarySubmissionDto | null>(
     initialSubmission,
@@ -87,7 +90,7 @@ export function DiaryViewer({
     setGenError(null);
     try {
       const annotations = await Promise.all(
-        parts.map((p) => generateMandarinAnnotation(p)),
+        parts.map((p) => generateAnnotation(p, lang)),
       );
       setLines(
         parts.map((p, i) => ({
@@ -231,11 +234,21 @@ export function DiaryViewer({
                 <div className="space-y-3">
                   {lines.map((line, i) => (
                     <div key={i} className="space-y-0.5">
-                      <AnnotatedSentence
-                        text={line.chineseText}
-                        fontSize={DIARY_CHAR_SIZE}
-                        className="text-foreground"
-                      />
+                      {lang === "cantonese" ? (
+                        <ModelAnnotatedSentence
+                          chinese={line.chineseText}
+                          pinyin={line.pinyin}
+                          fontSize={DIARY_CHAR_SIZE}
+                          className="text-foreground"
+                          lang="cantonese"
+                        />
+                      ) : (
+                        <AnnotatedSentence
+                          text={line.chineseText}
+                          fontSize={DIARY_CHAR_SIZE}
+                          className="text-foreground"
+                        />
+                      )}
                       {line.english && (
                         <p
                           className="text-muted-foreground italic"

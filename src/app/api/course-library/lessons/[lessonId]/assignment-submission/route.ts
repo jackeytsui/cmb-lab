@@ -13,6 +13,7 @@ import {
 import { getRealUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { listChallengeReviewers } from "@/lib/assignment-review";
+import { isTextAssignmentLesson } from "@/lib/lesson-language";
 import type { CourseLibraryTextAssignmentContent } from "@/db/schema/course-library";
 
 interface RouteParams {
@@ -68,7 +69,7 @@ async function getAccessibleTextAssignmentLesson(
     )
     .limit(1);
 
-  if (!row || row.lessonType !== "text_assignment") return null;
+  if (!row || !isTextAssignmentLesson(row.lessonType)) return null;
   return row;
 }
 

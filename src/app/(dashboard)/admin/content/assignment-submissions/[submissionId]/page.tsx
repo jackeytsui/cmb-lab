@@ -13,6 +13,7 @@ import {
   users,
 } from "@/db/schema";
 import { getAnyAssignmentReviewer } from "@/lib/assignment-review";
+import { lessonLanguage } from "@/lib/lesson-language";
 import { ReviewClient, type ReviewSubmissionDto } from "./ReviewClient";
 import {
   VocalHackReviewClient,
@@ -35,6 +36,7 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
       studentName: users.name,
       studentEmail: users.email,
       lessonTitle: courseLibraryLessons.title,
+      lessonType: courseLibraryLessons.lessonType,
       lessonContent: courseLibraryLessons.content,
       moduleTitle: courseLibraryModules.title,
       courseTitle: courseLibraryCourses.title,
@@ -57,6 +59,10 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
     .limit(1);
 
   if (!row || row.submission.status === "draft") notFound();
+
+  // Cantonese variants store jyutping + zh-HK English; the reviewer UI mirrors
+  // the student display/generation via this language.
+  const lang = lessonLanguage(row.lessonType);
 
   // Opening the review interface starts the review, which locks the student
   // out of editing their submission.
@@ -92,6 +98,7 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
     const vocalDto: VocalHackReviewDto = {
       id: row.submission.id,
       lessonId: row.submission.lessonId,
+      lang,
       status: row.submission.status,
       submittedAt: row.submission.submittedAt?.toISOString() ?? null,
       reviewedAt: row.submission.reviewedAt?.toISOString() ?? null,
@@ -154,6 +161,7 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
 
   const dto: ReviewSubmissionDto = {
     id: row.submission.id,
+    lang,
     status: row.submission.status,
     submittedAt: row.submission.submittedAt?.toISOString() ?? null,
     reviewedAt: row.submission.reviewedAt?.toISOString() ?? null,

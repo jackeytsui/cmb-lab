@@ -58,10 +58,12 @@ export function TextAssignmentViewer({
   lessonId,
   prompts,
   initialSubmission,
+  lang = "mandarin",
 }: {
   lessonId: string;
   prompts: TextAssignmentPrompt[];
   initialSubmission: TextAssignmentSubmissionDto | null;
+  lang?: "mandarin" | "cantonese";
 }) {
   const [submission, setSubmission] = useState(initialSubmission);
   const [values, setValues] = useState(() =>
@@ -202,6 +204,7 @@ export function TextAssignmentViewer({
               }
               disabled={submitting}
               readOnly={locked}
+              lang={lang}
             />
           </div>
         ))}

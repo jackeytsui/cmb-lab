@@ -9,7 +9,7 @@ import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import { SentenceVideo } from "@/components/assignments/SentenceVideo";
 import { isLoomUrl, sanitizeRecordingUrl } from "@/lib/recording-embed";
-import { generateModelPinyin } from "@/lib/generate-model-pinyin";
+import { generateModelRomanisation } from "@/lib/generate-model-pinyin";
 import { fetchProperTranslations } from "@/lib/mandarin-generation";
 
 // ---------------------------------------------------------------------------
@@ -39,6 +39,8 @@ export interface VocalHackReviewSentenceDto {
 export interface VocalHackReviewDto {
   id: string;
   lessonId: string;
+  /** Romanisation/tone language of the lesson (jyutping for Cantonese). */
+  lang: "mandarin" | "cantonese";
   status: string;
   submittedAt: string | null;
   reviewedAt: string | null;
@@ -126,8 +128,11 @@ export function VocalHackReviewClient({
     patchEntry(sentenceId, key, { generating: true });
     try {
       const [pinyin, translations] = await Promise.all([
-        generateModelPinyin(chinese),
-        fetchProperTranslations([chinese], "zh-CN"),
+        generateModelRomanisation(chinese, submission.lang),
+        fetchProperTranslations(
+          [chinese],
+          submission.lang === "cantonese" ? "zh-HK" : "zh-CN",
+        ),
       ]);
       patchEntry(sentenceId, key, {
         pinyin,
@@ -260,6 +265,7 @@ export function VocalHackReviewClient({
                       chinese={sentence.chineseText}
                       pinyin={sentence.generatedPinyin}
                       english={sentence.generatedEnglish}
+                      lang={submission.lang}
                     />
                   </div>
                   <div>
@@ -387,6 +393,7 @@ export function VocalHackReviewClient({
                               pinyin={entry.pinyin}
                               english={entry.english}
                               fontSize={20}
+                              lang={submission.lang}
                             />
                           </div>
                         )}

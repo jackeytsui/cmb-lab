@@ -2,7 +2,11 @@
 
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
-import { extractToneFromPinyin, getToneColorStyle } from "@/lib/tone-colors";
+import {
+  extractToneFromJyutping,
+  extractToneFromPinyin,
+  getToneColorStyle,
+} from "@/lib/tone-colors";
 import { PINYIN_RATIO, type CharAnnotation } from "@/lib/mandarin-annotate";
 
 // ---------------------------------------------------------------------------
@@ -20,6 +24,7 @@ export function AnnotatedChar({
   fontSize,
   struck = false,
   dataOffset,
+  lang = "mandarin",
 }: {
   ann: CharAnnotation;
   fontSize: number;
@@ -27,11 +32,16 @@ export function AnnotatedChar({
   struck?: boolean;
   /** UTF-16 offset to expose for selection mapping; omit for read-only views. */
   dataOffset?: number;
+  /** Tone-colour system: mandarin (4 tones) or cantonese (6, jyutping). */
+  lang?: "mandarin" | "cantonese";
 }) {
   const pinyinSize = Math.round(fontSize * PINYIN_RATIO);
-  const toneStyle = ann.pinyin
-    ? getToneColorStyle(extractToneFromPinyin(ann.pinyin), "mandarin")
-    : undefined;
+  const tone = ann.pinyin
+    ? lang === "cantonese"
+      ? extractToneFromJyutping(ann.pinyin)
+      : extractToneFromPinyin(ann.pinyin)
+    : 0;
+  const toneStyle = ann.pinyin ? getToneColorStyle(tone, lang) : undefined;
 
   const charStyle: CSSProperties = struck
     ? { fontSize: `${fontSize}px`, color: "#ef4444" }

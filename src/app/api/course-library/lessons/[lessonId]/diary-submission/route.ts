@@ -13,6 +13,7 @@ import {
 import { getRealUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { listChallengeReviewers } from "@/lib/assignment-review";
+import { isDiaryLesson } from "@/lib/lesson-language";
 
 interface RouteParams {
   params: Promise<{ lessonId: string }>;
@@ -73,7 +74,7 @@ async function getAccessibleDiaryLesson(lessonId: string, role: string) {
     )
     .limit(1);
 
-  if (!row || row.lessonType !== "diary") return null;
+  if (!row || !isDiaryLesson(row.lessonType)) return null;
   return row;
 }
 

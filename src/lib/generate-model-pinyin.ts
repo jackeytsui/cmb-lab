@@ -3,6 +3,7 @@ import {
   annotateSentence,
   type WordToken,
 } from "@/lib/mandarin-annotate";
+import { smartRomanise } from "@/lib/romanise";
 
 // ---------------------------------------------------------------------------
 // Generate a space-separated pinyin model answer from Chinese text using the
@@ -41,6 +42,22 @@ export async function generateModelPinyin(chinese: string): Promise<string> {
     .filter((a) => a.pinyin)
     .map((a) => a.pinyin)
     .join(" ");
+}
+
+/**
+ * Generate a space-separated model romanisation for either language:
+ *   - mandarin:  jieba (/api/segment) + tone-sandhi pinyin (generateModelPinyin)
+ *   - cantonese: jyutping via to-jyutping (smartRomanise) — one syllable per
+ *     Han character, no jieba/tone-sandhi (Cantonese has neither), matching the
+ *     coaching "Cantonese input".
+ * Admin-facing helper: the result pre-fills an editable field.
+ */
+export async function generateModelRomanisation(
+  chinese: string,
+  language: "mandarin" | "cantonese",
+): Promise<string> {
+  if (language === "cantonese") return smartRomanise(chinese.trim(), "cantonese");
+  return generateModelPinyin(chinese);
 }
 
 /** Count of Han characters in a string (for syllable-alignment validation). */

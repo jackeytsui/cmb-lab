@@ -10,6 +10,7 @@ import {
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { CourseLibraryVocalHackContent } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { isVocalHackLesson } from "@/lib/lesson-language";
 
 /**
  * GET /api/course-library/vocal-hack-video/[lessonId]?sentence=<id>
@@ -65,7 +66,7 @@ export async function GET(
     )
     .limit(1);
 
-  if (!lesson || lesson.lessonType !== "vocal_hack") {
+  if (!lesson || !isVocalHackLesson(lesson.lessonType)) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 

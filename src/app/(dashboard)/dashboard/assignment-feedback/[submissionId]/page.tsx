@@ -12,6 +12,7 @@ import {
   courseLibraryModules,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import { lessonLanguage } from "@/lib/lesson-language";
 import { parseRecordingEmbed } from "@/lib/recording-embed";
 import { CorrectedSentence } from "@/components/assignments/CorrectedSentence";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
@@ -71,6 +72,7 @@ export default async function AssignmentFeedbackDetailPage({
     .select({
       submission: assignmentSubmissions,
       lessonTitle: courseLibraryLessons.title,
+      lessonType: courseLibraryLessons.lessonType,
       lessonContent: courseLibraryLessons.content,
       moduleTitle: courseLibraryModules.title,
       courseTitle: courseLibraryCourses.title,
@@ -131,6 +133,7 @@ export default async function AssignmentFeedbackDetailPage({
     typeof lessonContent.description === "string"
       ? lessonContent.description
       : "";
+  const lang = lessonLanguage(row.lessonType);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
@@ -229,6 +232,7 @@ export default async function AssignmentFeedbackDetailPage({
                 chinese={sentence.chineseText}
                 pinyin={sentence.generatedPinyin}
                 english={sentence.generatedEnglish}
+                lang={lang}
               />
               {sentence.audioUrl && (
                 <div>
@@ -276,6 +280,7 @@ export default async function AssignmentFeedbackDetailPage({
                         chinese={alt.chinese}
                         pinyin={alt.pinyin}
                         english={alt.english}
+                        lang={lang}
                       />
                     ))}
                   </div>
@@ -297,6 +302,8 @@ export default async function AssignmentFeedbackDetailPage({
               )}
               <CorrectedSentence
                 text={sentence.chineseText}
+                lang={lang}
+                pinyin={sentence.generatedPinyin}
                 corrections={corrections
                   .filter((c) => c.sentenceId === sentence.id)
                   .map((c) => ({

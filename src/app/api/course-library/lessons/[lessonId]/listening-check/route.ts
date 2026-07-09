@@ -12,7 +12,8 @@ import {
 } from "@/db/schema";
 import type { CourseLibraryListeningPracticeSentence } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
-import { pinyinMatches } from "@/lib/pinyin-normalize";
+import { romanisationMatches } from "@/lib/pinyin-normalize";
+import { isListeningPracticeLesson, lessonLanguage } from "@/lib/lesson-language";
 
 // ---------------------------------------------------------------------------
 // POST /api/course-library/lessons/[lessonId]/listening-check
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     )
     .limit(1);
 
-  if (!lesson || lesson.lessonType !== "listening_practice") {
+  if (!lesson || !isListeningPracticeLesson(lesson.lessonType)) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
@@ -111,7 +112,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const giveUp = parsed.data.giveUp === true;
-  const correct = !giveUp && pinyinMatches(parsed.data.answer ?? "", sentence.pinyin);
+  const correct =
+    !giveUp &&
+    romanisationMatches(
+      parsed.data.answer ?? "",
+      sentence.pinyin,
+      lessonLanguage(lesson.lessonType),
+    );
   const status: SentenceStatus = correct
     ? "correct"
     : giveUp

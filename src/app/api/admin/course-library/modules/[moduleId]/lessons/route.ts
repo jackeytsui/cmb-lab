@@ -18,6 +18,10 @@ const createSchema = z.object({
     "listening_practice",
     "vocal_hack",
     "diary",
+    "text_assignment_canto",
+    "listening_practice_canto",
+    "vocal_hack_canto",
+    "diary_canto",
   ]),
   content: z.record(z.string(), z.unknown()).optional(),
 });
@@ -78,6 +82,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     download: { fileUrl: "", fileName: "", sizeBytes: 0 },
     form: { embedUrl: "", embedHeight: 600 },
     text_assignment: {
+      description: "",
+      sentencePrompts: [
+        {
+          id: crypto.randomUUID(),
+          label: "Sentence 1",
+          description: "",
+          order: 0,
+        },
+      ],
+    },
+    text_assignment_canto: {
       description: "",
       sentencePrompts: [
         {

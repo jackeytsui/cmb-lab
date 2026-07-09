@@ -32,7 +32,7 @@ import { extractEmbedUrl, looksLikeIframeSnippet } from "@/lib/embed";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { QuizBuilder } from "./QuizBuilder";
 import {
-  generateModelPinyin,
+  generateModelRomanisation,
   countHanCharacters,
 } from "@/lib/generate-model-pinyin";
 import { fetchProperTranslations } from "@/lib/mandarin-generation";
@@ -47,7 +47,11 @@ type LessonType =
   | "text_assignment"
   | "listening_practice"
   | "vocal_hack"
-  | "diary";
+  | "diary"
+  | "text_assignment_canto"
+  | "listening_practice_canto"
+  | "vocal_hack_canto"
+  | "diary_canto";
 
 interface LessonData {
   id: string;
@@ -80,6 +84,26 @@ const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: 
   },
   diary: {
     label: "Diary",
+    Icon: NotebookPen,
+    color: "text-sky-500",
+  },
+  text_assignment_canto: {
+    label: "Text Assignment (Canto)",
+    Icon: ClipboardList,
+    color: "text-teal-500",
+  },
+  listening_practice_canto: {
+    label: "Listening Practice (Canto)",
+    Icon: Headphones,
+    color: "text-indigo-500",
+  },
+  vocal_hack_canto: {
+    label: "Vocal Hack (Canto)",
+    Icon: Mic,
+    color: "text-rose-500",
+  },
+  diary_canto: {
+    label: "Diary (Canto)",
     Icon: NotebookPen,
     color: "text-sky-500",
   },
@@ -310,28 +334,45 @@ export function LessonEditorClient({
           onUpdate={updateContent}
         />
       )}
-      {lesson.lessonType === "text_assignment" && (
+      {(lesson.lessonType === "text_assignment" ||
+        lesson.lessonType === "text_assignment_canto") && (
         <TextAssignmentLessonForm
           lessonId={lesson.id}
           content={lesson.content}
           onUpdate={updateContent}
+          lang={
+            lesson.lessonType === "text_assignment_canto"
+              ? "cantonese"
+              : "mandarin"
+          }
         />
       )}
-      {lesson.lessonType === "listening_practice" && (
+      {(lesson.lessonType === "listening_practice" ||
+        lesson.lessonType === "listening_practice_canto") && (
         <ListeningPracticeLessonForm
           lessonId={lesson.id}
           content={lesson.content}
           onUpdate={updateContent}
+          lang={
+            lesson.lessonType === "listening_practice_canto"
+              ? "cantonese"
+              : "mandarin"
+          }
         />
       )}
-      {lesson.lessonType === "vocal_hack" && (
+      {(lesson.lessonType === "vocal_hack" ||
+        lesson.lessonType === "vocal_hack_canto") && (
         <VocalHackLessonForm
           lessonId={lesson.id}
           content={lesson.content}
           onUpdate={updateContent}
+          lang={
+            lesson.lessonType === "vocal_hack_canto" ? "cantonese" : "mandarin"
+          }
         />
       )}
-      {lesson.lessonType === "diary" && (
+      {(lesson.lessonType === "diary" ||
+        lesson.lessonType === "diary_canto") && (
         <DiaryLessonForm
           lessonId={lesson.id}
           content={lesson.content}
@@ -1529,10 +1570,12 @@ function TextAssignmentLessonForm({
   lessonId,
   content,
   onUpdate,
+  lang = "mandarin",
 }: {
   lessonId: string;
   content: Record<string, unknown>;
   onUpdate: (next: Record<string, unknown>) => void;
+  lang?: "mandarin" | "cantonese";
 }) {
   const savedDescription = (content.description as string) ?? "";
   const savedPrompts = normalizeSentencePrompts(content.sentencePrompts);
@@ -1637,8 +1680,9 @@ function TextAssignmentLessonForm({
               Sentence Boxes ({prompts.length})
             </h3>
             <p className="text-xs text-muted-foreground">
-              One Mandarin submission box per prompt. Students type a sentence
-              and press Enter to generate pinyin + English.
+              One {lang === "cantonese" ? "Cantonese" : "Mandarin"} submission
+              box per prompt. Students type a sentence and press Enter to
+              generate {lang === "cantonese" ? "jyutping" : "pinyin"} + English.
             </p>
           </div>
           <button
@@ -1809,13 +1853,16 @@ function ListeningPracticeLessonForm({
   lessonId,
   content,
   onUpdate,
+  lang = "mandarin",
 }: {
   lessonId: string;
   content: Record<string, unknown>;
   onUpdate: (next: Record<string, unknown>) => void;
+  lang?: "mandarin" | "cantonese";
 }) {
   const savedDescription = (content.description as string) ?? "";
   const savedSentences = normalizeListeningSentences(content.sentences);
+  const romanLabel = lang === "cantonese" ? "Jyutping" : "Pinyin";
 
   const [description, setDescription] = useState(savedDescription);
   const [sentences, setSentences] = useState<ListeningSentenceDraft[]>(
@@ -1887,7 +1934,7 @@ function ListeningPracticeLessonForm({
     if (!chinese.trim()) return;
     setGeneratingId(id);
     try {
-      const pinyin = await generateModelPinyin(chinese);
+      const pinyin = await generateModelRomanisation(chinese, lang);
       updateSentence(id, { pinyin });
     } finally {
       setGeneratingId(null);
@@ -1898,7 +1945,10 @@ function ListeningPracticeLessonForm({
     if (!chinese.trim()) return;
     setTranslatingId(id);
     try {
-      const translations = await fetchProperTranslations([chinese], "zh-CN");
+      const translations = await fetchProperTranslations(
+        [chinese],
+        lang === "cantonese" ? "zh-HK" : "zh-CN",
+      );
       const english = translations?.join(" ").trim();
       if (english) updateSentence(id, { english });
     } finally {
@@ -2105,7 +2155,7 @@ function ListeningPracticeLessonForm({
                 <div>
                   <div className="mb-1 flex items-center justify-between">
                     <label className="block text-xs font-medium text-muted-foreground">
-                      Pinyin model answer
+                      {romanLabel} model answer
                     </label>
                     <button
                       type="button"
@@ -2131,12 +2181,15 @@ function ListeningPracticeLessonForm({
                     onChange={(e) =>
                       updateSentence(sentence.id, { pinyin: e.target.value })
                     }
-                    placeholder="nǐ chī fàn le ma"
+                    placeholder={
+                      lang === "cantonese" ? "nei5 hou2" : "nǐ chī fàn le ma"
+                    }
                     className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
                   />
                   <p className="mt-1 text-[10px] text-muted-foreground">
                     Checking ignores tones and spaces — this is only used to
-                    grade and to reveal the pinyin after a correct answer.
+                    grade and to reveal the {romanLabel.toLowerCase()} after a
+                    correct answer.
                   </p>
                   {mismatch ? (
                     <p className="mt-1 text-[10px] text-amber-500">
@@ -2389,13 +2442,16 @@ function VocalHackLessonForm({
   lessonId,
   content,
   onUpdate,
+  lang = "mandarin",
 }: {
   lessonId: string;
   content: Record<string, unknown>;
   onUpdate: (next: Record<string, unknown>) => void;
+  lang?: "mandarin" | "cantonese";
 }) {
   const savedDescription = (content.description as string) ?? "";
   const savedSentences = normalizeVocalHackSentences(content.sentences);
+  const romanLabel = lang === "cantonese" ? "Jyutping" : "Pinyin";
 
   const [description, setDescription] = useState(savedDescription);
   const [sentences, setSentences] = useState<VocalHackSentenceDraft[]>(
@@ -2465,7 +2521,7 @@ function VocalHackLessonForm({
     if (!chinese.trim()) return;
     setGeneratingId(id);
     try {
-      const pinyin = await generateModelPinyin(chinese);
+      const pinyin = await generateModelRomanisation(chinese, lang);
       updateSentence(id, { pinyin });
     } finally {
       setGeneratingId(null);
@@ -2476,7 +2532,10 @@ function VocalHackLessonForm({
     if (!chinese.trim()) return;
     setTranslatingId(id);
     try {
-      const translations = await fetchProperTranslations([chinese], "zh-CN");
+      const translations = await fetchProperTranslations(
+        [chinese],
+        lang === "cantonese" ? "zh-HK" : "zh-CN",
+      );
       const english = translations?.join(" ").trim();
       if (english) updateSentence(id, { english });
     } finally {
@@ -2719,7 +2778,7 @@ function VocalHackLessonForm({
                 <div>
                   <div className="mb-1 flex items-center justify-between">
                     <label className="block text-xs font-medium text-muted-foreground">
-                      Pinyin
+                      {romanLabel}
                     </label>
                     <button
                       type="button"
@@ -2745,7 +2804,7 @@ function VocalHackLessonForm({
                     onChange={(e) =>
                       updateSentence(sentence.id, { pinyin: e.target.value })
                     }
-                    placeholder="zhè shì lì jù"
+                    placeholder={lang === "cantonese" ? "nei5 hou2" : "zhè shì lì jù"}
                     className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
                   />
                   {mismatch ? (

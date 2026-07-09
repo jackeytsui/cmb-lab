@@ -39,3 +39,44 @@ export function pinyinMatches(submission: string, modelAnswer: string): boolean 
   if (!a) return false;
   return a === normalizePinyin(modelAnswer);
 }
+
+// ---------------------------------------------------------------------------
+// Jyutping comparison for the Cantonese Listening Practice lesson type.
+//
+// Checking disregards spacing and tone NUMBERS (jyutping uses trailing 1–6),
+// mirroring how the Mandarin check ignores tones. So for 你好 (model "nei5
+// hou2") all of these match: "nei5 hou2", "nei hou", "neihou", "Nei Hou".
+//   1. lowercase
+//   2. strip ALL digits (jyutping tone numbers 1–6, plus any strays)
+//   3. keep only a–z (removes spaces, punctuation, middle dots)
+// ---------------------------------------------------------------------------
+
+/** Canonicalise a jyutping string for tone/space-insensitive comparison. */
+export function normalizeJyutping(input: string): string {
+  if (!input) return "";
+  return input
+    .toLowerCase()
+    .replace(/[0-9]/g, "")
+    .replace(/[^a-z]/g, "");
+}
+
+/** True when a student's jyutping submission matches the model answer. */
+export function jyutpingMatches(
+  submission: string,
+  modelAnswer: string,
+): boolean {
+  const a = normalizeJyutping(submission);
+  if (!a) return false;
+  return a === normalizeJyutping(modelAnswer);
+}
+
+/** Language-aware romanisation match for the Listening Practice grader. */
+export function romanisationMatches(
+  submission: string,
+  modelAnswer: string,
+  language: "mandarin" | "cantonese",
+): boolean {
+  return language === "cantonese"
+    ? jyutpingMatches(submission, modelAnswer)
+    : pinyinMatches(submission, modelAnswer);
+}
