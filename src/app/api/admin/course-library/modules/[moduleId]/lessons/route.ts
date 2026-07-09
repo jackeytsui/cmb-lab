@@ -39,8 +39,11 @@ interface RouteParams {
 function diaryDefaultDescription(language: string): string {
   return [
     "<p>Writing a diary is a great way to express yourself. Using Chinese to write one can also improve your sentence structure, word choice, and pronunciation! It might seem challenging at first, but I am sure you'll improve with practice. Start with <strong>3-4 short sentences</strong>, then try more complex structures and content later.</p>",
+    "<p></p>",
     "<p>*Keep it to a <strong>maximum of 15 sentences</strong> as you only have <strong>5 minutes to record</strong> your diary.</p>",
+    "<p></p>",
     "<p>Here are some ideas/ inspirations for you to write your diary:</p>",
+    "<p></p>",
     "<ul>",
     "<li>What did you eat today?</li>",
     "<li>Describe your morning routine.</li>",
@@ -53,6 +56,7 @@ function diaryDefaultDescription(language: string): string {
     "<li>Describe a recent challenge you've overcome.</li>",
     `<li>Share your thoughts on learning ${language}.</li>`,
     "</ul>",
+    "<p></p>",
     "<p>Our coaches will provide feedback!</p>",
   ].join("");
 }
