@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { Loader2, Pencil, Play, Sparkles, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { generateMandarinAnnotation } from "@/lib/mandarin-generation";
+import { generateAnnotation } from "@/lib/mandarin-generation";
 import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
+import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import {
   ASSIGNMENT_CHAR_SIZE,
   ASSIGNMENT_CHAR_SIZE_COMPACT,
@@ -42,6 +43,8 @@ interface MandarinSentenceInputProps {
   readOnly?: boolean;
   autoFocus?: boolean;
   compact?: boolean;
+  /** Generation/display/TTS language: mandarin (pinyin) or cantonese (jyutping). */
+  lang?: "mandarin" | "cantonese";
 }
 
 export function MandarinSentenceInput({
@@ -49,12 +52,18 @@ export function MandarinSentenceInput({
   onValueChange,
   onGeneratingChange,
   disabled,
-  placeholder = "Type your Mandarin sentence here, then press Enter...",
+  placeholder,
   editButtonLabel = "Edit your submission",
   readOnly = false,
   autoFocus = false,
   compact = false,
+  lang = "mandarin",
 }: MandarinSentenceInputProps) {
+  const resolvedPlaceholder =
+    placeholder ??
+    (lang === "cantonese"
+      ? "Type your Cantonese sentence here, then press Enter..."
+      : "Type your Mandarin sentence here, then press Enter...");
   const [draft, setDraft] = useState(value?.chineseText ?? "");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +80,7 @@ export function MandarinSentenceInput({
     setError(null);
     setGeneratingState(true);
     try {
-      const annotation = await generateMandarinAnnotation(text);
+      const annotation = await generateAnnotation(text, lang);
       onValueChange({
         chineseText: text,
         pinyin: annotation.pinyin,
@@ -99,7 +108,10 @@ export function MandarinSentenceInput({
     if (isPlaying) {
       stop();
     } else {
-      void speak(value.chineseText, { language: "zh-CN", rate: "medium" });
+      void speak(value.chineseText, {
+        language: lang === "cantonese" ? "zh-HK" : "zh-CN",
+        rate: "medium",
+      });
     }
   };
 
@@ -112,12 +124,28 @@ export function MandarinSentenceInput({
         )}
       >
         <div className="flex items-start justify-between gap-3">
-          {/* Pinyin-on-top, tone-colored Chinese — same format as coaching notes */}
-          <AnnotatedSentence
-            text={value.chineseText}
-            fontSize={compact ? ASSIGNMENT_CHAR_SIZE_COMPACT : ASSIGNMENT_CHAR_SIZE}
-            className="text-foreground"
-          />
+          {/* Romanisation-on-top, tone-colored Chinese — same format as coaching
+              notes. Mandarin re-derives pinyin live (jieba); Cantonese renders
+              from the stored jyutping (no jieba/tone-sandhi for Cantonese). */}
+          {lang === "cantonese" ? (
+            <ModelAnnotatedSentence
+              chinese={value.chineseText}
+              pinyin={value.pinyin}
+              fontSize={
+                compact ? ASSIGNMENT_CHAR_SIZE_COMPACT : ASSIGNMENT_CHAR_SIZE
+              }
+              className="text-foreground"
+              lang="cantonese"
+            />
+          ) : (
+            <AnnotatedSentence
+              text={value.chineseText}
+              fontSize={
+                compact ? ASSIGNMENT_CHAR_SIZE_COMPACT : ASSIGNMENT_CHAR_SIZE
+              }
+              className="text-foreground"
+            />
+          )}
           <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
@@ -167,7 +195,7 @@ export function MandarinSentenceInput({
               void handleGenerate();
             }
           }}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           disabled={disabled || generating}
           autoFocus={autoFocus}
           rows={compact ? 1 : 2}

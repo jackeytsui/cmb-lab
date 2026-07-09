@@ -13,6 +13,7 @@ import {
 import { getRealUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { listChallengeReviewers } from "@/lib/assignment-review";
+import { isVocalHackLesson } from "@/lib/lesson-language";
 import type { CourseLibraryVocalHackContent } from "@/db/schema/course-library";
 
 interface RouteParams {
@@ -75,7 +76,7 @@ async function getAccessibleVocalHackLesson(lessonId: string, role: string) {
     )
     .limit(1);
 
-  if (!row || row.lessonType !== "vocal_hack") return null;
+  if (!row || !isVocalHackLesson(row.lessonType)) return null;
   return row;
 }
 

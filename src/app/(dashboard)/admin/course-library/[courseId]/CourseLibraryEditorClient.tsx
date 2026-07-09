@@ -39,7 +39,11 @@ type LessonType =
   | "text_assignment"
   | "listening_practice"
   | "vocal_hack"
-  | "diary";
+  | "diary"
+  | "text_assignment_canto"
+  | "listening_practice_canto"
+  | "vocal_hack_canto"
+  | "diary_canto";
 
 interface LessonRow {
   id: string;
@@ -112,6 +116,26 @@ const LESSON_TYPE_META: Record<
   },
   diary: {
     label: "Diary",
+    Icon: NotebookPen,
+    color: "text-sky-500",
+  },
+  text_assignment_canto: {
+    label: "Text Assignment (Canto)",
+    Icon: ClipboardList,
+    color: "text-teal-500",
+  },
+  listening_practice_canto: {
+    label: "Listening Practice (Canto)",
+    Icon: Headphones,
+    color: "text-indigo-500",
+  },
+  vocal_hack_canto: {
+    label: "Vocal Hack (Canto)",
+    Icon: Mic,
+    color: "text-rose-500",
+  },
+  diary_canto: {
+    label: "Diary (Canto)",
     Icon: NotebookPen,
     color: "text-sky-500",
   },
@@ -1043,6 +1067,10 @@ export function CourseLibraryEditorClient({
                         <option value="listening_practice">Listening Practice</option>
                         <option value="vocal_hack">Vocal Hack</option>
                         <option value="diary">Diary</option>
+                        <option value="text_assignment_canto">Text Assignment (Canto)</option>
+                        <option value="listening_practice_canto">Listening Practice (Canto)</option>
+                        <option value="vocal_hack_canto">Vocal Hack (Canto)</option>
+                        <option value="diary_canto">Diary (Canto)</option>
                       </select>
                     <input
                       type="text"

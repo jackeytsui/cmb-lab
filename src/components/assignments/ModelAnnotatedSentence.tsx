@@ -22,13 +22,16 @@ export function ModelAnnotatedSentence({
   english,
   fontSize = ASSIGNMENT_CHAR_SIZE,
   className,
+  lang = "mandarin",
 }: {
   chinese: string;
-  /** Space-separated pinyin, one syllable per Han character. */
+  /** Space-separated romanisation (pinyin or jyutping), one syllable per Han char. */
   pinyin: string;
   english?: string | null;
   fontSize?: number;
   className?: string;
+  /** Romanisation/tone-colour system for the characters. */
+  lang?: "mandarin" | "cantonese";
 }) {
   const annotations = annotateFromModelAnswer(chinese, pinyin);
   return (
@@ -38,7 +41,12 @@ export function ModelAnnotatedSentence({
         style={{ lineHeight: 1.15 }}
       >
         {annotations.map((ann) => (
-          <AnnotatedChar key={ann.offset} ann={ann} fontSize={fontSize} />
+          <AnnotatedChar
+            key={ann.offset}
+            ann={ann}
+            fontSize={fontSize}
+            lang={lang}
+          />
         ))}
       </span>
       {english ? (

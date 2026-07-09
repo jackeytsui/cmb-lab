@@ -11,6 +11,7 @@ interface SubmissionRow {
   id: string;
   status: "submitted" | "assigned" | "in_review" | "reviewed";
   assignmentType: string;
+  lessonType: string;
   submittedAt: string | null;
   reviewedAt: string | null;
   finalScore: number | null;
@@ -59,6 +60,12 @@ const TYPE_LABELS: Record<string, string> = {
   vocal_hack: "Vocal Hack",
   diary: "Diary",
 };
+
+/** Type label with a "(Canto)" suffix when the lesson is a Cantonese variant. */
+function typeLabel(assignmentType: string, lessonType: string): string {
+  const base = TYPE_LABELS[assignmentType] ?? assignmentType;
+  return lessonType.endsWith("_canto") ? `${base} (Canto)` : base;
+}
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -290,7 +297,7 @@ export function AssignmentSubmissionsClient({
                       {row.moduleTitle}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {TYPE_LABELS[row.assignmentType] ?? row.assignmentType}
+                      {typeLabel(row.assignmentType, row.lessonType)}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                       {formatDate(row.submittedAt)}

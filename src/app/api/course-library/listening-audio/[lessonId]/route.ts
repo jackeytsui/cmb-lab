@@ -10,6 +10,7 @@ import {
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { CourseLibraryListeningPracticeSentence } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { isListeningPracticeLesson } from "@/lib/lesson-language";
 
 /**
  * GET /api/course-library/listening-audio/[lessonId]?sentence=<id>
@@ -67,7 +68,7 @@ export async function GET(
     )
     .limit(1);
 
-  if (!lesson || lesson.lessonType !== "listening_practice") {
+  if (!lesson || !isListeningPracticeLesson(lesson.lessonType)) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 

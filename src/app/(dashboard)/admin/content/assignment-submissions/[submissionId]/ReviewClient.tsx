@@ -37,6 +37,8 @@ export interface ReviewSentenceDto {
 
 export interface ReviewSubmissionDto {
   id: string;
+  /** Romanisation/tone language of the lesson (jyutping for Cantonese). */
+  lang: "mandarin" | "cantonese";
   status: "submitted" | "assigned" | "in_review" | "reviewed";
   submittedAt: string | null;
   reviewedAt: string | null;
@@ -510,6 +512,8 @@ export function ReviewClient({
                 <CorrectedSentence
                   text={sentence.chineseText}
                   corrections={state.corrections}
+                  lang={submission.lang}
+                  pinyin={sentence.generatedPinyin}
                   onRemoveCorrection={(correctionId) =>
                     removeCorrection(sentence.id, correctionId)
                   }
@@ -538,6 +542,7 @@ export function ReviewClient({
                     onGeneratingChange={setCorrectionGenerating}
                     placeholder="Type the suggested correction, then press Enter..."
                     editButtonLabel="Edit correction"
+                    lang={submission.lang}
                     compact
                     autoFocus
                   />

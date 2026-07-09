@@ -32,11 +32,14 @@ export function ListeningAudioPlayer({
   sentenceId,
   chinese,
   hasOverride,
+  ttsLanguage = "zh-CN",
 }: {
   lessonId: string;
   sentenceId: string;
   chinese: string;
   hasOverride: boolean;
+  /** TTS voice language for generated audio (zh-HK for Cantonese lessons). */
+  ttsLanguage?: "zh-CN" | "zh-HK";
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
@@ -77,7 +80,7 @@ export function ListeningAudioPlayer({
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: chinese, language: "zh-CN", rate: "medium" }),
+        body: JSON.stringify({ text: chinese, language: ttsLanguage, rate: "medium" }),
       });
       if (!res.ok) throw new Error(`TTS failed (${res.status})`);
       const blob = await res.blob();
@@ -92,7 +95,7 @@ export function ListeningAudioPlayer({
     } finally {
       setLoading(false);
     }
-  }, [chinese, hasOverride, overrideSrc]);
+  }, [chinese, hasOverride, overrideSrc, ttsLanguage]);
 
   const togglePlay = useCallback(async () => {
     const audio = audioRef.current;

@@ -39,13 +39,15 @@ interface SentenceState {
   error: string | null;
 }
 
-/** Pinyin-on-top reveal using the admin's (possibly edited) model answer. */
+/** Romanisation-on-top reveal using the admin's (possibly edited) model answer. */
 function RevealedSentence({
   chinese,
   pinyin,
+  lang,
 }: {
   chinese: string;
   pinyin: string;
+  lang: "mandarin" | "cantonese";
 }) {
   const annotations = annotateFromModelAnswer(chinese, pinyin);
   return (
@@ -58,6 +60,7 @@ function RevealedSentence({
           key={ann.offset}
           ann={ann}
           fontSize={ASSIGNMENT_CHAR_SIZE}
+          lang={lang}
         />
       ))}
     </span>
@@ -67,9 +70,11 @@ function RevealedSentence({
 export function ListeningPracticeViewer({
   lessonId,
   sentences,
+  lang = "mandarin",
 }: {
   lessonId: string;
   sentences: ListeningSentenceDto[];
+  lang?: "mandarin" | "cantonese";
 }) {
   const [state, setState] = useState<Record<string, SentenceState>>(() => {
     const initial: Record<string, SentenceState> = {};
@@ -224,6 +229,7 @@ export function ListeningPracticeViewer({
               sentenceId={sentence.id}
               chinese={sentence.chinese}
               hasOverride={sentence.hasOverride}
+              ttsLanguage={lang === "cantonese" ? "zh-HK" : "zh-CN"}
             />
 
             {/* Chinese: reveal pinyin-on-top once resolved, else plain chars.
@@ -233,6 +239,7 @@ export function ListeningPracticeViewer({
                 <RevealedSentence
                   chinese={sentence.chinese}
                   pinyin={st.revealed as string}
+                  lang={lang}
                 />
               ) : (
                 <span
@@ -265,7 +272,11 @@ export function ListeningPracticeViewer({
                       send(sentence.id, { answer: st.input });
                     }
                   }}
-                  placeholder="Type the pinyin (tones and spaces don't matter)"
+                  placeholder={
+                    lang === "cantonese"
+                      ? "Type the jyutping (tones and spaces don't matter)"
+                      : "Type the pinyin (tones and spaces don't matter)"
+                  }
                   disabled={st.checking}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 />

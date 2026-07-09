@@ -12,7 +12,7 @@ import {
 import { getAnyAssignmentReviewer } from "@/lib/assignment-review";
 
 const STATUSES = ["submitted", "assigned", "in_review", "reviewed"] as const;
-const TYPES = ["text_assignment", "vocal_hack"] as const;
+const TYPES = ["text_assignment", "vocal_hack", "diary"] as const;
 
 /**
  * GET /api/admin/assignment-submissions
@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
       assignedReviewerEmail: assignedReviewer.email,
       lessonId: courseLibraryLessons.id,
       lessonTitle: courseLibraryLessons.title,
+      lessonType: courseLibraryLessons.lessonType,
       moduleTitle: courseLibraryModules.title,
       courseId: courseLibraryCourses.id,
       courseTitle: courseLibraryCourses.title,

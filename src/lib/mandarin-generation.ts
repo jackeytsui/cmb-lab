@@ -56,11 +56,31 @@ export interface MandarinAnnotation {
 export async function generateMandarinAnnotation(
   text: string,
 ): Promise<MandarinAnnotation> {
+  return generateAnnotation(text, "mandarin");
+}
+
+/**
+ * Generate romanisation (pinyin OR jyutping) + English translation for a
+ * sentence, using the same pipeline as the matching 1:1 coaching input box:
+ *   - mandarin:  pinyin via smartRomanise + English via zh-CN translate-batch
+ *   - cantonese: jyutping via smartRomanise + English via zh-HK translate-batch
+ *
+ * The `pinyin` field carries jyutping for Cantonese (it maps to the same
+ * generated_pinyin storage column). Throws if translation fails so callers can
+ * surface a retry — an incomplete generation must not silently pass as complete.
+ */
+export async function generateAnnotation(
+  text: string,
+  language: "mandarin" | "cantonese",
+): Promise<MandarinAnnotation> {
   const trimmed = text.trim();
   if (!trimmed) return { pinyin: "", english: "" };
 
-  const pinyin = smartRomanise(trimmed, "mandarin");
-  const translations = await fetchProperTranslations([trimmed], "zh-CN");
+  const pinyin = smartRomanise(trimmed, language);
+  const translations = await fetchProperTranslations(
+    [trimmed],
+    language === "cantonese" ? "zh-HK" : "zh-CN",
+  );
   const english = translations?.join(" ").trim();
   if (!english) {
     throw new Error("Translation generation failed");

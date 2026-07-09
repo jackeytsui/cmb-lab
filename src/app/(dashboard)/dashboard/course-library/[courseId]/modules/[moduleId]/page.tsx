@@ -25,6 +25,7 @@ import {
 import { and, asc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { baseLessonType, isCantoneseLessonType } from "@/lib/lesson-language";
 import { cn } from "@/lib/utils";
 
 interface PageProps {
@@ -211,8 +212,16 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
         ) : (
           <div className="rounded-lg border border-border bg-card overflow-hidden divide-y divide-border">
             {lessons.map((lesson) => {
-              const Icon = TYPE_ICON[lesson.lessonType];
-              const color = TYPE_COLOR[lesson.lessonType];
+              // Cantonese variants share the base type's icon/colour/label; the
+              // "(Canto)" suffix marks the language.
+              const baseType = baseLessonType(
+                lesson.lessonType,
+              ) as keyof typeof TYPE_ICON;
+              const Icon = TYPE_ICON[baseType];
+              const color = TYPE_COLOR[baseType];
+              const typeLabel = `${TYPE_LABEL[baseType] ?? baseType}${
+                isCantoneseLessonType(lesson.lessonType) ? " (Canto)" : ""
+              }`;
               const isCompleted = completedLessonIds.has(lesson.id);
               const isCurrent = currentLessonId === lesson.id && !isCompleted;
               return (
@@ -227,7 +236,7 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
                 >
                   <Icon className={cn("w-4 h-4 shrink-0", color)} />
                   <span className="text-xs text-muted-foreground uppercase font-medium w-16">
-                    {TYPE_LABEL[lesson.lessonType] ?? lesson.lessonType}
+                    {typeLabel}
                   </span>
                   <span className="flex-1 text-sm text-foreground">
                     {lesson.title}

@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils";
 import { useTTS } from "@/hooks/useTTS";
 import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
 import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
+import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import { useSentenceAnnotations } from "@/components/assignments/useSentenceAnnotations";
 import {
+  annotateFromModelAnswer,
   ASSIGNMENT_CHAR_SIZE,
   type CharAnnotation,
 } from "@/lib/mandarin-annotate";
@@ -44,14 +46,24 @@ interface CorrectedSentenceProps {
   /** Show a remove (×) button on each bubble — reviewer editing mode. */
   onRemoveCorrection?: (correctionId: string) => void;
   className?: string;
+  /** Romanisation/tone system: mandarin (pinyin, jieba) or cantonese (jyutping). */
+  lang?: "mandarin" | "cantonese";
+  /**
+   * Stored space-separated romanisation for the sentence — required for
+   * Cantonese, where we render jyutping from this instead of re-deriving pinyin
+   * via jieba (Cantonese has no jieba/tone-sandhi pipeline).
+   */
+  pinyin?: string;
 }
 
 function CorrectionBubble({
   correction,
   onRemove,
+  lang = "mandarin",
 }: {
   correction: RenderableCorrection;
   onRemove?: (id: string) => void;
+  lang?: "mandarin" | "cantonese";
 }) {
   const { speak, stop, isPlaying, isLoading } = useTTS();
 
@@ -60,7 +72,7 @@ function CorrectionBubble({
       stop();
     } else {
       void speak(correction.suggestedChinese, {
-        language: "zh-CN",
+        language: lang === "cantonese" ? "zh-HK" : "zh-CN",
         rate: "medium",
       });
     }
@@ -85,8 +97,18 @@ function CorrectionBubble({
         </button>
       )}
       <span className="flex items-start gap-1.5">
-        {/* Suggested correction with pinyin stacked on top of each character */}
-        <AnnotatedSentence text={correction.suggestedChinese} fontSize={20} />
+        {/* Suggested correction with romanisation stacked on top of each char.
+            Cantonese renders from the stored jyutping; Mandarin re-derives. */}
+        {lang === "cantonese" ? (
+          <ModelAnnotatedSentence
+            chinese={correction.suggestedChinese}
+            pinyin={correction.suggestedPinyin}
+            fontSize={20}
+            lang="cantonese"
+          />
+        ) : (
+          <AnnotatedSentence text={correction.suggestedChinese} fontSize={20} />
+        )}
         <button
           type="button"
           onClick={handleSpeak}
@@ -122,10 +144,19 @@ export function CorrectedSentence({
   fontSize = ASSIGNMENT_CHAR_SIZE,
   onRemoveCorrection,
   className,
+  lang = "mandarin",
+  pinyin,
 }: CorrectedSentenceProps) {
-  // Jieba-backed per-character annotations (same pipeline as the coaching
-  // page), with a synchronous fallback for first paint.
-  const annotations = useSentenceAnnotations(text);
+  // Jieba-backed per-character annotations for Mandarin (same pipeline as the
+  // coaching page), with a synchronous fallback for first paint. The hook must
+  // run unconditionally; Cantonese overrides it with the stored jyutping,
+  // aligned one syllable per Han character (offsets stay UTF-16-accurate for
+  // the reviewer's highlight-to-correct mechanic).
+  const liveAnnotations = useSentenceAnnotations(text);
+  const annotations =
+    lang === "cantonese"
+      ? annotateFromModelAnswer(text, pinyin ?? "")
+      : liveAnnotations;
 
   // Group consecutive characters by the correction they fall in (or none).
   // Corrections don't overlap (enforced upstream), so a correction's chars are
@@ -167,12 +198,14 @@ export function CorrectedSentence({
                   fontSize={fontSize}
                   struck
                   dataOffset={ann.offset}
+                  lang={lang}
                 />
               ))}
             </span>
             <CorrectionBubble
               correction={group.correction}
               onRemove={onRemoveCorrection}
+              lang={lang}
             />
           </span>
         ) : (
@@ -182,6 +215,7 @@ export function CorrectedSentence({
               ann={ann}
               fontSize={fontSize}
               dataOffset={ann.offset}
+              lang={lang}
             />
           ))
         ),

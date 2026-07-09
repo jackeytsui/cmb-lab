@@ -40,10 +40,12 @@ export function VocalHackViewer({
   lessonId,
   sentences,
   initialSubmission,
+  lang = "mandarin",
 }: {
   lessonId: string;
   sentences: VocalHackSentenceDto[];
   initialSubmission: VocalHackSubmissionDto | null;
+  lang?: "mandarin" | "cantonese";
 }) {
   const [submission, setSubmission] = useState<VocalHackSubmissionDto | null>(
     initialSubmission,
@@ -202,6 +204,7 @@ export function VocalHackViewer({
                     chinese={sentence.chinese}
                     pinyin={sentence.pinyin}
                     english={sentence.english}
+                    lang={lang}
                   />
                 </div>
                 {!locked ? (

@@ -35,6 +35,14 @@ export const courseLibraryLessonTypeEnum = pgEnum(
     "listening_practice",
     "vocal_hack",
     "diary",
+    // Cantonese duplicates — identical shapes/content, but the romanisation is
+    // jyutping, the English is translated from Cantonese, and TTS uses zh-HK.
+    // They map back to the same base assignment_type_kind for review, so the
+    // existing reviewer roles cover both languages (see lib/lesson-language.ts).
+    "text_assignment_canto",
+    "listening_practice_canto",
+    "vocal_hack_canto",
+    "diary_canto",
   ],
 );
 

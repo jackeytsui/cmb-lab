@@ -31,6 +31,13 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import {
+  isDiaryLesson,
+  isListeningPracticeLesson,
+  isTextAssignmentLesson,
+  isVocalHackLesson,
+  lessonLanguage,
+} from "@/lib/lesson-language";
 
 interface Attachment {
   url: string;
@@ -124,12 +131,15 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   const content = (row.content ?? {}) as Record<string, unknown>;
   const lessonType = row.lessonType as string;
+  // Cantonese variants share every code path; only romanisation/English/TTS
+  // differ, keyed off this language.
+  const lang = lessonLanguage(lessonType);
 
   // Listening Practice: build the student DTOs. Model-answer pinyin is only
   // included for sentences the student has already resolved (correct/gaveup),
   // so unanswered answers never reach the client.
   let listeningSentences: ListeningSentenceDto[] = [];
-  if (row.lessonType === "listening_practice") {
+  if (isListeningPracticeLesson(lessonType)) {
     const rawSentences = Array.isArray(content.sentences)
       ? (content.sentences as Array<Record<string, unknown>>)
       : [];
@@ -178,7 +188,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
     description: string;
   }> = [];
   let textAssignmentSubmission: TextAssignmentSubmissionDto | null = null;
-  if (row.lessonType === "text_assignment") {
+  if (isTextAssignmentLesson(lessonType)) {
     const rawPrompts = Array.isArray(content.sentencePrompts)
       ? (content.sentencePrompts as Array<Record<string, unknown>>)
       : [];
@@ -227,7 +237,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
   // Vocal Hack: sentence config + the student's existing submission.
   let vocalHackSentences: VocalHackSentenceDto[] = [];
   let vocalHackSubmission: VocalHackSubmissionDto | null = null;
-  if (row.lessonType === "vocal_hack") {
+  if (isVocalHackLesson(lessonType)) {
     const rawSentences = Array.isArray(content.sentences)
       ? (content.sentences as Array<Record<string, unknown>>)
       : [];
@@ -288,7 +298,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   // Diary: the student's existing submission (segmented lines + recording).
   let diarySubmission: DiarySubmissionDto | null = null;
-  if (row.lessonType === "diary" && currentUser) {
+  if (isDiaryLesson(lessonType) && currentUser) {
     const submission = await db.query.assignmentSubmissions.findFirst({
       where: and(
         eq(assignmentSubmissions.lessonId, lessonId),
@@ -549,7 +559,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           </div>
         )}
 
-        {row.lessonType === "text_assignment" && (
+        {isTextAssignmentLesson(lessonType) && (
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
@@ -565,6 +575,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 lessonId={lessonId}
                 prompts={textAssignmentPrompts}
                 initialSubmission={textAssignmentSubmission}
+                lang={lang}
               />
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
@@ -576,7 +587,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           </div>
         )}
 
-        {row.lessonType === "diary" && (
+        {isDiaryLesson(lessonType) && (
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
@@ -590,11 +601,12 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <DiaryViewer
               lessonId={lessonId}
               initialSubmission={diarySubmission}
+              lang={lang}
             />
           </div>
         )}
 
-        {row.lessonType === "vocal_hack" && (
+        {isVocalHackLesson(lessonType) && (
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
@@ -610,6 +622,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 lessonId={lessonId}
                 sentences={vocalHackSentences}
                 initialSubmission={vocalHackSubmission}
+                lang={lang}
               />
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
@@ -621,7 +634,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           </div>
         )}
 
-        {row.lessonType === "listening_practice" && (
+        {isListeningPracticeLesson(lessonType) && (
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
@@ -636,6 +649,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               <ListeningPracticeViewer
                 lessonId={lessonId}
                 sentences={listeningSentences}
+                lang={lang}
               />
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
