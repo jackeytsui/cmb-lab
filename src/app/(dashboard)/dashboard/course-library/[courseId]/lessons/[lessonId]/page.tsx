@@ -19,6 +19,7 @@ import {
 } from "./VocalHackViewer";
 import { DiaryViewer, type DiarySubmissionDto } from "./DiaryViewer";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
+import { AssignmentInstructions } from "@/components/course-library/AssignmentInstructions";
 import { db } from "@/db";
 import {
   assignmentSubmissions,
@@ -563,12 +564,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
-                <div
-                  className="prose prose-invert max-w-none text-foreground prose-p:text-foreground prose-li:text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
-                  dangerouslySetInnerHTML={{
-                    __html: content.description as string,
-                  }}
-                />
+                <AssignmentInstructions html={content.description as string} />
               )}
             {textAssignmentPrompts.length > 0 ? (
               <TextAssignmentViewer
@@ -591,12 +587,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
-                <div
-                  className="prose prose-invert max-w-none text-foreground prose-p:text-foreground prose-li:text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
-                  dangerouslySetInnerHTML={{
-                    __html: content.description as string,
-                  }}
-                />
+                <AssignmentInstructions html={content.description as string} />
               )}
             <DiaryViewer
               lessonId={lessonId}
@@ -610,12 +601,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
-                <div
-                  className="prose prose-invert max-w-none text-foreground prose-p:text-foreground prose-li:text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
-                  dangerouslySetInnerHTML={{
-                    __html: content.description as string,
-                  }}
-                />
+                <AssignmentInstructions html={content.description as string} />
               )}
             {vocalHackSentences.length > 0 ? (
               <VocalHackViewer
@@ -638,12 +624,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
-                <div
-                  className="prose prose-invert max-w-none text-foreground prose-p:text-foreground prose-li:text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
-                  dangerouslySetInnerHTML={{
-                    __html: content.description as string,
-                  }}
-                />
+                <AssignmentInstructions html={content.description as string} />
               )}
             {listeningSentences.length > 0 ? (
               <ListeningPracticeViewer

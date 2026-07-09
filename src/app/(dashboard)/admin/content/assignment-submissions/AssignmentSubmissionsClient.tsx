@@ -238,7 +238,9 @@ export function AssignmentSubmissionsClient({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              <th className="px-4 py-3 font-medium">Student</th>
+              <th className="sticky left-0 z-20 border-r border-border bg-card px-4 py-3 font-medium">
+                Student
+              </th>
               <th className="px-4 py-3 font-medium">Assignment</th>
               <th className="px-4 py-3 font-medium">Course</th>
               <th className="px-4 py-3 font-medium">Module</th>
@@ -248,7 +250,9 @@ export function AssignmentSubmissionsClient({
               <th className="px-4 py-3 font-medium">Reviewer</th>
               <th className="px-4 py-3 font-medium">Score</th>
               <th className="px-4 py-3 font-medium">Reviewed</th>
-              <th className="px-4 py-3 font-medium">Actions</th>
+              <th className="sticky right-0 z-20 border-l border-border bg-card px-4 py-3 font-medium">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -275,9 +279,9 @@ export function AssignmentSubmissionsClient({
                 return (
                   <tr
                     key={row.id}
-                    className="border-b border-border last:border-b-0 hover:bg-muted/30"
+                    className="group border-b border-border last:border-b-0 hover:bg-muted/30"
                   >
-                    <td className="px-4 py-3">
+                    <td className="sticky left-0 z-10 border-r border-border bg-card px-4 py-3 group-hover:bg-muted/30">
                       <div className="text-foreground">
                         {row.studentName || row.studentEmail}
                       </div>
@@ -348,7 +352,7 @@ export function AssignmentSubmissionsClient({
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                       {formatDate(row.reviewedAt)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="sticky right-0 z-10 border-l border-border bg-card px-4 py-3 group-hover:bg-muted/30">
                       <Link
                         href={`/admin/content/assignment-submissions/${row.id}`}
                         className={cn(
