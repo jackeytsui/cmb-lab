@@ -814,7 +814,12 @@ function DocEditor({
     <div className="space-y-4">
       <div className="relative rounded-md border border-border">
         <EditorToolbar editor={editor} />
-        <EditorContent editor={editor} />
+        {/* Contain an over-wide (e.g. pasted) table inside the editor so it
+            scrolls here instead of blowing out the page layout. Wraps only the
+            content, so the toolbar's dropdowns are never clipped. */}
+        <div className="overflow-x-auto">
+          <EditorContent editor={editor} />
+        </div>
         {savedIndicator && (
           <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded bg-green-100 px-2 py-1 text-xs text-green-700 dark:bg-green-900/40 dark:text-green-400">
             <Check className="h-3 w-3" />
