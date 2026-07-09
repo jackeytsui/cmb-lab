@@ -74,45 +74,13 @@ function DocViewer({ doc }: { doc: InternalDoc }) {
     editor.commands.setContent(incoming);
   }, [doc.id, editor]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fit-to-width: coaches read the whole table without horizontal scrolling.
-  // Any table wider than the available width is scaled down to fit via CSS
-  // `zoom` (which shrinks the layout box too, so no leftover width / scrollbar).
-  // The table's own column widths are never modified — this only affects display.
-  useEffect(() => {
-    if (!editor) return;
-    const root = editor.view.dom as HTMLElement;
-
-    const fitTables = () => {
-      const style = window.getComputedStyle(root);
-      const padX =
-        parseFloat(style.paddingLeft || "0") +
-        parseFloat(style.paddingRight || "0");
-      const available = root.clientWidth - padX;
-      if (available <= 0) return;
-      root.querySelectorAll("table").forEach((el) => {
-        const table = el as HTMLElement;
-        // Reset before measuring so re-runs (resize / tab switch) recompute.
-        table.style.removeProperty("zoom");
-        const natural = table.offsetWidth;
-        if (natural > available) {
-          table.style.setProperty("zoom", String(available / natural));
-        }
-      });
-    };
-
-    const raf = requestAnimationFrame(fitTables);
-    window.addEventListener("resize", fitTables);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", fitTables);
-    };
-  }, [doc.id, editor]);
-
   const attachments = doc.attachments ?? [];
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-border">
+      {/* Tables keep their full size; if one is wider than the screen it
+          scrolls horizontally inside this box rather than shrinking. */}
+      <div className="overflow-x-auto rounded-md border border-border">
         <EditorContent editor={editor} />
       </div>
 
