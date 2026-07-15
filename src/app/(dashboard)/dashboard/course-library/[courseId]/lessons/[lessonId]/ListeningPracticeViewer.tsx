@@ -217,7 +217,7 @@ export function ListeningPracticeViewer({
       {/* Mode picker — the choice is remembered for this lesson. */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-foreground">
+          <p className="text-lg font-semibold text-foreground">
             Choose your level
           </p>
           <div className="flex rounded-lg border border-border bg-background p-1">
@@ -229,20 +229,20 @@ export function ListeningPracticeViewer({
                   type="button"
                   onClick={() => changeMode(m)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-semibold transition-colors",
                     mode === m
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5" />
+                  <Icon className="h-4 w-4" />
                   {label}
                 </button>
               );
             })}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-base text-muted-foreground">
           {modeInstructions(mode, romanName)}
         </p>
       </div>
