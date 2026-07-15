@@ -41,6 +41,19 @@ export const aiChatLimiterElevated = createLimiter({
   analytics: true,
 });
 
+// Lab Assistant (support bot): 15/min students, 45/min elevated
+export const labAssistantLimiter = createLimiter({
+  limiter: Ratelimit.slidingWindow(15, "1 m"),
+  prefix: "ratelimit:lab-assistant",
+  analytics: true,
+});
+
+export const labAssistantLimiterElevated = createLimiter({
+  limiter: Ratelimit.slidingWindow(45, "1 m"),
+  prefix: "ratelimit:lab-assistant:elevated",
+  analytics: true,
+});
+
 // Grading: 10/min students, 30/min elevated (coaches/admins)
 export const gradingLimiter = createLimiter({
   limiter: Ratelimit.slidingWindow(10, "1 m"),
