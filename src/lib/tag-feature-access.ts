@@ -168,3 +168,32 @@ export async function getRestrictedContentIds(
 
   return new Set(rows.map((r) => r.contentId));
 }
+
+/** Content type used in tag_content_grants for Course Library courses. */
+export const COURSE_LIBRARY_COURSE_CONTENT_TYPE = "course_library_course";
+
+/**
+ * Build a per-course visibility predicate for the Course Library, driven by
+ * tag_content_grants (same model as audio series):
+ * - A course with no grant rows is unrestricted → visible to everyone.
+ * - A course with grant rows is visible only to students holding one of the
+ *   granting tags.
+ * - Staff (admin/coach) always see everything.
+ */
+export async function getCourseLibraryCourseAccess(
+  user: { id: string; role?: string | null } | null | undefined
+): Promise<(courseId: string) => boolean> {
+  if (user && (user.role === "admin" || user.role === "coach")) {
+    return () => true;
+  }
+
+  const [grantedIds, restrictedIds] = await Promise.all([
+    user
+      ? getUserContentGrants(user.id, COURSE_LIBRARY_COURSE_CONTENT_TYPE)
+      : Promise.resolve(new Set<string>()),
+    getRestrictedContentIds(COURSE_LIBRARY_COURSE_CONTENT_TYPE),
+  ]);
+
+  return (courseId: string) =>
+    !restrictedIds.has(courseId) || grantedIds.has(courseId);
+}

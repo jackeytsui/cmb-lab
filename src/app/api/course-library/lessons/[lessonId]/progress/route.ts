@@ -11,6 +11,7 @@ import {
   users,
 } from "@/db/schema";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 interface RouteParams {
   params: Promise<{ lessonId: string }>;
@@ -70,6 +71,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
+  const canSeeCourse = await getCourseLibraryCourseAccess(user);
+  if (!canSeeCourse(access.courseId)) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
+
   const progress = await db.query.courseLibraryLessonProgress.findFirst({
     where: and(
       eq(courseLibraryLessonProgress.userId, user.id),
@@ -94,6 +100,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const { lessonId } = await params;
   const [access] = await getLessonAccess(lessonId, user.role);
   if (!access) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
+
+  const canSeeCourse = await getCourseLibraryCourseAccess(user);
+  if (!canSeeCourse(access.courseId)) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 

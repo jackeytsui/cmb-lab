@@ -25,6 +25,7 @@ import {
 import { and, asc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { baseLessonType, isCantoneseLessonType } from "@/lib/lesson-language";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +105,10 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
     .limit(1);
 
   if (!row) notFound();
+
+  const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
+  if (!canSeeCourse(courseId)) notFound();
+
   const mod = row.module;
 
   const lessons = await db

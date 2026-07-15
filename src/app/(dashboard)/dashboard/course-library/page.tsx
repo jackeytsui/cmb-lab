@@ -11,6 +11,7 @@ import {
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 export const metadata = {
   title: "Course Library",
@@ -19,8 +20,9 @@ export const metadata = {
 export default async function CourseLibraryStudentPage() {
   const currentUser = await getCurrentUser();
   const statuses = visibleCourseStatuses(currentUser?.role);
+  const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
 
-  const courses = await db
+  const allCourses = await db
     .select()
     .from(courseLibraryCourses)
     .where(
@@ -30,6 +32,10 @@ export default async function CourseLibraryStudentPage() {
       ),
     )
     .orderBy(asc(courseLibraryCourses.sortOrder));
+
+  // Tag-based visibility: courses with tag grants are only shown to students
+  // holding one of the granting tags (managed in Admin > Tag Management).
+  const courses = allCourses.filter((course) => canSeeCourse(course.id));
 
   const courseIds = courses.map((course) => course.id);
   const progressByCourse = new Map<
