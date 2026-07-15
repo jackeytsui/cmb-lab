@@ -7,8 +7,11 @@ import {
   courseLibraryCourses,
   courseLibraryModules,
   courseLibraryLessons,
+  tagContentGrants,
+  tags,
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { COURSE_LIBRARY_COURSE_CONTENT_TYPE } from "@/lib/tag-feature-access";
 import { CourseLibraryEditorClient } from "./CourseLibraryEditorClient";
 
 interface PageProps {
@@ -71,6 +74,22 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
     lessonsByModule.set(l.moduleId, list);
   }
 
+  const [allTags, grantRows] = await Promise.all([
+    db
+      .select({ id: tags.id, name: tags.name, color: tags.color })
+      .from(tags)
+      .orderBy(asc(tags.name)),
+    db
+      .select({ tagId: tagContentGrants.tagId })
+      .from(tagContentGrants)
+      .where(
+        and(
+          eq(tagContentGrants.contentType, COURSE_LIBRARY_COURSE_CONTENT_TYPE),
+          eq(tagContentGrants.contentId, courseId),
+        ),
+      ),
+  ]);
+
   const hydrated = {
     id: course.id,
     title: course.title,
@@ -104,7 +123,11 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
         Back to courses
       </Link>
 
-      <CourseLibraryEditorClient initialCourse={hydrated} />
+      <CourseLibraryEditorClient
+        initialCourse={hydrated}
+        allTags={allTags}
+        initialAllowedTagIds={grantRows.map((g) => g.tagId)}
+      />
     </div>
   );
 }

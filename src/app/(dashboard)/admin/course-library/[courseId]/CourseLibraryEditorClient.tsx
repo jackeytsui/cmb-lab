@@ -66,6 +66,12 @@ interface ModuleRow {
 
 type CourseStatus = "draft" | "preview" | "published";
 
+interface AccessTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface CourseData {
   id: string;
   title: string;
@@ -336,8 +342,12 @@ function SortableLessonList({
 
 export function CourseLibraryEditorClient({
   initialCourse,
+  allTags,
+  initialAllowedTagIds,
 }: {
   initialCourse: CourseData;
+  allTags: AccessTag[];
+  initialAllowedTagIds: string[];
 }) {
   const router = useRouter();
   const [course, setCourse] = useState<CourseData>(initialCourse);
@@ -359,6 +369,10 @@ export function CourseLibraryEditorClient({
     weekLabel: "",
   });
   const [savingModule, setSavingModule] = useState(false);
+  const [allowedTagIds, setAllowedTagIds] = useState<string[]>(
+    initialAllowedTagIds,
+  );
+  const [savingAccess, setSavingAccess] = useState(false);
 
   const isDirty = title !== course.title || summary !== course.summary;
 
@@ -379,6 +393,30 @@ export function CourseLibraryEditorClient({
       }
     } finally {
       setSavingHeader(false);
+    }
+  };
+
+  const toggleAccessTag = async (tagId: string) => {
+    const next = allowedTagIds.includes(tagId)
+      ? allowedTagIds.filter((id) => id !== tagId)
+      : [...allowedTagIds, tagId];
+    const prev = allowedTagIds;
+    setAllowedTagIds(next);
+    setSavingAccess(true);
+    try {
+      const res = await fetch(
+        `/api/admin/course-library/courses/${course.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ allowedTagIds: next }),
+        },
+      );
+      if (!res.ok) setAllowedTagIds(prev);
+    } catch {
+      setAllowedTagIds(prev);
+    } finally {
+      setSavingAccess(false);
     }
   };
 
@@ -773,6 +811,49 @@ export function CourseLibraryEditorClient({
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
           />
         </div>
+        {allTags.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Student Access (tags)
+              </label>
+              {savingAccess && (
+                <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mb-2">
+              {allowedTagIds.length === 0
+                ? "No tags selected — visible to all students with Course Library access."
+                : "Only students with one of the selected tags can see this course."}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {allTags.map((tag) => {
+                const selected = allowedTagIds.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => toggleAccessTag(tag.id)}
+                    disabled={savingAccess}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60",
+                      selected
+                        ? "border-blue-500/50 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                        : "border-border bg-background text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full shrink-0"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    {tag.name}
+                    {selected && <Check className="w-3 h-3" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {isDirty && (
           <div className="flex justify-end">
             <button
