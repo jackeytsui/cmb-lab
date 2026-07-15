@@ -24,6 +24,7 @@ Requires the existing GHL integration to be configured: at least one active loca
 | Guidance | `ai_prompts` slug `lab-assistant-guidance` | Team-editable in **Admin → AI Prompts**, no code change. Fallback default in `src/lib/lab-assistant/guidance.ts` |
 | Data gatekeeper | `src/lib/lab-assistant/student-context.ts` | See below |
 | Handover | `src/lib/lab-assistant/escalation.ts` + `src/lib/ghl/tasks.ts` | GHL tasks on the student's contact |
+| Admin block | `src/components/admin/LabAssistantAdminWidget.tsx` on **Admin → Manage Portal** | Stats, config health, recent handovers, live test console (`/api/admin/lab-assistant/overview`) |
 
 ## Data gatekeeping (non-negotiable)
 
@@ -66,6 +67,17 @@ Triggered when: intent is `other`/unclassified, confidence is below threshold, t
 
 `npm run db:seed` upserts the `lab-assistant-guidance` prompt (idempotent). Without seeding, the built-in default is used; once the row exists the team owns the copy.
 
+## Admin management
+
+Everything sits in one block on **Admin → Manage Portal** ("CMB Lab Assistant", admin-only):
+
+- **Stats (30d)** — chats, in-scope resolution rate (amber below the 60% gate), escalations (with failures), testimonial requests, intent breakdown
+- **Config health** — widget flag, OpenAI key, active GHL location, seeded guidance prompt, missing field mappings
+- **Recent handovers** — last 5 escalation/testimonial tasks with failure reasons, linking to the full sync log
+- **Test console** — chat against the real pipeline in dry-run mode (admin/coach only): intent scan, gatekept context, and guidance all run for real, but no GHL tasks are created and test chats are excluded from resolution metrics. Responses use the signed-in admin's own contact data — the gatekeeper never impersonates a student.
+
+Deeper edits link out: guidance copy in **Admin → AI Prompts**, field mappings in **Admin → GHL Integration**.
+
 ## Success gate (P3)
 
-≥60% in-scope resolution, zero data-scope incidents. Resolution/escalation rates are queryable from `sync_events` (`lab_assistant.intent_scan` payloads carry `intent`, `confidence`, `resolved`, `urgent`).
+≥60% in-scope resolution, zero data-scope incidents. Resolution/escalation rates are visible in the admin block and queryable from `sync_events` (`lab_assistant.intent_scan` payloads carry `intent`, `confidence`, `resolved`, `urgent`).

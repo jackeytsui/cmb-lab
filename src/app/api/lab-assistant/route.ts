@@ -18,7 +18,7 @@ import {
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
-import { getRealUser } from "@/lib/auth";
+import { getRealUser, hasMinimumRole } from "@/lib/auth";
 import {
   labAssistantLimiter,
   labAssistantLimiterElevated,
@@ -216,6 +216,11 @@ export async function POST(request: Request) {
       return Response.json({ error: "No messages provided" }, { status: 400 });
     }
 
+    // Dry run (admin test console): full pipeline, but no GHL tasks are
+    // created and intent scans stay out of the resolution metrics.
+    // Only honored for coach/admin so students can't suppress escalation.
+    const dryRun = body.dryRun === true && (await hasMinimumRole("coach"));
+
     const transcript = buildTranscript(messages);
 
     // Pipeline: intent scan + gatekept context (independent, run together)
@@ -231,36 +236,40 @@ export async function POST(request: Request) {
 
     // Unresolved (off-scope, unclear, or low confidence) → escalate, don't guess.
     if (intent === null || intent === "other") {
-      logIntentScan(user, scan, false);
+      if (!dryRun) logIntentScan(user, scan, false);
 
       if (alreadyEscalated(messages)) {
         return cannedResponse(ALREADY_ESCALATED_REPLY);
       }
 
-      const result = await createEscalationTask({
-        user,
-        ghlContactId: studentContext.ghlContactId,
-        intent: scan && intent === "other" ? "other" : null,
-        confidence: scan?.confidence ?? null,
-        transcript,
-        urgent,
-      });
+      const result = dryRun
+        ? { ok: true, taskId: null }
+        : await createEscalationTask({
+            user,
+            ghlContactId: studentContext.ghlContactId,
+            intent: scan && intent === "other" ? "other" : null,
+            confidence: scan?.confidence ?? null,
+            transcript,
+            urgent,
+          });
 
       return cannedResponse(
         result.ok ? ESCALATION_CONFIRMATION : ESCALATION_FALLBACK_REPLY
       );
     }
 
-    logIntentScan(user, scan, true);
+    if (!dryRun) logIntentScan(user, scan, true);
 
     // Intent 5: always create the testimonial task, then confirm.
     let testimonialNote = "";
     if (intent === "testimonial_sheldon") {
-      const result = await createTestimonialTask({
-        user,
-        ghlContactId: studentContext.ghlContactId,
-        transcript,
-      });
+      const result = dryRun
+        ? { ok: true, taskId: null }
+        : await createTestimonialTask({
+            user,
+            ghlContactId: studentContext.ghlContactId,
+            transcript,
+          });
       testimonialNote = result.ok
         ? `\n\nSERVER NOTE: A "Testimonial interview request" task was just created for the team. Confirm warmly to the student that their testimonial interview with Sheldon has been requested and the team will reach out to schedule it. Do not create any further escalation.`
         : `\n\nSERVER NOTE: Creating the testimonial request failed. Apologise briefly and ask the student to email ${SUPPORT_EMAIL} to set up their testimonial interview with Sheldon.`;
@@ -269,14 +278,16 @@ export async function POST(request: Request) {
     // Urgent in-scope message: task now, and the model points to the inbox.
     let urgentNote = "";
     if (urgent && intent !== "testimonial_sheldon") {
-      const result = await createEscalationTask({
-        user,
-        ghlContactId: studentContext.ghlContactId,
-        intent,
-        confidence: scan?.confidence ?? null,
-        transcript,
-        urgent: true,
-      });
+      const result = dryRun
+        ? { ok: true, taskId: null }
+        : await createEscalationTask({
+            user,
+            ghlContactId: studentContext.ghlContactId,
+            intent,
+            confidence: scan?.confidence ?? null,
+            transcript,
+            urgent: true,
+          });
       urgentNote = result.ok
         ? `\n\nSERVER NOTE: This message was flagged urgent — a same-day task was already created for the team. Answer the question if you can, mention the team has been notified, and point the student to ${SUPPORT_EMAIL} for anything time-critical. Do not call escalateToTeam again.`
         : `\n\nSERVER NOTE: This message was flagged urgent but the team task could not be created. Point the student to ${SUPPORT_EMAIL} directly.`;
@@ -309,14 +320,16 @@ export async function POST(request: Request) {
               .describe("True if the student needs same-day follow-up"),
           }),
           execute: async ({ reason, urgent: toolUrgent }) => {
-            const escalation = await createEscalationTask({
-              user,
-              ghlContactId: studentContext.ghlContactId,
-              intent,
-              confidence: scan?.confidence ?? null,
-              transcript: `${transcript}\n\n[Bot escalation reason: ${reason}]`,
-              urgent: toolUrgent || urgent,
-            });
+            const escalation = dryRun
+              ? { ok: true, taskId: null }
+              : await createEscalationTask({
+                  user,
+                  ghlContactId: studentContext.ghlContactId,
+                  intent,
+                  confidence: scan?.confidence ?? null,
+                  transcript: `${transcript}\n\n[Bot escalation reason: ${reason}]`,
+                  urgent: toolUrgent || urgent,
+                });
             return escalation.ok
               ? {
                   ok: true,
