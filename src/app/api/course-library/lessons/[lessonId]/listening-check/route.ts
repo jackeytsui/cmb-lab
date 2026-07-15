@@ -14,6 +14,7 @@ import type { CourseLibraryListeningPracticeSentence } from "@/db/schema/course-
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { romanisationMatches } from "@/lib/pinyin-normalize";
 import { isListeningPracticeLesson, lessonLanguage } from "@/lib/lesson-language";
+import { convertScript } from "@/lib/chinese-convert";
 
 // ---------------------------------------------------------------------------
 // POST /api/course-library/lessons/[lessonId]/listening-check
@@ -39,7 +40,31 @@ const bodySchema = z.object({
   sentenceId: z.string().min(1),
   answer: z.string().max(200).optional(),
   giveUp: z.boolean().optional(),
+  // "guided" (default): romanisation answers only, text is shown.
+  // "mastery": audio only — Chinese characters are also accepted as answers.
+  mode: z.enum(["guided", "mastery"]).optional(),
 });
+
+/**
+ * True when the submitted characters match the sentence (Mastery mode).
+ * Both sides are normalised: converted to Simplified (so Traditional and
+ * Simplified submissions are equally valid) and stripped to Han characters
+ * only, so punctuation and spacing never matter. Submissions with no Han
+ * characters never match.
+ */
+async function chineseAnswerMatches(
+  submission: string,
+  modelChinese: string,
+): Promise<boolean> {
+  const hanOnly = (text: string) => text.replace(/[^\p{Script=Han}]/gu, "");
+  const submittedHan = hanOnly(submission);
+  if (!submittedHan) return false;
+  const [submittedSimplified, modelSimplified] = await Promise.all([
+    convertScript(submittedHan, "traditional", "simplified"),
+    convertScript(hanOnly(modelChinese), "traditional", "simplified"),
+  ]);
+  return submittedSimplified === modelSimplified;
+}
 
 async function getCourseLibraryUser() {
   const { userId: clerkId } = await auth();
@@ -112,13 +137,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const giveUp = parsed.data.giveUp === true;
+  const answer = parsed.data.answer ?? "";
+  const isMastery = parsed.data.mode === "mastery";
+  // Guided: romanisation only (the characters are on screen, so accepting them
+  // would be a copy-paste pass). Mastery: romanisation OR the characters
+  // themselves, Traditional or Simplified.
   const correct =
     !giveUp &&
-    romanisationMatches(
-      parsed.data.answer ?? "",
+    (romanisationMatches(
+      answer,
       sentence.pinyin,
       lessonLanguage(lesson.lessonType),
-    );
+    ) ||
+      (isMastery && (await chineseAnswerMatches(answer, sentence.chinese))));
   const status: SentenceStatus = correct
     ? "correct"
     : giveUp

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, X, Loader2, Flag } from "lucide-react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { Check, X, Loader2, Eye, BookOpen, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
 import {
@@ -18,6 +18,74 @@ import { ListeningAudioPlayer } from "./ListeningAudioPlayer";
 // ---------------------------------------------------------------------------
 
 type Status = "unanswered" | "incorrect" | "correct" | "gaveup";
+
+// Practice modes. Guided = the classic format (characters + English shown,
+// transcribe the romanisation). Mastery = by ear alone: nothing is shown until
+// the answer is checked, and either the romanisation OR the Chinese characters
+// (Simplified or Traditional) count as correct. The choice is remembered per
+// lesson per browser; switching affects only unanswered sentences.
+type PracticeMode = "guided" | "mastery";
+
+const MODE_STORAGE_PREFIX = "listening-practice-mode:";
+const MODE_CHANGE_EVENT = "listening-practice-mode-change";
+
+function readStoredMode(lessonId: string): PracticeMode {
+  try {
+    return window.localStorage.getItem(`${MODE_STORAGE_PREFIX}${lessonId}`) ===
+      "mastery"
+      ? "mastery"
+      : "guided";
+  } catch {
+    return "guided";
+  }
+}
+
+/**
+ * The student's remembered mode for this lesson, backed by localStorage via
+ * useSyncExternalStore — SSR renders "guided" and the stored choice applies
+ * cleanly on hydration without a state-in-effect dance.
+ */
+function useRememberedMode(lessonId: string) {
+  const subscribe = useCallback((onChange: () => void) => {
+    window.addEventListener("storage", onChange);
+    window.addEventListener(MODE_CHANGE_EVENT, onChange);
+    return () => {
+      window.removeEventListener("storage", onChange);
+      window.removeEventListener(MODE_CHANGE_EVENT, onChange);
+    };
+  }, []);
+  const mode = useSyncExternalStore(
+    subscribe,
+    () => readStoredMode(lessonId),
+    () => "guided" as PracticeMode,
+  );
+  const changeMode = useCallback(
+    (next: PracticeMode) => {
+      try {
+        window.localStorage.setItem(`${MODE_STORAGE_PREFIX}${lessonId}`, next);
+      } catch {
+        // storage unavailable — the choice just won't persist
+      }
+      window.dispatchEvent(new Event(MODE_CHANGE_EVENT));
+    },
+    [lessonId],
+  );
+  return [mode, changeMode] as const;
+}
+
+const MODE_META: Record<
+  PracticeMode,
+  { label: string; Icon: typeof BookOpen }
+> = {
+  guided: { label: "Level 1 · Guided", Icon: BookOpen },
+  mastery: { label: "Level 2 · Mastery", Icon: Headphones },
+};
+
+function modeInstructions(mode: PracticeMode, roman: string): string {
+  return mode === "guided"
+    ? `Read along as you listen — the Chinese and its meaning are shown. Type the ${roman} for what you hear. Tones and spaces don't matter.`
+    : `By ear alone — nothing is shown until you check your answer. Type what you hear as ${roman} or as Chinese characters (Simplified and Traditional both count).`;
+}
 
 export interface ListeningSentenceDto {
   id: string;
@@ -90,6 +158,11 @@ export function ListeningPracticeViewer({
     return initial;
   });
 
+  // Mode is remembered per lesson per browser.
+  const [mode, changeMode] = useRememberedMode(lessonId);
+
+  const romanName = lang === "cantonese" ? "jyutping" : "pinyin";
+
   const patch = (id: string, next: Partial<SentenceState>) =>
     setState((prev) => ({ ...prev, [id]: { ...prev[id], ...next } }));
 
@@ -121,7 +194,7 @@ export function ListeningPracticeViewer({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sentenceId: id, ...payload }),
+          body: JSON.stringify({ sentenceId: id, mode, ...payload }),
         },
       );
       const data = await res.json();
@@ -141,6 +214,39 @@ export function ListeningPracticeViewer({
 
   return (
     <div className="space-y-5">
+      {/* Mode picker — the choice is remembered for this lesson. */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-foreground">
+            Choose your level
+          </p>
+          <div className="flex rounded-lg border border-border bg-background p-1">
+            {(Object.keys(MODE_META) as PracticeMode[]).map((m) => {
+              const { label, Icon } = MODE_META[m];
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => changeMode(m)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                    mode === m
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {modeInstructions(mode, romanName)}
+        </p>
+      </div>
+
       {/* Progress / final percentage */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
         <div>
@@ -232,8 +338,9 @@ export function ListeningPracticeViewer({
               ttsLanguage={lang === "cantonese" ? "zh-HK" : "zh-CN"}
             />
 
-            {/* Chinese: reveal pinyin-on-top once resolved, else plain chars.
-                English translation is shown beneath in both states. */}
+            {/* Chinese: reveal romanisation-on-top once resolved. Before that,
+                Guided shows the plain characters (+ English beneath) while
+                Mastery shows nothing — by ear alone until checked. */}
             <div className="rounded-md bg-background px-3 py-3">
               {showReveal ? (
                 <RevealedSentence
@@ -241,6 +348,11 @@ export function ListeningPracticeViewer({
                   pinyin={st.revealed as string}
                   lang={lang}
                 />
+              ) : mode === "mastery" ? (
+                <p className="flex items-center gap-1.5 text-sm italic text-muted-foreground">
+                  <Headphones className="h-4 w-4 shrink-0" />
+                  Listen closely — the sentence is revealed after you answer.
+                </p>
               ) : (
                 <span
                   className="font-medium text-foreground"
@@ -249,7 +361,7 @@ export function ListeningPracticeViewer({
                   {sentence.chinese}
                 </span>
               )}
-              {sentence.english && (
+              {sentence.english && (mode === "guided" || resolved) && (
                 <p
                   className="mt-1.5 text-muted-foreground"
                   style={{ fontSize: `${ASSIGNMENT_ENGLISH_SIZE}px` }}
@@ -273,9 +385,9 @@ export function ListeningPracticeViewer({
                     }
                   }}
                   placeholder={
-                    lang === "cantonese"
-                      ? "Type the jyutping (tones and spaces don't matter)"
-                      : "Type the pinyin (tones and spaces don't matter)"
+                    mode === "mastery"
+                      ? `Type the ${romanName} or the Chinese characters`
+                      : `Type the ${romanName} (tones and spaces don't matter)`
                   }
                   disabled={st.checking}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -309,8 +421,8 @@ export function ListeningPracticeViewer({
                     disabled={st.checking}
                     className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
                   >
-                    <Flag className="h-4 w-4" />
-                    Give up
+                    <Eye className="h-4 w-4" />
+                    Reveal answer
                   </button>
                 </div>
               </div>
