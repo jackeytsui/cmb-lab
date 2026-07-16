@@ -346,12 +346,47 @@ function HealthRow({
   );
 }
 
+// Track keys mirror TALK_TRACK_INTENTS on the server ("" = overall guidance).
+const GUIDANCE_TRACKS: Array<{ key: string; label: string; hint: string }> = [
+  {
+    key: "",
+    label: "Overall guidance",
+    hint: "The bot's base instructions: tone, what it may answer, null-state phrasing, escalation and urgent handling. Applies to every message.",
+  },
+  {
+    key: "start_date",
+    label: "Start date",
+    hint: "Exactly how to answer start-date questions (wording, what to add, when to escalate).",
+  },
+  {
+    key: "end_date",
+    label: "End date",
+    hint: "Exactly how to answer end-date questions.",
+  },
+  {
+    key: "my_coach",
+    label: "My coach",
+    hint: "How to talk about coach assignments, including the no-coach-yet case.",
+  },
+  {
+    key: "referral",
+    label: "Referrals",
+    hint: "Your referral talk track: how the program works, rewards, links to share, what the bot should promise.",
+  },
+  {
+    key: "testimonial_sheldon",
+    label: "Testimonial",
+    hint: "What to say when booking a testimonial with Sheldon (a GHL task is always created for this intent).",
+  },
+];
+
 /**
- * Edit the bot's guidance (tone, scope, actions/behaviour instructions)
- * directly from the block. Saves to the ai_prompts row with versioning —
- * changes take effect on the next student message, no deploy needed.
+ * Edit the bot's overall guidance and per-intent talk tracks directly from
+ * the block. Saves to ai_prompts rows with versioning — changes take effect
+ * on the next student message, no deploy needed.
  */
 function GuidanceEditor({ onSaved }: { onSaved: () => void }) {
+  const [track, setTrack] = useState<string>("");
   const [content, setContent] = useState("");
   const [initialContent, setInitialContent] = useState("");
   const [version, setVersion] = useState<number | null>(null);
@@ -359,26 +394,49 @@ function GuidanceEditor({ onSaved }: { onSaved: () => void }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const activeTrack =
+    GUIDANCE_TRACKS.find((t) => t.key === track) ?? GUIDANCE_TRACKS[0];
+  const isTalkTrack = track !== "";
+
   useEffect(() => {
-    fetch("/api/admin/lab-assistant/guidance")
+    let cancelled = false;
+    setLoading(true);
+    setMessage(null);
+    const url = track
+      ? `/api/admin/lab-assistant/guidance?track=${track}`
+      : "/api/admin/lab-assistant/guidance";
+    fetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data) => {
+        if (cancelled) return;
         setContent(data.content ?? "");
         setInitialContent(data.content ?? "");
         setVersion(data.version ?? null);
       })
-      .catch(() => setMessage("Couldn't load guidance"))
-      .finally(() => setLoading(false));
-  }, []);
+      .catch(() => {
+        if (!cancelled) setMessage("Couldn't load this track");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [track]);
 
   const dirty = content !== initialContent;
+  // Talk tracks may be saved empty (clears them); overall guidance may not.
+  const canSave = dirty && !saving && (isTalkTrack || !!content.trim());
 
   async function handleSave() {
-    if (!content.trim() || saving) return;
+    if (!canSave) return;
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/admin/lab-assistant/guidance", {
+      const url = track
+        ? `/api/admin/lab-assistant/guidance?track=${track}`
+        : "/api/admin/lab-assistant/guidance";
+      const res = await fetch(url, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
@@ -403,7 +461,7 @@ function GuidanceEditor({ onSaved }: { onSaved: () => void }) {
     <div className="mt-4 rounded-lg border border-border/70 bg-background/50 p-3">
       <div className="mb-1 flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Guidance &amp; actions
+          Guidance &amp; talk tracks
           {version !== null && (
             <span className="ml-1.5 normal-case font-normal">v{version}</span>
           )}
@@ -421,12 +479,33 @@ function GuidanceEditor({ onSaved }: { onSaved: () => void }) {
           </span>
         )}
       </div>
+
+      {/* Track selector */}
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        {GUIDANCE_TRACKS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTrack(t.key)}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+              track === t.key
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-background text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <p className="mb-2 text-[11px] text-muted-foreground">
-        The bot&apos;s instructions: tone, what it may answer, null-state
-        phrasing, and the actions you want (when to escalate, what to say for
-        testimonials, urgent handling). Paste or edit freely — saves as a new
-        version and applies immediately. Test it in the console above.
+        {activeTrack.hint}{" "}
+        {isTalkTrack
+          ? "Leave empty to fall back to the overall guidance. Saves as a new version and applies immediately — test it in the console above."
+          : "Paste or edit freely — saves as a new version and applies immediately. Test it in the console above."}
       </p>
+
       {loading ? (
         <div className="h-32 animate-pulse rounded-md bg-muted" />
       ) : (
@@ -434,18 +513,27 @@ function GuidanceEditor({ onSaved }: { onSaved: () => void }) {
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            rows={10}
+            rows={isTalkTrack ? 6 : 10}
             spellCheck={false}
+            placeholder={
+              isTalkTrack
+                ? `e.g. "Always mention the referral reward, share the sign-up link, and offer to pass their question to the team if they want specifics."`
+                : undefined
+            }
             className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-foreground outline-none focus:border-primary"
           />
           <div className="mt-2 flex items-center gap-3">
             <button
               type="button"
               onClick={handleSave}
-              disabled={!dirty || saving || !content.trim()}
+              disabled={!canSave}
               className="rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save guidance"}
+              {saving
+                ? "Saving..."
+                : isTalkTrack
+                  ? `Save "${activeTrack.label}" track`
+                  : "Save guidance"}
             </button>
             {dirty && !saving && (
               <button

@@ -1,7 +1,10 @@
 // src/app/api/admin/lab-assistant/guidance/route.ts
-// Read/update the Lab Assistant guidance prompt directly from the admin
-// block (no need to visit AI Prompts). Creates the ai_prompts row on first
-// save, and keeps the same versioning behaviour as the prompts editor.
+// Read/update the Lab Assistant guidance prompt and per-intent talk tracks
+// directly from the admin block. Rows are created on first save and keep the
+// same versioning behaviour as the prompts editor.
+//
+// ?track=<intent> targets a talk track (start_date, end_date, my_coach,
+// referral, testimonial_sheldon); no param targets the overall guidance.
 
 import { NextRequest, NextResponse } from "next/server";
 import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
@@ -12,22 +15,64 @@ import { invalidatePromptCache } from "@/lib/prompts";
 import {
   DEFAULT_GUIDANCE_PROMPT,
   LAB_ASSISTANT_PROMPT_SLUG,
+  TALK_TRACK_INTENTS,
+  TALK_TRACK_LABELS,
+  talkTrackSlug,
+  type TalkTrackIntent,
 } from "@/lib/lab-assistant/guidance";
 
-export async function GET() {
+interface Target {
+  slug: string;
+  name: string;
+  description: string;
+  defaultContent: string;
+  /** Talk tracks may be saved empty (= cleared); overall guidance may not. */
+  allowEmpty: boolean;
+}
+
+function resolveTarget(trackParam: string | null): Target | null {
+  if (!trackParam) {
+    return {
+      slug: LAB_ASSISTANT_PROMPT_SLUG,
+      name: "CMB Lab Assistant - Guidance",
+      description:
+        "Guidance layer for the CMB Lab Assistant support widget (tone, scope, null-state phrasing, escalation rules).",
+      defaultContent: DEFAULT_GUIDANCE_PROMPT,
+      allowEmpty: false,
+    };
+  }
+  if (!(TALK_TRACK_INTENTS as readonly string[]).includes(trackParam)) {
+    return null;
+  }
+  const intent = trackParam as TalkTrackIntent;
+  return {
+    slug: talkTrackSlug(intent),
+    name: `CMB Lab Assistant - Talk Track: ${TALK_TRACK_LABELS[intent]}`,
+    description: `Team-authored reply instructions for the "${TALK_TRACK_LABELS[intent]}" intent. Empty = follow the overall guidance only.`,
+    defaultContent: "",
+    allowEmpty: true,
+  };
+}
+
+export async function GET(request: NextRequest) {
   const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const target = resolveTarget(request.nextUrl.searchParams.get("track"));
+  if (!target) {
+    return NextResponse.json({ error: "Unknown track" }, { status: 400 });
+  }
+
   try {
     const prompt = await db.query.aiPrompts.findFirst({
-      where: eq(aiPrompts.slug, LAB_ASSISTANT_PROMPT_SLUG),
+      where: eq(aiPrompts.slug, target.slug),
       columns: { currentContent: true, currentVersion: true, updatedAt: true },
     });
 
     return NextResponse.json({
-      content: prompt?.currentContent ?? DEFAULT_GUIDANCE_PROMPT,
+      content: prompt?.currentContent ?? target.defaultContent,
       version: prompt?.currentVersion ?? null,
       exists: !!prompt,
       updatedAt: prompt?.updatedAt?.toISOString() ?? null,
@@ -47,11 +92,16 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const target = resolveTarget(request.nextUrl.searchParams.get("track"));
+  if (!target) {
+    return NextResponse.json({ error: "Unknown track" }, { status: 400 });
+  }
+
   try {
     const body = await request.json();
     const content =
       typeof body.content === "string" ? body.content.trim() : "";
-    if (!content) {
+    if (!content && !target.allowEmpty) {
       return NextResponse.json(
         { error: "Content is required" },
         { status: 400 }
@@ -60,7 +110,7 @@ export async function PUT(request: NextRequest) {
 
     const currentUser = await getCurrentUser();
     const existing = await db.query.aiPrompts.findFirst({
-      where: eq(aiPrompts.slug, LAB_ASSISTANT_PROMPT_SLUG),
+      where: eq(aiPrompts.slug, target.slug),
       columns: { id: true, currentVersion: true },
     });
 
@@ -85,17 +135,16 @@ export async function PUT(request: NextRequest) {
           .where(eq(aiPrompts.id, existing.id));
       });
     } else {
-      // First save: create the prompt row (replaces the db:seed step).
+      // First save: create the prompt row (no seeding step needed).
       version = 1;
       await db.transaction(async (tx) => {
         const [created] = await tx
           .insert(aiPrompts)
           .values({
-            slug: LAB_ASSISTANT_PROMPT_SLUG,
-            name: "CMB Lab Assistant - Guidance",
+            slug: target.slug,
+            name: target.name,
             type: "chatbot",
-            description:
-              "Guidance layer for the CMB Lab Assistant support widget (tone, scope, null-state phrasing, escalation rules).",
+            description: target.description,
             currentContent: content,
             currentVersion: 1,
           })
@@ -110,7 +159,7 @@ export async function PUT(request: NextRequest) {
       });
     }
 
-    invalidatePromptCache(LAB_ASSISTANT_PROMPT_SLUG);
+    invalidatePromptCache(target.slug);
     return NextResponse.json({ success: true, version });
   } catch (error) {
     console.error("[Lab Assistant] Guidance update failed:", error);

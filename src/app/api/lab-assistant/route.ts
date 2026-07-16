@@ -38,6 +38,7 @@ import {
 } from "@/lib/lab-assistant/escalation";
 import {
   getGuidancePrompt,
+  getIntentTalkTrack,
   renderStudentContext,
 } from "@/lib/lab-assistant/guidance";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
@@ -293,13 +294,21 @@ export async function POST(request: Request) {
         : `\n\nSERVER NOTE: This message was flagged urgent but the team task could not be created. Point the student to ${SUPPORT_EMAIL} directly.`;
     }
 
-    // Guidance layer: team-editable prompt + allowlisted context only.
-    const guidance = await getGuidancePrompt();
+    // Guidance layer: team-editable prompt + allowlisted context only,
+    // plus the team-authored talk track for the detected intent (if any).
+    const [guidance, talkTrack] = await Promise.all([
+      getGuidancePrompt(),
+      getIntentTalkTrack(intent),
+    ]);
+    const talkTrackNote = talkTrack
+      ? `\n\nTALK TRACK FOR THIS INTENT (team-authored — follow it closely, adapting naturally to the conversation):\n${talkTrack}`
+      : "";
     const systemPrompt =
       guidance +
       "\n" +
       renderStudentContext(studentContext) +
       `\n\nDetected intent for the latest message: ${intent}` +
+      talkTrackNote +
       testimonialNote +
       urgentNote;
 

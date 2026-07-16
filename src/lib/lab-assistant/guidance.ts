@@ -9,6 +9,46 @@ import type { StudentContext } from "./student-context";
 
 export const LAB_ASSISTANT_PROMPT_SLUG = "lab-assistant-guidance";
 
+// ---------------------------------------------------------------------------
+// Per-intent talk tracks.
+// Team-authored reply instructions for a single intent (e.g. exactly what to
+// say about referrals). Stored as ai_prompts rows (slug per intent, created
+// on first save from the admin block). Empty = no track; the bot follows the
+// overall guidance alone.
+// ---------------------------------------------------------------------------
+
+export const TALK_TRACK_INTENTS = [
+  "start_date",
+  "end_date",
+  "my_coach",
+  "referral",
+  "testimonial_sheldon",
+] as const;
+
+export type TalkTrackIntent = (typeof TALK_TRACK_INTENTS)[number];
+
+export function talkTrackSlug(intent: TalkTrackIntent): string {
+  return `lab-assistant-track-${intent}`;
+}
+
+export const TALK_TRACK_LABELS: Record<TalkTrackIntent, string> = {
+  start_date: "Start date",
+  end_date: "End date",
+  my_coach: "My coach",
+  referral: "Referrals",
+  testimonial_sheldon: "Testimonial w/ Sheldon",
+};
+
+/** Load the team-authored talk track for an intent ("" when not set). */
+export async function getIntentTalkTrack(
+  intent: string
+): Promise<string> {
+  if (!(TALK_TRACK_INTENTS as readonly string[]).includes(intent)) return "";
+  const { getPrompt } = await import("@/lib/prompts");
+  const content = await getPrompt(talkTrackSlug(intent as TalkTrackIntent), "");
+  return content.trim();
+}
+
 export const DEFAULT_GUIDANCE_PROMPT = `You are the CMB Lab Assistant, the support chatbot inside CMB Lab (The Canto to Mando Blueprint's student platform). You are in BETA.
 
 VOICE
