@@ -32,6 +32,7 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import {
   isDiaryLesson,
   isListeningPracticeLesson,
@@ -120,6 +121,9 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
     .limit(1);
 
   if (!row) notFound();
+
+  const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
+  if (!canSeeCourse(courseId)) notFound();
 
   const progress = currentUser
     ? await db.query.courseLibraryLessonProgress.findFirst({

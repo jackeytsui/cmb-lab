@@ -35,6 +35,14 @@ interface AudioSeries {
   extraPack: boolean;
 }
 
+interface LibraryCourse {
+  id: string;
+  title: string;
+  status: "draft" | "preview" | "published";
+}
+
+const COURSE_LIBRARY_CONTENT_TYPE = "course_library_course";
+
 // Feature access grouped into logical categories for easier scanning.
 // Order within each category matches the typical student journey.
 const FEATURE_CATEGORIES: Array<{
@@ -86,9 +94,11 @@ const FEATURE_CATEGORIES: Array<{
 function TagRow({
   tag,
   audioSeries,
+  libraryCourses,
 }: {
   tag: Tag;
   audioSeries: AudioSeries[];
+  libraryCourses: LibraryCourse[];
 }) {
   const [expanded, setExpanded] = useState(false);
   const [featureGrants, setFeatureGrants] = useState<FeatureGrant[]>([]);
@@ -214,6 +224,37 @@ function TagRow({
   const hasAudioSeries = (seriesId: string) =>
     contentGrants.some(
       (g) => g.contentType === "audio_series" && g.contentId === seriesId
+    );
+
+  const toggleLibraryCourse = (courseId: string) => {
+    setContentGrants((prev) => {
+      const exists = prev.some(
+        (g) =>
+          g.contentType === COURSE_LIBRARY_CONTENT_TYPE &&
+          g.contentId === courseId
+      );
+      if (exists) {
+        return prev.filter(
+          (g) =>
+            !(
+              g.contentType === COURSE_LIBRARY_CONTENT_TYPE &&
+              g.contentId === courseId
+            )
+        );
+      }
+      return [
+        ...prev,
+        { contentType: COURSE_LIBRARY_CONTENT_TYPE, contentId: courseId },
+      ];
+    });
+    setDirty(true);
+  };
+
+  const hasLibraryCourse = (courseId: string) =>
+    contentGrants.some(
+      (g) =>
+        g.contentType === COURSE_LIBRARY_CONTENT_TYPE &&
+        g.contentId === courseId
     );
 
   return (
@@ -389,6 +430,67 @@ function TagRow({
                 </div>
               )}
 
+              {/* Course library grants */}
+              {libraryCourses.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground mb-3">
+                    Course Library Access
+                  </h4>
+                  <p className="text-[10px] text-muted-foreground mb-3">
+                    Select which Course Library courses this tag grants access to. Unselected = no restriction (visible to all).
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {libraryCourses.map((course) => {
+                      const granted = hasLibraryCourse(course.id);
+                      return (
+                        <button
+                          key={course.id}
+                          type="button"
+                          onClick={() => toggleLibraryCourse(course.id)}
+                          className={cn(
+                            "flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors text-left",
+                            granted
+                              ? "border-blue-500/50 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                              : "border-border bg-background text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "w-3.5 h-3.5 shrink-0 rounded border flex items-center justify-center",
+                              granted
+                                ? "bg-blue-500 border-blue-500"
+                                : "border-border"
+                            )}
+                          >
+                            {granted && (
+                              <svg
+                                className="w-2.5 h-2.5 text-white"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={3}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M5 13l4 4L19 7"
+                                />
+                              </svg>
+                            )}
+                          </span>
+                          <span className="truncate">{course.title}</span>
+                          {course.status !== "published" && (
+                            <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
+                              {course.status}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Save button */}
               {dirty && (
                 <div className="flex items-center gap-3 pt-2 border-t border-border">
@@ -431,6 +533,7 @@ const TAG_COLORS = [
 export function TagAccessClient() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [audioSeries, setAudioSeries] = useState<AudioSeries[]>([]);
+  const [libraryCourses, setLibraryCourses] = useState<LibraryCourse[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Create tag form
@@ -444,14 +547,22 @@ export function TagAccessClient() {
     Promise.all([
       fetch("/api/admin/tags").then((r) => (r.ok ? r.json() : { tags: [] })),
       fetch("/api/admin/audio-course").then((r) => (r.ok ? r.json() : { series: [] })),
+      fetch("/api/admin/course-library/courses").then((r) =>
+        r.ok ? r.json() : { courses: [] }
+      ),
     ])
-      .then(([tagsData, audioData]) => {
+      .then(([tagsData, audioData, libraryData]) => {
         setTags(tagsData.tags ?? []);
         // Exclude extraPack series from tag-based Audio Course Access grants —
         // those courses live on the dedicated Audio Accelerator Edition page
         // and are gated by the `audio_accelerator_edition` feature toggle.
+        // Also exclude custom courses — their visibility is managed only in
+        // the audio course editor's Visibility section.
         const series = (audioData.series ?? [])
-          .filter((c: { extraPack?: boolean }) => c.extraPack !== true)
+          .filter(
+            (c: { extraPack?: boolean; customCourse?: boolean }) =>
+              c.extraPack !== true && c.customCourse !== true
+          )
           .map(
             (c: { id: string; title: string; extraPack?: boolean }) => ({
               id: c.id,
@@ -460,6 +571,15 @@ export function TagAccessClient() {
             })
           );
         setAudioSeries(series);
+        setLibraryCourses(
+          (libraryData.courses ?? []).map(
+            (c: { id: string; title: string; status: LibraryCourse["status"] }) => ({
+              id: c.id,
+              title: c.title,
+              status: c.status,
+            })
+          )
+        );
       })
       .finally(() => setLoading(false));
   }, []);
@@ -577,7 +697,7 @@ export function TagAccessClient() {
       {/* Tag rows */}
       {tags.map((tag) => (
         <div key={tag.id} className="relative">
-          <TagRow tag={tag} audioSeries={audioSeries} />
+          <TagRow tag={tag} audioSeries={audioSeries} libraryCourses={libraryCourses} />
           <button
             type="button"
             onClick={() => handleDeleteTag(tag.id, tag.name)}

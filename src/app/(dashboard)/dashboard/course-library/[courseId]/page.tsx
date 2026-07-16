@@ -13,6 +13,7 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
@@ -38,6 +39,9 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
     .limit(1);
 
   if (!course) notFound();
+
+  const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
+  if (!canSeeCourse(course.id)) notFound();
 
   const modules = await db
     .select()
