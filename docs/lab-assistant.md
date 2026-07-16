@@ -7,7 +7,7 @@ AI support chatbot embedded in CMB Lab. Gorgias-style pipeline: **identify → i
 Access is tag-driven (no env flag):
 
 - **Admins and coaches** always see the launcher (bottom-right, CMB brand blue, chat icon; light/dark aware).
-- **Students** see it only when one of their tags grants the **Lab Assistant (Support Chat)** feature — toggle it on a tag in **Admin → Tag Management**.
+- **Students** see it when whitelisted: any tag that gives them Course Library access also shows the assistant (one whitelist covers both), or grant the **Lab Assistant (Support Chat)** feature on a tag in **Admin → Tag Management** to show the assistant on its own.
 
 The widget mounts in the dashboard layout, so it appears across the student app (dashboard, lessons, practice).
 

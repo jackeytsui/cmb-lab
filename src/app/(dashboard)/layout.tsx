@@ -232,11 +232,16 @@ export default async function DashboardLayout({
 
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
-  // Lab Assistant support widget: staff always; students only when a
-  // whitelist tag grants the lab_assistant feature (Tag Management).
+  // Lab Assistant support widget: staff always; students when whitelisted —
+  // either the lab_assistant feature via a tag (Tag Management), or the same
+  // whitelist that grants them Course Library access (course_library was
+  // resolved above via canViewCourseLibrary, so one whitelist tag covers
+  // both the library and the assistant).
   const showLabAssistant =
     role !== "student" ||
-    (enabledFeatures ?? []).includes("lab_assistant");
+    (enabledFeatures ?? []).some(
+      (f) => f === "lab_assistant" || f === "course_library"
+    );
 
   return (
     <>
