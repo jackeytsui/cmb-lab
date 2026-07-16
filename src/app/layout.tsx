@@ -3,7 +3,6 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ChatWidget } from "@/components/chat/ChatWidget";
-import { LabAssistantWidget } from "@/components/lab-assistant/LabAssistantWidget";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { Toaster } from "sonner";
@@ -35,9 +34,6 @@ export const metadata: Metadata = {
 };
 
 const SHOW_CHAT_WIDGET = process.env.NEXT_PUBLIC_ENABLE_CHAT_WIDGET === "true";
-// On by default for all signed-in users; set NEXT_PUBLIC_ENABLE_LAB_ASSISTANT=false to hide
-const SHOW_LAB_ASSISTANT =
-  process.env.NEXT_PUBLIC_ENABLE_LAB_ASSISTANT !== "false";
 
 export default function RootLayout({
   children,
@@ -63,9 +59,6 @@ export default function RootLayout({
           {children}
           <Toaster richColors position="top-right" />
           {SHOW_CHAT_WIDGET ? <ChatWidget /> : null}
-          {SHOW_LAB_ASSISTANT ? (
-            <LabAssistantWidget raised={SHOW_CHAT_WIDGET} />
-          ) : null}
           <ServiceWorkerRegistrar />
           <InstallPrompt />
         </body>

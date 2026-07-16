@@ -7,6 +7,9 @@ import { useLabAssistant } from '@/hooks/useLabAssistant';
 
 const SUPPORT_EMAIL = 'contact@thecmblueprint.com';
 
+// CMB brand blue — matches the launcher and the course library header.
+const BRAND_BLUE = '#2e3a97';
+
 // FAQ chips pinned at the top — one per launch-scope intent.
 const FAQ_CHIPS = [
   'When does my program start?',
@@ -63,40 +66,43 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header: title + BETA badge + signed-in email */}
-      <div className="px-4 py-3 bg-zinc-900/80 backdrop-blur-sm border-b border-zinc-700/50">
+      {/* Header: title + BETA badge + signed-in email (brand blue) */}
+      <div
+        className="px-4 py-3 border-b border-border"
+        style={{ backgroundColor: BRAND_BLUE }}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-white text-sm">
               CMB Lab Assistant
             </h3>
-            <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded px-1.5 py-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-400/20 text-amber-300 border border-amber-300/40 rounded px-1.5 py-0.5">
               Beta
             </span>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-white transition-colors rounded"
+            className="p-1.5 text-white/70 hover:text-white transition-colors rounded"
             aria-label="Close assistant"
           >
             <X size={16} />
           </button>
         </div>
         {email && (
-          <p className="text-xs text-zinc-400 mt-0.5 truncate">
+          <p className="text-xs text-white/70 mt-0.5 truncate">
             Signed in as {email}
           </p>
         )}
       </div>
 
       {/* FAQ chips pinned at top */}
-      <div className="px-3 py-2 border-b border-zinc-800 flex flex-wrap gap-1.5">
+      <div className="px-3 py-2 border-b border-border bg-muted/40 flex flex-wrap gap-1.5">
         {FAQ_CHIPS.map((chip) => (
           <button
             key={chip}
             onClick={() => send(chip)}
             disabled={!canSend}
-            className="text-xs text-cyan-300 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-800/60 rounded-full px-2.5 py-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-xs rounded-full px-2.5 py-1 border border-border bg-background text-foreground/80 hover:text-foreground hover:border-[#3a49b8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {chip}
           </button>
@@ -104,9 +110,9 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-2">
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-2 bg-background">
         {messages.length === 0 && (
-          <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-zinc-800 text-zinc-100 text-sm px-3 py-2">
+          <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-muted text-foreground text-sm px-3 py-2">
             {WELCOME_MESSAGE}
           </div>
         )}
@@ -119,13 +125,16 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
           if (!text) return null;
           return message.role === 'user' ? (
             <div key={message.id} className="flex justify-end">
-              <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-cyan-600 text-white text-sm px-3 py-2 whitespace-pre-wrap">
+              <div
+                className="max-w-[85%] rounded-2xl rounded-br-sm text-white text-sm px-3 py-2 whitespace-pre-wrap"
+                style={{ backgroundColor: BRAND_BLUE }}
+              >
                 {text}
               </div>
             </div>
           ) : (
             <div key={message.id} className="flex justify-start">
-              <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-zinc-800 text-zinc-100 text-sm px-3 py-2 whitespace-pre-wrap">
+              <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-muted text-foreground text-sm px-3 py-2 whitespace-pre-wrap">
                 {text}
               </div>
             </div>
@@ -133,7 +142,9 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
         })}
 
         {status === 'submitted' && (
-          <p className="text-zinc-400 text-sm animate-pulse">Thinking...</p>
+          <p className="text-muted-foreground text-sm animate-pulse">
+            Thinking...
+          </p>
         )}
 
         <div ref={messagesEndRef} />
@@ -141,7 +152,7 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
 
       {/* Errors */}
       {error && (
-        <div className="text-red-400 text-xs px-4 py-1">
+        <div className="text-red-500 dark:text-red-400 text-xs px-4 py-1 bg-background">
           {error.message?.toLowerCase().includes('too many') ||
           error.message?.includes('429') ? (
             <p>You&apos;re sending messages too quickly — give it a moment.</p>
@@ -160,7 +171,7 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
       {/* Input */}
       <form
         onSubmit={handleSubmit}
-        className="p-3 border-t border-zinc-800 flex gap-2"
+        className="p-3 border-t border-border bg-background flex gap-2"
       >
         <input
           ref={inputRef}
@@ -168,7 +179,7 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about your program..."
-          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+          className="flex-1 bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#3a49b8]"
         />
         {isStreaming ? (
           <button
@@ -183,7 +194,8 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
           <button
             type="submit"
             disabled={!canSend || !input.trim()}
-            className="p-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            style={{ backgroundColor: BRAND_BLUE }}
+            className="p-2 rounded-lg text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
             aria-label="Send message"
           >
             <Send size={16} />
@@ -192,10 +204,10 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
       </form>
 
       {/* Footer */}
-      <div className="px-3 pb-2 text-center">
+      <div className="px-3 pb-2 text-center bg-background">
         <a
           href={`mailto:${SUPPORT_EMAIL}`}
-          className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
         >
           Urgent? {SUPPORT_EMAIL}
         </a>
