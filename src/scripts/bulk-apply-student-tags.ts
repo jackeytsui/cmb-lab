@@ -1,26 +1,36 @@
 /**
- * Bulk-apply cmb_student / IC_student tags to all CMB Lab students,
+ * Bulk-apply cmb_student / IC_student tags to CMB Lab students,
  * driven by each student's tags in GoHighLevel (GHL).
  *
  * Rule (per request):
- *   - If a student's GHL contact carries the "cmb_student" tag  -> assign LMS tag "cmb_student"
- *   - Otherwise (student is in CMB Lab but has no such GHL tag)  -> assign LMS tag "IC_student"
+ *   - If a student's GHL contact carries the "cmb_student" tag  -> LMS tag "cmb_student"
+ *   - Otherwise (student is in CMB Lab but has no such GHL tag)  -> LMS tag "IC_student"
+ *
+ * REPLACE semantics: cmb_student and IC_student are mutually exclusive. Each
+ * processed student ends up with EXACTLY ONE of them — the other is removed if
+ * present. All the student's OTHER tags (coach tags, exclusive/access tags,
+ * etc.) are left completely untouched.
+ *
+ * WHITELIST: students who already hold a whitelist tag (analytics_whitelist /
+ * analytics-whitelist / whitelisted — the same set the analytics layer
+ * excludes) are skipped entirely. They are neither tagged nor untagged, and
+ * their GHL is not even fetched.
  *
  * Design decisions (confirmed with requester):
- *   - GHL tags are fetched FRESH from the GHL API per linked contact (most accurate).
+ *   - GHL tags are fetched FRESH from the GHL API per linked contact (accurate).
  *   - Tagging is LMS-only: nothing is written back to GHL, no GHL automations fire.
- *   - The script is DRY-RUN by default. It prints what it *would* do and writes
- *     nothing until you pass `--apply`.
+ *   - DRY-RUN by default. Prints what it *would* do and writes nothing until
+ *     you pass `--apply`.
  *
  * "Student" = users.role = 'student' AND users.deleted_at IS NULL.
  *
  * Safety:
  *   - If a student's GHL fetch errors, they are NOT classified (reported as
- *     "errored") so a real cmb_student is never mislabeled IC_student.
+ *     "errored") and NOT touched — so a real cmb_student is never mislabeled.
  *   - If NO active GHL locations are configured, the script aborts rather than
  *     tagging every student IC_student.
- *   - Assignment is additive and idempotent (ON CONFLICT DO NOTHING); safe to
- *     re-run. Existing tags are left untouched.
+ *   - Idempotent: the add is ON CONFLICT DO NOTHING and the opposite-tag delete
+ *     is a no-op when absent. Safe to re-run.
  *
  * Usage:
  *   npx tsx src/scripts/bulk-apply-student-tags.ts                 # dry run (default)
@@ -39,6 +49,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { tags, studentTags, users, ghlContacts, ghlLocations } from "../db/schema";
 import { createGhlClient } from "../lib/ghl/client";
+import { WHITELIST_TAGS } from "../lib/analytics-whitelist";
 
 // Load environment variables from .env.local
 config({ path: ".env.local" });
@@ -61,6 +72,11 @@ const TAG_DEFS: Record<string, { color: string; description: string }> = {
       "In-CMB-Lab student who does NOT carry the cmb_student tag in GoHighLevel. Applied by bulk-apply-student-tags.",
   },
 };
+
+// Students holding any of these tags (case-insensitive) are skipped entirely.
+const WHITELIST_TAG_SET = new Set<string>(
+  WHITELIST_TAGS.map((t) => t.toLowerCase())
+);
 
 // --- CLI args ---
 
@@ -156,10 +172,11 @@ async function mapPool<T, R>(
 
 async function main() {
   console.log("=".repeat(64));
-  console.log("Bulk-apply student tags from GHL");
+  console.log("Bulk-apply student tags from GHL (replace + whitelist-skip)");
   console.log(
     `Mode: ${APPLY ? "APPLY (writes enabled)" : "DRY-RUN (no writes)"}  |  concurrency: ${CONCURRENCY}`
   );
+  console.log(`Whitelist (skipped): ${WHITELIST_TAGS.join(", ")}`);
   console.log("=".repeat(64));
 
   // 1. Active GHL locations -> per-location API client
@@ -181,18 +198,44 @@ async function main() {
   console.log(`Active GHL locations: ${locations.length}`);
 
   // 2. All students (role=student, not soft-deleted)
-  const students: StudentRecord[] = await db
+  const allStudents: StudentRecord[] = await db
     .select({ id: users.id, email: users.email, name: users.name })
     .from(users)
     .where(and(sql`${users.role} = 'student'`, isNull(users.deletedAt)));
 
-  console.log(`Students in CMB Lab: ${students.length}`);
-  if (students.length === 0) {
+  console.log(`Students in CMB Lab: ${allStudents.length}`);
+  if (allStudents.length === 0) {
     console.log("Nothing to do.");
     process.exit(0);
   }
 
-  // 3. Active GHL contact links for those students
+  // 3. Whitelisted students -> skip entirely
+  const allIds = allStudents.map((s) => s.id);
+  const whitelistedIds = new Set<string>();
+  for (const idBatch of chunk(allIds, 1000)) {
+    const rows = await db
+      .select({ userId: studentTags.userId })
+      .from(studentTags)
+      .innerJoin(tags, eq(studentTags.tagId, tags.id))
+      .where(
+        and(
+          inArray(studentTags.userId, idBatch),
+          inArray(sql`lower(${tags.name})`, [...WHITELIST_TAG_SET])
+        )
+      );
+    for (const r of rows) whitelistedIds.add(r.userId);
+  }
+
+  const students = allStudents.filter((s) => !whitelistedIds.has(s.id));
+  console.log(
+    `Whitelisted (skipped): ${whitelistedIds.size}  |  to process: ${students.length}\n`
+  );
+  if (students.length === 0) {
+    console.log("All students are whitelisted. Nothing to do.");
+    process.exit(0);
+  }
+
+  // 4. Active GHL contact links for the students to process
   const studentIds = students.map((s) => s.id);
   const linkRows: { userId: string; ghlContactId: string; ghlLocationId: string }[] =
     [];
@@ -227,7 +270,7 @@ async function main() {
       `(no-link students -> IC_student by definition)\n`
   );
 
-  // 4. Classify each student by fetching fresh GHL tags
+  // 5. Classify each student by fetching fresh GHL tags
   let done = 0;
   const classifications = await mapPool(students, CONCURRENCY, async (student) => {
     const links = linksByUser.get(student.id) ?? [];
@@ -314,12 +357,12 @@ async function main() {
     );
   }
 
-  // 5. Apply (or preview) the tag assignments
+  // 6. Apply (or preview) — REPLACE: add the target tag, remove the opposite one
   const cmbTagId = await ensureTag(CMB_TAG);
   const icTagId = await ensureTag(IC_TAG);
 
-  await applyTag(CMB_TAG, cmbTagId, cmbUserIds);
-  await applyTag(IC_TAG, icTagId, icUserIds);
+  await replaceTag(CMB_TAG, cmbTagId, IC_TAG, icTagId, cmbUserIds);
+  await replaceTag(IC_TAG, icTagId, CMB_TAG, cmbTagId, icUserIds);
 
   console.log("\n" + "=".repeat(64));
   if (APPLY) {
@@ -331,42 +374,67 @@ async function main() {
 }
 
 /**
- * Bulk-assign a tag to a set of users (idempotent). Reports newly-assigned vs
- * already-had counts. Writes nothing in dry-run mode.
+ * REPLACE a set of users onto `targetTag`: assign the target (idempotent) and
+ * remove the mutually-exclusive `oppositeTag` from those same users. All other
+ * tags are untouched. Writes nothing in dry-run mode.
  */
-async function applyTag(
-  tagName: string,
-  tagId: string | null,
+async function replaceTag(
+  targetName: string,
+  targetTagId: string | null,
+  oppositeName: string,
+  oppositeTagId: string | null,
   userIds: string[]
 ): Promise<void> {
   if (userIds.length === 0) {
-    console.log(`\n[${tagName}] no students to tag.`);
+    console.log(`\n[${targetName}] no students to tag.`);
     return;
   }
 
   if (!APPLY) {
-    console.log(`\n[${tagName}] (dry-run) would assign to ${userIds.length} students.`);
+    console.log(
+      `\n[${targetName}] (dry-run) would assign to ${userIds.length} students ` +
+        `and remove "${oppositeName}" from any of them that currently have it.`
+    );
     return;
   }
 
-  if (!tagId) {
-    console.error(`\n[${tagName}] tag id missing — cannot assign. Skipped.`);
+  if (!targetTagId) {
+    console.error(`\n[${targetName}] tag id missing — cannot assign. Skipped.`);
     return;
   }
 
+  // Add target (idempotent)
   let newlyAssigned = 0;
   for (const batch of chunk(userIds, 1000)) {
     const inserted = await db
       .insert(studentTags)
-      .values(batch.map((userId) => ({ userId, tagId, assignedBy: null })))
+      .values(batch.map((userId) => ({ userId, tagId: targetTagId, assignedBy: null })))
       .onConflictDoNothing()
       .returning({ id: studentTags.id });
     newlyAssigned += inserted.length;
   }
 
+  // Remove the opposite classification tag from these users
+  let removed = 0;
+  if (oppositeTagId) {
+    for (const batch of chunk(userIds, 1000)) {
+      const deleted = await db
+        .delete(studentTags)
+        .where(
+          and(
+            eq(studentTags.tagId, oppositeTagId),
+            inArray(studentTags.userId, batch)
+          )
+        )
+        .returning({ id: studentTags.id });
+      removed += deleted.length;
+    }
+  }
+
   console.log(
-    `\n[${tagName}] assigned to ${userIds.length} students ` +
-      `(${newlyAssigned} newly added, ${userIds.length - newlyAssigned} already had it).`
+    `\n[${targetName}] assigned to ${userIds.length} students ` +
+      `(${newlyAssigned} newly added, ${userIds.length - newlyAssigned} already had it); ` +
+      `removed "${oppositeName}" from ${removed} of them.`
   );
 }
 
