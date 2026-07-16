@@ -556,8 +556,13 @@ export function TagAccessClient() {
         // Exclude extraPack series from tag-based Audio Course Access grants —
         // those courses live on the dedicated Audio Accelerator Edition page
         // and are gated by the `audio_accelerator_edition` feature toggle.
+        // Also exclude custom courses — their visibility is managed only in
+        // the audio course editor's Visibility section.
         const series = (audioData.series ?? [])
-          .filter((c: { extraPack?: boolean }) => c.extraPack !== true)
+          .filter(
+            (c: { extraPack?: boolean; customCourse?: boolean }) =>
+              c.extraPack !== true && c.customCourse !== true
+          )
           .map(
             (c: { id: string; title: string; extraPack?: boolean }) => ({
               id: c.id,

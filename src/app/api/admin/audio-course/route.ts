@@ -15,6 +15,9 @@ type AudioSeriesMeta = {
   allowedTagIds?: string[];
   allowedUserIds?: string[];
   extraPack?: boolean;
+  // Custom (per-student) series: visibility is managed only in the audio
+  // course editor's Visibility section; hidden from the Tag Management page.
+  customCourse?: boolean;
 };
 
 function parseAudioSeriesMeta(raw: string | null): AudioSeriesMeta | null {
@@ -33,6 +36,7 @@ function parseAudioSeriesMeta(raw: string | null): AudioSeriesMeta | null {
       allowedTagIds: Array.isArray(parsed.allowedTagIds) ? parsed.allowedTagIds : [],
       allowedUserIds: Array.isArray(parsed.allowedUserIds) ? parsed.allowedUserIds : [],
       extraPack: parsed.extraPack === true,
+      customCourse: parsed.customCourse === true,
     };
   } catch {
     return null;
@@ -64,6 +68,7 @@ function stringifySeriesMeta(input: Omit<AudioSeriesMeta, "audioCourse">): strin
     allowedTagIds: input.allowedTagIds ?? [],
     allowedUserIds: input.allowedUserIds ?? [],
     extraPack: input.extraPack ?? false,
+    customCourse: input.customCourse ?? false,
   });
 }
 
@@ -135,6 +140,7 @@ export async function GET() {
       allowedTagIds: meta?.allowedTagIds ?? [],
       allowedUserIds: meta?.allowedUserIds ?? [],
       extraPack: meta?.extraPack ?? false,
+      customCourse: meta?.customCourse ?? false,
       moduleId: mainModule?.id ?? null,
       lessons: moduleLessons.map((lesson) => {
         const lc = parseLessonContent(lesson.content);
@@ -171,6 +177,7 @@ export async function POST(request: NextRequest) {
     allowedTagIds?: string[];
     allowedUserIds?: string[];
     extraPack?: boolean;
+    customCourse?: boolean;
   };
 
   const title = body.title?.trim() ?? "";
@@ -198,6 +205,7 @@ export async function POST(request: NextRequest) {
         allowedTagIds: body.allowedTagIds ?? [],
         allowedUserIds: body.allowedUserIds ?? [],
         extraPack: body.extraPack ?? false,
+        customCourse: body.customCourse ?? false,
       }),
       isPublished: false,
       sortOrder: (maxOrder?.sortOrder ?? 0) + 1,

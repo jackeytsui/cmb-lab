@@ -53,6 +53,7 @@ type AudioSeries = {
   allowedTagIds: string[];
   allowedUserIds: string[];
   extraPack: boolean;
+  customCourse: boolean;
   moduleId: string | null;
   lessons: AudioLesson[];
   isPublished: boolean;
@@ -859,6 +860,23 @@ export function AudioCourseManager() {
                   </label>
                   <span className="text-xs text-muted-foreground">
                     Shows in Mandarin Accelerator Extra Pack instead of regular Audio Courses
+                  </span>
+                </div>
+                {/* Custom course toggle */}
+                <div className="flex items-center gap-3 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={activeSeries.customCourse ?? false}
+                      onChange={(e) => saveSeries({ customCourse: e.target.checked })}
+                      className="rounded border-border"
+                    />
+                    <span className="text-sm font-medium text-foreground">
+                      Custom course
+                    </span>
+                  </label>
+                  <span className="text-xs text-muted-foreground">
+                    Per-student series — manage access in the Visibility section below; hidden from the Tag Management page
                   </span>
                 </div>
               </section>
