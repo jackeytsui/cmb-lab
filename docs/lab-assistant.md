@@ -2,15 +2,14 @@
 
 AI support chatbot embedded in CMB Lab. Gorgias-style pipeline: **identify → intent scan → guidance → resolve or escalate**. Implements the v0.1 build spec.
 
-## Enabling
+## Who sees the widget
 
-**On by default** for all signed-in users. To hide it, set:
+Access is tag-driven (no env flag):
 
-```
-NEXT_PUBLIC_ENABLE_LAB_ASSISTANT=false
-```
+- **Admins and coaches** always see the launcher (bottom-right, CMB brand blue, chat icon; light/dark aware).
+- **Students** see it only when one of their tags grants the **Lab Assistant (Support Chat)** feature — toggle it on a tag in **Admin → Tag Management**.
 
-(build-time variable — requires a redeploy to take effect). The floating launcher renders bottom-right for signed-in users (root layout). If the legacy learning-assistant widget (`NEXT_PUBLIC_ENABLE_CHAT_WIDGET`) is also on, the Lab Assistant launcher stacks above it.
+The widget mounts in the dashboard layout, so it appears across the student app (dashboard, lessons, practice).
 
 Requires the existing GHL integration to be configured: at least one active location in **Admin → GHL → Locations**, plus `OPENAI_API_KEY`.
 
@@ -63,20 +62,19 @@ Created on the student's GHL contact:
 
 Triggered when: intent is `other`/unclassified, confidence is below threshold, the model calls its `escalateToTeam` tool (student asks for a human, accepts an offer, off-scope follow-up), or urgency is detected (task created *and* the inbox is surfaced). Repeat unresolved messages in an already-escalated conversation do not create duplicate tasks. If the student has no linked GHL contact, the failure is audit-logged and the bot falls back to the support inbox.
 
-## Seeding the guidance prompt
-
-`npm run db:seed` upserts the `lab-assistant-guidance` prompt (idempotent). Without seeding, the built-in default is used; once the row exists the team owns the copy.
-
 ## Admin management
 
 Everything sits in one block on **Admin → Manage Portal** ("CMB Lab Assistant", admin-only):
 
 - **Stats (30d)** — chats, in-scope resolution rate (amber below the 60% gate), escalations (with failures), testimonial requests, intent breakdown
-- **Config health** — widget flag, OpenAI key, active GHL location, seeded guidance prompt, missing field mappings
+- **Config health** — widget access rule, OpenAI key, active GHL location, saved guidance prompt, missing field mappings
 - **Recent handovers** — last 5 escalation/testimonial tasks with failure reasons, linking to the full sync log
+- **Guidance & actions editor** — edit the bot's instructions (tone, scope, wanted actions/escalation behaviour) directly in the block; saves as a new version of the `lab-assistant-guidance` prompt (created automatically on first save — no seeding needed) and applies on the next message
 - **Test console** — chat against the real pipeline in dry-run mode (admin/coach only): intent scan, gatekept context, and guidance all run for real, but no GHL tasks are created and test chats are excluded from resolution metrics. Responses use the signed-in admin's own contact data — the gatekeeper never impersonates a student.
 
-Deeper edits link out: guidance copy in **Admin → AI Prompts**, field mappings in **Admin → GHL Integration**.
+The overview endpoint degrades gracefully: if a stats/health query fails, the block renders the rest and lists the failing section's error inline.
+
+Deeper edits link out: prompt version history in **Admin → AI Prompts**, field mappings in **Admin → GHL Integration**.
 
 ## Success gate (P3)
 

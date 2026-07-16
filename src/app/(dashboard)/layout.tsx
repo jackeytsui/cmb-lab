@@ -23,6 +23,7 @@ import {
   getUserFeatureTagOverrides,
 } from "@/lib/tag-feature-access";
 import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
+import { LabAssistantWidget } from "@/components/lab-assistant/LabAssistantWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -231,6 +232,12 @@ export default async function DashboardLayout({
 
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
+  // Lab Assistant support widget: staff always; students only when a
+  // whitelist tag grants the lab_assistant feature (Tag Management).
+  const showLabAssistant =
+    role !== "student" ||
+    (enabledFeatures ?? []).includes("lab_assistant");
+
   return (
     <>
       {viewAsUser && (
@@ -260,6 +267,7 @@ export default async function DashboardLayout({
           <RouteThemeScope>{children}</RouteThemeScope>
         </main>
         </SidebarInset>
+        {showLabAssistant && <LabAssistantWidget />}
       </SidebarProvider>
     </>
   );

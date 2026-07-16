@@ -78,6 +78,7 @@ const FEATURE_CATEGORIES: Array<{
     features: [
       { key: "ai_conversation", label: "AI Conversation" },
       { key: "ai_chat", label: "AI Chat" },
+      { key: "lab_assistant", label: "Lab Assistant (Support Chat)" },
       { key: "practice_sets", label: "Practice Sets" },
       { key: "video_threads", label: "Video Threads" },
     ],

@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ExternalLink,
+  Info,
   RefreshCw,
   Send,
   XCircle,
@@ -34,12 +35,12 @@ interface Overview {
     createdAt: string;
   }>;
   health: {
-    widgetEnabled: boolean;
     openaiConfigured: boolean;
     activeLocations: number;
     promptSeeded: boolean;
     missingMappings: string[];
   };
+  errors: string[];
 }
 
 function timeAgo(dateStr: string): string {
@@ -55,17 +56,20 @@ function timeAgo(dateStr: string): string {
 export function LabAssistantAdminWidget() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
-    setLoadError(false);
+    setLoadError(null);
     try {
       const res = await fetch("/api/admin/lab-assistant/overview");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
       setOverview(await res.json());
-    } catch {
-      setLoadError(true);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Unknown error");
     } finally {
       setLoading(false);
     }
@@ -94,28 +98,40 @@ export function LabAssistantAdminWidget() {
         </button>
       </div>
       <p className="mb-4 text-xs text-muted-foreground">
-        Support chatbot health, resolution stats, and a live test console.
-        Guidance is edited in{" "}
-        <Link href="/admin/prompts" className="underline hover:text-foreground">
-          AI Prompts
-        </Link>
-        , field mappings in{" "}
+        Support chatbot health, resolution stats, guidance editing, and a live
+        test console. Field mappings live in{" "}
         <Link href="/admin/ghl" className="underline hover:text-foreground">
           GHL Integration
         </Link>
+        ; version history in{" "}
+        <Link href="/admin/prompts" className="underline hover:text-foreground">
+          AI Prompts
+        </Link>
         .
       </p>
+
+      {/* Partial-data warnings from the overview endpoint */}
+      {overview && overview.errors.length > 0 && (
+        <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+          Some sections failed to load:
+          {overview.errors.map((e) => (
+            <span key={e} className="block truncate">
+              • {e}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Left: stats + health + recent handovers */}
         <div className="space-y-4">
           {loadError ? (
-            <p className="text-xs text-red-400">
-              Couldn&apos;t load overview.{" "}
+            <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-500">
+              Couldn&apos;t load overview: {loadError}{" "}
               <button onClick={load} className="underline">
                 Retry
               </button>
-            </p>
+            </div>
           ) : loading && !overview ? (
             <div className="space-y-2">
               <div className="h-16 animate-pulse rounded-lg bg-muted" />
@@ -162,11 +178,17 @@ export function LabAssistantAdminWidget() {
                   Config health
                 </h3>
                 <div className="space-y-1.5">
-                  <HealthRow
-                    ok={overview.health.widgetEnabled}
-                    label="Student widget enabled"
-                    hint="Set NEXT_PUBLIC_ENABLE_LAB_ASSISTANT=true and redeploy"
-                  />
+                  <div className="flex items-start gap-2 text-xs">
+                    <Info className="mt-0.5 size-3.5 shrink-0 text-sky-500" />
+                    <span className="text-foreground">
+                      Widget access: admins &amp; coaches always; students need
+                      the{" "}
+                      <span className="font-medium">
+                        Lab Assistant (Support Chat)
+                      </span>{" "}
+                      feature via a tag (Tag Management).
+                    </span>
+                  </div>
                   <HealthRow
                     ok={overview.health.openaiConfigured}
                     label="OpenAI API key configured"
@@ -179,8 +201,8 @@ export function LabAssistantAdminWidget() {
                   />
                   <HealthRow
                     ok={overview.health.promptSeeded}
-                    label="Guidance prompt in AI Prompts"
-                    hint="Run npm run db:seed — a built-in default is used meanwhile"
+                    label="Guidance prompt saved"
+                    hint="Save the guidance below to create it — the built-in default is used meanwhile"
                   />
                   <HealthRow
                     ok={overview.health.missingMappings.length === 0}
@@ -266,6 +288,9 @@ export function LabAssistantAdminWidget() {
         {/* Right: test console */}
         <TestConsole />
       </div>
+
+      {/* Guidance editor (full width) */}
+      <GuidanceEditor onSaved={load} />
     </div>
   );
 }
@@ -317,6 +342,123 @@ function HealthRow({
         {label}
         {!ok && <span className="block text-muted-foreground">{hint}</span>}
       </span>
+    </div>
+  );
+}
+
+/**
+ * Edit the bot's guidance (tone, scope, actions/behaviour instructions)
+ * directly from the block. Saves to the ai_prompts row with versioning —
+ * changes take effect on the next student message, no deploy needed.
+ */
+function GuidanceEditor({ onSaved }: { onSaved: () => void }) {
+  const [content, setContent] = useState("");
+  const [initialContent, setInitialContent] = useState("");
+  const [version, setVersion] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/lab-assistant/guidance")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => {
+        setContent(data.content ?? "");
+        setInitialContent(data.content ?? "");
+        setVersion(data.version ?? null);
+      })
+      .catch(() => setMessage("Couldn't load guidance"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const dirty = content !== initialContent;
+
+  async function handleSave() {
+    if (!content.trim() || saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/lab-assistant/guidance", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+      setInitialContent(content);
+      setVersion(data.version ?? null);
+      setMessage("Saved — live on the next student message");
+      setTimeout(() => setMessage(null), 4000);
+      onSaved();
+    } catch (error) {
+      setMessage(
+        `Save failed: ${error instanceof Error ? error.message : "unknown error"}`
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-border/70 bg-background/50 p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Guidance &amp; actions
+          {version !== null && (
+            <span className="ml-1.5 normal-case font-normal">v{version}</span>
+          )}
+        </h3>
+        {message && (
+          <span
+            className={cn(
+              "text-xs",
+              message.startsWith("Save failed") || message.startsWith("Couldn't")
+                ? "text-red-500"
+                : "text-green-600 dark:text-green-500"
+            )}
+          >
+            {message}
+          </span>
+        )}
+      </div>
+      <p className="mb-2 text-[11px] text-muted-foreground">
+        The bot&apos;s instructions: tone, what it may answer, null-state
+        phrasing, and the actions you want (when to escalate, what to say for
+        testimonials, urgent handling). Paste or edit freely — saves as a new
+        version and applies immediately. Test it in the console above.
+      </p>
+      {loading ? (
+        <div className="h-32 animate-pulse rounded-md bg-muted" />
+      ) : (
+        <>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={10}
+            spellCheck={false}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-foreground outline-none focus:border-primary"
+          />
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!dirty || saving || !content.trim()}
+              className="rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save guidance"}
+            </button>
+            {dirty && !saving && (
+              <button
+                type="button"
+                onClick={() => setContent(initialContent)}
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >
+                Discard changes
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

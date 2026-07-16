@@ -36,6 +36,9 @@ export const FEATURE_KEYS = [
   "tone_mastery",
   "listening_training",
   "notepad",
+  // CMB Lab Assistant support chatbot widget. Staff always see it; students
+  // need this feature via a whitelist tag (Tag Management).
+  "lab_assistant",
   // Reviewer capability: grants access to Admin > Content > Assignment
   // Submissions for text assignments ("Challenge Reviewer" role bundle).
   // Future reviewer capabilities follow the same pattern, e.g.

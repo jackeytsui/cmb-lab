@@ -31,6 +31,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   listening_training: "Native Speed Listening Comprehension Training",
   notepad: "Notepad",
   assignment_review_text: "Assignment Review (Text)",
+  lab_assistant: "CMB Lab Assistant",
 };
 
 // ---------------------------------------------------------------------------
