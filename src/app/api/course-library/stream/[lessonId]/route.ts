@@ -4,6 +4,11 @@ import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
+// Video blobs are large; the default function timeout can cut the stream off
+// mid-transfer (the browser then hangs on a perpetual loading spinner). Match
+// the 60s used by every other blob-proxy route in this codebase.
+export const maxDuration = 60;
+
 /**
  * GET /api/course-library/stream/[lessonId]
  * Authenticated proxy for private Vercel Blob video lessons.

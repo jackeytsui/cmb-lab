@@ -4,6 +4,10 @@ import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
+// Downloadable files can be large; match the 60s used by the other blob-proxy
+// routes so the transfer isn't cut off by the default function timeout.
+export const maxDuration = 60;
+
 /**
  * GET /api/course-library/download/[lessonId]
  * Authenticated proxy for download lessons. Adds Content-Disposition so
