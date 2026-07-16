@@ -23,9 +23,12 @@ interface GhlTaskResponse {
  */
 export async function createContactTask(
   ghlContactId: string,
-  params: CreateContactTaskParams
+  params: CreateContactTaskParams,
+  /** Pass when known (e.g. ops fallback contact) to skip the user-mapping lookup. */
+  knownLocationId?: string
 ): Promise<string | null> {
-  const ghlLocationId = await getLocationForContact(ghlContactId);
+  const ghlLocationId =
+    knownLocationId ?? (await getLocationForContact(ghlContactId));
   const client = ghlLocationId
     ? await getGhlClientForLocation(ghlLocationId)
     : null;
