@@ -1,0 +1,22 @@
+{
+  "targetCourseId": "REPLACE_WITH_CANTOMANDO_COURSE_UUID",
+  "source": "videoask",
+  "notes": "Normalized intermediate produced from the read-only VideoAsk MCP. One VideoAsk form -> one module; one creator/question video -> one lesson. Fill videoUrl + text from the MCP; muxPlaybackId/muxAssetId/durationSeconds are filled by 1-upload-to-mux.mjs.",
+  "modules": [
+    {
+      "title": "Module 1 (e.g. VideoAsk form title)",
+      "description": "Optional module description",
+      "lessons": [
+        {
+          "title": "Lesson 1 (e.g. the question title)",
+          "description": "Optional lesson description",
+          "text": "Transcript / question text -> becomes the lesson 'content' (HTML or plain text).",
+          "videoUrl": "https://media.videoask.com/transcoded/....mp4",
+          "durationSeconds": null,
+          "muxPlaybackId": null,
+          "muxAssetId": null
+        }
+      ]
+    }
+  ]
+}
