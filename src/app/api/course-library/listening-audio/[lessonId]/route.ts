@@ -12,6 +12,10 @@ import type { CourseLibraryListeningPracticeSentence } from "@/db/schema/course-
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { isListeningPracticeLesson } from "@/lib/lesson-language";
 
+// Match the 60s used by the other blob-proxy routes so long audio isn't cut
+// off mid-transfer by the default function timeout.
+export const maxDuration = 60;
+
 /**
  * GET /api/course-library/listening-audio/[lessonId]?sentence=<id>
  *

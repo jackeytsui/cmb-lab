@@ -4,6 +4,10 @@ import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
+// Audio blobs can be long-form; the default function timeout can cut the stream
+// off mid-transfer. Match the 60s used by the other blob-proxy routes.
+export const maxDuration = 60;
+
 /**
  * GET /api/course-library/audio/[lessonId]
  * Authenticated proxy for private Vercel Blob audio lessons.

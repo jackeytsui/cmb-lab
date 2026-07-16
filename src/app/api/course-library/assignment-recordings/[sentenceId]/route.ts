@@ -6,6 +6,10 @@ import { getRealUser } from "@/lib/auth";
 import { userCanReviewAssignments } from "@/lib/assignment-review";
 import type { ReviewableAssignmentType } from "@/lib/assignment-review";
 
+// Recordings can be large; the default function timeout can cut the stream off
+// mid-transfer. Match the 60s used by the other blob-proxy routes.
+export const maxDuration = 60;
+
 /**
  * GET /api/course-library/assignment-recordings/[sentenceId]
  *

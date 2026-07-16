@@ -4,6 +4,9 @@ import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
+// Match the 60s used by the other blob-proxy routes for consistency.
+export const maxDuration = 60;
+
 /**
  * GET /api/course-library/image/[lessonId]
  * Authenticated proxy for lesson thumbnail images stored in private Blob.

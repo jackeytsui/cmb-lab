@@ -12,6 +12,11 @@ import type { CourseLibraryVocalHackContent } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { isVocalHackLesson } from "@/lib/lesson-language";
 
+// Video blobs are large; the default function timeout can cut the stream off
+// mid-transfer (perpetual loading spinner). Match the 60s used by the other
+// blob-proxy routes in this codebase.
+export const maxDuration = 60;
+
 /**
  * GET /api/course-library/vocal-hack-video/[lessonId]?sentence=<id>
  *
