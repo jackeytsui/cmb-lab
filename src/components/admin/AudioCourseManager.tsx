@@ -876,7 +876,7 @@ export function AudioCourseManager() {
                     </span>
                   </label>
                   <span className="text-xs text-muted-foreground">
-                    Per-student series — manage access in the Visibility section below; hidden from the Tag Management page
+                    Per-student series — hidden from ALL students until granted in the Visibility section below; not listed on the Tag Management page. Series with &quot;Customized&quot; in the title get this behaviour automatically.
                   </span>
                 </div>
               </section>

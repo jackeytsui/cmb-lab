@@ -38,6 +38,11 @@ const allSections: PortalSection[] = [
     ],
   },
   {
+    id: "lab-assistant",
+    title: "CMB Lab Assistant",
+    widget: "lab-assistant",
+  },
+  {
     id: "ai",
     title: "AI & Knowledge",
     items: [

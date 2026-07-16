@@ -127,6 +127,9 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
         initialCourse={hydrated}
         allTags={allTags}
         initialAllowedTagIds={grantRows.map((g) => g.tagId)}
+        initialAllowedUserIds={
+          Array.isArray(course.allowedUserIds) ? course.allowedUserIds : []
+        }
       />
     </div>
   );

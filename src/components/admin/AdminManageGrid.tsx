@@ -6,6 +6,7 @@ import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ViewAsPanel } from "@/components/admin/ViewAsPanel";
 import { TranscriptLimitsWidget } from "@/components/admin/TranscriptLimitsWidget";
+import { LabAssistantAdminWidget } from "@/components/admin/LabAssistantAdminWidget";
 
 export interface PortalItem {
   id: string;
@@ -19,12 +20,13 @@ export interface PortalSection {
   title: string;
   items?: PortalItem[];
   /** If set, renders a built-in widget instead of link tiles */
-  widget?: "view-as" | "transcript-limits";
+  widget?: "view-as" | "transcript-limits" | "lab-assistant";
 }
 
 const WIDGET_MAP: Record<string, React.FC> = {
   "view-as": ViewAsPanel,
   "transcript-limits": TranscriptLimitsWidget,
+  "lab-assistant": LabAssistantAdminWidget,
 };
 
 const STORAGE_KEY = "admin-manage-section-order";

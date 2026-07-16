@@ -1,7 +1,13 @@
 import "server-only";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, ilike, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { studentTags, tags, tagFeatureGrants, tagContentGrants } from "@/db/schema";
+import {
+  courseLibraryCourses,
+  studentTags,
+  tags,
+  tagFeatureGrants,
+  tagContentGrants,
+} from "@/db/schema";
 import { FEATURE_KEYS, type FeatureKey } from "@/lib/permissions";
 
 type FeatureOverrideState = {
@@ -178,6 +184,10 @@ export const COURSE_LIBRARY_COURSE_CONTENT_TYPE = "course_library_course";
  * - A course with no grant rows is unrestricted → visible to everyone.
  * - A course with grant rows is visible only to students holding one of the
  *   granting tags.
+ * - Customized courses ("Customized ..." titles) are ALWAYS restricted, even
+ *   with no grants configured — default deny. Access comes from a tag grant
+ *   or the per-student allowedUserIds list managed in the course editor's
+ *   Visibility section.
  * - Staff (admin/coach) always see everything.
  */
 export async function getCourseLibraryCourseAccess(
@@ -187,13 +197,33 @@ export async function getCourseLibraryCourseAccess(
     return () => true;
   }
 
-  const [grantedIds, restrictedIds] = await Promise.all([
+  const [grantedIds, restrictedIds, customCourses] = await Promise.all([
     user
       ? getUserContentGrants(user.id, COURSE_LIBRARY_COURSE_CONTENT_TYPE)
       : Promise.resolve(new Set<string>()),
     getRestrictedContentIds(COURSE_LIBRARY_COURSE_CONTENT_TYPE),
+    db
+      .select({
+        id: courseLibraryCourses.id,
+        allowedUserIds: courseLibraryCourses.allowedUserIds,
+      })
+      .from(courseLibraryCourses)
+      .where(ilike(courseLibraryCourses.title, "%customized%")),
   ]);
 
-  return (courseId: string) =>
-    !restrictedIds.has(courseId) || grantedIds.has(courseId);
+  const customIds = new Set(customCourses.map((c) => c.id));
+  if (user) {
+    // Per-student manual grants count as access for customized courses.
+    for (const course of customCourses) {
+      const userIds = Array.isArray(course.allowedUserIds)
+        ? (course.allowedUserIds as string[])
+        : [];
+      if (userIds.includes(user.id)) grantedIds.add(course.id);
+    }
+  }
+
+  return (courseId: string) => {
+    if (customIds.has(courseId)) return grantedIds.has(courseId);
+    return !restrictedIds.has(courseId) || grantedIds.has(courseId);
+  };
 }

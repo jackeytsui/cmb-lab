@@ -15,6 +15,10 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import { config } from "dotenv";
 import { courses, modules, lessons, aiPrompts, aiPromptVersions, kbCategories } from "./schema";
+import {
+  DEFAULT_GUIDANCE_PROMPT,
+  LAB_ASSISTANT_PROMPT_SLUG,
+} from "../lib/lab-assistant/guidance";
 
 // Load environment variables from .env.local
 config({ path: ".env.local" });
@@ -54,6 +58,10 @@ const GRADING_AUDIO_PROMPT_V1_ID = "550e8400-e29b-41d4-a716-446655440023";
 // Fixed UUIDs for chatbot prompt
 const CHATBOT_SYSTEM_ID = "550e8400-e29b-41d4-a716-446655440014";
 const CHATBOT_SYSTEM_V1_ID = "550e8400-e29b-41d4-a716-446655440024";
+
+// Fixed UUIDs for the Lab Assistant guidance prompt
+const LAB_ASSISTANT_GUIDANCE_ID = "550e8400-e29b-41d4-a716-446655440015";
+const LAB_ASSISTANT_GUIDANCE_V1_ID = "550e8400-e29b-41d4-a716-446655440025";
 
 // Default AI prompts - content based on current hardcoded prompts in lesson-context.ts
 const defaultPrompts = [
@@ -217,6 +225,16 @@ SCOPE:
 - Provide study tips and learning strategies
 - Do NOT provide medical, legal, or financial advice
 - Redirect off-topic questions politely back to language learning`,
+  },
+  {
+    id: LAB_ASSISTANT_GUIDANCE_ID,
+    versionId: LAB_ASSISTANT_GUIDANCE_V1_ID,
+    slug: LAB_ASSISTANT_PROMPT_SLUG,
+    name: "CMB Lab Assistant - Guidance",
+    type: "chatbot" as const,
+    description:
+      "Guidance layer for the CMB Lab Assistant support widget (tone, scope, null-state phrasing, escalation rules). Editable by the team — no code change needed.",
+    content: DEFAULT_GUIDANCE_PROMPT,
   },
 ];
 
