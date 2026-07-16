@@ -35,8 +35,9 @@ export const metadata: Metadata = {
 };
 
 const SHOW_CHAT_WIDGET = process.env.NEXT_PUBLIC_ENABLE_CHAT_WIDGET === "true";
+// On by default for all signed-in users; set NEXT_PUBLIC_ENABLE_LAB_ASSISTANT=false to hide
 const SHOW_LAB_ASSISTANT =
-  process.env.NEXT_PUBLIC_ENABLE_LAB_ASSISTANT === "true";
+  process.env.NEXT_PUBLIC_ENABLE_LAB_ASSISTANT !== "false";
 
 export default function RootLayout({
   children,

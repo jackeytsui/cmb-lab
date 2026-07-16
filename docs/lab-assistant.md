@@ -4,13 +4,13 @@ AI support chatbot embedded in CMB Lab. Gorgias-style pipeline: **identify → i
 
 ## Enabling
 
-Set the env flag (off by default):
+**On by default** for all signed-in users. To hide it, set:
 
 ```
-NEXT_PUBLIC_ENABLE_LAB_ASSISTANT=true
+NEXT_PUBLIC_ENABLE_LAB_ASSISTANT=false
 ```
 
-The floating launcher renders bottom-right for signed-in users (root layout). If the legacy learning-assistant widget (`NEXT_PUBLIC_ENABLE_CHAT_WIDGET`) is also on, the Lab Assistant launcher stacks above it.
+(build-time variable — requires a redeploy to take effect). The floating launcher renders bottom-right for signed-in users (root layout). If the legacy learning-assistant widget (`NEXT_PUBLIC_ENABLE_CHAT_WIDGET`) is also on, the Lab Assistant launcher stacks above it.
 
 Requires the existing GHL integration to be configured: at least one active location in **Admin → GHL → Locations**, plus `OPENAI_API_KEY`.
 

@@ -172,7 +172,8 @@ export async function GET() {
         createdAt: event.createdAt.toISOString(),
       })),
       health: {
-        widgetEnabled: process.env.NEXT_PUBLIC_ENABLE_LAB_ASSISTANT === "true",
+        // Matches the root layout: on by default, opt-out via ="false"
+        widgetEnabled: process.env.NEXT_PUBLIC_ENABLE_LAB_ASSISTANT !== "false",
         openaiConfigured: !!process.env.OPENAI_API_KEY,
         activeLocations: activeLocations[0]?.count ?? 0,
         promptSeeded: promptRow.length > 0,
