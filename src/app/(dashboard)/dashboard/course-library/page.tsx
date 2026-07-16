@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
-import { FeatureGate } from "@/components/auth/FeatureGate";
+import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -88,7 +88,7 @@ export default async function CourseLibraryStudentPage() {
   }
 
   return (
-    <FeatureGate feature="course_library">
+    <CourseLibraryGate>
       <div className="container mx-auto px-4 py-8 space-y-6">
         <header>
           <h1 className="text-2xl font-bold text-foreground">Course Library</h1>
@@ -168,6 +168,6 @@ export default async function CourseLibraryStudentPage() {
           </div>
         )}
       </div>
-    </FeatureGate>
+    </CourseLibraryGate>
   );
 }

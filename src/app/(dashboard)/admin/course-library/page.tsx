@@ -30,8 +30,9 @@ export default async function CourseLibraryAdminPage() {
         <h1 className="text-3xl font-bold text-foreground">Course Library</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Host and manage video, text, quiz, and downloadable course content.
-          Currently admin-only — enable the <code>course_library</code> feature
-          to grant students access.
+          Students see the Course Library only when one of their tags grants a
+          course (Tag Management) or they&apos;re added to a course&apos;s
+          student list — staff always have access.
         </p>
       </header>
 

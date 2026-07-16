@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, ilike, inArray } from "drizzle-orm";
+import { and, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -177,6 +177,42 @@ export async function getRestrictedContentIds(
 
 /** Content type used in tag_content_grants for Course Library courses. */
 export const COURSE_LIBRARY_COURSE_CONTENT_TYPE = "course_library_course";
+
+/**
+ * Whether the Course Library tab/pages are visible to this user.
+ * Access is tag-driven, not feature/role-plan-driven:
+ * - admin/coach: always
+ * - student: only with an explicit grant — a tag that grants at least one
+ *   library course, or a per-student grant (allowedUserIds) on any course.
+ */
+export async function canViewCourseLibrary(
+  user: { id: string; role?: string | null } | null | undefined
+): Promise<boolean> {
+  if (!user) return false;
+  if (user.role === "admin" || user.role === "coach") return true;
+
+  const granted = await getUserContentGrants(
+    user.id,
+    COURSE_LIBRARY_COURSE_CONTENT_TYPE
+  );
+  if (granted.size > 0) return true;
+
+  // Per-student manual grants (customized-course flow)
+  const rows = await db
+    .select({ allowedUserIds: courseLibraryCourses.allowedUserIds })
+    .from(courseLibraryCourses)
+    .where(
+      and(
+        isNull(courseLibraryCourses.deletedAt),
+        sql`jsonb_array_length(${courseLibraryCourses.allowedUserIds}) > 0`
+      )
+    );
+
+  return rows.some(
+    (row) =>
+      Array.isArray(row.allowedUserIds) && row.allowedUserIds.includes(user.id)
+  );
+}
 
 /**
  * Build a per-course visibility predicate for the Course Library, driven by

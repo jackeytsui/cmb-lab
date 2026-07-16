@@ -17,7 +17,11 @@ import { and, count, eq, isNull } from "drizzle-orm";
 import { FEATURE_KEYS, resolvePermissions } from "@/lib/permissions";
 import { DEFAULT_STUDENT_FEATURES, ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { resolveRoleFromEmail } from "@/lib/access-control";
-import { applyFeatureTagOverrides, getUserFeatureTagOverrides } from "@/lib/tag-feature-access";
+import {
+  applyFeatureTagOverrides,
+  canViewCourseLibrary,
+  getUserFeatureTagOverrides,
+} from "@/lib/tag-feature-access";
 import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 
 export const dynamic = "force-dynamic";
@@ -189,6 +193,19 @@ export default async function DashboardLayout({
   if (dbUser && enabledFeatures) {
     const overrides = await getUserFeatureTagOverrides(dbUser.id);
     enabledFeatures = Array.from(applyFeatureTagOverrides(enabledFeatures, overrides));
+  }
+
+  // Course Library tab is tag-driven, not plan/feature-driven: staff always
+  // see it; students only with an explicit grant (tag whitelisting a library
+  // course, or a per-student grant). Overrides both role plans and the
+  // feature toggles above.
+  if (enabledFeatures) {
+    const showLibrary = dbUser
+      ? await canViewCourseLibrary({ id: dbUser.id, role })
+      : false;
+    enabledFeatures = showLibrary
+      ? Array.from(new Set([...enabledFeatures, "course_library"]))
+      : enabledFeatures.filter((f) => f !== "course_library");
   }
 
   // Unread reviewed-assignment feedback count for the sidebar badge.

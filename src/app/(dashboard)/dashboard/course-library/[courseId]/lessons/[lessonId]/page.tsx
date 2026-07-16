@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Download as DownloadIcon, Paperclip, Music, ExternalLink } from "lucide-react";
-import { FeatureGate } from "@/components/auth/FeatureGate";
+import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
 import { FlashcardSaveButton } from "@/components/flashcards/FlashcardSaveButton";
 import { QuizLessonViewer } from "./QuizLessonViewer";
 import {
@@ -332,7 +332,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
   }
 
   return (
-    <FeatureGate feature="course_library">
+    <CourseLibraryGate>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Link
           href={`/dashboard/course-library/${courseId}/modules/${row.moduleId}`}
@@ -672,6 +672,6 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           return <QuizLessonViewer lessonId={lessonId} quiz={safeQuiz} />;
         })()}
       </div>
-    </FeatureGate>
+    </CourseLibraryGate>
   );
 }

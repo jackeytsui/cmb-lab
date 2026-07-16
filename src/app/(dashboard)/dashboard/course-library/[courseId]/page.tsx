@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
-import { FeatureGate } from "@/components/auth/FeatureGate";
+import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
 import { CourseMap, type CourseMapStop } from "@/components/course-library/CourseMap";
 import { db } from "@/db";
 import {
@@ -143,7 +143,7 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
   } as const;
 
   return (
-    <FeatureGate feature="course_library">
+    <CourseLibraryGate>
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         <Link
           href="/dashboard/course-library"
@@ -247,6 +247,6 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
           />
         )}
       </div>
-    </FeatureGate>
+    </CourseLibraryGate>
   );
 }

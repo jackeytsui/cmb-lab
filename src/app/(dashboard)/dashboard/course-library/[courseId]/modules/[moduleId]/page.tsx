@@ -14,7 +14,7 @@ import {
   Mic,
   NotebookPen,
 } from "lucide-react";
-import { FeatureGate } from "@/components/auth/FeatureGate";
+import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -170,7 +170,7 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
   const chip = MAP_STYLE_CHIP[mod.mapStyle] ?? null;
 
   return (
-    <FeatureGate feature="course_library">
+    <CourseLibraryGate>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Link
           href={`/dashboard/course-library/${courseId}`}
@@ -278,6 +278,6 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
           </Link>
         )}
       </div>
-    </FeatureGate>
+    </CourseLibraryGate>
   );
 }
