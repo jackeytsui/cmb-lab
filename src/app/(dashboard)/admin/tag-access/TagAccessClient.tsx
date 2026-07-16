@@ -438,7 +438,7 @@ function TagRow({
                     Course Library Access
                   </h4>
                   <p className="text-[10px] text-muted-foreground mb-3">
-                    Select which Course Library courses this tag grants access to. Unselected = no restriction (visible to all).
+                    Select which Course Library courses this tag grants access to. Students see the Course Library tab only if one of their tags grants at least one course here. Unselected = no restriction (visible to every student who has library access).
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {libraryCourses.map((course) => {
