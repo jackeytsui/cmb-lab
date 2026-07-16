@@ -1,7 +1,7 @@
 // Cantomando Blueprint LMS - Service Worker
 // Smart caching: network-only for dynamic, cache-first for static, network-first for HTML
 
-const CACHE_NAME = "cantomando-v1";
+const CACHE_NAME = "cantomando-v2";
 
 const PRECACHE_URLS = ["/icon-192x192.png", "/icon-512x512.png"];
 
@@ -45,6 +45,21 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  // Never intercept media or byte-range requests. Re-issuing a partial-content
+  // (Range) request through the service worker breaks <video>/<audio> streaming
+  // and seeking — the media element hangs on a perpetual loading spinner
+  // (notably on Safari/iOS). Let the browser talk to the network directly so
+  // native 206/Range handling is preserved. This is what was breaking Course
+  // Library video lessons (which stream from /api/course-library/stream/...).
+  if (
+    request.headers.has("range") ||
+    request.destination === "video" ||
+    request.destination === "audio" ||
+    request.destination === "media"
+  ) {
+    return;
+  }
 
   // Only handle same-origin requests — never intercept cross-origin
   // (Mux video from stream.mux.com, Clerk from clerk.*.com, etc.)
