@@ -357,6 +357,11 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                   src={`/api/course-library/stream/${lessonId}#t=0.1`}
                   controls
                   playsInline
+                  // Browsers only allow autoplay when the video is muted; the
+                  // student unmutes from the controls. Without `muted` the
+                  // browser silently blocks autoplay.
+                  autoPlay
+                  muted
                   preload="metadata"
                   controlsList="nodownload"
                   className="w-full h-full"
