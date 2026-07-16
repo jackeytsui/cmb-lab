@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface LessonVideoPlayerProps {
   /** Authenticated stream endpoint for this lesson's video. */
@@ -16,13 +16,20 @@ interface LessonVideoPlayerProps {
  * `<video autoplay muted>` is parsed as unmuted — and browsers block unmuted
  * autoplay. Here we set `muted` on the element imperatively and call play()
  * on mount, which browsers allow. The student unmutes from the controls.
+ *
+ * While the video buffers for the first time (it streams through an
+ * authenticated proxy, which can take a few seconds) we show a short overlay
+ * so students know to wait instead of refreshing or leaving.
  */
 export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    // If it's already buffered (e.g. cached), don't show the overlay.
+    if (video.readyState >= 3) setLoading(false);
     // Guarantee muted is set before attempting playback so the browser's
     // autoplay policy permits it.
     video.muted = true;
@@ -35,16 +42,30 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
   }, [src]);
 
   return (
-    <video
-      ref={videoRef}
-      src={src}
-      controls
-      playsInline
-      muted
-      autoPlay
-      preload="metadata"
-      controlsList="nodownload"
-      className="w-full h-full"
-    />
+    <div className="relative h-full w-full">
+      <video
+        ref={videoRef}
+        src={src}
+        controls
+        playsInline
+        muted
+        autoPlay
+        preload="metadata"
+        controlsList="nodownload"
+        className="h-full w-full"
+        onCanPlay={() => setLoading(false)}
+        onPlaying={() => setLoading(false)}
+      />
+      {loading && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 px-6 text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          <p className="text-sm font-medium text-white">Loading your video…</p>
+          <p className="max-w-xs text-xs text-white/70">
+            This can take up to 10 seconds. Please don&apos;t refresh or leave
+            the page — it&apos;ll start playing automatically.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
