@@ -20,7 +20,7 @@ const FAQ_CHIPS = [
 ];
 
 const WELCOME_MESSAGE =
-  "Hi! I'm the CMB Lab Assistant. I can help with your start and end dates, your coach, referrals, or booking a testimonial with Sheldon. Anything else, I'll pass straight to the team.";
+  "Hi! I'm the CMB Lab Assistant — I'm still in beta, so I might not get everything right just yet. I can help with your start and end dates, your coach, referrals, or booking a testimonial with Sheldon. Anything else, I'll pass straight to the team. If something's urgent, email contact@thecmblueprint.com for the fastest support.";
 
 interface LabAssistantPanelProps {
   onClose: () => void;
@@ -93,6 +93,15 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
             Signed in as {email}
           </p>
         )}
+      </div>
+
+      {/* Beta notice — visible every time the panel opens */}
+      <div className="px-3 py-1.5 border-b border-amber-500/30 bg-amber-500/10 text-[11px] text-amber-700 dark:text-amber-400">
+        This assistant is in beta and may make mistakes. Urgent?{' '}
+        <a href={`mailto:${SUPPORT_EMAIL}`} className="underline font-medium">
+          {SUPPORT_EMAIL}
+        </a>{' '}
+        gets you the best support.
       </div>
 
       {/* FAQ chips pinned at top */}
