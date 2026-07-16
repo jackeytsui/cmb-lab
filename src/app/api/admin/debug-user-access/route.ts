@@ -92,16 +92,21 @@ export async function GET(req: NextRequest) {
     },
     finalFeatures,
     labAssistant: {
-      visible: isStaff || finalFeatures.includes("lab_assistant"),
+      visible:
+        isStaff ||
+        finalFeatures.includes("lab_assistant") ||
+        courseLibraryVisible,
       reason: isStaff
         ? "staff role — always visible"
         : finalFeatures.includes("lab_assistant")
-          ? "granted via tag"
-          : labAssistantGrants.some((g) => g.grantType === "deny")
-            ? "a tag explicitly DENIES lab_assistant"
-            : userTags.length === 0
-              ? "user has no tags in the LMS (check GHL tag sync)"
-              : "none of the user's tags grant the lab_assistant feature — toggle 'Lab Assistant (Support Chat)' on the tag in Tag Management and save",
+          ? "granted via the lab_assistant tag feature"
+          : courseLibraryVisible
+            ? "granted via Course Library whitelist (same whitelist covers the assistant)"
+            : labAssistantGrants.some((g) => g.grantType === "deny")
+              ? "a tag explicitly DENIES lab_assistant"
+              : userTags.length === 0
+                ? "user has no tags in the LMS (check GHL tag sync)"
+                : "no whitelist found — grant a Course Library course to one of their tags, or toggle 'Lab Assistant (Support Chat)' on the tag in Tag Management",
       grantsOnUserTags: labAssistantGrants.map((g) => ({
         tag: tagNameById.get(g.tagId) ?? g.tagId,
         grantType: g.grantType,
