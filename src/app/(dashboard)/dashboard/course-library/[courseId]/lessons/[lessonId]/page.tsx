@@ -19,6 +19,7 @@ import {
 } from "./VocalHackViewer";
 import { DiaryViewer, type DiarySubmissionDto } from "./DiaryViewer";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
+import { LessonVideoPlayer } from "@/components/course-library/LessonVideoPlayer";
 import { AssignmentInstructions } from "@/components/course-library/AssignmentInstructions";
 import { db } from "@/db";
 import {
@@ -353,18 +354,8 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="space-y-4">
             {content.videoUrl ? (
               <div className="rounded-lg overflow-hidden bg-black aspect-video">
-                <video
+                <LessonVideoPlayer
                   src={`/api/course-library/stream/${lessonId}#t=0.1`}
-                  controls
-                  playsInline
-                  // Browsers only allow autoplay when the video is muted; the
-                  // student unmutes from the controls. Without `muted` the
-                  // browser silently blocks autoplay.
-                  autoPlay
-                  muted
-                  preload="metadata"
-                  controlsList="nodownload"
-                  className="w-full h-full"
                 />
               </div>
             ) : (
