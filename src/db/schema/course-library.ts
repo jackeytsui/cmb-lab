@@ -74,6 +74,14 @@ export const courseLibraryCourses = pgTable(
     // backward compatibility; `status` is the source of truth for visibility.
     isPublished: boolean("is_published").notNull().default(false),
     status: courseLibraryCourseStatusEnum("status").notNull().default("draft"),
+    // Per-student manual access grants (user IDs), used for customized
+    // courses which are hidden from all students by default — same model as
+    // audio series' allowedUserIds. Tag-based grants live in
+    // tag_content_grants; this is the manual per-student path.
+    allowedUserIds: jsonb("allowed_user_ids")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
     sortOrder: integer("sort_order").notNull().default(0),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: timestamp("created_at").notNull().defaultNow(),

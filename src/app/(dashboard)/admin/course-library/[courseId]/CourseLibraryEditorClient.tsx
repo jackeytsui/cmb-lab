@@ -82,6 +82,12 @@ interface CourseData {
   modules: ModuleRow[];
 }
 
+interface StudentOption {
+  id: string;
+  name: string;
+  email: string;
+}
+
 // Mirrors the stop colors on the student course map.
 const MAP_STYLE_META: Record<ModuleMapStyle, { label: string; dot: string }> = {
   lesson: { label: "Lesson (dark blue)", dot: "#2e3a97" },
@@ -344,10 +350,12 @@ export function CourseLibraryEditorClient({
   initialCourse,
   allTags,
   initialAllowedTagIds,
+  initialAllowedUserIds,
 }: {
   initialCourse: CourseData;
   allTags: AccessTag[];
   initialAllowedTagIds: string[];
+  initialAllowedUserIds: string[];
 }) {
   const router = useRouter();
   const [course, setCourse] = useState<CourseData>(initialCourse);
@@ -373,6 +381,53 @@ export function CourseLibraryEditorClient({
     initialAllowedTagIds,
   );
   const [savingAccess, setSavingAccess] = useState(false);
+
+  // Per-student manual grants (primary path for customized courses, which
+  // are hidden from all students by default).
+  const isCustomized = /customized/i.test(course.title);
+  const [allowedUserIds, setAllowedUserIds] = useState<string[]>(
+    initialAllowedUserIds,
+  );
+  const [allStudents, setAllStudents] = useState<StudentOption[]>([]);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [savingStudents, setSavingStudents] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/students?limit=500")
+      .then((r) => r.json())
+      .then((d) => {
+        const students = (d.students ?? []).map(
+          (s: { id: string; name?: string; email?: string }) => ({
+            id: s.id,
+            name: s.name || s.email || "Unknown",
+            email: s.email || "",
+          }),
+        );
+        setAllStudents(students);
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveAllowedUsers = async (next: string[]) => {
+    const prev = allowedUserIds;
+    setAllowedUserIds(next);
+    setSavingStudents(true);
+    try {
+      const res = await fetch(
+        `/api/admin/course-library/courses/${course.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ allowedUserIds: next }),
+        },
+      );
+      if (!res.ok) setAllowedUserIds(prev);
+    } catch {
+      setAllowedUserIds(prev);
+    } finally {
+      setSavingStudents(false);
+    }
+  };
 
   const isDirty = title !== course.title || summary !== course.summary;
 
@@ -822,9 +877,11 @@ export function CourseLibraryEditorClient({
               )}
             </div>
             <p className="text-[10px] text-muted-foreground mb-2">
-              {allowedTagIds.length === 0
-                ? "No tags selected — visible to all students with Course Library access."
-                : "Only students with one of the selected tags can see this course."}
+              {isCustomized
+                ? "Customized course — hidden from all students by default; a tag selected here also grants access."
+                : allowedTagIds.length === 0
+                  ? "No tags selected — visible to all students with Course Library access."
+                  : "Only students with one of the selected tags can see this course."}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {allTags.map((tag) => {
@@ -854,6 +911,91 @@ export function CourseLibraryEditorClient({
             </div>
           </div>
         )}
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <label className="block text-xs font-medium text-muted-foreground">
+              Student Access (individual students)
+            </label>
+            {savingStudents && (
+              <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground mb-2">
+            {isCustomized
+              ? "Customized course — hidden from ALL students by default. Only the students added here (or granted via a tag above) can see it."
+              : allowedUserIds.length === 0
+                ? "No individual students added. Add students to grant them access regardless of tags."
+                : "These students can see this course regardless of tags."}
+          </p>
+          {allowedUserIds.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {allowedUserIds.map((uid) => {
+                const student = allStudents.find((s) => s.id === uid);
+                return (
+                  <span
+                    key={uid}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                  >
+                    {student ? student.name : uid.slice(0, 8)}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        saveAllowedUsers(
+                          allowedUserIds.filter((id) => id !== uid),
+                        )
+                      }
+                      disabled={savingStudents}
+                      className="hover:text-red-500 transition-colors"
+                      aria-label="Remove student"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <input
+            type="text"
+            value={studentSearch}
+            onChange={(e) => setStudentSearch(e.target.value)}
+            placeholder="Search students by name or email…"
+            className="w-full max-w-sm rounded-md border border-border bg-background px-3 py-1.5 text-xs"
+          />
+          {studentSearch.trim() && (
+            <div className="mt-1 max-w-sm rounded-md border border-border bg-card divide-y divide-border/60 overflow-hidden">
+              {allStudents
+                .filter(
+                  (s) =>
+                    !allowedUserIds.includes(s.id) &&
+                    (s.name
+                      .toLowerCase()
+                      .includes(studentSearch.toLowerCase()) ||
+                      s.email
+                        .toLowerCase()
+                        .includes(studentSearch.toLowerCase())),
+                )
+                .slice(0, 8)
+                .map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      saveAllowedUsers([...allowedUserIds, s.id]);
+                      setStudentSearch("");
+                    }}
+                    disabled={savingStudents}
+                    className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors text-left"
+                  >
+                    <span className="text-foreground">{s.name}</span>
+                    <span className="text-muted-foreground truncate ml-2">
+                      {s.email}
+                    </span>
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
         {isDirty && (
           <div className="flex justify-end">
             <button

@@ -21,6 +21,9 @@ const updateSchema = z.object({
   // Tag-based visibility (same model as audio series): empty array = no
   // restriction, visible to all students with the course_library feature.
   allowedTagIds: z.array(z.string().uuid()).optional(),
+  // Per-student manual grants. Primarily for customized ("Customized ...")
+  // courses, which are hidden from all students unless granted here or via tag.
+  allowedUserIds: z.array(z.string().uuid()).optional(),
 });
 
 interface RouteParams {

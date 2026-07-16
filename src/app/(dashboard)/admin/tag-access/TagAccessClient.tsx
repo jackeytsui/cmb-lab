@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { TagBadge } from "@/components/tags/TagBadge";
+import { isCustomizedTitle } from "@/lib/customized-content";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -556,12 +557,17 @@ export function TagAccessClient() {
         // Exclude extraPack series from tag-based Audio Course Access grants —
         // those courses live on the dedicated Audio Accelerator Edition page
         // and are gated by the `audio_accelerator_edition` feature toggle.
-        // Also exclude custom courses — their visibility is managed only in
-        // the audio course editor's Visibility section.
+        // Also exclude customized courses ("Customized ..." titles or the
+        // Custom course flag) — they're hidden from all students by default
+        // and access is granted per-student in the audio course editor's
+        // Visibility section. Tag Management only handles the regular
+        // catalogue.
         const series = (audioData.series ?? [])
           .filter(
-            (c: { extraPack?: boolean; customCourse?: boolean }) =>
-              c.extraPack !== true && c.customCourse !== true
+            (c: { title: string; extraPack?: boolean; customCourse?: boolean }) =>
+              c.extraPack !== true &&
+              c.customCourse !== true &&
+              !isCustomizedTitle(c.title)
           )
           .map(
             (c: { id: string; title: string; extraPack?: boolean }) => ({
@@ -571,14 +577,20 @@ export function TagAccessClient() {
             })
           );
         setAudioSeries(series);
+        // Same rule for the Course Library: customized courses are managed
+        // per-student in the course editor, not via tags.
         setLibraryCourses(
-          (libraryData.courses ?? []).map(
-            (c: { id: string; title: string; status: LibraryCourse["status"] }) => ({
-              id: c.id,
-              title: c.title,
-              status: c.status,
-            })
-          )
+          (libraryData.courses ?? [])
+            .filter(
+              (c: { title: string }) => !isCustomizedTitle(c.title)
+            )
+            .map(
+              (c: { id: string; title: string; status: LibraryCourse["status"] }) => ({
+                id: c.id,
+                title: c.title,
+                status: c.status,
+              })
+            )
         );
       })
       .finally(() => setLoading(false));
