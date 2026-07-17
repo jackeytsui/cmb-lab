@@ -10,8 +10,6 @@ interface UseLessonResumeOpts {
   currentTime: number;
   /** Video duration in seconds (0/undefined until known) */
   duration: number;
-  /** Whether the video is currently playing */
-  isPlaying: boolean;
 }
 
 /**
@@ -25,20 +23,24 @@ const END_THRESHOLD_SECONDS = 15;
  * useLessonResume — periodically saves the student's playback position for a
  * lesson video so it can resume where they left off.
  *
- * Mirrors useWatchProgress (used for the listening library) but targets the
- * lesson progress endpoint:
- * - Debounces saves to at most once every 10 seconds while playing.
- * - Flushes + sendBeacon on tab hide so progress survives closing the tab.
- * - Saves position 0 near the end so a finished video restarts next time.
+ * Persistence is layered so no exit path loses progress:
+ * - Debounced saves while watching, with maxWait so a save lands at least
+ *   every 10s even during uninterrupted playback (a plain debounce would keep
+ *   deferring and never fire until playback stopped).
+ * - flush() + sendBeacon on tab hide (closing/switching the tab).
+ * - sendBeacon on unmount, which is how in-app navigation ("Back to Course")
+ *   leaves the page — visibilitychange never fires in that case.
+ *
+ * Positions within END_THRESHOLD_SECONDS of the end are saved as 0 so a
+ * finished video restarts next time.
  */
 export function useLessonResume({
   lessonId,
   currentTime,
   duration,
-  isPlaying,
 }: UseLessonResumeOpts) {
-  // Keep latest values in refs for the visibilitychange handler (avoids stale
-  // closures on the one-time-registered listener). Updated in an effect so we
+  // Keep latest values in refs for the hide/unmount handlers (avoids stale
+  // closures on the once-registered listener). Updated in an effect so we
   // never touch refs during render.
   const currentTimeRef = useRef(currentTime);
   const durationRef = useRef(duration);
@@ -61,7 +63,8 @@ export function useLessonResume({
     []
   );
 
-  // Debounced save — fires at most every 10 seconds.
+  // Debounced save — coalesces rapid timeupdate calls, but maxWait guarantees a
+  // save at least every 10s during continuous playback.
   const savePosition = useDebouncedCallback(
     (posSeconds: number, durSeconds: number) => {
       const id = lessonIdRef.current;
@@ -78,27 +81,25 @@ export function useLessonResume({
         console.error("Failed to save lesson position:", err);
       });
     },
-    10_000,
-    { leading: false, trailing: true }
+    5_000,
+    { leading: false, trailing: true, maxWait: 10_000 }
   );
 
-  // Trigger a debounced save as playback advances.
+  // Trigger a debounced save as playback position advances. Not gated on a
+  // "playing" flag so that pausing mid-video and leaving still persists the
+  // spot; the currentTime > 0 guard avoids saving the initial load at 0.
   useEffect(() => {
-    if (lessonId && isPlaying && currentTime > 0 && duration > 0) {
+    if (lessonId && currentTime > 0 && duration > 0) {
       savePosition(currentTime, duration);
     }
-  }, [currentTime, isPlaying, lessonId, duration, savePosition]);
+  }, [currentTime, lessonId, duration, savePosition]);
 
-  // Flush + beacon on tab hide so we don't lose the last few seconds.
+  // Reliable last-chance save via beacon on tab hide and on unmount.
   useEffect(() => {
-    function handleVisibilityChange() {
-      if (document.visibilityState !== "hidden") return;
-
-      savePosition.flush();
-
+    function saveViaBeacon() {
       const id = lessonIdRef.current;
-      const dur = durationRef.current;
       const pos = currentTimeRef.current;
+      const dur = durationRef.current;
       if (!id || pos <= 0) return;
 
       const payload = JSON.stringify({
@@ -110,9 +111,19 @@ export function useLessonResume({
       );
     }
 
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        savePosition.flush();
+        saveViaBeacon();
+      }
+    }
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      // In-app navigation away from the lesson unmounts this component while the
+      // page is still visible, so visibilitychange never fires — persist here.
+      saveViaBeacon();
       savePosition.cancel();
     };
   }, [savePosition, positionToSave]);

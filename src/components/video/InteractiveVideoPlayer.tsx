@@ -177,7 +177,6 @@ export const InteractiveVideoPlayer = forwardRef<
     lessonId,
     currentTime: context.currentTime,
     duration: context.duration,
-    isPlaying: state === "playing",
   });
 
   // Resume-on-load state: banner shown when we auto-seek to a saved position.
