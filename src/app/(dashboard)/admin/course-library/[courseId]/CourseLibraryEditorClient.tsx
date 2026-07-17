@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import type { ComponentProps } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -26,8 +26,10 @@ import {
   NotebookPen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DragDropProvider } from "@dnd-kit/react";
+import { DragDropProvider, useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
+import { move } from "@dnd-kit/helpers";
+import { CollisionPriority } from "@dnd-kit/abstract";
 
 type LessonType =
   | "video"
@@ -189,23 +191,30 @@ function WeekLabelInput({
 }
 
 // ---------------------------------------------------------------------------
-// Sortable lesson row (drag-and-drop handle)
+// Draggable lesson row — sortable within its module and movable across modules
 // ---------------------------------------------------------------------------
 
-function SortableLesson({
+function MoveableLesson({
   lesson,
   index,
+  group,
   courseId,
-  moduleId,
   onDelete,
 }: {
   lesson: LessonRow;
   index: number;
+  group: string;
   courseId: string;
-  moduleId: string;
   onDelete: (lessonId: string, title: string, moduleId: string) => void;
 }) {
-  const { ref, isDragging } = useSortable({ id: lesson.id, index });
+  const { ref, isDragging } = useSortable({
+    id: lesson.id,
+    index,
+    group,
+    type: "lesson",
+    accept: "lesson",
+  });
+  const moduleId = group;
   const meta = LESSON_TYPE_META[lesson.lessonType];
 
   return (
@@ -252,81 +261,66 @@ function SortableLesson({
 }
 
 // ---------------------------------------------------------------------------
-// Sortable lesson list per module
+// Droppable lesson list for a single module (drop target for cross-module drags)
 // ---------------------------------------------------------------------------
 
-function SortableLessonList({
+function ModuleLessonList({
   moduleId,
-  lessons,
+  lessonIds,
+  lessonById,
   courseId,
   onDelete,
-  onReorder,
 }: {
   moduleId: string;
-  lessons: LessonRow[];
+  lessonIds: string[];
+  lessonById: Map<string, LessonRow>;
   courseId: string;
   onDelete: (lessonId: string, title: string, moduleId: string) => void;
-  onReorder: (moduleId: string, updates: { id: string; sortOrder: number }[]) => Promise<void>;
 }) {
-  type DragDropProviderProps = ComponentProps<typeof DragDropProvider>;
-  const [localLessons, setLocalLessons] = useState<LessonRow[]>(
-    () => [...lessons].sort((a, b) => a.sortOrder - b.sortOrder),
-  );
-  const itemsRef = useRef(localLessons);
-
-  const handleDragOver: NonNullable<DragDropProviderProps["onDragOver"]> = (
-    event,
-  ) => {
-    const sourceId = event.operation.source?.id;
-    const targetId = event.operation.target?.id;
-    if (!sourceId || !targetId || sourceId === targetId) return;
-
-    const current = itemsRef.current;
-    const srcIdx = current.findIndex((l) => l.id === sourceId);
-    const tgtIdx = current.findIndex((l) => l.id === targetId);
-    if (srcIdx === -1 || tgtIdx === -1) return;
-
-    const next = [...current];
-    const [moved] = next.splice(srcIdx, 1);
-    next.splice(tgtIdx, 0, moved);
-    itemsRef.current = next;
-    setLocalLessons(next);
-  };
-
-  const handleDragEnd: NonNullable<DragDropProviderProps["onDragEnd"]> = async (
-    event,
-  ) => {
-    if (event.canceled) return;
-    const final = itemsRef.current;
-    const updates = final.map((l, i) => ({ id: l.id, sortOrder: i }));
-    itemsRef.current = final;
-    setLocalLessons(final.map((l, i) => ({ ...l, sortOrder: i })));
-    try {
-      await onReorder(moduleId, updates);
-    } catch (error) {
-      console.error("Failed to reorder course-library lessons:", error);
-      itemsRef.current = [...lessons].sort((a, b) => a.sortOrder - b.sortOrder);
-      setLocalLessons([...lessons].sort((a, b) => a.sortOrder - b.sortOrder));
-    }
-  };
-
-  if (localLessons.length === 0) return null;
+  // The whole list is a drop target so a lesson can be dragged into a module
+  // even when it is currently empty. Lower priority than the lesson rows so
+  // hovering a specific row still positions precisely.
+  const { ref, isDropTarget } = useDroppable({
+    id: moduleId,
+    type: "column",
+    accept: "lesson",
+    collisionPriority: CollisionPriority.Low,
+  });
 
   return (
-    <DragDropProvider onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-      <div className="space-y-2">
-        {localLessons.map((lesson, index) => (
-          <SortableLesson
-            key={lesson.id}
-            lesson={lesson}
-            index={index}
-            courseId={courseId}
-            moduleId={moduleId}
-            onDelete={onDelete}
-          />
-        ))}
-      </div>
-    </DragDropProvider>
+    <div
+      ref={ref}
+      className={cn(
+        "space-y-2 rounded-md transition-colors",
+        isDropTarget && "bg-primary/5 ring-1 ring-primary/30",
+      )}
+    >
+      {lessonIds.length === 0 ? (
+        <p
+          className={cn(
+            "rounded-md border border-dashed border-border py-3 text-center text-xs italic text-muted-foreground",
+            isDropTarget && "border-primary/40 text-primary",
+          )}
+        >
+          Drop a lesson here
+        </p>
+      ) : (
+        lessonIds.map((id, index) => {
+          const lesson = lessonById.get(id);
+          if (!lesson) return null;
+          return (
+            <MoveableLesson
+              key={id}
+              lesson={lesson}
+              index={index}
+              group={moduleId}
+              courseId={courseId}
+              onDelete={onDelete}
+            />
+          );
+        })
+      )}
+    </div>
   );
 }
 
@@ -718,6 +712,140 @@ export function CourseLibraryEditorClient({
     }));
   };
 
+  // -------------------------------------------------------------------------
+  // Cross-module lesson drag-and-drop
+  //
+  // One provider spans every module. `dndItems` mirrors the committed layout
+  // (moduleId -> ordered lesson ids) and is updated optimistically as the user
+  // drags. When the server-confirmed layout changes (add/delete/reorder module,
+  // successful move) we re-seed during render — no effect, so no state-in-effect.
+  // -------------------------------------------------------------------------
+  type DragDropProviderProps = ComponentProps<typeof DragDropProvider>;
+
+  const lessonById = useMemo(() => {
+    const map = new Map<string, LessonRow>();
+    course.modules.forEach((m) => m.lessons.forEach((l) => map.set(l.id, l)));
+    return map;
+  }, [course.modules]);
+
+  const serverLayout = useMemo(() => {
+    const rec: Record<string, string[]> = {};
+    [...course.modules]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .forEach((m) => {
+        rec[m.id] = [...m.lessons]
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((l) => l.id);
+      });
+    return rec;
+  }, [course.modules]);
+  const serverSig = JSON.stringify(serverLayout);
+
+  const [dndItems, setDndItems] = useState<Record<string, string[]>>(serverLayout);
+  const [syncedSig, setSyncedSig] = useState(serverSig);
+  const dndRef = useRef(serverLayout);
+  if (serverSig !== syncedSig) {
+    setDndItems(serverLayout);
+    setSyncedSig(serverSig);
+    dndRef.current = serverLayout;
+  }
+
+  const revertDnd = () => {
+    dndRef.current = serverLayout;
+    setDndItems(serverLayout);
+  };
+
+  const persistLessonMove = async (
+    event: Parameters<NonNullable<DragDropProviderProps["onDragEnd"]>>[0],
+  ) => {
+    const sourceId = event.operation.source?.id;
+    if (sourceId == null) return;
+    const lessonId = String(sourceId);
+    const next = dndRef.current;
+
+    const targetModuleId = Object.keys(next).find((mid) =>
+      next[mid].includes(lessonId),
+    );
+    const sourceModuleId = Object.keys(serverLayout).find((mid) =>
+      serverLayout[mid].includes(lessonId),
+    );
+    if (!targetModuleId || !sourceModuleId) return;
+    if (JSON.stringify(next) === serverSig) return; // nothing changed
+
+    setActionError(null);
+    try {
+      if (sourceModuleId === targetModuleId) {
+        const updates = next[targetModuleId].map((id, i) => ({ id, sortOrder: i }));
+        await handleReorderLessons(targetModuleId, updates);
+      } else {
+        const groups = {
+          [sourceModuleId]: next[sourceModuleId],
+          [targetModuleId]: next[targetModuleId],
+        };
+        const res = await fetch(
+          `/api/admin/course-library/lessons/${lessonId}/move`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ groups }),
+          },
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error || "Failed to move lesson");
+        }
+        // Reflect the new membership + ordering in the source of truth.
+        setCourse((prev) => {
+          const lookup = new Map<string, LessonRow>();
+          prev.modules.forEach((m) => m.lessons.forEach((l) => lookup.set(l.id, l)));
+          const affected = [sourceModuleId, targetModuleId];
+          return {
+            ...prev,
+            modules: prev.modules.map((m) => {
+              if (!affected.includes(m.id)) return m;
+              const ids = next[m.id] ?? [];
+              return {
+                ...m,
+                lessons: ids
+                  .map((id, i) => {
+                    const l = lookup.get(id);
+                    return l ? { ...l, sortOrder: i } : null;
+                  })
+                  .filter((l): l is LessonRow => l !== null),
+              };
+            }),
+          };
+        });
+      }
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "Failed to move lesson",
+      );
+      revertDnd();
+    }
+  };
+
+  const handleLessonDragOver: NonNullable<
+    DragDropProviderProps["onDragOver"]
+  > = (event) => {
+    const nextItems = move(dndRef.current, event);
+    dndRef.current = nextItems;
+    setDndItems(nextItems);
+  };
+
+  const handleLessonDragEnd: NonNullable<
+    DragDropProviderProps["onDragEnd"]
+  > = (event) => {
+    if (event.canceled) {
+      revertDnd();
+      return;
+    }
+    const nextItems = move(dndRef.current, event);
+    dndRef.current = nextItems;
+    setDndItems(nextItems);
+    void persistLessonMove(event);
+  };
+
   return (
     <div className="space-y-6">
       {/* Course header */}
@@ -848,6 +976,10 @@ export function CourseLibraryEditorClient({
           </div>
         )}
 
+        <DragDropProvider
+          onDragOver={handleLessonDragOver}
+          onDragEnd={handleLessonDragEnd}
+        >
         {[...course.modules]
           .sort((a, b) => a.sortOrder - b.sortOrder)
           .map((mod, modIndex, orderedModules) => (
@@ -1030,21 +1162,12 @@ export function CourseLibraryEditorClient({
               </div>
             )}
             <div className="p-3 space-y-2">
-              {mod.lessons.length === 0 && addingLessonTo !== mod.id && (
-                <p className="text-xs text-muted-foreground italic py-2 text-center">
-                  No lessons yet
-                </p>
-              )}
-
-              <SortableLessonList
-                key={`${mod.id}:${mod.lessons
-                  .map((l) => `${l.id}:${l.sortOrder}`)
-                  .join("|")}`}
+              <ModuleLessonList
                 moduleId={mod.id}
-                lessons={mod.lessons}
+                lessonIds={dndItems[mod.id] ?? []}
+                lessonById={lessonById}
                 courseId={course.id}
                 onDelete={handleDeleteLesson}
-                onReorder={handleReorderLessons}
               />
 
               {addingLessonTo === mod.id ? (
@@ -1135,6 +1258,7 @@ export function CourseLibraryEditorClient({
             </div>
           </div>
         ))}
+        </DragDropProvider>
 
         {course.modules.length === 0 && !addingModule && (
           <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
