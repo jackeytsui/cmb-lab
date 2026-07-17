@@ -211,9 +211,12 @@ export function LabAssistantAdminWidget() {
                         ? "All 5 field mappings configured"
                         : `Missing field mappings: ${overview.health.missingMappings.join(", ")}`
                     }
-                    hint="Map them under GHL Integration → Field Mappings"
+                    hint="Use the quick setup below or GHL Integration → Field Mappings"
                   />
                 </div>
+                {overview.health.missingMappings.length > 0 && (
+                  <FieldMappingSetup onSaved={load} />
+                )}
               </div>
 
               {/* Intent breakdown */}
@@ -342,6 +345,140 @@ function HealthRow({
         {label}
         {!ok && <span className="block text-muted-foreground">{hint}</span>}
       </span>
+    </div>
+  );
+}
+
+const CONCEPT_LABELS: Record<string, string> = {
+  start_date: "Program start date",
+  end_date: "Program end date",
+  assigned_coach: "Assigned coach",
+  referral_source: "Referral source",
+  referral_status: "Referral status",
+};
+
+/**
+ * Quick field-mapping setup: pulls the GHL location's custom fields,
+ * pre-selects a best-guess match per allowlist concept, and saves through
+ * the existing field-mappings upsert API. Shown while mappings are missing.
+ */
+function FieldMappingSetup({ onSaved }: { onSaved: () => void }) {
+  const [fields, setFields] = useState<Array<{ id: string; name: string }>>([]);
+  const [selections, setSelections] = useState<Record<string, string>>({});
+  const [concepts, setConcepts] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/lab-assistant/ghl-fields")
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(data?.error ?? `HTTP ${r.status}`);
+        return data;
+      })
+      .then(
+        (data: {
+          fields: Array<{ id: string; name: string }>;
+          concepts: Array<{
+            concept: string;
+            suggestedFieldId: string | null;
+          }>;
+        }) => {
+          setFields(data.fields);
+          setConcepts(data.concepts.map((c) => c.concept));
+          setSelections(
+            Object.fromEntries(
+              data.concepts.map((c) => [c.concept, c.suggestedFieldId ?? ""])
+            )
+          );
+        }
+      )
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : "Failed to load GHL fields")
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      for (const concept of concepts) {
+        const fieldId = selections[concept];
+        if (!fieldId) continue;
+        const field = fields.find((f) => f.id === fieldId);
+        const res = await fetch("/api/admin/ghl/field-mappings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lmsConcept: concept,
+            ghlFieldId: fieldId,
+            ghlFieldName: field?.name ?? fieldId,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error ?? `Failed to save ${concept}`);
+        }
+      }
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 rounded-md border border-border bg-background p-2.5">
+      <p className="mb-2 text-[11px] font-medium text-foreground">
+        Quick setup — match each field to your GHL custom field:
+      </p>
+      {loading ? (
+        <div className="h-24 animate-pulse rounded bg-muted" />
+      ) : error && fields.length === 0 ? (
+        <p className="text-xs text-red-500">{error}</p>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            {concepts.map((concept) => (
+              <div key={concept} className="flex items-center gap-2 text-xs">
+                <span className="w-32 shrink-0 text-muted-foreground">
+                  {CONCEPT_LABELS[concept] ?? concept}
+                </span>
+                <select
+                  value={selections[concept] ?? ""}
+                  onChange={(e) =>
+                    setSelections((prev) => ({
+                      ...prev,
+                      [concept]: e.target.value,
+                    }))
+                  }
+                  className="h-7 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary"
+                >
+                  <option value="">— not mapped —</option>
+                  {fields.map((field) => (
+                    <option key={field.id} value={field.id}>
+                      {field.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+          {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || Object.values(selections).every((v) => !v)}
+            className="mt-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save mappings"}
+          </button>
+        </>
+      )}
     </div>
   );
 }
