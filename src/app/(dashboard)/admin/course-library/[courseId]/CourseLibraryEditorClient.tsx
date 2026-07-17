@@ -356,6 +356,12 @@ export function CourseLibraryEditorClient({
   const [title, setTitle] = useState(course.title);
   const [summary, setSummary] = useState(course.summary);
   const [savingHeader, setSavingHeader] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
+  // Bumped after each cover change so the same-origin preview URL (keyed by
+  // courseId, not the blob URL) refetches instead of showing a cached image.
+  const [coverVersion, setCoverVersion] = useState(0);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const [addingModule, setAddingModule] = useState(false);
   const [newModuleTitle, setNewModuleTitle] = useState("");
   const [addingLessonTo, setAddingLessonTo] = useState<string | null>(null);
@@ -420,6 +426,69 @@ export function CourseLibraryEditorClient({
       setAllowedUserIds(prev);
     } finally {
       setSavingStudents(false);
+    }
+  };
+
+  const persistCoverImageUrl = async (coverImageUrl: string | null) => {
+    const res = await fetch(`/api/admin/course-library/courses/${course.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coverImageUrl }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error || "Failed to save cover image");
+    }
+    const data = await res.json();
+    setCourse((prev) => ({
+      ...prev,
+      coverImageUrl: data.course.coverImageUrl ?? null,
+    }));
+    setCoverVersion((v) => v + 1);
+  };
+
+  const handleCoverSelected = async (file: File | undefined) => {
+    if (!file) return;
+    setCoverError(null);
+    if (!file.type.startsWith("image/")) {
+      setCoverError("Please choose an image file (JPG, PNG, WebP, or GIF).");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setCoverError("Image too large — the maximum is 10MB.");
+      return;
+    }
+    setUploadingCover(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/admin/course-library/upload?kind=image", {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Upload failed");
+      }
+      const data = await res.json();
+      await persistCoverImageUrl(data.url as string);
+    } catch (err) {
+      setCoverError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingCover(false);
+      if (coverInputRef.current) coverInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveCover = async () => {
+    setCoverError(null);
+    setUploadingCover(true);
+    try {
+      await persistCoverImageUrl(null);
+    } catch (err) {
+      setCoverError(err instanceof Error ? err.message : "Failed to remove");
+    } finally {
+      setUploadingCover(false);
     }
   };
 
@@ -993,6 +1062,77 @@ export function CourseLibraryEditorClient({
             rows={2}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
           />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Cover image{" "}
+            <span className="font-normal">
+              (shown on the course card — 16:9 works best)
+            </span>
+          </label>
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => handleCoverSelected(e.target.files?.[0])}
+          />
+          {course.coverImageUrl ? (
+            <div className="flex items-start gap-3">
+              <div className="relative aspect-video w-48 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/course-library/course-image/${course.id}?v=${coverVersion}`}
+                  alt="Course cover"
+                  className="h-full w-full object-cover"
+                />
+                {uploadingCover && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                    <Loader2 className="h-5 w-5 animate-spin text-white" />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => coverInputRef.current?.click()}
+                  disabled={uploadingCover}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Replace
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveCover}
+                  disabled={uploadingCover}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-red-500 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => coverInputRef.current?.click()}
+              disabled={uploadingCover}
+              className="flex aspect-video w-48 flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-background text-xs text-muted-foreground hover:bg-muted/30 hover:text-foreground disabled:opacity-50"
+            >
+              {uploadingCover ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  <Plus className="h-5 w-5" />
+                  Upload cover image
+                </>
+              )}
+            </button>
+          )}
+          {coverError && (
+            <p className="mt-1.5 text-xs text-red-500">{coverError}</p>
+          )}
         </div>
         {allTags.length > 0 && (
           <div>
