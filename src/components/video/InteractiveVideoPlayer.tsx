@@ -23,6 +23,7 @@ import { AnimatePresence } from "framer-motion";
 import { useInteractiveVideo } from "@/hooks/useInteractiveVideo";
 import { useSubtitlePreference } from "@/hooks/useSubtitlePreference";
 import { useProgress } from "@/hooks/useProgress";
+import { useLessonResume } from "@/hooks/useLessonResume";
 import { useCelebration } from "@/hooks/useCelebration";
 import type { CuePoint, SubtitleCue } from "@/types/video";
 import {
@@ -39,6 +40,19 @@ import { Button } from "@/components/ui/button";
 import { AudioInteraction } from "@/components/audio/AudioInteraction";
 import { TextInteraction } from "@/components/interactions/TextInteraction";
 import { VideoInteraction } from "@/components/video/interactions/VideoInteraction";
+
+/**
+ * Format a number of seconds as m:ss (or h:mm:ss) for the resume banner.
+ */
+function formatTimestamp(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(s / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
+  const seconds = s % 60;
+  const mm = hours > 0 ? String(minutes).padStart(2, "0") : String(minutes);
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+}
 
 /**
  * Props for the InteractiveVideoPlayer component.
@@ -151,7 +165,24 @@ export const InteractiveVideoPlayer = forwardRef<
   } = useSubtitlePreference();
 
   // Progress tracking - hook handles undefined lessonId by returning no-ops
-  const { updateVideoProgress, markInteractionComplete } = useProgress({ lessonId });
+  const {
+    updateVideoProgress,
+    markInteractionComplete,
+    initialPositionSeconds,
+    isLoading: isProgressLoading,
+  } = useProgress({ lessonId });
+
+  // "Remember where you left off" — save playback position while watching.
+  useLessonResume({
+    lessonId,
+    currentTime: context.currentTime,
+    duration: context.duration,
+    isPlaying: state === "playing",
+  });
+
+  // Resume-on-load state: banner shown when we auto-seek to a saved position.
+  const [resumedFromSeconds, setResumedFromSeconds] = useState<number | null>(null);
+  const hasResumedRef = useRef(false);
 
   // Celebration overlay for lesson completion
   const celebration = useCelebration({ score: 100 });
@@ -392,6 +423,70 @@ export const InteractiveVideoPlayer = forwardRef<
   }, [handleDurationChange, handleCuePointChange, handleTimeUpdate, playerRef]);
 
   /**
+   * Resume from last saved position ("記住你睇到邊").
+   *
+   * Runs once, when the saved progress has loaded and the player knows its
+   * duration. Seeks to the saved position and surfaces a dismissible banner
+   * so the student can start over if they'd rather. Only resumes for a
+   * meaningful offset that isn't essentially the end of the video.
+   */
+  useEffect(() => {
+    if (hasResumedRef.current) return;
+    if (!lessonId || isProgressLoading) return;
+
+    const player = playerRef.current;
+    const duration = context.duration;
+    if (!player || !duration || duration === Infinity) return;
+
+    const target = initialPositionSeconds;
+    const isMeaningful = target >= 5 && target < duration - 15;
+    if (!isMeaningful) {
+      // Nothing worth resuming to — don't try again.
+      hasResumedRef.current = true;
+      return;
+    }
+
+    hasResumedRef.current = true;
+    try {
+      player.currentTime = target;
+      updateTime(target);
+      // Runs exactly once (guarded by hasResumedRef) to surface the resume
+      // banner after seeking — a one-shot init from async progress, not a
+      // cascading update.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setResumedFromSeconds(target);
+    } catch {
+      // Seeking failed (player not ready) — leave at the start.
+    }
+  }, [
+    lessonId,
+    isProgressLoading,
+    initialPositionSeconds,
+    context.duration,
+    playerRef,
+    updateTime,
+  ]);
+
+  // Auto-hide the resume banner a few seconds after it appears.
+  useEffect(() => {
+    if (resumedFromSeconds === null) return;
+    const timer = setTimeout(() => setResumedFromSeconds(null), 8000);
+    return () => clearTimeout(timer);
+  }, [resumedFromSeconds]);
+
+  /**
+   * Start the video over from the beginning (dismisses the resume banner).
+   */
+  const handleStartOver = useCallback(() => {
+    const player = playerRef.current;
+    if (player) {
+      player.currentTime = 0;
+      updateTime(0);
+    }
+    setResumedFromSeconds(null);
+  }, [playerRef, updateTime]);
+
+  /**
    * Handle overlay exit animation complete.
    */
   const handleOverlayExitComplete = useCallback(() => {
@@ -420,6 +515,25 @@ export const InteractiveVideoPlayer = forwardRef<
         primaryColor="#ffffff"
         secondaryColor="#a1a1aa"
       />
+
+      {/* "Resumed from…" banner — Netflix-style resume where you left off */}
+      {resumedFromSeconds !== null && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 rounded-full bg-black/80 px-4 py-2 text-sm text-white shadow-lg backdrop-blur-sm">
+          <span>
+            Resumed from{" "}
+            <span className="font-semibold tabular-nums">
+              {formatTimestamp(resumedFromSeconds)}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={handleStartOver}
+            className="rounded-full bg-white/15 px-3 py-1 font-medium hover:bg-white/25 transition-colors"
+          >
+            Start over
+          </button>
+        </div>
+      )}
 
       {/* Subtitle overlay with Ruby annotations */}
       {subtitleCues.length > 0 && (

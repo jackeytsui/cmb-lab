@@ -91,6 +91,42 @@ export async function upsertLessonProgress(
 }
 
 /**
+ * Save a student's last playback position for a lesson video ("resume where
+ * you left off"). Deliberately lightweight and side-effect-free — no completion
+ * check, no XP, no milestone dispatch — because it is called frequently while
+ * watching and on tab close (via sendBeacon). Creates the progress row if the
+ * student has not started the lesson yet.
+ *
+ * @param input.userId - User ID
+ * @param input.lessonId - Lesson ID
+ * @param input.lastPositionSeconds - Latest playback position in whole seconds
+ */
+export async function saveLessonPosition(input: {
+  userId: string;
+  lessonId: string;
+  lastPositionSeconds: number;
+}): Promise<void> {
+  const { userId, lessonId } = input;
+  // Clamp to a sane non-negative integer.
+  const lastPositionSeconds = Math.max(0, Math.floor(input.lastPositionSeconds));
+
+  await db
+    .insert(lessonProgress)
+    .values({
+      userId,
+      lessonId,
+      lastPositionSeconds,
+    })
+    .onConflictDoUpdate({
+      target: [lessonProgress.userId, lessonProgress.lessonId],
+      set: {
+        lastPositionSeconds,
+        lastAccessedAt: new Date(),
+      },
+    });
+}
+
+/**
  * Check lesson completion status for a user.
  * Completion requires BOTH:
  * 1. Video watched to 60%+ (videoCompletedAt is set)

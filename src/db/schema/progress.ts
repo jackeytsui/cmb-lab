@@ -24,6 +24,9 @@ export const lessonProgress = pgTable(
     // Video completion tracking
     videoWatchedPercent: integer("video_watched_percent").notNull().default(0),
     videoCompletedAt: timestamp("video_completed_at"), // Set when 95%+ reached
+    // "Remember where you left off" — last playback position in whole seconds.
+    // Used to resume the video where the student stopped watching (Netflix-style).
+    lastPositionSeconds: integer("last_position_seconds").notNull().default(0),
     // Interaction completion tracking
     interactionsCompleted: integer("interactions_completed").notNull().default(0),
     interactionsTotal: integer("interactions_total").notNull().default(0),

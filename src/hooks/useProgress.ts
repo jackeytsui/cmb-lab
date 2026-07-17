@@ -6,6 +6,8 @@ import type { CompletionStatus } from "@/lib/progress";
 interface ProgressState {
   /** Current video watch percentage (0-100) */
   videoWatchedPercent: number;
+  /** Last saved playback position in seconds ("resume where you left off") */
+  initialPositionSeconds: number;
   /** Completion status with detailed breakdown */
   completion: CompletionStatus | null;
   /** Whether initial progress is being loaded */
@@ -62,6 +64,7 @@ interface UseProgressReturn extends ProgressState {
 export function useProgress({ lessonId }: UseProgressOptions): UseProgressReturn {
   const [state, setState] = useState<ProgressState>({
     videoWatchedPercent: 0,
+    initialPositionSeconds: 0,
     completion: null,
     isLoading: !!lessonId, // Only loading if we have a lessonId
     error: null,
@@ -90,6 +93,7 @@ export function useProgress({ lessonId }: UseProgressOptions): UseProgressReturn
         const data = await res.json();
         setState({
           videoWatchedPercent: data.progress?.videoWatchedPercent ?? 0,
+          initialPositionSeconds: data.progress?.lastPositionSeconds ?? 0,
           completion: data.completion,
           isLoading: false,
           error: null,
