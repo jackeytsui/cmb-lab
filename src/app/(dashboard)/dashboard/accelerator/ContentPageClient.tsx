@@ -104,7 +104,9 @@ export function ContentPageClient({
             controls
             playsInline
             preload="metadata"
-            controlsList="nodownload"
+            controlsList="nodownload noremoteplayback"
+            disablePictureInPicture
+            onContextMenu={(e) => e.preventDefault()}
           >
             Your browser does not support the video tag.
           </video>

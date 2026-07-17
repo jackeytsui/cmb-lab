@@ -307,6 +307,9 @@ export function VideoThreadPlayer({
           controls={false}
           loop
           muted
+          controlsList="nodownload noremoteplayback"
+          disablePictureInPicture
+          onContextMenu={(e) => e.preventDefault()}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white">

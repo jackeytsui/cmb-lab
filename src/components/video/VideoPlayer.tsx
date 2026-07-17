@@ -52,7 +52,7 @@ export function VideoPlayer({
   };
 
   return (
-    <div className={className}>
+    <div className={className} onContextMenu={(e) => e.preventDefault()}>
       <MuxPlayer
         playbackId={playbackId}
         streamType="on-demand"

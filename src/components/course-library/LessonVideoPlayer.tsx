@@ -51,7 +51,9 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
         muted
         autoPlay
         preload="metadata"
-        controlsList="nodownload"
+        controlsList="nodownload noremoteplayback"
+        disablePictureInPicture
+        onContextMenu={(e) => e.preventDefault()}
         className="h-full w-full"
         onCanPlay={() => setLoading(false)}
         onPlaying={() => setLoading(false)}

@@ -399,7 +399,10 @@ export const InteractiveVideoPlayer = forwardRef<
   }, []);
 
   return (
-    <div className={`relative ${className || ""}`}>
+    <div
+      className={`relative ${className || ""}`}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <MuxPlayer
         ref={playerRef}
         playbackId={playbackId}

@@ -485,7 +485,8 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                   src={`/api/course-library/audio/${lessonId}`}
                   controls
                   preload="metadata"
-                  controlsList="nodownload"
+                  controlsList="nodownload noremoteplayback"
+                  onContextMenu={(e) => e.preventDefault()}
                   className="w-full"
                 />
               </div>
