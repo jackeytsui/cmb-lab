@@ -174,7 +174,7 @@ export function CourseLibraryListClient({
                   {course.coverImageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={course.coverImageUrl}
+                      src={`/api/course-library/course-image/${course.id}`}
                       alt={course.title}
                       className="w-full h-full object-cover"
                     />
