@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { vocabularyListAssignments, users } from "@/db/schema";
+import { vocabularyListAssignments, vocabularyLists, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(req: Request) {
@@ -13,10 +13,26 @@ export async function POST(req: Request) {
   });
   if (!currentUser) return new NextResponse("User not found", { status: 404 });
 
+  // Only coaches/admins may assign vocabulary lists to students.
+  // Without this gate, any authenticated student could create arbitrary
+  // assignment rows against any users referencing any list.
+  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+
   const { listId, studentIds, dueDate } = await req.json();
 
   if (!listId || !studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
     return new NextResponse("Invalid request: listId and studentIds required", { status: 400 });
+  }
+
+  // Verify the list exists before creating assignments that reference it.
+  const list = await db.query.vocabularyLists.findFirst({
+    where: eq(vocabularyLists.id, listId),
+    columns: { id: true },
+  });
+  if (!list) {
+    return new NextResponse("Vocabulary list not found", { status: 404 });
   }
 
   // Insert assignments for each student

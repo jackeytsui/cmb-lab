@@ -31,27 +31,41 @@ export async function POST(request: NextRequest) {
     const payload = await request.text();
     const signature = request.headers.get("mux-signature");
 
-    // Verify signature if secret is configured
+    // Signature verification is MANDATORY when a secret is configured.
+    // Previously this only ran when the `mux-signature` header was present,
+    // so omitting the header skipped verification entirely and let an attacker
+    // POST forged Mux events that mutate upload status.
     const secret = process.env.MUX_WEBHOOK_SECRET;
-    if (secret && signature) {
+    if (secret) {
+      if (!signature) {
+        console.error("Missing Mux webhook signature");
+        return NextResponse.json({ error: "Missing signature" }, { status: 401 });
+      }
       // Mux signature format: t=timestamp,v1=signature
       const parts = signature.split(",");
-      const sigPart = parts.find((p) => p.startsWith("v1="));
-      if (sigPart) {
-        const sig = sigPart.replace("v1=", "");
-        const timestamp = parts
-          .find((p) => p.startsWith("t="))
-          ?.replace("t=", "");
-        const signedPayload = `${timestamp}.${payload}`;
-
-        if (!verifySignature(signedPayload, sig, secret)) {
-          console.error("Invalid webhook signature");
-          return NextResponse.json(
-            { error: "Invalid signature" },
-            { status: 401 }
-          );
-        }
+      const sig = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "");
+      const timestamp = parts.find((p) => p.startsWith("t="))?.replace("t=", "");
+      if (!sig || !timestamp) {
+        console.error("Malformed Mux webhook signature");
+        return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
       }
+      const signedPayload = `${timestamp}.${payload}`;
+      let valid = false;
+      try {
+        valid = verifySignature(signedPayload, sig, secret);
+      } catch {
+        valid = false;
+      }
+      if (!valid) {
+        console.error("Invalid Mux webhook signature");
+        return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+      }
+    } else {
+      console.error(
+        "MUX_WEBHOOK_SECRET is not configured — rejecting webhook. " +
+          "Set the secret from the Mux dashboard to enable video status updates."
+      );
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
     }
 
     const event = JSON.parse(payload);

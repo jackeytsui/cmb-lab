@@ -14,13 +14,23 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   }
 }
 
-// Helper to create a limiter or a mock fallback
+// Helper to create a limiter or a fallback when Redis is unconfigured.
+// In production we FAIL CLOSED: without Redis there is no cost governor at all,
+// so allowing everything would let a single user drain the OpenAI/Azure bill.
+// In development we stay permissive so local work isn't blocked.
 function createLimiter(config: Omit<ConstructorParameters<typeof Ratelimit>[0], "redis">): Ratelimit {
   if (!redis) {
-    // Mock limiter that allows everything
+    const failClosed = process.env.NODE_ENV === "production";
+    if (failClosed) {
+      console.error(
+        "Rate limiting is UNCONFIGURED in production (missing UPSTASH_REDIS_* env). " +
+          "Failing closed to protect AI spend. Configure Upstash Redis to restore service."
+      );
+    }
+    const allow = !failClosed;
     return {
-      limit: async () => ({ success: true, limit: 100, remaining: 100, reset: 0 }),
-      blockUntilReady: async () => ({ success: true, limit: 100, remaining: 100, reset: 0 }),
+      limit: async () => ({ success: allow, limit: 0, remaining: 0, reset: Date.now() + 60_000 }),
+      blockUntilReady: async () => ({ success: allow, limit: 0, remaining: 0, reset: Date.now() + 60_000 }),
     } as unknown as Ratelimit;
   }
   return new Ratelimit({ redis, ...config });
@@ -85,6 +95,21 @@ export const ttsLimiter = createLimiter({
 export const ttsLimiterElevated = createLimiter({
   limiter: Ratelimit.slidingWindow(90, "1 m"),
   prefix: "ratelimit:tts:elevated",
+  analytics: true,
+});
+
+// Realtime voice (OpenAI Realtime API): the most expensive surface in the app.
+// A voice session bills continuously, so cap how often a user can mint one.
+// 5/min students, 15/min elevated.
+export const realtimeLimiter = createLimiter({
+  limiter: Ratelimit.slidingWindow(5, "1 m"),
+  prefix: "ratelimit:realtime",
+  analytics: true,
+});
+
+export const realtimeLimiterElevated = createLimiter({
+  limiter: Ratelimit.slidingWindow(15, "1 m"),
+  prefix: "ratelimit:realtime:elevated",
   analytics: true,
 });
 

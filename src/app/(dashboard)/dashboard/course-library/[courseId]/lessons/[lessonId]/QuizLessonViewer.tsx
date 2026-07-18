@@ -30,7 +30,7 @@ interface GradeResult {
     correct: boolean;
     pointsEarned: number;
     points: number;
-    correctOptionIds: string[];
+    correctOptionIds?: string[];
     explanation?: string;
   }>;
 }
@@ -196,7 +196,9 @@ export function QuizLessonViewer({
                 </div>
                 <div className="space-y-1.5 ml-6">
                   {q.options.map((opt) => {
-                    const isCorrect = res.correctOptionIds.includes(opt.id);
+                    // correctOptionIds is only returned for questions the
+                    // student answered correctly (the key is withheld otherwise).
+                    const isCorrect = res.correctOptionIds?.includes(opt.id) ?? false;
                     const wasSelected = given.includes(opt.id);
                     return (
                       <div

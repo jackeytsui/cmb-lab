@@ -83,7 +83,7 @@ export async function POST(
     correct: boolean;
     pointsEarned: number;
     points: number;
-    correctOptionIds: string[];
+    correctOptionIds?: string[];
     explanation?: string;
   }> = [];
 
@@ -106,13 +106,17 @@ export async function POST(
 
     const pointsEarned = isCorrect ? q.points : 0;
     earned += pointsEarned;
+    // Only reveal the answer key + explanation for questions the student
+    // answered correctly. Previously the correct option IDs for EVERY question
+    // were returned, so anyone could POST blank answers and harvest the key.
     perQuestion.push({
       questionId: q.id,
       correct: isCorrect,
       pointsEarned,
       points: q.points,
-      correctOptionIds: q.correctOptionIds,
-      explanation: q.explanation,
+      ...(isCorrect
+        ? { correctOptionIds: q.correctOptionIds, explanation: q.explanation }
+        : {}),
     });
   }
 

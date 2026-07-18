@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { cut } from "jieba-wasm";
 
 /**
@@ -35,6 +36,14 @@ function hasTraditional(text: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
+    // Require authentication. This endpoint runs jieba-wasm segmentation +
+    // OpenCC conversion on up to 1000 strings per request; leaving it public
+    // is a CPU-abuse / DoS vector.
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { texts } = body as { texts: string[] };
 

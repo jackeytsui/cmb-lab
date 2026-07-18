@@ -129,7 +129,14 @@ export async function POST(
       const baseUrl = request.nextUrl.origin;
       await fetch(`${baseUrl}/api/notify/coach-feedback`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // Shared secret so the internal notification endpoint can reject
+          // arbitrary external callers (prevents platform-branded email spam).
+          ...(process.env.INTERNAL_API_SECRET && {
+            "x-internal-secret": process.env.INTERNAL_API_SECRET,
+          }),
+        },
         body: JSON.stringify({
           studentEmail: submission.user.email,
           studentName: submission.user.name || "Student",

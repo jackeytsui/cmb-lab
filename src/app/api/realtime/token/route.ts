@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { realtimeLimiter, rateLimitResponse } from "@/lib/rate-limit";
 
 /**
  * OpenAI Realtime API session response shape
@@ -26,6 +27,14 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // 1b. Rate limit — Realtime voice sessions are the most expensive surface in
+  // the app and were previously uncapped, letting one user run up an unbounded
+  // bill by opening sessions back-to-back.
+  const rl = await realtimeLimiter.limit(userId);
+  if (!rl.success) {
+    return rateLimitResponse(rl);
+  }
+
   // 2. Check for OpenAI API key
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -47,6 +56,9 @@ export async function POST() {
       body: JSON.stringify({
         model: "gpt-4o-realtime-preview-2024-12-17",
         voice: "alloy",
+        // Bound each model response so a single turn can't emit a huge
+        // (expensive) audio completion.
+        max_response_output_tokens: 4096,
       }),
     });
 

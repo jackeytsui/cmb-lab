@@ -16,6 +16,22 @@ interface NotificationPayload {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Internal-only endpoint. It sends platform-branded email to an arbitrary
+    // recipient, so it must not be callable by the public. Require a shared
+    // secret that only server-side callers know. Fail closed when the secret
+    // is configured; if it is unset, warn loudly (dev/unconfigured only).
+    const internalSecret = process.env.INTERNAL_API_SECRET;
+    if (internalSecret) {
+      if (request.headers.get("x-internal-secret") !== internalSecret) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } else {
+      console.warn(
+        "INTERNAL_API_SECRET is not set — /api/notify/coach-feedback is unauthenticated. " +
+          "Set INTERNAL_API_SECRET in production to lock this endpoint down."
+      );
+    }
+
     const body: NotificationPayload = await request.json();
     const { studentEmail, studentName, lessonTitle, coachName, loomUrl, feedbackText } = body;
 
