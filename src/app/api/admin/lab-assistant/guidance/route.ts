@@ -14,6 +14,7 @@ import { eq } from "drizzle-orm";
 import { invalidatePromptCache } from "@/lib/prompts";
 import {
   DEFAULT_GUIDANCE_PROMPT,
+  DEFAULT_TALK_TRACKS,
   LAB_ASSISTANT_PROMPT_SLUG,
   TALK_TRACK_INTENTS,
   TALK_TRACK_LABELS,
@@ -48,8 +49,10 @@ function resolveTarget(trackParam: string | null): Target | null {
   return {
     slug: talkTrackSlug(intent),
     name: `CMB Lab Assistant - Talk Track: ${TALK_TRACK_LABELS[intent]}`,
-    description: `Team-authored reply instructions for the "${TALK_TRACK_LABELS[intent]}" intent. Empty = follow the overall guidance only.`,
-    defaultContent: "",
+    description: `Team-authored reply instructions for the "${TALK_TRACK_LABELS[intent]}" intent. Empty = use the built-in default talk track.`,
+    // Editors start from the built-in playbook so the team refines rather
+    // than writes from scratch; saving empty reverts to this default.
+    defaultContent: DEFAULT_TALK_TRACKS[intent],
     allowEmpty: true,
   };
 }

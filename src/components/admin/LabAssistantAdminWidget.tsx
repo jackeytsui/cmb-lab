@@ -36,6 +36,7 @@ interface Overview {
   }>;
   health: {
     openaiConfigured: boolean;
+    discordConfigured: boolean;
     activeLocations: number;
     promptSeeded: boolean;
     missingMappings: string[];
@@ -193,6 +194,11 @@ export function LabAssistantAdminWidget() {
                     ok={overview.health.openaiConfigured}
                     label="OpenAI API key configured"
                     hint="Set OPENAI_API_KEY"
+                  />
+                  <HealthRow
+                    ok={overview.health.discordConfigured}
+                    label="Discord escalation alerts"
+                    hint="Set DISCORD_WEBHOOK_URL (Discord channel → Integrations → Webhooks) so every handover pings the ops channel"
                   />
                   <HealthRow
                     ok={overview.health.activeLocations > 0}
@@ -639,7 +645,7 @@ function GuidanceEditor({ onSaved }: { onSaved: () => void }) {
       <p className="mb-2 text-[11px] text-muted-foreground">
         {activeTrack.hint}{" "}
         {isTalkTrack
-          ? "Leave empty to fall back to the overall guidance. Saves as a new version and applies immediately — test it in the console above."
+          ? "Pre-filled with the built-in playbook — refine it to your liking; saving empty reverts to the built-in default. Applies immediately — test it in the console above."
           : "Paste or edit freely — saves as a new version and applies immediately. Test it in the console above."}
       </p>
 

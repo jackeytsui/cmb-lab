@@ -224,6 +224,7 @@ export async function GET() {
     })),
     health: {
       openaiConfigured: !!process.env.OPENAI_API_KEY,
+      discordConfigured: !!process.env.DISCORD_WEBHOOK_URL,
       activeLocations: activeLocations?.[0]?.count ?? 0,
       promptSeeded: (promptRow?.length ?? 0) > 0,
       missingMappings,
