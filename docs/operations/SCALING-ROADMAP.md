@@ -1,7 +1,37 @@
 # CMB Operations Scaling Roadmap — Detailed Action Plan
 
-> **Rev A · 2026-07-18** · Companion to [`SCALING-BLUEPRINT.md`](./SCALING-BLUEPRINT.md).
-> Ticket-level plan: 4 horizons · 8 workstreams · 30 tickets with acceptance criteria, target files, effort, and dependencies.
+> **Rev C (data-audited) · 2026-07-18** · Companion to [`SCALING-BLUEPRINT.md`](./SCALING-BLUEPRINT.md) · Evidence: [`DATA-BASELINE.md`](./DATA-BASELINE.md).
+> Ticket-level plan: 4 horizons · 8 workstreams · 34 tickets with acceptance criteria, target files, effort, and dependencies.
+
+---
+
+## Rev C — data-audit corrections & re-prioritization
+
+The row-level parse of the GHL export (n = **143**, not ~2,189) reframes the plan: the constraint is **activation, retention, and growth-readiness**, not inbound volume. Changes:
+
+1. **Priority order is now Instrument → Retain → Amplify → Deflect.** Deflection tickets (OPS-108, OPS-401, OPS-402) move to **H4** — they buy capacity for the next 500 students, not this quarter's revenue.
+2. **Four tickets added** (below): OPS-111, OPS-112, OPS-204a, OPS-210 — each justified by a measured finding (F1–F6 in `DATA-BASELINE.md`).
+3. **Critical path is now: OPS-204a (this week) → OPS-105 → OPS-201 → OPS-203.**
+
+### OPS-111 · Coach assignment sweep — WS3 · Ops + Coach · **S** · *H1, do first*
+**Why (F4):** 32/143 students (22%) have no assigned coach — despite 110 being 1:1-eligible. Unrouted students can't be saved, reviewed, or upsold. Jane carries 67 (47%) vs Janelle's 16 — 4× imbalance.
+**Do:** one-time triage of all 32 via the existing `bulk-assign-coach` endpoint, distributing toward load balance; record the assignment rule (by level/language/product) in the SOP base so intake never leaves a student unrouted again.
+**Accept:** 0 unassigned; no coach >45% of roster; GHL `Coach name` field backfilled for all 143.
+
+### OPS-112 · Data-hygiene backfill + required-at-intake rules — WS1/WS2 · Ops + Eng · **M** · *H1*
+**Why (F5):** the fields that drive money decisions are the emptiest — `Paid total` 16% filled, `Product line` 20%, `Lesson #` 59%, `CMBP level` 66%.
+**Do:** backfill from order records / coach knowledge (Ops); make the enrollment n8n flow write `Paid total`, `Product line`, `Access plan`, `Product END date` on every new contact (Eng); monthly completeness report to `#ops-alerts`.
+**Accept:** money-field completeness ≥90% within 30 days; new enrollments arrive 100% complete.
+
+### OPS-204a · Emergency July renewal motion — WS4 · Ops + Sheldon · **S** · *H1, this week*
+**Why (F3/F6):** the largest renewal wave ever — **37 end dates in July 2026** (the Jan-2026 intake spike, 6 months later) — is hitting *now*, with zero orchestrated motion; plus 11 already-expired contacts still marked active.
+**Do:** don't wait for the engine. Pull the July + past-due list from GHL today; manual triage (renew / extend / offboard / win-back) with a simple GHL sequence + coach call for engaged students; log outcomes — this becomes the renewal-rate baseline OPS-110 needs.
+**Accept:** every July/past-due contact has a disposition within 10 business days; renewal-rate baseline recorded.
+
+### OPS-210 · Activation journey (first 14 days) — WS4 · Eng + Ops · **M** · *H2*
+**Why (F1):** 48/143 (34%) have ≤1 lifetime portal login — students pay and never truly enter the product.
+**Do:** instrumented onboarding: n8n checkpoints at D1 (logged in?), D3 (first lesson started?), D7 (first interaction passed?), D14 (≥2 sessions?); each missed checkpoint triggers the right nudge (email → SMS → Discord → coach ping for high-value plans); track cohort activation in the Command Center.
+**Accept:** ≥85% of new students hit ≥2 logins by day 14 (baseline ~66%); checkpoint funnel visible per cohort.
 
 **How to use this doc**
 - Tickets are IDs (`OPS-1xx` = Horizon 1, etc.). Work top-to-bottom within a horizon; dependencies are explicit.

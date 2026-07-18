@@ -1,20 +1,27 @@
 # CMB Operations Scaling Blueprint
 
-> **Rev A · 2026-07-18** · Strategy for scaling the ops team across GHL, Discord, and CMB Lab.
-> Detailed ticket-level execution plan: [`SCALING-ROADMAP.md`](./SCALING-ROADMAP.md)
+> **Rev C (data-audited) · 2026-07-18** · Strategy for scaling the ops team across GHL, Discord, and CMB Lab.
+> Detailed ticket-level execution plan: [`SCALING-ROADMAP.md`](./SCALING-ROADMAP.md) · Full data analysis: [`DATA-BASELINE.md`](./DATA-BASELINE.md)
 
 ---
 
-## 1. The diagnosis
+## 1. The diagnosis (corrected)
 
-| Signal | Value | Meaning |
+> ⚠️ **Correction:** Rev A cited ~2,189 active students / 730:1 — a raw CSV line count inflated by multi-line note fields. Row-level parsing shows **143 active (non-lifetime) students**. All numbers below are measured from the export ([`DATA-BASELINE.md`](./DATA-BASELINE.md)).
+
+| Measured signal | Value | Meaning |
 |---|---|---|
-| Active paid students | ~2,189 | From GHL active-students export |
-| Coaches | 2–3 | ~730:1 student-to-coach ratio |
-| GHL lifecycle fields | ~90 | The full student record already exists in GHL |
-| Scheduled automations | 2 crons | The automation spine is thin relative to the platform's maturity |
+| Active students | **143** (3 coaches) | Boutique high-touch scale, ~$2,458 avg paid |
+| In portal, trailing 7d | **12%** (17/143) | Engagement collapse — GHL "Last Activity" masks it |
+| Disengaged 31d+ (incl. never) | **63%** (90/143) | ~$221K booked revenue sitting idle |
+| ≤1 lifetime portal login | **34%** (48/143) | Activation is the first leak |
+| Terms ending ≤6mo of export | **78%** (112/143) | Renewal is *the* revenue motion — and unorchestrated |
+| Expired-but-active records | **11** | Proof of the missing expiry automation |
+| No coach assigned | **22%** (32/143) | Unrouted students can't be saved or upsold |
+| Money fields filled (paid / product line) | **16% / 20%** | Ops is flying on a stale, incomplete export |
+| Jan-2026 intake | **45 starts** (4× baseline) | Demand arrives in launch waves; Jan's 45 renew together in July (37-student cliff) |
 
-**We do not have a tooling problem. We have a connective-tissue and leverage problem.**
+**This is not a volume-deflection problem. It is an activation, retention, and growth-readiness problem** — students buy, quietly stop showing up, and nothing notices; nearly every term expires within six months with no renewal machine; and the ops process must absorb 4× launch waves before marketing scales again.
 
 - **GHL** already holds the entire business lifecycle: entitlements (start/end dates, access plan, product line, payment status), coach assignment, a mirror of learning progress, support tickets, NPS, upsell notes, referral tracking.
 - **CMB Lab** is a mature LMS (v10, 74 phases): AI grading via n8n, coach review queues, at-risk/drop-off analytics, RBAC webhook enrollment, and a working AI support bot (Lab Assistant) that escalates into GHL tasks.
@@ -27,7 +34,9 @@ The systems talk — but **the ops team is still the manual glue between them**.
 
 ## 2. The Leverage Doctrine
 
-Three moves break 730:1. Every project in the roadmap serves one of them. If a proposed build doesn't **deflect**, **amplify**, or **instrument** — it's a distraction.
+Every project in the roadmap serves one of these moves. If a proposed build doesn't **instrument**, **retain**, **amplify**, or **deflect** — it's a distraction.
+
+> **Priority order (revised by the data): Instrument → Retain → Amplify → Deflect.** At 143 students, inbound volume is not the constraint — silent churn and the missing renewal motion are. Deflection still ships (H4): it buys capacity for the *next* 500 students, not this quarter's revenue.
 
 ### Move 1 — Deflect
 AI and self-serve absorb volume *before* it reaches a human. Target the ~70% of requests that are answerable, repetitive, or "what should I do next?"
@@ -148,19 +157,21 @@ The loop that matters: **Discord activity feeds the Health Score, and the Health
 
 ---
 
-## 8. The ops scoreboard
+## 8. The ops scoreboard (measured baselines)
 
-| Metric | Today (est.) | 12-mo target |
-|---|---|---|
-| Students supported / coach | ~730 | 1,500+ |
-| Tier-0 deflection (self-serve resolved) | ≥60% in-scope | 80%+ |
-| Feedback turnaround SLA | manual / variable | < 24h |
-| At-risk → recovered rate | not tracked | > 30% |
-| Renewal / retention rate | not orchestrated | +10–15 pts |
-| Coach hours on admin vs teaching | high | cut 50% |
-| Time-to-first-value (onboarding) | unmeasured | < 48h |
+| Metric | Baseline (measured) | 90-day target | 12-mo target |
+|---|---|---|---|
+| Portal-active, trailing 7d | 12% (17/143) | 30% | 45% |
+| Disengaged 31d+ share | 63% (90/143) | ≤45% | ≤25% |
+| Activation: ≥2 logins by day 14 | ~66% (proxy) | 85% | 92% |
+| Expired-but-active records | 11 | 0 | 0 |
+| Renewal motion coverage | 0% orchestrated | 100% of end dates | 100% + health-gated offers |
+| Students without a coach | 32 (22%) | 0 | 0 · load variance <1.5× |
+| Money-field completeness | 16% / 20% | ≥90% | ≥98% |
+| Ops data freshness | 5-month-old export | <24h, monitored | live |
+| Red-band share (Health v1 sim) | 42% | ≤30% | ≤15% |
 
-Baselines captured in H1 (OPS-110) before targets are committed.
+Renewal-rate and feedback-SLA baselines need data outside the export (re-enrollment records; `submissions`→`coachFeedback` timestamps) — captured in OPS-110, week 1.
 
 ---
 
@@ -173,4 +184,4 @@ Baselines captured in H1 (OPS-110) before targets are committed.
 
 ---
 
-*The 730:1 ratio isn't a wall. It's the starting line.*
+*143 students, 63% silent, 78% renewing within six months. The data doesn't ask for a bigger team — it asks for a machine that notices.*
