@@ -1,10 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import {
   computeCoachingTimeline,
   parseGhlDate,
   hasSheldonSessionTag,
 } from "@/lib/coaching/timeline";
-import type { OneOnOneCoachingConfig } from "@/lib/coaching/one-on-one-config";
+import {
+  getOneOnOneCoachingConfig,
+  type OneOnOneCoachingConfig,
+} from "@/lib/coaching/one-on-one-config";
 
 const config: OneOnOneCoachingConfig = {
   sheldonSessionTags: ["1-on-1-with-sheldon"],
@@ -206,5 +209,72 @@ describe("computeCoachingTimeline", () => {
     expect(t.isNotStarted).toBe(true);
     expect(t.currentMonth).toBe(0);
     expect(t.reminders).toEqual([]);
+  });
+
+  it("hides the consultant reminder until its booking link is configured (staged launch)", () => {
+    const sheldonOnly: OneOnOneCoachingConfig = {
+      ...config,
+      consultantBookingUrl: "", // consultant call not launched yet
+    };
+    const t = computeCoachingTimeline({
+      start,
+      end,
+      tags: ["1-on-1-with-sheldon"],
+      config: sheldonOnly,
+      now: new Date(2026, 5, 20), // month 5 — both would otherwise fire
+    });
+    expect(t.reminders.find((r) => r.type === "consultant")).toBeUndefined();
+    // Sheldon still fires in month 5.
+    expect(t.reminders.find((r) => r.type === "sheldon")).toBeDefined();
+  });
+
+  it("hides the Sheldon reminder when its booking link is empty", () => {
+    const noLink: OneOnOneCoachingConfig = { ...config, sheldonBookingUrl: "" };
+    const t = computeCoachingTimeline({
+      start,
+      end,
+      tags: ["1-on-1-with-sheldon"],
+      config: noLink,
+      now: new Date(2026, 3, 20), // month 3
+    });
+    expect(t.reminders.find((r) => r.type === "sheldon")).toBeUndefined();
+  });
+});
+
+describe("getOneOnOneCoachingConfig live defaults (Sheldon launch)", () => {
+  const envKeys = [
+    "GHL_SHELDON_SESSION_TAG",
+    "GHL_SHELDON_REMINDER_MONTHS",
+    "GHL_CONSULTANT_REMINDER_MONTH",
+    "GHL_PROGRAM_LENGTH_MONTHS",
+    "NEXT_PUBLIC_SHELDON_BOOKING_URL",
+    "NEXT_PUBLIC_CONSULTANT_BOOKING_URL",
+  ];
+  const saved: Record<string, string | undefined> = {};
+  for (const k of envKeys) saved[k] = process.env[k];
+
+  afterEach(() => {
+    for (const k of envKeys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it("defaults to the hamza tag, Sheldon booking link, and an unconfigured consultant link", () => {
+    for (const k of envKeys) delete process.env[k];
+    const c = getOneOnOneCoachingConfig();
+    expect(c.sheldonSessionTags).toEqual(["hamza-email-campaign"]);
+    expect(c.sheldonBookingUrl).toBe(
+      "https://api.leadconnectorhq.com/widget/bookings/sheldon-personal-calendar"
+    );
+    expect(c.consultantBookingUrl).toBe("");
+    expect(c.sheldonReminderMonths).toEqual([3, 4, 5]);
+    expect(c.consultantReminderMonth).toBe(5);
+  });
+
+  it("lets env override the tag", () => {
+    process.env.GHL_SHELDON_SESSION_TAG = "some-other-tag, second-tag";
+    const c = getOneOnOneCoachingConfig();
+    expect(c.sheldonSessionTags).toEqual(["some-other-tag", "second-tag"]);
   });
 });

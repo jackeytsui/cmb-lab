@@ -17,6 +17,16 @@
 /** Sentinel returned when a booking link has not been configured yet. */
 export const BOOKING_URL_NOT_CONFIGURED = "";
 
+/**
+ * Live defaults (Sheldon 1:1 launch). Env vars still override these, but baking
+ * the confirmed values in means the feature is live in production without any
+ * env wiring. The consultant link is intentionally left unconfigured so its
+ * reminder stays dark until that call is launched too.
+ */
+const DEFAULT_SHELDON_SESSION_TAGS = ["hamza-email-campaign"];
+const DEFAULT_SHELDON_BOOKING_URL =
+  "https://api.leadconnectorhq.com/widget/bookings/sheldon-personal-calendar";
+
 function parseMonthsList(raw: string | undefined, fallback: number[]): number[] {
   if (!raw) return fallback;
   const parsed = raw
@@ -73,10 +83,10 @@ export interface OneOnOneCoachingConfig {
  */
 export function getOneOnOneCoachingConfig(): OneOnOneCoachingConfig {
   return {
-    sheldonSessionTags: parseTagList(process.env.GHL_SHELDON_SESSION_TAG, [
-      // Placeholder — will not match real contacts until replaced.
-      "1-on-1-with-sheldon",
-    ]),
+    sheldonSessionTags: parseTagList(
+      process.env.GHL_SHELDON_SESSION_TAG,
+      DEFAULT_SHELDON_SESSION_TAGS
+    ),
     sheldonReminderMonths: parseMonthsList(
       process.env.GHL_SHELDON_REMINDER_MONTHS,
       [3, 4, 5]
@@ -91,7 +101,7 @@ export function getOneOnOneCoachingConfig(): OneOnOneCoachingConfig {
     ),
     sheldonBookingUrl:
       process.env.NEXT_PUBLIC_SHELDON_BOOKING_URL?.trim() ||
-      BOOKING_URL_NOT_CONFIGURED,
+      DEFAULT_SHELDON_BOOKING_URL,
     consultantBookingUrl:
       process.env.NEXT_PUBLIC_CONSULTANT_BOOKING_URL?.trim() ||
       BOOKING_URL_NOT_CONFIGURED,

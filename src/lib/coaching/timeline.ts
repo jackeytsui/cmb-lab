@@ -225,8 +225,16 @@ function buildReminders({
   if (!isActive) return [];
   const reminders: CoachReminder[] = [];
 
+  // A reminder only surfaces once its booking link is configured — this is what
+  // lets the two calls launch independently (Sheldon now, consultant later):
+  // an unconfigured call stays dark instead of nagging coaches with a dead link.
+
   // Sheldon session reminder — tag-gated, only in the configured cadence months.
-  if (hasSheldonTag && config.sheldonReminderMonths.includes(currentMonth)) {
+  if (
+    hasSheldonTag &&
+    config.sheldonBookingUrl.length > 0 &&
+    config.sheldonReminderMonths.includes(currentMonth)
+  ) {
     const sessionNumber = config.sheldonReminderMonths.indexOf(currentMonth) + 1;
     reminders.push({
       type: "sheldon",
@@ -238,7 +246,11 @@ function buildReminders({
   }
 
   // Consultant reminder — all coaching students, at the configured month.
-  if (currentMonth === config.consultantReminderMonth) {
+  // Stays hidden until the consultant booking link is set (launched separately).
+  if (
+    config.consultantBookingUrl.length > 0 &&
+    currentMonth === config.consultantReminderMonth
+  ) {
     reminders.push({
       type: "consultant",
       title: `Book a consultation call`,
