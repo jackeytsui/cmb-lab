@@ -9,6 +9,7 @@ import { createGhlClient } from "@/lib/ghl/client";
 import { createContactTask } from "@/lib/ghl/tasks";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import { SUPPORT_EMAIL } from "./allowlist";
+import { sendDiscordHandoverNotification } from "./notifications";
 
 const ESCALATION_DUE_HOURS = 24;
 const URGENT_DUE_HOURS = 4; // same-day follow-up for urgent signals
@@ -94,6 +95,15 @@ function studentDisplayName(user: User): string {
   return user.name?.trim() || user.email;
 }
 
+/** Last student line of the transcript, for the Discord notification. */
+function lastStudentMessage(transcript: string): string | null {
+  const lines = transcript
+    .split("\n")
+    .filter((l) => l.startsWith("Student: "));
+  const last = lines[lines.length - 1];
+  return last ? last.slice("Student: ".length) : null;
+}
+
 /**
  * Create the `[Lab Bot] Escalation` task on the student's GHL contact.
  * Body carries the full transcript + detected intent + confidence + timestamp
@@ -123,6 +133,12 @@ export async function createEscalationTask(
     body,
     dueDate: dueDateFromNow(urgent ? URGENT_DUE_HOURS : ESCALATION_DUE_HOURS),
     eventType: "lab_assistant.escalation",
+    notify: {
+      kind: "escalation",
+      intent,
+      urgent,
+      lastMessage: lastStudentMessage(transcript),
+    },
   });
 }
 
@@ -153,6 +169,12 @@ export async function createTestimonialTask(params: {
     body,
     dueDate: dueDateFromNow(ESCALATION_DUE_HOURS),
     eventType: "lab_assistant.testimonial_request",
+    notify: {
+      kind: "testimonial",
+      intent: "testimonial_sheldon",
+      urgent: false,
+      lastMessage: lastStudentMessage(transcript),
+    },
   });
 }
 
@@ -163,8 +185,29 @@ async function createHandoverTask(params: {
   body: string;
   dueDate: Date;
   eventType: string;
+  notify: {
+    kind: "escalation" | "testimonial";
+    intent: string | null;
+    urgent: boolean;
+    lastMessage: string | null;
+  };
 }): Promise<HandoverResult> {
-  const { user, ghlContactId, title, body, dueDate, eventType } = params;
+  const { user, ghlContactId, title, body, dueDate, eventType, notify } =
+    params;
+
+  // Every handover pings the ops Discord channel (mirrors the GHL form
+  // automation). Never throws; no-op when DISCORD_WEBHOOK_URL is unset.
+  const notifyDiscord = (taskVia: "student" | "ops" | "failed") =>
+    sendDiscordHandoverNotification({
+      kind: notify.kind,
+      studentName: studentDisplayName(user),
+      studentEmail: user.email,
+      intent: notify.intent,
+      urgent: notify.urgent,
+      dueDate,
+      taskVia,
+      lastMessage: notify.lastMessage,
+    });
 
   const logOutcome = (
     payload: Record<string, unknown>,
@@ -197,6 +240,7 @@ async function createHandoverTask(params: {
         undefined,
         ghlContactId
       );
+      await notifyDiscord("student");
       return { ok: true, taskId };
     } catch (error) {
       console.error(
@@ -233,6 +277,7 @@ async function createHandoverTask(params: {
         undefined,
         ops.contactId
       );
+      await notifyDiscord("ops");
       return { ok: true, taskId };
     } catch (error) {
       console.error(
@@ -247,6 +292,7 @@ async function createHandoverTask(params: {
         "failed",
         ops.contactId
       );
+      await notifyDiscord("failed");
       return { ok: false, taskId: null };
     }
   }
@@ -258,5 +304,6 @@ async function createHandoverTask(params: {
     },
     "failed"
   );
+  await notifyDiscord("failed");
   return { ok: false, taskId: null };
 }

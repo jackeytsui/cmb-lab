@@ -64,6 +64,8 @@ Triggered when: intent is `other`/unclassified, confidence is below threshold, t
 
 **Handover always lands in GHL** (like the team's operations form): first choice is a task on the student's own contact; if they have no linked contact — or that call fails — the task is created on a dedicated **CMB Lab Operations** contact instead (upserted automatically; email configurable via `GHL_OPS_CONTACT_EMAIL`, default `contact@thecmblueprint.com`) with the requester's email appended to the title. The audit log records which route was used (`via: student|ops`). Only if both routes fail does the bot point to the support inbox.
 
+**Discord alerts**: when `DISCORD_WEBHOOK_URL` is set (Discord channel → Integrations → Webhooks), every handover also pings the ops channel — student, intent, urgency, relative due time, where the task landed (student contact / ops contact / a FAILED alert for manual follow-up), and the student's last message. The full transcript stays in the GHL task. The admin block's health checklist shows whether the webhook is configured.
+
 ## Admin management
 
 Everything sits in one block on **Admin → Manage Portal** ("CMB Lab Assistant", admin-only):
@@ -71,7 +73,7 @@ Everything sits in one block on **Admin → Manage Portal** ("CMB Lab Assistant"
 - **Stats (30d)** — chats, in-scope resolution rate (amber below the 60% gate), escalations (with failures), testimonial requests, intent breakdown
 - **Config health** — widget access rule, OpenAI key, active GHL location, saved guidance prompt, missing field mappings
 - **Recent handovers** — last 5 escalation/testimonial tasks with failure reasons, linking to the full sync log
-- **Guidance & actions editor** — edit the bot's instructions (tone, scope, wanted actions/escalation behaviour) directly in the block; saves as a new version of the `lab-assistant-guidance` prompt (created automatically on first save — no seeding needed) and applies on the next message
+- **Guidance & talk tracks editor** — the Gorgias-style mechanism the team owns: the overall guidance (a full built-in playbook covers voice, scope, context use, data rules, actions, urgent handling) plus a per-intent talk track for each of the 5 intents (pre-filled with built-in defaults to refine, not write from scratch). Every save is a new version (`lab-assistant-guidance` / `lab-assistant-track-*`, rows created automatically) and applies on the next message; saving a track empty reverts it to the built-in default
 - **Test console** — chat against the real pipeline in dry-run mode (admin/coach only): intent scan, gatekept context, and guidance all run for real, but no GHL tasks are created and test chats are excluded from resolution metrics. Responses use the signed-in admin's own contact data — the gatekeeper never impersonates a student.
 
 The overview endpoint degrades gracefully: if a stats/health query fails, the block renders the rest and lists the failing section's error inline.
