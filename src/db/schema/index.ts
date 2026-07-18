@@ -46,3 +46,4 @@ export * from "./course-library";
 export * from "./internal-docs";
 export * from "./lesson-assignments";
 export * from "./assignments";
+export * from "./csm";

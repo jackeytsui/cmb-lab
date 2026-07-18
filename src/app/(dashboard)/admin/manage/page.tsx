@@ -55,6 +55,7 @@ const allSections: PortalSection[] = [
     id: "ops",
     title: "Operations",
     items: [
+      { id: "csm", title: "Success Command Center", href: "/admin/csm", description: "Customer health scores, at-risk worklist, and next-best-actions for every student." },
       { id: "analytics", title: "Analytics", href: "/admin/analytics", description: "Completion rates, engagement, and at-risk students." },
       { id: "ai-logs", title: "AI Logs", href: "/admin/ai-logs", description: "Inspect model calls and errors." },
       { id: "ghl", title: "GHL Integration", href: "/admin/ghl", description: "CRM sync, field mappings, and webhook events." },
@@ -66,7 +67,7 @@ const allSections: PortalSection[] = [
 
 /** Sections and items visible to coaches */
 const COACH_SECTION_IDS = new Set(["view-as", "access", "ops"]);
-const COACH_ITEM_IDS = new Set(["user-access", "analytics"]);
+const COACH_ITEM_IDS = new Set(["user-access", "analytics", "csm"]);
 
 function filterForCoach(sections: PortalSection[]): PortalSection[] {
   return sections
