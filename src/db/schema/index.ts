@@ -13,6 +13,7 @@ export * from "./notepad";
 export * from "./notifications";
 export * from "./uploads";
 export * from "./ghl";
+export * from "./discord";
 export * from "./bulk-operations";
 export * from "./tags";
 export * from "./filter-presets";

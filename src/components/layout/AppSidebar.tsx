@@ -123,6 +123,11 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         url: "/dashboard/assignment-feedback",
         icon: ClipboardList,
       },
+      {
+        title: "Discord Community",
+        url: "/dashboard/community",
+        icon: MessageSquare,
+      },
     ],
   },
   {

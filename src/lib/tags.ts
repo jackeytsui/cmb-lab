@@ -90,6 +90,14 @@ export async function assignTag(
     .onConflictDoNothing()
     .returning();
 
+  // Discord roles/membership follow tags. Fire-and-forget; lazy import keeps
+  // this module dependency-free for callers that never touch Discord.
+  if (result.length > 0) {
+    import("@/lib/discord/sync")
+      .then((m) => m.queueDiscordSyncForUser(userId))
+      .catch(console.error);
+  }
+
   // result.length > 0 means a new row was inserted (new assignment)
   return { assigned: result.length > 0, tag };
 }
@@ -109,6 +117,13 @@ export async function removeTag(
     .delete(studentTags)
     .where(and(eq(studentTags.userId, userId), eq(studentTags.tagId, tagId)))
     .returning({ id: studentTags.id });
+
+  // Discord roles/membership follow tags (see assignTag).
+  if (deleted.length > 0) {
+    import("@/lib/discord/sync")
+      .then((m) => m.queueDiscordSyncForUser(userId))
+      .catch(console.error);
+  }
 
   return { removed: deleted.length > 0, tag: tag ?? null };
 }
