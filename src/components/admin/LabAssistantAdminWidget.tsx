@@ -195,10 +195,9 @@ export function LabAssistantAdminWidget() {
                     label="OpenAI API key configured"
                     hint="Set OPENAI_API_KEY"
                   />
-                  <HealthRow
-                    ok={overview.health.discordConfigured}
-                    label="Discord escalation alerts"
-                    hint="Set DISCORD_WEBHOOK_URL (Discord channel → Integrations → Webhooks) so every handover pings the ops channel"
+                  <DiscordSetup
+                    configured={overview.health.discordConfigured}
+                    onSaved={load}
                   />
                   <HealthRow
                     ok={overview.health.activeLocations > 0}
@@ -351,6 +350,153 @@ function HealthRow({
         {label}
         {!ok && <span className="block text-muted-foreground">{hint}</span>}
       </span>
+    </div>
+  );
+}
+
+/**
+ * Discord issue-escalation channel wiring, managed in-app: paste a webhook
+ * URL (Discord channel → Integrations → Webhooks), it's verified with a test
+ * ping before saving to app_settings. Every handover then posts there
+ * alongside its GHL task.
+ */
+function DiscordSetup({
+  configured,
+  onSaved,
+}: {
+  configured: boolean;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function save(nextUrl: string) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/lab-assistant/discord", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: nextUrl }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+      setMessage(
+        nextUrl ? "Saved — test message sent to the channel" : "Webhook removed"
+      );
+      setEditing(false);
+      setUrl("");
+      onSaved();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendTest() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/lab-assistant/discord", {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+      setMessage("Test message sent — check the channel");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Test failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="text-xs">
+      <div className="flex items-start gap-2">
+        {configured ? (
+          <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-green-500" />
+        ) : (
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+        )}
+        <span className={configured ? "text-foreground" : "text-amber-500"}>
+          Discord escalation alerts
+          {!configured && (
+            <span className="block text-muted-foreground">
+              Paste your issue-escalation channel&apos;s webhook URL (Discord
+              channel → Integrations → Webhooks) so every handover pings the
+              channel
+            </span>
+          )}
+        </span>
+        <span className="ml-auto flex shrink-0 gap-2">
+          {configured && (
+            <button
+              type="button"
+              onClick={sendTest}
+              disabled={busy}
+              className="text-muted-foreground underline hover:text-foreground disabled:opacity-50"
+            >
+              Send test
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setEditing((prev) => !prev);
+              setMessage(null);
+            }}
+            className="text-muted-foreground underline hover:text-foreground"
+          >
+            {configured ? "Change" : "Set up"}
+          </button>
+        </span>
+      </div>
+      {editing && (
+        <div className="mt-1.5 flex gap-2 pl-5">
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://discord.com/api/webhooks/…"
+            className="h-7 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={() => save(url)}
+            disabled={busy || !url.trim()}
+            className="rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {busy ? "…" : "Save & test"}
+          </button>
+          {configured && (
+            <button
+              type="button"
+              onClick={() => save("")}
+              disabled={busy}
+              className="text-red-500 underline disabled:opacity-50"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+      {message && (
+        <p
+          className={cn(
+            "mt-1 pl-5",
+            message.startsWith("Saved") || message.startsWith("Test message")
+              ? "text-green-600 dark:text-green-500"
+              : message === "Webhook removed"
+                ? "text-muted-foreground"
+                : "text-red-500"
+          )}
+        >
+          {message}
+        </p>
+      )}
     </div>
   );
 }

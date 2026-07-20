@@ -2,10 +2,8 @@
 // Handover layer: escalation and testimonial requests become GHL tasks on the
 // student's own contact (single-contact scope enforced by student-context.ts).
 
-import { db } from "@/db";
-import { ghlLocations, type User } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { createGhlClient } from "@/lib/ghl/client";
+import { type User } from "@/db/schema";
+import { createGhlClient, getAnyActiveGhlLocation } from "@/lib/ghl/client";
 import { createContactTask } from "@/lib/ghl/tasks";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import { SUPPORT_EMAIL } from "./allowlist";
@@ -37,14 +35,7 @@ async function resolveOpsContact(): Promise<{
   }
 
   try {
-    const [location] = await db
-      .select({
-        ghlLocationId: ghlLocations.ghlLocationId,
-        apiToken: ghlLocations.apiToken,
-      })
-      .from(ghlLocations)
-      .where(eq(ghlLocations.isActive, true))
-      .limit(1);
+    const location = await getAnyActiveGhlLocation();
     if (!location) return null;
 
     const email = process.env.GHL_OPS_CONTACT_EMAIL || SUPPORT_EMAIL;
