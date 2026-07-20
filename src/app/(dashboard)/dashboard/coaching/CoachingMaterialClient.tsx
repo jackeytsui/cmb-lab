@@ -19,6 +19,7 @@ import { exportCoachingNotes } from "@/lib/coaching-export";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import { FlashcardStarButton } from "@/components/flashcards/FlashcardStarButton";
 import { notifyFlashcardsChanged } from "@/lib/flashcards";
+import { OneOnOneCoachingTimeline } from "@/components/coach/OneOnOneCoachingTimeline";
 import {
   extractToneFromPinyin,
   extractToneFromJyutping,
@@ -2028,7 +2029,11 @@ function CoachingPanel({
         </div>
       </div>
 
-
+      {/* Coach-only 1:1 coaching timeline — months/days left + booking reminders.
+          Per-student (keyed on the selected student's email); students never see it. */}
+      {sessionType === "one-on-one" && canWrite && goalsStudentEmail && (
+        <OneOnOneCoachingTimeline studentEmail={goalsStudentEmail} />
+      )}
 
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
