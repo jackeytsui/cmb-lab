@@ -9,38 +9,14 @@ import { db } from "@/db";
 import { ghlFieldMappings, ghlLocations } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { createGhlClient } from "@/lib/ghl/client";
+import { ALLOWLISTED_FIELD_CONCEPTS } from "@/lib/lab-assistant/allowlist";
 import {
-  ALLOWLISTED_FIELD_CONCEPTS,
-  type AllowlistedFieldConcept,
-} from "@/lib/lab-assistant/allowlist";
-
-interface GhlCustomField {
-  id: string;
-  name: string;
-}
+  suggestField,
+  type CatalogField as GhlCustomField,
+} from "@/lib/lab-assistant/field-resolution";
 
 interface GhlCustomFieldsResponse {
   customFields: Array<{ id: string; name?: string; fieldKey?: string }>;
-}
-
-// Name heuristics per concept, tried in order (first match wins).
-const CONCEPT_PATTERNS: Record<AllowlistedFieldConcept, RegExp[]> = {
-  start_date: [/start\s*date/i, /date.*start/i],
-  end_date: [/end\s*date/i, /date.*end/i],
-  assigned_coach: [/coach/i],
-  referral_source: [/referral.*source/i, /referred\s*by/i, /referral(?!.*status)/i],
-  referral_status: [/referral.*status/i],
-};
-
-function suggestField(
-  concept: AllowlistedFieldConcept,
-  fields: GhlCustomField[]
-): GhlCustomField | null {
-  for (const pattern of CONCEPT_PATTERNS[concept]) {
-    const match = fields.find((f) => pattern.test(f.name));
-    if (match) return match;
-  }
-  return null;
 }
 
 export async function GET() {

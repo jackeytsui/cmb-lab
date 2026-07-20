@@ -9,6 +9,7 @@ import {
   applyFeatureTagOverrides,
   canViewCourseLibrary,
 } from "@/lib/tag-feature-access";
+import { getStudentContext } from "@/lib/lab-assistant/student-context";
 import { DEFAULT_STUDENT_FEATURES } from "@/lib/student-role";
 
 /**
@@ -76,6 +77,27 @@ export async function GET(req: NextRequest) {
   // Course Library tab (tag/content-grant driven, independent of features)
   const courseLibraryVisible = await canViewCourseLibrary(user);
 
+  // Lab Assistant data resolution: run the real gatekeeper and report which
+  // allowlisted fields resolved and how (values redacted to presence only).
+  let labAssistantFields: Record<string, unknown> | null = null;
+  try {
+    const context = await getStudentContext(user);
+    labAssistantFields = {
+      ghlContactLinked: !!context.ghlContactId,
+      firstName: context.firstName,
+      fields: Object.fromEntries(
+        Object.entries(context.fields).map(([concept, value]) => [
+          concept,
+          value !== null ? "resolved" : "missing",
+        ])
+      ),
+    };
+  } catch (error) {
+    labAssistantFields = {
+      error: error instanceof Error ? error.message : "resolution failed",
+    };
+  }
+
   return NextResponse.json({
     user: {
       id: user.id,
@@ -113,5 +135,6 @@ export async function GET(req: NextRequest) {
       })),
     },
     courseLibrary: { visible: courseLibraryVisible },
+    labAssistantFields,
   });
 }
