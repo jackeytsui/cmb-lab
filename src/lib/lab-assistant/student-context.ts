@@ -11,11 +11,9 @@
 // Every field fetch is audit-logged (field names + presence only, no values).
 
 import type { User } from "@/db/schema";
-import {
-  fetchGhlContactData,
-  resolveCustomFields,
-} from "@/lib/ghl/contact-fields";
+import { fetchGhlContactData } from "@/lib/ghl/contact-fields";
 import { findOrLinkContact, getGhlContactId } from "@/lib/ghl/contacts";
+import { resolveAllowlistedFields } from "./field-resolution";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import {
   ALLOWLISTED_FIELD_CONCEPTS,
@@ -80,23 +78,21 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
   }
 
   let firstName = firstNameFallback;
+  let resolvedVia: Record<string, string | null> = {};
   try {
     const { data } = await fetchGhlContactData(user.id);
     if (data) {
       firstName = data.firstName?.trim() || firstNameFallback;
 
-      const resolved = await resolveCustomFields(data.customFields);
-      for (const field of resolved) {
-        // Strict allowlist: anything not listed is dropped (default DENY).
-        if (
-          (ALLOWLISTED_FIELD_CONCEPTS as readonly string[]).includes(
-            field.lmsConcept
-          )
-        ) {
-          fields[field.lmsConcept as AllowlistedFieldConcept] = toDisplayValue(
-            field.value
-          );
-        }
+      // Self-healing resolution: explicit mapping by ID, then by field name,
+      // then built-in name heuristics — strictly allowlist-scoped.
+      const resolution = await resolveAllowlistedFields(
+        ghlContactId,
+        data.customFields
+      );
+      resolvedVia = resolution.via;
+      for (const concept of ALLOWLISTED_FIELD_CONCEPTS) {
+        fields[concept] = toDisplayValue(resolution.values[concept]);
       }
     }
   } catch (error) {
@@ -106,8 +102,9 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
     );
   }
 
-  // Audit trail: which fields were fetched and whether they had values.
-  // Values are intentionally omitted (PII stays out of analytics).
+  // Audit trail: which fields were fetched, whether they had values, and how
+  // each resolved (mapping / mapping-name / auto). Values are intentionally
+  // omitted (PII stays out of analytics).
   await logSyncEvent({
     eventType: "lab_assistant.field_fetch",
     direction: "outbound",
@@ -122,6 +119,7 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
           fields[concept] !== null,
         ])
       ),
+      resolvedVia,
     },
   }).catch((error) => {
     console.error("[Lab Assistant] Failed to write field-fetch audit log:", error);
