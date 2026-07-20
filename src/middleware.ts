@@ -13,6 +13,7 @@ const isStudentAllowedRoute = createRouteMatcher([
   "/dashboard/flashcards(.*)",
   "/dashboard/accelerator(.*)",
   "/dashboard/notepad(.*)",
+  "/dashboard/community(.*)",
   "/settings(.*)",
 ]);
 const isProtectedRoute = createRouteMatcher([

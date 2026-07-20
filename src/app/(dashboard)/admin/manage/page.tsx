@@ -58,6 +58,7 @@ const allSections: PortalSection[] = [
       { id: "analytics", title: "Analytics", href: "/admin/analytics", description: "Completion rates, engagement, and at-risk students." },
       { id: "ai-logs", title: "AI Logs", href: "/admin/ai-logs", description: "Inspect model calls and errors." },
       { id: "ghl", title: "GHL Integration", href: "/admin/ghl", description: "CRM sync, field mappings, and webhook events." },
+      { id: "discord", title: "Discord Community", href: "/admin/discord", description: "Automated student invites, roles, and removals." },
       { id: "dev-toolkit", title: "Dev Toolkit", href: "/admin/dev-toolkit", description: "Launch checklist and operational shortcuts." },
       { id: "migration", title: "Migration", href: "/admin/migration", description: "Access migration and attribution tools." },
     ],
