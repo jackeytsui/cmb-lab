@@ -64,7 +64,9 @@ Triggered when: intent is `other`/unclassified, confidence is below threshold, t
 
 **Handover always lands in GHL** (like the team's operations form): first choice is a task on the student's own contact; if they have no linked contact — or that call fails — the task is created on a dedicated **CMB Lab Operations** contact instead (upserted automatically; email configurable via `GHL_OPS_CONTACT_EMAIL`, default `contact@thecmblueprint.com`) with the requester's email appended to the title. The audit log records which route was used (`via: student|ops`). Only if both routes fail does the bot point to the support inbox.
 
-**Discord alerts**: when `DISCORD_WEBHOOK_URL` is set (Discord channel → Integrations → Webhooks), every handover also pings the ops channel — student, intent, urgency, relative due time, where the task landed (student contact / ops contact / a FAILED alert for manual follow-up), and the student's last message. The full transcript stays in the GHL task. The admin block's health checklist shows whether the webhook is configured.
+**Discord alerts**: every handover also pings the issue-escalation channel — student, intent, urgency, relative due time, where the task landed (student contact / ops contact / a FAILED alert for manual follow-up), and the student's last message. The full transcript stays in the GHL task. Configure it in the admin block's Config health section: paste the channel's webhook URL (Discord channel → Integrations → Webhooks); it's verified with a test ping before saving (stored in `app_settings`; the `DISCORD_WEBHOOK_URL` env var works as a fallback). A "Send test" button re-verifies any time.
+
+**GHL credentials**: all Lab Assistant GHL calls (contact linking, field reads, task creation, the ops fallback contact, the field catalog) use the active location in **Admin → GHL → Locations**; when that table is empty they fall back to the legacy `GHL_API_TOKEN` + `GHL_LOCATION_ID` env vars, so either configuration works.
 
 ## Admin management
 

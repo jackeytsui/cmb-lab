@@ -185,8 +185,11 @@ export function createGhlClient(apiToken: string): GhlClient {
 
 /**
  * Get a GHL client configured for a specific location.
- * Looks up the API token from the ghlLocations table.
- * Returns null if location not found or inactive.
+ * Looks up the API token from the ghlLocations table; when the table has no
+ * row for the location, falls back to the legacy env credentials
+ * (GHL_API_TOKEN + GHL_LOCATION_ID) when they refer to the same location —
+ * so environments configured via env vars alone keep working.
+ * Returns null if no credentials are available.
  */
 export async function getGhlClientForLocation(
   ghlLocationId: string
@@ -207,9 +210,55 @@ export async function getGhlClientForLocation(
     )
     .limit(1);
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    const envToken = process.env.GHL_API_TOKEN;
+    const envLocationId = process.env.GHL_LOCATION_ID;
+    if (envToken && envLocationId === ghlLocationId) {
+      return new GhlClient(envToken);
+    }
+    return null;
+  }
 
   return new GhlClient(rows[0].apiToken);
+}
+
+/**
+ * First usable GHL location: the first active row in ghlLocations, or the
+ * legacy env credentials (GHL_API_TOKEN + GHL_LOCATION_ID) when the table is
+ * empty. Single source of truth for "which location do we operate on".
+ */
+export async function getAnyActiveGhlLocation(): Promise<{
+  ghlLocationId: string;
+  apiToken: string;
+  name: string;
+} | null> {
+  const { db } = await import("@/db");
+  const { ghlLocations } = await import("@/db/schema");
+  const { eq } = await import("drizzle-orm");
+
+  const [row] = await db
+    .select({
+      ghlLocationId: ghlLocations.ghlLocationId,
+      apiToken: ghlLocations.apiToken,
+      name: ghlLocations.name,
+    })
+    .from(ghlLocations)
+    .where(eq(ghlLocations.isActive, true))
+    .limit(1);
+
+  if (row) return row;
+
+  const envToken = process.env.GHL_API_TOKEN;
+  const envLocationId = process.env.GHL_LOCATION_ID;
+  if (envToken && envLocationId) {
+    return {
+      ghlLocationId: envLocationId,
+      apiToken: envToken,
+      name: "Environment credentials",
+    };
+  }
+
+  return null;
 }
 
 // Helper to read location ID from environment (legacy single-location fallback)

@@ -19,6 +19,7 @@ import {
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { ALLOWLISTED_FIELD_CONCEPTS } from "@/lib/lab-assistant/allowlist";
 import { LAB_ASSISTANT_PROMPT_SLUG } from "@/lib/lab-assistant/guidance";
+import { isDiscordConfigured } from "@/lib/lab-assistant/notifications";
 
 const STATS_WINDOW_DAYS = 30;
 const RECENT_HANDOVER_LIMIT = 5;
@@ -224,8 +225,11 @@ export async function GET() {
     })),
     health: {
       openaiConfigured: !!process.env.OPENAI_API_KEY,
-      discordConfigured: !!process.env.DISCORD_WEBHOOK_URL,
-      activeLocations: activeLocations?.[0]?.count ?? 0,
+      discordConfigured: await isDiscordConfigured(),
+      activeLocations:
+        (activeLocations?.[0]?.count ?? 0) ||
+        // Legacy env credentials count as one usable location.
+        (process.env.GHL_API_TOKEN && process.env.GHL_LOCATION_ID ? 1 : 0),
       promptSeeded: (promptRow?.length ?? 0) > 0,
       missingMappings,
     },

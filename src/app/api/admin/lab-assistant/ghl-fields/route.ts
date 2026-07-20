@@ -6,9 +6,9 @@
 import { NextResponse } from "next/server";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
-import { ghlFieldMappings, ghlLocations } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
-import { createGhlClient } from "@/lib/ghl/client";
+import { ghlFieldMappings } from "@/db/schema";
+import { inArray } from "drizzle-orm";
+import { createGhlClient, getAnyActiveGhlLocation } from "@/lib/ghl/client";
 import { ALLOWLISTED_FIELD_CONCEPTS } from "@/lib/lab-assistant/allowlist";
 import {
   suggestField,
@@ -26,15 +26,7 @@ export async function GET() {
   }
 
   try {
-    const [location] = await db
-      .select({
-        ghlLocationId: ghlLocations.ghlLocationId,
-        apiToken: ghlLocations.apiToken,
-        name: ghlLocations.name,
-      })
-      .from(ghlLocations)
-      .where(eq(ghlLocations.isActive, true))
-      .limit(1);
+    const location = await getAnyActiveGhlLocation();
 
     if (!location) {
       return NextResponse.json(

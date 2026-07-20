@@ -5,7 +5,11 @@
 import { db } from "@/db";
 import { ghlContacts, ghlLocations, type GhlContact } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { createGhlClient, getGhlClientForLocation } from "@/lib/ghl/client";
+import {
+  createGhlClient,
+  getAnyActiveGhlLocation,
+  getGhlClientForLocation,
+} from "@/lib/ghl/client";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 
 interface GhlSearchResponse {
@@ -54,11 +58,25 @@ export async function findOrLinkContact(
     }));
   }
 
-  // Get all active locations
-  const locations = await db
-    .select()
+  // Get all active locations; fall back to the legacy env credentials when
+  // the ghl_locations table is empty (environments configured via env only).
+  let locations: Array<{
+    ghlLocationId: string;
+    apiToken: string;
+    name: string;
+  }> = await db
+    .select({
+      ghlLocationId: ghlLocations.ghlLocationId,
+      apiToken: ghlLocations.apiToken,
+      name: ghlLocations.name,
+    })
     .from(ghlLocations)
     .where(eq(ghlLocations.isActive, true));
+
+  if (locations.length === 0) {
+    const fallback = await getAnyActiveGhlLocation();
+    if (fallback) locations = [fallback];
+  }
 
   if (locations.length === 0) {
     throw new Error("No active GHL locations configured");
