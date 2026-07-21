@@ -3,16 +3,20 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 
-// Video blobs are large; the default function timeout can cut the stream off
-// mid-transfer (the browser then hangs on a perpetual loading spinner). Match
-// the 60s used by every other blob-proxy route in this codebase.
+// Each invocation now serves at most one bounded chunk (see blob-media-proxy),
+// so 60s is ample headroom — the timeout can no longer kill a transfer that a
+// browser is still waiting on.
 export const maxDuration = 60;
 
 /**
  * GET /api/course-library/stream/[lessonId]
- * Authenticated proxy for private Vercel Blob video lessons.
- * Forwards Range headers for seeking support.
+ * Authenticated chunked-range proxy for private Vercel Blob video lessons.
+ * Open-ended Range requests are clamped to bounded chunks so a single
+ * serverless invocation never has to stream the whole file (which previously
+ * got killed at maxDuration mid-transfer, leaving players on an endless
+ * spinner). Browsers follow up with sequential range requests automatically.
  */
 export async function GET(
   request: NextRequest,
@@ -55,34 +59,8 @@ export async function GET(
     );
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-  const range = request.headers.get("range");
-  if (range) headers["Range"] = range;
-
-  const blobResponse = await fetch(videoUrl, { headers });
-  if (!blobResponse.ok && blobResponse.status !== 206) {
-    return NextResponse.json(
-      { error: "Failed to fetch video" },
-      { status: blobResponse.status },
-    );
-  }
-
-  const responseHeaders = new Headers();
-  const contentType = blobResponse.headers.get("content-type");
-  if (contentType) responseHeaders.set("Content-Type", contentType);
-  else responseHeaders.set("Content-Type", "video/mp4");
-  const contentLength = blobResponse.headers.get("content-length");
-  if (contentLength) responseHeaders.set("Content-Length", contentLength);
-  const contentRange = blobResponse.headers.get("content-range");
-  if (contentRange) responseHeaders.set("Content-Range", contentRange);
-  const acceptRanges = blobResponse.headers.get("accept-ranges");
-  responseHeaders.set("Accept-Ranges", acceptRanges ?? "bytes");
-  responseHeaders.set("Cache-Control", "private, max-age=3600");
-
-  return new NextResponse(blobResponse.body, {
-    status: blobResponse.status,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, videoUrl, {
+    fallbackContentType: "video/mp4",
+    label: "course-library/stream",
   });
 }

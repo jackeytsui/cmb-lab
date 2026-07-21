@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasMinimumRole } from "@/lib/auth";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 
-// Video/audio previews are large; the default function timeout can cut the
-// stream off mid-transfer. Match the 60s used by the other blob-proxy routes.
+// Each invocation serves at most one bounded chunk (see blob-media-proxy), so
+// 60s is ample headroom even for large video previews.
 export const maxDuration = 60;
 
 /**
@@ -37,37 +38,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unsupported url" }, { status: 400 });
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-  const range = request.headers.get("range");
-  if (range) headers["Range"] = range;
-
-  const blobResponse = await fetch(target.toString(), { headers });
-  if (!blobResponse.ok && blobResponse.status !== 206) {
-    return NextResponse.json(
-      { error: "Failed to fetch asset" },
-      { status: blobResponse.status },
-    );
-  }
-
-  const responseHeaders = new Headers();
-  responseHeaders.set(
-    "Content-Type",
-    blobResponse.headers.get("content-type") ?? "application/octet-stream",
-  );
-  const contentLength = blobResponse.headers.get("content-length");
-  if (contentLength) responseHeaders.set("Content-Length", contentLength);
-  const contentRange = blobResponse.headers.get("content-range");
-  if (contentRange) responseHeaders.set("Content-Range", contentRange);
-  responseHeaders.set(
-    "Accept-Ranges",
-    blobResponse.headers.get("accept-ranges") ?? "bytes",
-  );
-  responseHeaders.set("Cache-Control", "private, no-store");
-
-  return new NextResponse(blobResponse.body, {
-    status: blobResponse.status,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, target.toString(), {
+    fallbackContentType: "application/octet-stream",
+    label: "admin/blob-preview",
+    // Previews are of unsaved uploads — never cache them.
+    extraHeaders: { "Cache-Control": "private, no-store" },
   });
 }
