@@ -61,6 +61,55 @@ export function resolveVoice(language: string): VoiceInfo {
   }
 }
 
+// --- Cantonese provider resolution ---
+
+export type CantoneseProvider = "azure" | "elevenlabs" | "openai";
+
+export interface CantoneseProviderEnv {
+  AZURE_SPEECH_KEY?: string;
+  AZURE_SPEECH_REGION?: string;
+  ELEVENLABS_API_KEY?: string;
+  ELEVENLABS_CANTONESE_VOICE_ID?: string;
+  CANTONESE_TTS_PROVIDER?: string;
+  OPENAI_API_KEY?: string;
+  // Allows passing process.env directly.
+  [key: string]: string | undefined;
+}
+
+/**
+ * Decide which provider synthesizes Cantonese audio.
+ *
+ * Azure's zh-HK-HiuMaanNeural is the default: it is a dedicated Cantonese
+ * (Hong Kong) locale voice, so it never "guesses" the language, and it is the
+ * only provider that supports jyutping phoneme disambiguation and true SSML
+ * rate control. ElevenLabs has no Cantonese TTS language code ("yue" is
+ * speech-to-text only), so its models rely on auto-detecting Cantonese from
+ * text — which drifts into a Mandarin-inflected accent, especially on short
+ * words and single characters. That accent drift is exactly the "audio sounds
+ * weird" regression this resolver exists to prevent.
+ *
+ * ElevenLabs therefore has to be opted into explicitly with
+ * CANTONESE_TTS_PROVIDER=elevenlabs (custom-cloned voice use cases); it is
+ * never chosen implicitly just because its API keys are present. OpenAI is
+ * the last-resort fallback when neither Azure nor ElevenLabs is configured.
+ */
+export function resolveCantoneseProvider(
+  env: CantoneseProviderEnv = process.env,
+): CantoneseProvider {
+  const hasAzure = Boolean(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION);
+  const hasElevenLabs = Boolean(
+    env.ELEVENLABS_API_KEY && env.ELEVENLABS_CANTONESE_VOICE_ID,
+  );
+  const preference = (env.CANTONESE_TTS_PROVIDER || "").trim().toLowerCase();
+
+  if (preference === "elevenlabs" && hasElevenLabs) return "elevenlabs";
+  if (preference === "azure" && hasAzure) return "azure";
+
+  if (hasAzure) return "azure";
+  if (hasElevenLabs) return "elevenlabs";
+  return "openai";
+}
+
 // --- XML Escaping ---
 
 /**
@@ -171,10 +220,11 @@ export function buildCacheKey(
   voice: string,
   rate: string
 ): string {
-  // v5: bust cache after ElevenLabs model migration (multilingual_v2 →
-  // turbo_v2_5) — old entries contain wrong-accent Cantonese audio.
+  // v6: bust cache after moving Cantonese back to Azure zh-HK-HiuMaanNeural —
+  // entries generated while ElevenLabs multilingual_v2 auto-detection was the
+  // default contain Mandarin-inflected ("weird-sounding") Cantonese audio.
   const hash = createHash("md5").update(text).digest("hex");
-  return `tts:v5:${language}:${voice}:${rate}:${hash}`;
+  return `tts:v6:${language}:${voice}:${rate}:${hash}`;
 }
 
 /**
@@ -215,7 +265,9 @@ export async function synthesizeSpeechElevenLabs(
 
   const stability = 0.5;
   const similarityBoost = 0.75;
-  const speed = rate === "x-slow" ? 0.6 : rate === "slow" ? 0.8 : rate === "fast" ? 1.3 : 1.0;
+  // ElevenLabs only accepts voice_settings.speed in [0.7, 1.2] — 0.6/1.3
+  // (our old x-slow/fast values) are rejected by the API.
+  const speed = rate === "x-slow" ? 0.7 : rate === "slow" ? 0.8 : rate === "fast" ? 1.2 : 1.0;
 
   // Cantonese TTS: ElevenLabs' Multilingual v2 model auto-detects the language
   // from the text and, paired with a Cantonese voice, renders Cantonese. The

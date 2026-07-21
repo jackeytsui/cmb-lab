@@ -6,6 +6,7 @@ import { scriptLines } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
 import {
   resolveVoice,
+  resolveCantoneseProvider,
   buildSSML,
   synthesizeSpeech,
   synthesizeSpeechElevenLabs,
@@ -67,18 +68,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2. Synthesize. Cantonese: ElevenLabs (if configured) with Azure fallback;
-  //    Mandarin: Azure direct. ElevenLabs failures are common (model/language
-  //    combos, voice config drift, quota), so a fallback keeps the feature
-  //    working — the regenerated audio just won't be the ElevenLabs voice.
-  const hasElevenLabs = Boolean(
-    process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_CANTONESE_VOICE_ID,
-  );
+  // 2. Synthesize. Cantonese follows the same provider policy as /api/tts
+  //    (Azure zh-HK by default; ElevenLabs only via explicit
+  //    CANTONESE_TTS_PROVIDER=elevenlabs opt-in, with Azure fallback because
+  //    ElevenLabs failures are common). Mandarin: Azure direct.
+  const useElevenLabs =
+    isCantonese && resolveCantoneseProvider(process.env) === "elevenlabs";
 
   let audio: Buffer | null = null;
   let primaryError: string | null = null;
 
-  if (isCantonese && hasElevenLabs) {
+  if (useElevenLabs) {
     try {
       audio = await synthesizeSpeechElevenLabs(text, "medium");
     } catch (err) {

@@ -9,6 +9,7 @@ import {
 } from "@/lib/rate-limit";
 import {
   resolveVoice,
+  resolveCantoneseProvider,
   buildSSML,
   buildPhonemeSSML,
   buildCacheKey,
@@ -161,7 +162,10 @@ export async function POST(request: NextRequest) {
     );
 
     // 4. Resolve provider.
-    // Cantonese: ElevenLabs > Azure > OpenAI
+    // Cantonese: Azure zh-HK-HiuMaanNeural by default (dedicated Cantonese
+    //   locale voice — no language auto-detection, supports jyutping phonemes
+    //   and SSML rate). ElevenLabs only via explicit CANTONESE_TTS_PROVIDER
+    //   opt-in; its auto-detection produces Mandarin-inflected Cantonese.
     // Mandarin: TTS_PROVIDER env > OpenAI > Azure
     const isCantonese = language === "zh-HK" || language === "cantonese";
     const hasElevenLabs = Boolean(
@@ -176,11 +180,8 @@ export async function POST(request: NextRequest) {
     }
 
     const provider: "openai" | "azure" | "elevenlabs" = (() => {
-      // Cantonese: ElevenLabs (Multilingual v2 + Cantonese voice) > Azure zh-HK-HiuMaanNeural
       if (isCantonese) {
-        if (hasElevenLabs) return "elevenlabs" as const;
-        if (hasAzure) return "azure" as const;
-        return "openai" as const;
+        return resolveCantoneseProvider(process.env);
       }
       if (TTS_PROVIDER === "azure" && hasAzure) return "azure" as const;
       if (hasOpenAI) return "openai" as const;
