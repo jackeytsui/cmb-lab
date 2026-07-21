@@ -61,39 +61,76 @@ function getBrowserLang(
 }
 
 /**
+ * Load the device voice list, waiting briefly for the async `voiceschanged`
+ * event if it hasn't populated yet (Chrome returns [] on first call).
+ */
+function loadVoices(): Promise<SpeechSynthesisVoice[]> {
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) return Promise.resolve(voices);
+  return new Promise((resolve) => {
+    const done = () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", done);
+      resolve(window.speechSynthesis.getVoices());
+    };
+    window.speechSynthesis.addEventListener("voiceschanged", done);
+    // Some platforms never fire voiceschanged — don't hang forever.
+    setTimeout(done, 1000);
+  });
+}
+
+/**
+ * Find a device voice that genuinely matches the requested language.
+ * BCP-47 tags are compared case-insensitively and with `_`/`-` normalized
+ * (Android reports e.g. "zh_HK_#Hant").
+ */
+function findBrowserVoice(
+  voices: SpeechSynthesisVoice[],
+  lang: string,
+): SpeechSynthesisVoice | null {
+  const normalize = (v: string) => v.replace(/_/g, "-").toLowerCase();
+  const wanted = normalize(lang);
+  return (
+    voices.find((v) => normalize(v.lang) === wanted) ??
+    voices.find((v) => normalize(v.lang).startsWith(wanted)) ??
+    // Cantonese is also tagged "yue" (e.g. "yue-HK") on some platforms.
+    (wanted === "zh-hk"
+      ? (voices.find((v) => normalize(v.lang).startsWith("yue")) ?? null)
+      : null)
+  );
+}
+
+/**
  * Speak text using the browser's built-in speechSynthesis API.
- * Explicitly selects a matching voice for the requested language.
+ *
+ * Only speaks when the device actually has a voice for the requested
+ * language. This matters most for Cantonese: most devices ship no zh-HK
+ * voice, and letting the default (Mandarin or English) voice read Cantonese
+ * text produces garbled, wrong-language audio that students report as
+ * "the audio sounds broken" — worse than no audio at all.
  * Returns a promise that resolves when speech ends.
  */
-function browserSpeak(
+async function browserSpeak(
   text: string,
   language: string,
   rate: string
 ): Promise<void> {
+  if (!("speechSynthesis" in window)) {
+    throw new Error("Speech synthesis not supported");
+  }
+  const lang = getBrowserLang(language);
+  const voice = findBrowserVoice(await loadVoices(), lang);
+  if (!voice) {
+    throw new Error(`No ${lang} voice available on this device`);
+  }
   return new Promise((resolve, reject) => {
-    if (!("speechSynthesis" in window)) {
-      reject(new Error("Speech synthesis not supported"));
-      return;
-    }
     window.speechSynthesis.cancel();
     // Strip bracketed placeholders like [your name] so they aren't spoken
     const spokenText = text.replace(/\[[^\]]+\]/g, "");
     const utterance = new SpeechSynthesisUtterance(spokenText);
-    const lang = getBrowserLang(language);
     utterance.lang = lang;
+    utterance.voice = voice;
     utterance.rate =
       rate === "x-slow" ? 0.6 : rate === "slow" ? 0.8 : rate === "fast" ? 1.45 : 1;
-
-    // Explicitly pick a voice matching the language so Cantonese doesn't
-    // fall back to a Mandarin voice
-    const voices = window.speechSynthesis.getVoices();
-    const exactMatch = voices.find((v) => v.lang === lang);
-    const prefixMatch = voices.find((v) => v.lang.startsWith(lang.slice(0, 5)));
-    if (exactMatch) {
-      utterance.voice = exactMatch;
-    } else if (prefixMatch) {
-      utterance.voice = prefixMatch;
-    }
 
     utterance.onend = () => resolve();
     utterance.onerror = (e) => reject(e);
@@ -253,13 +290,15 @@ export function useTTS(): UseTTSReturn {
               return;
             }
 
-            // Server TTS failed — silently try browser fallback
+            // Server TTS failed — try the device voice, but only if a real
+            // voice for this language exists (browserSpeak enforces that).
             try {
               if (mountedRef.current) setIsPlaying(true);
               await browserSpeak(text, language, rate);
               if (mountedRef.current) setIsPlaying(false);
             } catch {
               if (mountedRef.current) {
+                setError("Audio is temporarily unavailable. Please try again.");
                 setIsPlaying(false);
               }
             }
@@ -341,7 +380,8 @@ export function useTTS(): UseTTSReturn {
 
         await playbackDone;
       } catch {
-        // Unexpected error (network failure, etc.) — try browser fallback
+        // Unexpected error (network failure, etc.) — try the device voice,
+        // but only if a real voice for this language exists.
         if (mountedRef.current) {
           setIsLoading(false);
           try {
@@ -352,7 +392,7 @@ export function useTTS(): UseTTSReturn {
             if (mountedRef.current) setIsPlaying(false);
           } catch {
             if (mountedRef.current) {
-              setError("Audio not available.");
+              setError("Audio is temporarily unavailable. Please try again.");
               setIsPlaying(false);
             }
           }

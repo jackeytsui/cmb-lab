@@ -207,6 +207,10 @@ export async function POST(request: NextRequest) {
           "Content-Type": "audio/mpeg",
           "Cache-Control": "public, max-age=86400",
           "X-Cache": "HIT",
+          // Which provider synthesized this entry (implied by the cache key's
+          // voice) — lets the team verify Cantonese is served by the intended
+          // provider straight from the browser's network tab.
+          "X-TTS-Provider": provider,
         },
       });
     }
@@ -222,6 +226,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 8. Synthesize via selected provider only (no per-request provider mixing)
+    if (isCantonese) {
+      // Cantonese quality regressions have bitten twice — keep an explicit
+      // trail of which provider/voice served each fresh synthesis.
+      console.log(
+        `TTS: cantonese synthesis via ${provider} (voice=${voice.voiceName}, rate=${rate})`,
+      );
+    }
     let audioBuffer: Buffer;
     if (provider === "elevenlabs") {
       // ElevenLabs: strip brackets for spoken text (no SSML support)
@@ -261,6 +272,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "audio/mpeg",
         "Cache-Control": "public, max-age=86400",
         "X-Cache": "MISS",
+        "X-TTS-Provider": provider,
       },
     });
   } catch (error) {

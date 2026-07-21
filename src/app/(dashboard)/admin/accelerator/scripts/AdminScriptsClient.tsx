@@ -375,6 +375,53 @@ export default function AdminScriptsClient() {
   }
 
   // -----------------------------------------------------------------------
+  // Bulk-regenerate one script's TTS audio (skips human-uploaded recordings)
+  // -----------------------------------------------------------------------
+
+  async function handleRegenerateScriptAudio(
+    scriptId: string,
+    field: "cantoneseAudioUrl" | "mandarinAudioUrl",
+  ) {
+    const label = field === "cantoneseAudioUrl" ? "Cantonese" : "Mandarin";
+    if (
+      !confirm(
+        `Regenerate ALL ${label} TTS audio for this script?\n\n` +
+          "Only missing or previously TTS-generated audio is replaced — " +
+          "human-recorded uploads are kept untouched.",
+      )
+    ) {
+      return;
+    }
+    const key = `${scriptId}-bulk-${field}`;
+    setRegeneratingAudio(key);
+    try {
+      const res = await fetch(
+        "/api/admin/accelerator/scripts/regenerate-audio",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scriptId, field }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error ?? `Bulk regenerate failed (${res.status})`);
+      }
+      const parts = [`Regenerated ${data.regenerated} line(s).`];
+      if (data.skippedUploads > 0)
+        parts.push(`Kept ${data.skippedUploads} human recording(s) untouched.`);
+      if (data.failed > 0) parts.push(`${data.failed} line(s) FAILED — see line list.`);
+      alert(parts.join("\n"));
+      await fetchScripts();
+    } catch (err) {
+      console.error("Bulk audio regenerate error:", err);
+      alert(err instanceof Error ? err.message : "Bulk regenerate failed");
+    } finally {
+      setRegeneratingAudio(null);
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Line management in form
   // -----------------------------------------------------------------------
 
@@ -475,6 +522,26 @@ export default function AdminScriptsClient() {
                       </div>
                     </CollapsibleTrigger>
                     <div className="flex gap-2 items-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={script.contentLocked || regeneratingAudio !== null}
+                        title={
+                          script.contentLocked
+                            ? "Unlock to regenerate audio"
+                            : "Regenerate all Cantonese TTS audio for this script (human recordings are kept)"
+                        }
+                        onClick={() =>
+                          handleRegenerateScriptAudio(script.id, "cantoneseAudioUrl")
+                        }
+                      >
+                        {regeneratingAudio === `${script.id}-bulk-cantoneseAudioUrl` ? (
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        ) : (
+                          <Wand2 className="w-4 h-4 mr-1" />
+                        )}
+                        <span className="text-xs">Canto audio</span>
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
