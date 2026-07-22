@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { Loader2, Pencil, Play, Sparkles, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { generateAnnotation } from "@/lib/mandarin-generation";
+import {
+  fetchProperTranslations,
+  generateAnnotation,
+} from "@/lib/mandarin-generation";
+import { generateModelRomanisation } from "@/lib/generate-model-pinyin";
 import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import {
@@ -45,6 +49,13 @@ interface MandarinSentenceInputProps {
   compact?: boolean;
   /** Generation/display/TTS language: mandarin (pinyin) or cantonese (jyutping). */
   lang?: "mandarin" | "cantonese";
+  /**
+   * Reviewer/admin mode: never block on a failed English translation (commit
+   * with whatever was generated and let the reviewer fill it in), and expose
+   * editable pinyin + English fields so a wrong auto-generation can be
+   * overwritten by hand. Students do not get this — they must retry.
+   */
+  annotationEditable?: boolean;
 }
 
 export function MandarinSentenceInput({
@@ -58,6 +69,7 @@ export function MandarinSentenceInput({
   autoFocus = false,
   compact = false,
   lang = "mandarin",
+  annotationEditable = false,
 }: MandarinSentenceInputProps) {
   const resolvedPlaceholder =
     placeholder ??
@@ -80,16 +92,41 @@ export function MandarinSentenceInput({
     setError(null);
     setGeneratingState(true);
     try {
-      const annotation = await generateAnnotation(text, lang);
-      onValueChange({
-        chineseText: text,
-        pinyin: annotation.pinyin,
-        english: annotation.english,
-      });
+      if (annotationEditable) {
+        // Reviewer/admin: never block. Pinyin uses the aligned model-answer
+        // generator (one syllable per Han char, so a manual override renders
+        // correctly) and English is best-effort — both fall back gracefully so
+        // the reviewer can always proceed and fix them by hand.
+        const [pinyin, translations] = await Promise.all([
+          generateModelRomanisation(text, lang),
+          fetchProperTranslations(
+            [text],
+            lang === "cantonese" ? "zh-HK" : "zh-CN",
+          ),
+        ]);
+        onValueChange({
+          chineseText: text,
+          pinyin,
+          english: translations?.join(" ").trim() || "",
+        });
+      } else {
+        const annotation = await generateAnnotation(text, lang);
+        onValueChange({
+          chineseText: text,
+          pinyin: annotation.pinyin,
+          english: annotation.english,
+        });
+      }
     } catch {
-      setError(
-        "Could not generate pinyin and translation. Please press Enter to try again.",
-      );
+      if (annotationEditable) {
+        // Even a total failure must not block the reviewer — commit the typed
+        // Chinese so they can add pinyin + English manually.
+        onValueChange({ chineseText: text, pinyin: "", english: "" });
+      } else {
+        setError(
+          "Could not generate pinyin and translation. Please press Enter to try again.",
+        );
+      }
     } finally {
       setGeneratingState(false);
     }
@@ -125,9 +162,10 @@ export function MandarinSentenceInput({
       >
         <div className="flex items-start justify-between gap-3">
           {/* Romanisation-on-top, tone-colored Chinese — same format as coaching
-              notes. Mandarin re-derives pinyin live (jieba); Cantonese renders
-              from the stored jyutping (no jieba/tone-sandhi for Cantonese). */}
-          {lang === "cantonese" ? (
+              notes. Student Mandarin re-derives pinyin live (jieba); Cantonese
+              and reviewer-editable Mandarin render from the stored/edited pinyin
+              so a manual override is what's shown. */}
+          {lang === "cantonese" || annotationEditable ? (
             <ModelAnnotatedSentence
               chinese={value.chineseText}
               pinyin={value.pinyin}
@@ -135,7 +173,7 @@ export function MandarinSentenceInput({
                 compact ? ASSIGNMENT_CHAR_SIZE_COMPACT : ASSIGNMENT_CHAR_SIZE
               }
               className="text-foreground"
-              lang="cantonese"
+              lang={lang}
             />
           ) : (
             <AnnotatedSentence
@@ -174,10 +212,49 @@ export function MandarinSentenceInput({
             )}
           </div>
         </div>
-        {value.english && (
-          <p className="text-lg text-muted-foreground italic">
-            {value.english}
-          </p>
+        {annotationEditable ? (
+          <div className="space-y-1.5 pt-1">
+            <label className="block">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {lang === "cantonese" ? "Jyutping" : "Pinyin"} (editable)
+              </span>
+              <input
+                type="text"
+                value={value.pinyin}
+                onChange={(e) =>
+                  onValueChange({ ...value, pinyin: e.target.value })
+                }
+                disabled={disabled}
+                placeholder={
+                  lang === "cantonese"
+                    ? "Jyutping — one syllable per character"
+                    : "Pinyin — one syllable per character"
+                }
+                className="mt-0.5 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 disabled:opacity-60"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                English translation (editable)
+              </span>
+              <input
+                type="text"
+                value={value.english}
+                onChange={(e) =>
+                  onValueChange({ ...value, english: e.target.value })
+                }
+                disabled={disabled}
+                placeholder="English translation"
+                className="mt-0.5 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 disabled:opacity-60"
+              />
+            </label>
+          </div>
+        ) : (
+          value.english && (
+            <p className="text-lg text-muted-foreground italic">
+              {value.english}
+            </p>
+          )
         )}
       </div>
     );

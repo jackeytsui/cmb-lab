@@ -98,13 +98,15 @@ function CorrectionBubble({
       )}
       <span className="flex items-start gap-1.5">
         {/* Suggested correction with romanisation stacked on top of each char.
-            Cantonese renders from the stored jyutping; Mandarin re-derives. */}
-        {lang === "cantonese" ? (
+            Render from the stored/reviewer-edited pinyin whenever we have it, so
+            a manual override is what's shown; fall back to live re-derivation
+            for Mandarin only when no pinyin was stored. */}
+        {lang === "cantonese" || correction.suggestedPinyin.trim() ? (
           <ModelAnnotatedSentence
             chinese={correction.suggestedChinese}
             pinyin={correction.suggestedPinyin}
             fontSize={20}
-            lang="cantonese"
+            lang={lang}
           />
         ) : (
           <AnnotatedSentence text={correction.suggestedChinese} fontSize={20} />
