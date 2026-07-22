@@ -1,44 +1,141 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { scriptLines } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
 import {
   resolveVoice,
+  resolveCantoneseProvider,
   buildSSML,
   synthesizeSpeech,
   synthesizeSpeechElevenLabs,
+  synthesizeSpeechMiniMax,
 } from "@/lib/tts";
 
 export const maxDuration = 60;
 
 type FieldName = "cantoneseAudioUrl" | "mandarinAudioUrl";
 
+type ScriptLine = typeof scriptLines.$inferSelect;
+
+/**
+ * Synthesize one line of text with the shared provider policy.
+ * Cantonese follows the same resolution as /api/tts (MiniMax with pinned
+ * "Chinese,Yue" when configured, else Azure zh-HK; ElevenLabs only via
+ * explicit CANTONESE_TTS_PROVIDER=elevenlabs opt-in). The non-Azure
+ * providers fall back to Azure on failure so the feature keeps working.
+ * Mandarin: Azure direct.
+ */
+async function synthesizeLine(text: string, isCantonese: boolean): Promise<Buffer> {
+  const provider = isCantonese ? resolveCantoneseProvider(process.env) : "azure";
+
+  let primaryError: string | null = null;
+  if (provider === "minimax") {
+    try {
+      return await synthesizeSpeechMiniMax(text, "medium");
+    } catch (err) {
+      primaryError = err instanceof Error ? err.message : "MiniMax failed";
+      console.warn("[regenerate-audio] MiniMax failed, falling back to Azure:", err);
+    }
+  } else if (provider === "elevenlabs") {
+    try {
+      return await synthesizeSpeechElevenLabs(text, "medium");
+    } catch (err) {
+      primaryError = err instanceof Error ? err.message : "ElevenLabs failed";
+      console.warn("[regenerate-audio] ElevenLabs failed, falling back to Azure:", err);
+    }
+  }
+
+  try {
+    const { voiceName, lang } = resolveVoice(isCantonese ? "zh-HK" : "zh-CN");
+    const ssml = buildSSML(text, voiceName, lang, "medium");
+    return await synthesizeSpeech(ssml);
+  } catch (err) {
+    const azureError = err instanceof Error ? err.message : "Azure failed";
+    console.error("[regenerate-audio] Azure failed:", err);
+    throw new Error(
+      primaryError
+        ? `Both providers failed. Primary: ${primaryError}. Azure: ${azureError}`
+        : azureError,
+    );
+  }
+}
+
+/** Regenerate one line's audio field: synthesize, upload, update the column. */
+async function regenerateLine(line: ScriptLine, field: FieldName): Promise<string> {
+  const isCantonese = field === "cantoneseAudioUrl";
+  const text = (isCantonese ? line.cantoneseText : line.mandarinText)?.trim();
+  if (!text) {
+    throw new Error(
+      `No ${isCantonese ? "Cantonese" : "Mandarin"} text to synthesize on this line`,
+    );
+  }
+
+  const audio = await synthesizeLine(text, isCantonese);
+
+  const pathname = `conversation-scripts/${line.scriptId}/${line.id}/regen-${isCantonese ? "yue" : "cmn"}-${Date.now()}.mp3`;
+  // CMB Lab Blob store is private-only — public access fails with 400.
+  const blob = await put(pathname, audio, {
+    access: "private",
+    contentType: "audio/mpeg",
+    token: process.env.BLOB_READ_WRITE_TOKEN,
+    addRandomSuffix: true,
+  });
+
+  // Update just this one column on this line (non-destructive — does NOT touch
+  // other lines or any text columns, so coach edits are preserved)
+  await db
+    .update(scriptLines)
+    .set(isCantonese ? { cantoneseAudioUrl: blob.url } : { mandarinAudioUrl: blob.url })
+    .where(eq(scriptLines.id, line.id));
+
+  return blob.url;
+}
+
 /**
  * POST /api/admin/accelerator/scripts/regenerate-audio
- * Body: { lineId: string, field: "cantoneseAudioUrl" | "mandarinAudioUrl" }
+ * Body: { lineId, field } — regenerate a single line's audio, OR
+ *       { scriptId, field, overwriteUploads? } — bulk mode: regenerate the
+ *       field for every line of the script that has text (purges stale/bad
+ *       stored TTS audio, e.g. Cantonese generated while the wrong-accent
+ *       ElevenLabs default was live).
  *
- * Regenerates audio for a single conversation-script line using the stored text
- * via TTS, uploads the MP3 to Vercel Blob, and updates just that line's audio
- * URL column directly (no destructive bulk re-insert). Coach+ only.
+ * Bulk mode only replaces audio that is missing or was itself TTS-generated
+ * (blob path contains "/regen-"). Human-recorded uploads keep their original
+ * filenames and are left untouched unless overwriteUploads: true is passed —
+ * good audio stays good.
+ *
+ * Regenerates audio from the stored text via TTS, uploads the MP3 to Vercel
+ * Blob, and updates just the audio URL column(s). Coach+ only.
  */
 export async function POST(req: NextRequest) {
   if (!(await hasMinimumRole("coach"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let body: { lineId?: string; field?: FieldName };
+  let body: {
+    lineId?: string;
+    scriptId?: string;
+    field?: FieldName;
+    overwriteUploads?: boolean;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { lineId, field } = body;
-  if (!lineId || !field || (field !== "cantoneseAudioUrl" && field !== "mandarinAudioUrl")) {
+  const { lineId, scriptId, field, overwriteUploads } = body;
+  if (!field || (field !== "cantoneseAudioUrl" && field !== "mandarinAudioUrl")) {
     return NextResponse.json(
-      { error: "lineId and field (cantoneseAudioUrl|mandarinAudioUrl) required" },
+      { error: "field (cantoneseAudioUrl|mandarinAudioUrl) required" },
+      { status: 400 },
+    );
+  }
+  if (!lineId && !scriptId) {
+    return NextResponse.json(
+      { error: "lineId or scriptId required" },
       { status: 400 },
     );
   }
@@ -50,93 +147,63 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 1. Load the line
-  const line = await db.query.scriptLines.findFirst({
-    where: eq(scriptLines.id, lineId),
+  // Single-line mode (existing behavior).
+  if (lineId) {
+    const line = await db.query.scriptLines.findFirst({
+      where: eq(scriptLines.id, lineId),
+    });
+    if (!line) {
+      return NextResponse.json({ error: "Line not found" }, { status: 404 });
+    }
+    try {
+      const url = await regenerateLine(line, field);
+      return NextResponse.json({ url });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
+  }
+
+  // Bulk mode: every line of the script with text for this field.
+  const lines = await db.query.scriptLines.findMany({
+    where: eq(scriptLines.scriptId, scriptId!),
+    orderBy: [asc(scriptLines.sortOrder)],
   });
-  if (!line) {
-    return NextResponse.json({ error: "Line not found" }, { status: 404 });
+  if (lines.length === 0) {
+    return NextResponse.json({ error: "Script has no lines" }, { status: 404 });
   }
 
   const isCantonese = field === "cantoneseAudioUrl";
-  const text = (isCantonese ? line.cantoneseText : line.mandarinText)?.trim();
-  if (!text) {
-    return NextResponse.json(
-      { error: `No ${isCantonese ? "Cantonese" : "Mandarin"} text to synthesize on this line` },
-      { status: 400 },
-    );
-  }
-
-  // 2. Synthesize. Cantonese: ElevenLabs (if configured) with Azure fallback;
-  //    Mandarin: Azure direct. ElevenLabs failures are common (model/language
-  //    combos, voice config drift, quota), so a fallback keeps the feature
-  //    working — the regenerated audio just won't be the ElevenLabs voice.
-  const hasElevenLabs = Boolean(
-    process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_CANTONESE_VOICE_ID,
-  );
-
-  let audio: Buffer | null = null;
-  let primaryError: string | null = null;
-
-  if (isCantonese && hasElevenLabs) {
+  const results: Array<{ lineId: string; url?: string; error?: string }> = [];
+  let skippedUploads = 0;
+  // Sequential on purpose: keeps provider rate limits happy and failure
+  // attribution obvious. A typical script (~10-30 lines) finishes well within
+  // maxDuration; the endpoint is idempotent, so a partial run can be re-run.
+  for (const line of lines) {
+    const text = (isCantonese ? line.cantoneseText : line.mandarinText)?.trim();
+    if (!text) continue; // nothing to synthesize for this line
+    const currentUrl = isCantonese ? line.cantoneseAudioUrl : line.mandarinAudioUrl;
+    const isHumanUpload = Boolean(currentUrl) && !currentUrl!.includes("/regen-");
+    if (isHumanUpload && !overwriteUploads) {
+      skippedUploads++;
+      continue; // keep human recordings untouched
+    }
     try {
-      audio = await synthesizeSpeechElevenLabs(text, "medium");
+      const url = await regenerateLine(line, field);
+      results.push({ lineId: line.id, url });
     } catch (err) {
-      primaryError = err instanceof Error ? err.message : "ElevenLabs failed";
-      console.warn("[regenerate-audio] ElevenLabs failed, falling back to Azure:", err);
+      results.push({
+        lineId: line.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
-  if (!audio) {
-    try {
-      const { voiceName, lang } = resolveVoice(isCantonese ? "zh-HK" : "zh-CN");
-      const ssml = buildSSML(text, voiceName, lang, "medium");
-      audio = await synthesizeSpeech(ssml);
-    } catch (err) {
-      const azureError = err instanceof Error ? err.message : "Azure failed";
-      console.error("[regenerate-audio] Azure failed:", err);
-      const combined = primaryError
-        ? `Both providers failed. ElevenLabs: ${primaryError}. Azure: ${azureError}`
-        : azureError;
-      return NextResponse.json({ error: combined }, { status: 502 });
-    }
-  }
-
-  // 3. Upload to Blob
-  const pathname = `conversation-scripts/${line.scriptId}/${line.id}/regen-${isCantonese ? "yue" : "cmn"}-${Date.now()}.mp3`;
-  let blobUrl: string;
-  try {
-    // CMB Lab Blob store is private-only — public access fails with 400.
-    const blob = await put(pathname, audio, {
-      access: "private",
-      contentType: "audio/mpeg",
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-      addRandomSuffix: true,
-    });
-    blobUrl = blob.url;
-  } catch (err) {
-    console.error("[regenerate-audio] Blob upload failure:", err);
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json(
-      {
-        error: `Failed to store generated audio: ${message}`,
-        hint:
-          message.toLowerCase().includes("token") || message.toLowerCase().includes("auth")
-            ? "Check BLOB_READ_WRITE_TOKEN env var on Vercel"
-            : message.toLowerCase().includes("access")
-              ? "Vercel Blob store may be in private mode — see existing AdminScriptsClient pattern"
-              : undefined,
-      },
-      { status: 502 },
-    );
-  }
-
-  // 4. Update just this one column on this line (non-destructive — does NOT touch
-  //    other lines or any text columns, so coach edits are preserved)
-  await db
-    .update(scriptLines)
-    .set(isCantonese ? { cantoneseAudioUrl: blobUrl } : { mandarinAudioUrl: blobUrl })
-    .where(eq(scriptLines.id, lineId));
-
-  return NextResponse.json({ url: blobUrl });
+  const failed = results.filter((r) => r.error);
+  return NextResponse.json({
+    regenerated: results.length - failed.length,
+    failed: failed.length,
+    skippedUploads,
+    results,
+  });
 }

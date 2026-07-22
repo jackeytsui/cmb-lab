@@ -3,15 +3,15 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 
-// Audio blobs can be long-form; the default function timeout can cut the stream
-// off mid-transfer. Match the 60s used by the other blob-proxy routes.
+// Each invocation serves at most one bounded chunk (see blob-media-proxy), so
+// 60s is ample headroom even for long-form audio.
 export const maxDuration = 60;
 
 /**
  * GET /api/course-library/audio/[lessonId]
- * Authenticated proxy for private Vercel Blob audio lessons.
- * Forwards Range headers for seeking support.
+ * Authenticated chunked-range proxy for private Vercel Blob audio lessons.
  */
 export async function GET(
   request: NextRequest,
@@ -54,34 +54,8 @@ export async function GET(
     );
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-  const range = request.headers.get("range");
-  if (range) headers["Range"] = range;
-
-  const blobResponse = await fetch(audioUrl, { headers });
-  if (!blobResponse.ok && blobResponse.status !== 206) {
-    return NextResponse.json(
-      { error: "Failed to fetch audio" },
-      { status: blobResponse.status },
-    );
-  }
-
-  const responseHeaders = new Headers();
-  const contentType = blobResponse.headers.get("content-type");
-  if (contentType) responseHeaders.set("Content-Type", contentType);
-  else responseHeaders.set("Content-Type", "audio/mpeg");
-  const contentLength = blobResponse.headers.get("content-length");
-  if (contentLength) responseHeaders.set("Content-Length", contentLength);
-  const contentRange = blobResponse.headers.get("content-range");
-  if (contentRange) responseHeaders.set("Content-Range", contentRange);
-  const acceptRanges = blobResponse.headers.get("accept-ranges");
-  responseHeaders.set("Accept-Ranges", acceptRanges ?? "bytes");
-  responseHeaders.set("Cache-Control", "private, max-age=3600");
-
-  return new NextResponse(blobResponse.body, {
-    status: blobResponse.status,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, audioUrl, {
+    fallbackContentType: "audio/mpeg",
+    label: "course-library/audio",
   });
 }

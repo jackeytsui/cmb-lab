@@ -9,13 +9,16 @@ import {
 } from "@/lib/rate-limit";
 import {
   resolveVoice,
+  resolveCantoneseProvider,
   buildSSML,
   buildPhonemeSSML,
   buildCacheKey,
   getCacheTTL,
   synthesizeSpeech,
   synthesizeSpeechElevenLabs,
+  synthesizeSpeechMiniMax,
   escapeXml,
+  MINIMAX_DEFAULT_CANTONESE_VOICE,
 } from "@/lib/tts";
 import type { TTSLanguage, TTSRate } from "@/lib/tts";
 
@@ -161,26 +164,28 @@ export async function POST(request: NextRequest) {
     );
 
     // 4. Resolve provider.
-    // Cantonese: ElevenLabs > Azure > OpenAI
+    // Cantonese: providers with an explicit Cantonese mode only —
+    //   MiniMax (language_boost "Chinese,Yue" + native Cantonese voice,
+    //   preferred when configured) > Azure zh-HK-HiuMaanNeural. ElevenLabs
+    //   only via explicit CANTONESE_TTS_PROVIDER opt-in; its auto-detection
+    //   produces Mandarin-inflected Cantonese.
     // Mandarin: TTS_PROVIDER env > OpenAI > Azure
     const isCantonese = language === "zh-HK" || language === "cantonese";
+    const hasMiniMax = Boolean(process.env.MINIMAX_API_KEY);
     const hasElevenLabs = Boolean(
       process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_CANTONESE_VOICE_ID
     );
 
-    if (!hasOpenAI && !hasAzure && !hasElevenLabs) {
+    if (!hasOpenAI && !hasAzure && !hasElevenLabs && !hasMiniMax) {
       return NextResponse.json(
         { error: "TTS service not configured" },
         { status: 503 }
       );
     }
 
-    const provider: "openai" | "azure" | "elevenlabs" = (() => {
-      // Cantonese: ElevenLabs (Multilingual v2 + Cantonese voice) > Azure zh-HK-HiuMaanNeural
+    const provider: "openai" | "azure" | "elevenlabs" | "minimax" = (() => {
       if (isCantonese) {
-        if (hasElevenLabs) return "elevenlabs" as const;
-        if (hasAzure) return "azure" as const;
-        return "openai" as const;
+        return resolveCantoneseProvider(process.env);
       }
       if (TTS_PROVIDER === "azure" && hasAzure) return "azure" as const;
       if (hasOpenAI) return "openai" as const;
@@ -188,11 +193,16 @@ export async function POST(request: NextRequest) {
     })();
 
     const voice =
-      provider === "elevenlabs"
-        ? { voiceName: `elevenlabs-${process.env.ELEVENLABS_CANTONESE_VOICE_ID}`, lang: "zh-HK" }
-        : provider === "azure"
-          ? resolveVoice(language)
-          : { voiceName: `openai-${OPENAI_TTS_VOICE}`, lang: language as string };
+      provider === "minimax"
+        ? {
+            voiceName: `minimax-${process.env.MINIMAX_CANTONESE_VOICE_ID?.trim() || MINIMAX_DEFAULT_CANTONESE_VOICE}`,
+            lang: "zh-HK",
+          }
+        : provider === "elevenlabs"
+          ? { voiceName: `elevenlabs-${process.env.ELEVENLABS_CANTONESE_VOICE_ID}`, lang: "zh-HK" }
+          : provider === "azure"
+            ? resolveVoice(language)
+            : { voiceName: `openai-${OPENAI_TTS_VOICE}`, lang: language as string };
 
     // 5. Build cache key (includes provider-specific voice identifier)
     const cacheKey = buildCacheKey(text, voice.lang, voice.voiceName, rate);
@@ -206,6 +216,10 @@ export async function POST(request: NextRequest) {
           "Content-Type": "audio/mpeg",
           "Cache-Control": "public, max-age=86400",
           "X-Cache": "HIT",
+          // Which provider synthesized this entry (implied by the cache key's
+          // voice) — lets the team verify Cantonese is served by the intended
+          // provider straight from the browser's network tab.
+          "X-TTS-Provider": provider,
         },
       });
     }
@@ -221,8 +235,21 @@ export async function POST(request: NextRequest) {
     }
 
     // 8. Synthesize via selected provider only (no per-request provider mixing)
+    if (isCantonese) {
+      // Cantonese quality regressions have bitten twice — keep an explicit
+      // trail of which provider/voice served each fresh synthesis.
+      console.log(
+        `TTS: cantonese synthesis via ${provider} (voice=${voice.voiceName}, rate=${rate})`,
+      );
+    }
     let audioBuffer: Buffer;
-    if (provider === "elevenlabs") {
+    if (provider === "minimax") {
+      // MiniMax: no SSML — strip bracketed placeholders to pauses.
+      const mmText = hasBracketedPlaceholders
+        ? text.replace(/\[[^\]]+\]/g, "，……，")
+        : text;
+      audioBuffer = await synthesizeSpeechMiniMax(mmText, rate);
+    } else if (provider === "elevenlabs") {
       // ElevenLabs: strip brackets for spoken text (no SSML support)
       const elText = hasBracketedPlaceholders
         ? text.replace(/\[[^\]]+\]/g, "，……，")
@@ -260,6 +287,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "audio/mpeg",
         "Cache-Control": "public, max-age=86400",
         "X-Cache": "MISS",
+        "X-TTS-Provider": provider,
       },
     });
   } catch (error) {
@@ -272,13 +300,22 @@ export async function POST(request: NextRequest) {
           { status: 503 }
         );
       }
-      if (error.message === "TTS request timed out") {
+      if (
+        error.message === "TTS request timed out" ||
+        error.message === "MiniMax TTS request timed out" ||
+        error.message === "ElevenLabs TTS request timed out"
+      ) {
         return NextResponse.json(
           { error: "TTS request timed out" },
           { status: 504 }
         );
       }
-      if (error.message.startsWith("Azure TTS error:") || error.message === "OpenAI TTS error") {
+      if (
+        error.message.startsWith("Azure TTS error:") ||
+        error.message.startsWith("MiniMax TTS error:") ||
+        error.message.startsWith("ElevenLabs TTS error:") ||
+        error.message === "OpenAI TTS error"
+      ) {
         return NextResponse.json(
           { error: "TTS service unavailable" },
           { status: 502 }
