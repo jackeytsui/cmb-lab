@@ -80,3 +80,30 @@ export function romanisationMatches(
     ? jyutpingMatches(submission, modelAnswer)
     : pinyinMatches(submission, modelAnswer);
 }
+
+/**
+ * Remove foreign (Latin-script) words that appear verbatim in the sentence's
+ * Chinese text — e.g. English names like "John" in 你好，我叫 John — from a
+ * student's romanisation submission. The stored model romanisation skips
+ * English words entirely, so a student who faithfully types them ("ni hao wo
+ * jiao john") must not fail on their account; one who omits them passes too.
+ * Only words present in the sentence are removed, so real pinyin syllables are
+ * never touched (unless the sentence itself contains that exact Latin word).
+ */
+export function stripSentenceForeignWords(
+  submission: string,
+  sentenceChinese: string,
+): string {
+  const foreign = new Set(
+    (sentenceChinese.match(/[A-Za-z][A-Za-z']*/g) ?? []).map((w) =>
+      w.toLowerCase(),
+    ),
+  );
+  if (foreign.size === 0) return submission;
+  return submission
+    .split(/\s+/)
+    .filter(
+      (tok) => !foreign.has(tok.replace(/[^A-Za-z']/g, "").toLowerCase()),
+    )
+    .join(" ");
+}

@@ -12,7 +12,10 @@ import {
 } from "@/db/schema";
 import type { CourseLibraryListeningPracticeSentence } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
-import { romanisationMatches } from "@/lib/pinyin-normalize";
+import {
+  romanisationMatches,
+  stripSentenceForeignWords,
+} from "@/lib/pinyin-normalize";
 import { isListeningPracticeLesson, lessonLanguage } from "@/lib/lesson-language";
 import { convertScript } from "@/lib/chinese-convert";
 
@@ -145,7 +148,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const correct =
     !giveUp &&
     (romanisationMatches(
-      answer,
+      // English words in the sentence (e.g. names) aren't in the stored model
+      // romanisation — a submission that faithfully includes them still passes.
+      stripSentenceForeignWords(answer, sentence.chinese),
       sentence.pinyin,
       lessonLanguage(lesson.lessonType),
     ) ||
