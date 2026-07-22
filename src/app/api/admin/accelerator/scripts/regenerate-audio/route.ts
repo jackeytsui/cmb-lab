@@ -10,6 +10,7 @@ import {
   buildSSML,
   synthesizeSpeech,
   synthesizeSpeechElevenLabs,
+  synthesizeSpeechMiniMax,
 } from "@/lib/tts";
 
 export const maxDuration = 60;
@@ -20,16 +21,24 @@ type ScriptLine = typeof scriptLines.$inferSelect;
 
 /**
  * Synthesize one line of text with the shared provider policy.
- * Cantonese follows the same resolution as /api/tts (Azure zh-HK by default;
- * ElevenLabs only via explicit CANTONESE_TTS_PROVIDER=elevenlabs opt-in, with
- * Azure fallback because ElevenLabs failures are common). Mandarin: Azure.
+ * Cantonese follows the same resolution as /api/tts (MiniMax with pinned
+ * "Chinese,Yue" when configured, else Azure zh-HK; ElevenLabs only via
+ * explicit CANTONESE_TTS_PROVIDER=elevenlabs opt-in). The non-Azure
+ * providers fall back to Azure on failure so the feature keeps working.
+ * Mandarin: Azure direct.
  */
 async function synthesizeLine(text: string, isCantonese: boolean): Promise<Buffer> {
-  const useElevenLabs =
-    isCantonese && resolveCantoneseProvider(process.env) === "elevenlabs";
+  const provider = isCantonese ? resolveCantoneseProvider(process.env) : "azure";
 
   let primaryError: string | null = null;
-  if (useElevenLabs) {
+  if (provider === "minimax") {
+    try {
+      return await synthesizeSpeechMiniMax(text, "medium");
+    } catch (err) {
+      primaryError = err instanceof Error ? err.message : "MiniMax failed";
+      console.warn("[regenerate-audio] MiniMax failed, falling back to Azure:", err);
+    }
+  } else if (provider === "elevenlabs") {
     try {
       return await synthesizeSpeechElevenLabs(text, "medium");
     } catch (err) {
@@ -47,7 +56,7 @@ async function synthesizeLine(text: string, isCantonese: boolean): Promise<Buffe
     console.error("[regenerate-audio] Azure failed:", err);
     throw new Error(
       primaryError
-        ? `Both providers failed. ElevenLabs: ${primaryError}. Azure: ${azureError}`
+        ? `Both providers failed. Primary: ${primaryError}. Azure: ${azureError}`
         : azureError,
     );
   }

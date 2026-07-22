@@ -63,9 +63,10 @@ export function resolveVoice(language: string): VoiceInfo {
 
 // --- Cantonese provider resolution ---
 
-export type CantoneseProvider = "azure" | "elevenlabs" | "openai";
+export type CantoneseProvider = "minimax" | "azure" | "elevenlabs" | "openai";
 
 export interface CantoneseProviderEnv {
+  MINIMAX_API_KEY?: string;
   AZURE_SPEECH_KEY?: string;
   AZURE_SPEECH_REGION?: string;
   ELEVENLABS_API_KEY?: string;
@@ -79,32 +80,38 @@ export interface CantoneseProviderEnv {
 /**
  * Decide which provider synthesizes Cantonese audio.
  *
- * Azure's zh-HK-HiuMaanNeural is the default: it is a dedicated Cantonese
- * (Hong Kong) locale voice, so it never "guesses" the language, and it is the
- * only provider that supports jyutping phoneme disambiguation and true SSML
- * rate control. ElevenLabs has no Cantonese TTS language code ("yue" is
- * speech-to-text only), so its models rely on auto-detecting Cantonese from
- * text — which drifts into a Mandarin-inflected accent, especially on short
- * words and single characters. That accent drift is exactly the "audio sounds
- * weird" regression this resolver exists to prevent.
+ * Only providers with an EXPLICIT Cantonese mode are ever chosen by default:
  *
- * ElevenLabs therefore has to be opted into explicitly with
- * CANTONESE_TTS_PROVIDER=elevenlabs (custom-cloned voice use cases); it is
- * never chosen implicitly just because its API keys are present. OpenAI is
- * the last-resort fallback when neither Azure nor ElevenLabs is configured.
+ * - MiniMax (preferred when configured): T2A v2 with
+ *   `language_boost: "Chinese,Yue"` plus native Cantonese preset voices —
+ *   the language is pinned per request, never guessed from the text.
+ * - Azure zh-HK-HiuMaanNeural: a dedicated Cantonese (Hong Kong) locale
+ *   voice; also the only provider supporting jyutping phoneme
+ *   disambiguation and true SSML rate control.
+ *
+ * ElevenLabs has no Cantonese TTS language code ("yue" is speech-to-text
+ * only), so its models auto-detect the language from text — which drifts
+ * into a Mandarin-inflected accent, especially on short words and single
+ * characters. That accent drift is exactly the "audio sounds weird"
+ * regression this resolver exists to prevent, so ElevenLabs must be opted
+ * into explicitly with CANTONESE_TTS_PROVIDER=elevenlabs. OpenAI is the
+ * last-resort fallback when nothing else is configured.
  */
 export function resolveCantoneseProvider(
   env: CantoneseProviderEnv = process.env,
 ): CantoneseProvider {
+  const hasMiniMax = Boolean(env.MINIMAX_API_KEY);
   const hasAzure = Boolean(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION);
   const hasElevenLabs = Boolean(
     env.ELEVENLABS_API_KEY && env.ELEVENLABS_CANTONESE_VOICE_ID,
   );
   const preference = (env.CANTONESE_TTS_PROVIDER || "").trim().toLowerCase();
 
+  if (preference === "minimax" && hasMiniMax) return "minimax";
   if (preference === "elevenlabs" && hasElevenLabs) return "elevenlabs";
   if (preference === "azure" && hasAzure) return "azure";
 
+  if (hasMiniMax) return "minimax";
   if (hasAzure) return "azure";
   if (hasElevenLabs) return "elevenlabs";
   return "openai";
@@ -244,6 +251,116 @@ export function getCacheTTL(textLength: number): number {
   if (textLength <= 2) return 604800; // 7 days
   if (textLength <= 6) return 259200; // 3 days
   return 86400; // 24 hours
+}
+
+// --- MiniMax TTS REST API ---
+
+/** Default native-Cantonese preset voice for MiniMax T2A. */
+export const MINIMAX_DEFAULT_CANTONESE_VOICE = "Cantonese_GentleLady";
+
+/**
+ * Call MiniMax T2A v2 to synthesize Cantonese speech.
+ *
+ * Unlike ElevenLabs, MiniMax has an explicit Cantonese mode: the request
+ * pins `language_boost: "Chinese,Yue"` so the engine never guesses the
+ * language from the text, and the default voice is a native Cantonese
+ * preset. Returns raw MP3 audio as a Buffer (MiniMax responds with
+ * hex-encoded audio inside JSON).
+ *
+ * Env:
+ * - MINIMAX_API_KEY (required)
+ * - MINIMAX_GROUP_ID (optional; appended as ?GroupId= for accounts that
+ *   require it)
+ * - MINIMAX_CANTONESE_VOICE_ID (optional, default Cantonese_GentleLady)
+ * - MINIMAX_TTS_MODEL (optional, default speech-02-hd)
+ */
+export async function synthesizeSpeechMiniMax(
+  text: string,
+  rate: TTSRate = "medium",
+): Promise<Buffer> {
+  const apiKey = process.env.MINIMAX_API_KEY;
+  if (!apiKey) {
+    throw new Error("MiniMax credentials not configured");
+  }
+
+  const voiceId =
+    process.env.MINIMAX_CANTONESE_VOICE_ID?.trim() ||
+    MINIMAX_DEFAULT_CANTONESE_VOICE;
+  const model = process.env.MINIMAX_TTS_MODEL?.trim() || "speech-02-hd";
+  const groupId = process.env.MINIMAX_GROUP_ID?.trim() || "";
+  const url = `https://api.minimax.io/v1/t2a_v2${groupId ? `?GroupId=${encodeURIComponent(groupId)}` : ""}`;
+
+  // MiniMax speed range is [0.5, 2] — the app's rate presets fit as-is.
+  const speed =
+    rate === "x-slow" ? 0.6 : rate === "slow" ? 0.8 : rate === "fast" ? 1.3 : 1.0;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        text,
+        stream: false,
+        // Pin Cantonese explicitly — this is the whole point of using MiniMax.
+        language_boost: "Chinese,Yue",
+        voice_setting: {
+          voice_id: voiceId,
+          speed,
+          vol: 1.0,
+          pitch: 0,
+        },
+        audio_setting: {
+          format: "mp3",
+          sample_rate: 32000,
+          bitrate: 128000,
+          channel: 1,
+        },
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("MiniMax TTS request timed out");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    const snippet = errorText.slice(0, 300).replace(/\s+/g, " ").trim();
+    console.error(`MiniMax TTS: HTTP ${response.status}:`, snippet);
+    throw new Error(
+      `MiniMax TTS error: ${response.status}${snippet ? ` — ${snippet}` : ""}`,
+    );
+  }
+
+  const payload = (await response.json()) as {
+    data?: { audio?: string };
+    base_resp?: { status_code?: number; status_msg?: string };
+  };
+
+  const statusCode = payload.base_resp?.status_code;
+  if (statusCode !== 0) {
+    const msg = payload.base_resp?.status_msg || "unknown error";
+    console.error(`MiniMax TTS: API status ${statusCode}: ${msg}`);
+    throw new Error(`MiniMax TTS error: ${statusCode} — ${msg}`);
+  }
+
+  const hexAudio = payload.data?.audio;
+  if (!hexAudio || !/^[0-9a-fA-F]+$/.test(hexAudio)) {
+    throw new Error("MiniMax TTS error: response contained no audio");
+  }
+
+  return Buffer.from(hexAudio, "hex");
 }
 
 // --- ElevenLabs TTS REST API ---

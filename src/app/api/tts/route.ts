@@ -16,7 +16,9 @@ import {
   getCacheTTL,
   synthesizeSpeech,
   synthesizeSpeechElevenLabs,
+  synthesizeSpeechMiniMax,
   escapeXml,
+  MINIMAX_DEFAULT_CANTONESE_VOICE,
 } from "@/lib/tts";
 import type { TTSLanguage, TTSRate } from "@/lib/tts";
 
@@ -162,24 +164,26 @@ export async function POST(request: NextRequest) {
     );
 
     // 4. Resolve provider.
-    // Cantonese: Azure zh-HK-HiuMaanNeural by default (dedicated Cantonese
-    //   locale voice — no language auto-detection, supports jyutping phonemes
-    //   and SSML rate). ElevenLabs only via explicit CANTONESE_TTS_PROVIDER
-    //   opt-in; its auto-detection produces Mandarin-inflected Cantonese.
+    // Cantonese: providers with an explicit Cantonese mode only —
+    //   MiniMax (language_boost "Chinese,Yue" + native Cantonese voice,
+    //   preferred when configured) > Azure zh-HK-HiuMaanNeural. ElevenLabs
+    //   only via explicit CANTONESE_TTS_PROVIDER opt-in; its auto-detection
+    //   produces Mandarin-inflected Cantonese.
     // Mandarin: TTS_PROVIDER env > OpenAI > Azure
     const isCantonese = language === "zh-HK" || language === "cantonese";
+    const hasMiniMax = Boolean(process.env.MINIMAX_API_KEY);
     const hasElevenLabs = Boolean(
       process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_CANTONESE_VOICE_ID
     );
 
-    if (!hasOpenAI && !hasAzure && !hasElevenLabs) {
+    if (!hasOpenAI && !hasAzure && !hasElevenLabs && !hasMiniMax) {
       return NextResponse.json(
         { error: "TTS service not configured" },
         { status: 503 }
       );
     }
 
-    const provider: "openai" | "azure" | "elevenlabs" = (() => {
+    const provider: "openai" | "azure" | "elevenlabs" | "minimax" = (() => {
       if (isCantonese) {
         return resolveCantoneseProvider(process.env);
       }
@@ -189,11 +193,16 @@ export async function POST(request: NextRequest) {
     })();
 
     const voice =
-      provider === "elevenlabs"
-        ? { voiceName: `elevenlabs-${process.env.ELEVENLABS_CANTONESE_VOICE_ID}`, lang: "zh-HK" }
-        : provider === "azure"
-          ? resolveVoice(language)
-          : { voiceName: `openai-${OPENAI_TTS_VOICE}`, lang: language as string };
+      provider === "minimax"
+        ? {
+            voiceName: `minimax-${process.env.MINIMAX_CANTONESE_VOICE_ID?.trim() || MINIMAX_DEFAULT_CANTONESE_VOICE}`,
+            lang: "zh-HK",
+          }
+        : provider === "elevenlabs"
+          ? { voiceName: `elevenlabs-${process.env.ELEVENLABS_CANTONESE_VOICE_ID}`, lang: "zh-HK" }
+          : provider === "azure"
+            ? resolveVoice(language)
+            : { voiceName: `openai-${OPENAI_TTS_VOICE}`, lang: language as string };
 
     // 5. Build cache key (includes provider-specific voice identifier)
     const cacheKey = buildCacheKey(text, voice.lang, voice.voiceName, rate);
@@ -234,7 +243,13 @@ export async function POST(request: NextRequest) {
       );
     }
     let audioBuffer: Buffer;
-    if (provider === "elevenlabs") {
+    if (provider === "minimax") {
+      // MiniMax: no SSML — strip bracketed placeholders to pauses.
+      const mmText = hasBracketedPlaceholders
+        ? text.replace(/\[[^\]]+\]/g, "，……，")
+        : text;
+      audioBuffer = await synthesizeSpeechMiniMax(mmText, rate);
+    } else if (provider === "elevenlabs") {
       // ElevenLabs: strip brackets for spoken text (no SSML support)
       const elText = hasBracketedPlaceholders
         ? text.replace(/\[[^\]]+\]/g, "，……，")
@@ -285,13 +300,22 @@ export async function POST(request: NextRequest) {
           { status: 503 }
         );
       }
-      if (error.message === "TTS request timed out") {
+      if (
+        error.message === "TTS request timed out" ||
+        error.message === "MiniMax TTS request timed out" ||
+        error.message === "ElevenLabs TTS request timed out"
+      ) {
         return NextResponse.json(
           { error: "TTS request timed out" },
           { status: 504 }
         );
       }
-      if (error.message.startsWith("Azure TTS error:") || error.message === "OpenAI TTS error") {
+      if (
+        error.message.startsWith("Azure TTS error:") ||
+        error.message.startsWith("MiniMax TTS error:") ||
+        error.message.startsWith("ElevenLabs TTS error:") ||
+        error.message === "OpenAI TTS error"
+      ) {
         return NextResponse.json(
           { error: "TTS service unavailable" },
           { status: 502 }
