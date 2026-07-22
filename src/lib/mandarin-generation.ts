@@ -18,27 +18,42 @@ export async function fetchProperTranslations(
   texts: string[],
   language: "zh-CN" | "zh-HK",
 ): Promise<string[] | null> {
-  try {
-    const cleanTexts = texts
-      .map((t) => t.replace(/[\uFFFD\u200B\u200C\u200D\uFEFF]/g, "").trim())
-      .filter((t) => t.length > 0);
-    if (cleanTexts.length === 0) return null;
+  const cleanTexts = texts
+    .map((t) => t.replace(/[\uFFFD\u200B\u200C\u200D\uFEFF]/g, "").trim())
+    .filter((t) => t.length > 0);
+  if (cleanTexts.length === 0) return null;
 
-    const res = await fetch("/api/reader/translate-batch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ texts: cleanTexts, mode: "proper", language }),
-    });
-    if (!res.ok) {
-      console.error("Batch translate failed:", res.status);
-      return null;
+  // Translation goes through OpenAI, which fails transiently (rate limits,
+  // timeouts). Retry a few times with backoff so a blip doesn't surface as a
+  // hard "could not generate" to the user.
+  const ATTEMPTS = 3;
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch("/api/reader/translate-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texts: cleanTexts, mode: "proper", language }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const translations = data.translations ?? null;
+        if (
+          Array.isArray(translations) &&
+          translations.some((t) => typeof t === "string" && t.trim())
+        ) {
+          return translations;
+        }
+      } else {
+        console.error("Batch translate failed:", res.status);
+      }
+    } catch (err) {
+      console.error("Batch translate error:", err);
     }
-    const data = await res.json();
-    return data.translations ?? null;
-  } catch (err) {
-    console.error("Batch translate error:", err);
-    return null;
+    if (attempt < ATTEMPTS - 1) {
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    }
   }
+  return null;
 }
 
 export interface MandarinAnnotation {
@@ -72,7 +87,18 @@ export async function generateMandarinAnnotation(
 export async function generateAnnotation(
   text: string,
   language: "mandarin" | "cantonese",
+  opts?: {
+    /**
+     * When true (default) a missing English translation throws, so student
+     * flows force a retry rather than silently submitting an incomplete
+     * annotation. Reviewer/admin flows pass false: pinyin is always returned
+     * (derived locally) and English falls back to "" so they can proceed and
+     * fill it in manually.
+     */
+    requireEnglish?: boolean;
+  },
 ): Promise<MandarinAnnotation> {
+  const requireEnglish = opts?.requireEnglish ?? true;
   const trimmed = text.trim();
   if (!trimmed) return { pinyin: "", english: "" };
 
@@ -81,8 +107,8 @@ export async function generateAnnotation(
     [trimmed],
     language === "cantonese" ? "zh-HK" : "zh-CN",
   );
-  const english = translations?.join(" ").trim();
-  if (!english) {
+  const english = translations?.join(" ").trim() ?? "";
+  if (!english && requireEnglish) {
     throw new Error("Translation generation failed");
   }
   return { pinyin, english };
