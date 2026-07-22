@@ -5,6 +5,7 @@ import {
   normalizePinyin,
   pinyinMatches,
   romanisationMatches,
+  stripSentenceForeignWords,
 } from "../pinyin-normalize";
 
 describe("normalizePinyin", () => {
@@ -110,5 +111,38 @@ describe("romanisationMatches", () => {
     // Cantonese tone numbers are digits, so pinyin's tone-diacritic path would
     // still strip them; the routing just keeps the two systems separate.
     expect(romanisationMatches("nei hou", "nei5 hou2", "mandarin")).toBe(true);
+  });
+});
+
+describe("stripSentenceForeignWords", () => {
+  const sentence = "你好，我叫 John。你叫什么名字？";
+  const model = "nǐ hǎo wǒ jiào nǐ jiào shén me míng zì";
+
+  it("removes English words from the sentence out of the submission", () => {
+    const stripped = stripSentenceForeignWords(
+      "ni hao wo jiao John ni jiao shen me ming zi",
+      sentence,
+    );
+    expect(pinyinMatches(stripped, model)).toBe(true);
+  });
+
+  it("is case-insensitive and tolerates attached punctuation", () => {
+    const stripped = stripSentenceForeignWords(
+      "ni hao wo jiao john. ni jiao shen me ming zi",
+      sentence,
+    );
+    expect(pinyinMatches(stripped, model)).toBe(true);
+  });
+
+  it("leaves submissions without the foreign word unchanged", () => {
+    expect(
+      stripSentenceForeignWords("ni hao wo jiao ni jiao shen me ming zi", sentence),
+    ).toBe("ni hao wo jiao ni jiao shen me ming zi");
+  });
+
+  it("does nothing for sentences without foreign words", () => {
+    expect(stripSentenceForeignWords("dui ya ni chang lai ma", "对呀。你常来吗？")).toBe(
+      "dui ya ni chang lai ma",
+    );
   });
 });
