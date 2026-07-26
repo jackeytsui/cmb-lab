@@ -38,8 +38,12 @@
  *                          (deletes the existing thread; steps cascade)
  *   --creator-email X      LMS user (by email) recorded as thread creator and
  *                          video uploader. Required for non-dry-run imports.
- *   --wait-minutes N       How long to wait for Mux assets to become ready
- *                          before giving up on playback ids (default 10)
+ *   --storage blob|mux     Where videos land (default blob — private Vercel
+ *                          Blob store, same as course-library content, played
+ *                          via /api/video-threads/stream. mux ingests to Mux
+ *                          instead; requires a paid Mux plan at our volume.)
+ *   --wait-minutes N       Mux only: how long to wait for assets to become
+ *                          ready before giving up on playback ids (default 10)
  *
  * Required env vars (.env.local):
  *   VIDEOASK_API_TOKEN   Bearer token. Quick start: log into app.videoask.com,
@@ -47,8 +51,8 @@
  *                        create a Developer App (Organization Settings →
  *                        Developer Apps) and use its OAuth access token.
  *   DATABASE_URL         Neon Postgres (import phase)
- *   MUX_TOKEN_ID / MUX_TOKEN_SECRET   Mux API credentials (import phase,
- *                        unless --skip-videos)
+ *   BLOB_READ_WRITE_TOKEN             Vercel Blob token (--storage blob)
+ *   MUX_TOKEN_ID / MUX_TOKEN_SECRET   Mux API credentials (--storage mux)
  */
 
 import { config as dotenv } from "dotenv";
@@ -60,6 +64,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import { desc, eq, like } from "drizzle-orm";
 import Mux from "@mux/mux-node";
+import { put } from "@vercel/blob";
 import * as schema from "../src/db/schema";
 import {
   transformForm,
@@ -89,6 +94,7 @@ interface CliArgs {
   replace: boolean;
   creatorEmail: string | null;
   waitMinutes: number;
+  storage: "blob" | "mux";
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -110,6 +116,7 @@ function parseArgs(argv: string[]): CliArgs {
     replace: false,
     creatorEmail: null,
     waitMinutes: 10,
+    storage: "blob",
   };
 
   for (let i = 0; i < rest.length; i++) {
@@ -136,6 +143,15 @@ function parseArgs(argv: string[]): CliArgs {
       case "--wait-minutes":
         args.waitMinutes = Number(rest[++i]) || 10;
         break;
+      case "--storage": {
+        const value = rest[++i];
+        if (value !== "blob" && value !== "mux") {
+          console.error(`--storage must be "blob" or "mux", got: ${value}`);
+          process.exit(1);
+        }
+        args.storage = value;
+        break;
+      }
       default:
         console.error(`Unknown flag: ${flag}`);
         process.exit(1);
@@ -244,6 +260,42 @@ async function runExport(args: CliArgs): Promise<void> {
 // ---------------------------------------------------------------------------
 // Phase 2: import
 // ---------------------------------------------------------------------------
+
+/**
+ * Stream a VideoAsk CDN video into the private Vercel Blob store.
+ * Mirrors the GHL migration pattern (scripts/ghl-scrape-course.ts).
+ * Retries transient failures twice before giving up.
+ */
+async function mirrorVideoToBlob(
+  mediaUrl: string,
+  formId: string,
+  questionId: string
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const resp = await fetch(mediaUrl);
+      if (!resp.ok || !resp.body) {
+        throw new Error(`VideoAsk CDN ${resp.status}`);
+      }
+      const blob = await put(
+        `video-threads/videoask-migration/${formId}/${questionId}.mp4`,
+        resp.body,
+        {
+          access: "private",
+          addRandomSuffix: true,
+          contentType: "video/mp4",
+          token: process.env.BLOB_READ_WRITE_TOKEN!,
+        }
+      );
+      return blob.url;
+    } catch (err) {
+      lastError = err;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
 
 /**
  * Create a Mux asset from a URL, retrying transient failures (429/5xx) with
@@ -392,16 +444,24 @@ async function runImport(args: CliArgs): Promise<void> {
   }
   console.log(`Creator: ${creator.email} (user ${creator.id}, clerk ${creator.clerkId})`);
 
-  const mux = args.skipVideos
-    ? null
-    : new Mux({
+  const useMux = !args.skipVideos && args.storage === "mux";
+  const useBlob = !args.skipVideos && args.storage === "blob";
+
+  const mux = useMux
+    ? new Mux({
         tokenId: process.env.MUX_TOKEN_ID,
         tokenSecret: process.env.MUX_TOKEN_SECRET,
-      });
-  if (!args.skipVideos && (!process.env.MUX_TOKEN_ID || !process.env.MUX_TOKEN_SECRET)) {
-    console.error("MUX_TOKEN_ID / MUX_TOKEN_SECRET required (or pass --skip-videos).");
+      })
+    : null;
+  if (useMux && (!process.env.MUX_TOKEN_ID || !process.env.MUX_TOKEN_SECRET)) {
+    console.error("MUX_TOKEN_ID / MUX_TOKEN_SECRET required for --storage mux.");
     process.exit(1);
   }
+  if (useBlob && !process.env.BLOB_READ_WRITE_TOKEN) {
+    console.error("BLOB_READ_WRITE_TOKEN required for --storage blob (or pass --skip-videos).");
+    process.exit(1);
+  }
+  console.log(`Video storage: ${args.skipVideos ? "skipped (VideoAsk URL fallback)" : args.storage}`);
 
   let imported = 0;
   let skipped = 0;
@@ -435,11 +495,31 @@ async function runImport(args: CliArgs): Promise<void> {
 
     console.log(`\nImporting "${thread.title}" (${thread.steps.length} steps)…`);
 
-    // --- Mux ingest (reuses assets from previous partial runs) ---
+    // --- Blob mirror (default): copy each question video into the private
+    // Vercel Blob store, same as course-library content. Steps get the blob
+    // URL as videoUrl; the player streams it via /api/video-threads/stream.
+    const uploadIdByQuestion = new Map<string, string>();
+    const blobUrlByQuestion = new Map<string, string>();
+
+    if (useBlob) {
+      for (const step of thread.steps) {
+        if (!step.mediaUrl) continue;
+        try {
+          const blobUrl = await mirrorVideoToBlob(step.mediaUrl, thread.vaFormId, step.vaQuestionId);
+          blobUrlByQuestion.set(step.vaQuestionId, blobUrl);
+          console.log(`  video ${step.vaQuestionId}: mirrored to blob`);
+        } catch (err) {
+          console.warn(
+            `  video ${step.vaQuestionId}: blob mirror FAILED — ${err instanceof Error ? err.message : err} ` +
+              "(step keeps the VideoAsk URL fallback; use --replace to retry this form)"
+          );
+        }
+      }
+    }
+
+    // --- Mux ingest (--storage mux; reuses assets from previous partial runs) ---
     // Assets are only created here; readiness is polled once globally after
     // all forms are processed, so encoding runs in parallel on Mux's side.
-    const uploadIdByQuestion = new Map<string, string>();
-
     if (mux) {
       for (const step of thread.steps) {
         if (!step.mediaUrl) continue;
@@ -512,7 +592,7 @@ async function runImport(args: CliArgs): Promise<void> {
         .values({
           threadId: threadRow.id,
           uploadId: uploadIdByQuestion.get(step.vaQuestionId) ?? null,
-          videoUrl: step.mediaUrl,
+          videoUrl: blobUrlByQuestion.get(step.vaQuestionId) ?? step.mediaUrl,
           promptText: step.promptText,
           responseType: step.responseType,
           allowedResponseTypes: step.allowedResponseTypes,

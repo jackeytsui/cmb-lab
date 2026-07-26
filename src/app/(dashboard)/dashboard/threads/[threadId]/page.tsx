@@ -74,6 +74,11 @@ export default async function ThreadPlayerPage({ params }: PageProps) {
 
   const typedSteps: PlayerStep[] = rawSteps.map((step) => ({
     ...step,
+    // Private blob URLs aren't directly playable — route them through the
+    // authenticated streaming proxy (same pattern as course-library).
+    videoUrl: step.videoUrl?.includes(".blob.vercel-storage.com")
+      ? `/api/video-threads/stream/${step.id}`
+      : step.videoUrl,
     logic: step.logic as PlayerStep["logic"],
     logicRules: step.logicRules as PlayerStep["logicRules"],
     responseOptions: step.responseOptions as PlayerStep["responseOptions"],
