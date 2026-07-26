@@ -9,7 +9,7 @@ import { convertScript, ensureSimplifiedConverter } from "@/lib/chinese-convert"
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Pause, RotateCcw, Copy, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, GripVertical, ArrowRightLeft, NotebookPen } from "lucide-react";
+import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Pause, RotateCcw, Copy, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, GripVertical, ArrowRightLeft, NotebookPen, RefreshCw } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { smartRomanise } from "@/lib/romanise";
@@ -27,6 +27,33 @@ import {
   getToneColorHex,
   getToneDataAttr,
 } from "@/lib/tone-colors";
+
+// The end date arrives as a plain "YYYY-MM-DD" from GHL; build the Date from
+// parts so the displayed day never shifts across timezones.
+function parseDateOnly(value: string): Date | null {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateOnly(value: string): string {
+  const date = parseDateOnly(value);
+  if (!date) return value;
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function daysUntilDateOnly(value: string): number | null {
+  const date = parseDateOnly(value);
+  if (!date) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((date.getTime() - today.getTime()) / 86_400_000);
+}
 
 async function fetchJiebaSegments(
   sentences: string[],
@@ -1193,6 +1220,12 @@ function CoachingPanel({
   const [levelDraftLevel, setLevelDraftLevel] = useState("");
   const [levelDraftLesson, setLevelDraftLesson] = useState("");
 
+  // Course end date — read-only, sourced live from GoHighLevel (never LMS data)
+  const [courseEndDate, setCourseEndDate] = useState<string | null>(null);
+  const [endDateLinked, setEndDateLinked] = useState(true);
+  const [endDateLoading, setEndDateLoading] = useState(false);
+  const [endDateRefreshing, setEndDateRefreshing] = useState(false);
+
   // Sync recording URL and fathom link when active session changes
   useEffect(() => {
     setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
@@ -1223,6 +1256,43 @@ function CoachingPanel({
       setStudentLessonNumber(levelData?.lessonNumber ?? null);
     }).catch(() => {});
   }, [goalsStudentEmail, canWrite]);
+
+  // Fetch the course end date from GHL when a coach opens a student (1:1 only)
+  const fetchCourseEndDate = useCallback(
+    async (email: string, forceRefresh = false) => {
+      const params = new URLSearchParams({ studentEmail: email });
+      if (forceRefresh) params.set("refresh", "true");
+      try {
+        const res = await fetch(`/api/coaching/student-end-date?${params}`);
+        if (!res.ok) {
+          setCourseEndDate(null);
+          setEndDateLinked(true);
+          return;
+        }
+        const data = await res.json();
+        setCourseEndDate(data?.endDate ?? null);
+        setEndDateLinked(data?.linked !== false);
+      } catch {
+        setCourseEndDate(null);
+        setEndDateLinked(true);
+      } finally {
+        setEndDateLoading(false);
+        setEndDateRefreshing(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!goalsStudentEmail || !canWrite || sessionType !== "one-on-one") {
+      setCourseEndDate(null);
+      setEndDateLinked(true);
+      setEndDateLoading(false);
+      return;
+    }
+    setEndDateLoading(true);
+    fetchCourseEndDate(goalsStudentEmail);
+  }, [goalsStudentEmail, canWrite, sessionType, fetchCourseEndDate]);
 
   const handleSaveLevel = useCallback(async () => {
     if (!goalsStudentEmail) return;
@@ -1991,7 +2061,14 @@ function CoachingPanel({
 
           {/* Right: Goals + Level widget — student-level, shown when a student is loaded */}
           {goalsStudentEmail && sessionType === "one-on-one" && (
-            <div className="lg:max-w-[60%] w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div
+              className={cn(
+                "w-full grid grid-cols-1 gap-3",
+                canWrite
+                  ? "lg:max-w-[72%] sm:grid-cols-2 xl:grid-cols-3"
+                  : "lg:max-w-[60%] sm:grid-cols-2",
+              )}
+            >
               {/* Goals card */}
               <div className="rounded-lg border border-teal-500/25 bg-gradient-to-br from-teal-500/10 to-cyan-500/10 dark:from-teal-500/[0.07] dark:to-cyan-500/[0.07] p-3.5">
                 <div className="flex items-center justify-between gap-2">
@@ -2104,6 +2181,74 @@ function CoachingPanel({
                   </p>
                 )}
               </div>
+
+              {/* Course End Date card — read-only, synced from GoHighLevel */}
+              {canWrite && (
+                <div className="rounded-lg border border-rose-500/25 bg-gradient-to-br from-rose-500/10 to-orange-500/10 dark:from-rose-500/[0.07] dark:to-orange-500/[0.07] p-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+                      Course End Date
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!goalsStudentEmail || endDateRefreshing) return;
+                        setEndDateRefreshing(true);
+                        fetchCourseEndDate(goalsStudentEmail, true);
+                      }}
+                      disabled={endDateRefreshing || endDateLoading}
+                      title="Refresh from GoHighLevel"
+                      className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn("size-3", endDateRefreshing && "animate-spin")} />
+                    </button>
+                  </div>
+                  {endDateLoading ? (
+                    <p className="mt-1.5 text-[10px] text-rose-600/60 dark:text-rose-400/50">
+                      Loading from GoHighLevel...
+                    </p>
+                  ) : courseEndDate ? (
+                    <div className="mt-1.5 space-y-0.5">
+                      <p className="text-xs font-medium text-foreground">
+                        {formatDateOnly(courseEndDate)}
+                      </p>
+                      {(() => {
+                        const days = daysUntilDateOnly(courseEndDate);
+                        if (days === null) return null;
+                        const text =
+                          days > 1 ? `${days} days left`
+                          : days === 1 ? "Ends tomorrow"
+                          : days === 0 ? "Ends today"
+                          : days === -1 ? "Ended yesterday"
+                          : `Ended ${-days} days ago`;
+                        return (
+                          <p
+                            className={cn(
+                              "text-xs",
+                              days < 0
+                                ? "text-red-600 dark:text-red-400"
+                                : days <= 14
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-muted-foreground",
+                            )}
+                          >
+                            {text}
+                          </p>
+                        );
+                      })()}
+                      <p className="text-[10px] text-rose-600/60 dark:text-rose-400/50">
+                        Synced from GoHighLevel
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-1.5 text-[10px] text-rose-600/60 dark:text-rose-400/50">
+                      {endDateLinked
+                        ? "No end date found in GoHighLevel."
+                        : "Not linked to a GoHighLevel contact."}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
