@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Lock } from "lucide-react";
 import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
 import { db } from "@/db";
 import {
@@ -7,10 +7,15 @@ import {
   courseLibraryModules,
   courseLibraryLessons,
   courseLibraryLessonProgress,
+  courseLibraryLevelUnlocks,
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import {
+  getCourseLevelInfo,
+  type CourseLevelKey,
+} from "@/lib/course-library-levels";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 export const metadata = {
@@ -87,6 +92,40 @@ export default async function CourseLibraryStudentPage() {
     }
   }
 
+  // Hard cross-course level lock badges (mirrors lib/course-level-access.ts
+  // using the progress data already loaded above). Staff never see locks.
+  const isStaff =
+    currentUser?.role === "admin" || currentUser?.role === "coach";
+  const grantedLevels = new Set(
+    currentUser && !isStaff
+      ? (
+          await db.query.courseLibraryLevelUnlocks.findMany({
+            where: eq(courseLibraryLevelUnlocks.userId, currentUser.id),
+            columns: { level: true },
+          })
+        ).map((grant) => grant.level as string)
+      : [],
+  );
+  const courseByLevel = new Map<CourseLevelKey, string>();
+  for (const course of courses) {
+    const info = getCourseLevelInfo(course.title);
+    if (info && !courseByLevel.has(info.key)) {
+      courseByLevel.set(info.key, course.id);
+    }
+  }
+  const lockFor = (courseTitle: string): { requiredLabel: string } | null => {
+    if (!currentUser || isStaff) return null;
+    const info = getCourseLevelInfo(courseTitle);
+    if (!info?.prevKey || grantedLevels.has(info.key)) return null;
+    const prevCourseId = courseByLevel.get(info.prevKey);
+    if (!prevCourseId) return null; // fail-open: no visible previous course
+    const prev = progressByCourse.get(prevCourseId);
+    if (!prev || prev.totalLessons === 0) return null; // fail-open
+    return prev.completedLessons < prev.totalLessons
+      ? { requiredLabel: info.prevLabel ?? "the previous level" }
+      : null;
+  };
+
   return (
     <CourseLibraryGate>
       <div className="container mx-auto px-4 py-8 space-y-6">
@@ -117,6 +156,7 @@ export default async function CourseLibraryStudentPage() {
                       (progress.completedLessons / progress.totalLessons) * 100,
                     )
                   : 0;
+              const lock = lockFor(course.title);
 
               return (
                 <Link
@@ -130,11 +170,23 @@ export default async function CourseLibraryStudentPage() {
                       <img
                         src={`/api/course-library/course-image/${course.id}`}
                         alt={course.title}
-                        className="w-full h-full object-cover"
+                        className={
+                          lock
+                            ? "w-full h-full object-cover opacity-50 grayscale"
+                            : "w-full h-full object-cover"
+                        }
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
                         <BookOpen className="w-12 h-12" />
+                      </div>
+                    )}
+                    {lock && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-background/95 border border-border px-3 py-1.5 text-[11px] font-bold text-foreground shadow">
+                          <Lock className="w-3.5 h-3.5" />
+                          Finish {lock.requiredLabel} to unlock
+                        </span>
                       </div>
                     )}
                   </div>

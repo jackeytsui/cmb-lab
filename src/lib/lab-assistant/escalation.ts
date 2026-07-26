@@ -169,6 +169,47 @@ export async function createTestimonialTask(params: {
   });
 }
 
+/**
+ * Record an assistant-granted early level unlock as a GHL task on the
+ * student's contact, so the team sees the unlock in GoHighLevel alongside the
+ * mirrored "CMB Level Unlocked" tag.
+ */
+export async function createLevelUnlockTask(params: {
+  user: User;
+  ghlContactId: string | null;
+  levelLabel: string;
+  transcript: string;
+}): Promise<HandoverResult> {
+  const { user, ghlContactId, levelLabel, transcript } = params;
+
+  const body = [
+    `Student: ${studentDisplayName(user)} <${user.email}>`,
+    `Unlocked level: ${levelLabel} (one-time early unlock via Lab Assistant)`,
+    `Timestamp: ${new Date().toISOString()}`,
+    "",
+    "The student's one-time self-serve unlock is now used — any further",
+    "early unlocks must be granted by the team from Admin → Students.",
+    "",
+    "--- Transcript ---",
+    transcript,
+  ].join("\n");
+
+  return createHandoverTask({
+    user,
+    ghlContactId,
+    title: `[Lab Bot] Early level unlock — ${levelLabel} — ${studentDisplayName(user)}`,
+    body,
+    dueDate: dueDateFromNow(ESCALATION_DUE_HOURS),
+    eventType: "lab_assistant.level_unlock",
+    notify: {
+      kind: "level_unlock",
+      intent: "level_unlock",
+      urgent: false,
+      lastMessage: lastStudentMessage(transcript),
+    },
+  });
+}
+
 async function createHandoverTask(params: {
   user: User;
   ghlContactId: string | null;
@@ -177,7 +218,7 @@ async function createHandoverTask(params: {
   dueDate: Date;
   eventType: string;
   notify: {
-    kind: "escalation" | "testimonial";
+    kind: "escalation" | "testimonial" | "level_unlock";
     intent: string | null;
     urgent: boolean;
     lastMessage: string | null;

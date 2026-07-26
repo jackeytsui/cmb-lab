@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, Download as DownloadIcon, Paperclip, Music, ExternalLink } from "lucide-react";
 import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
 import { FlashcardSaveButton } from "@/components/flashcards/FlashcardSaveButton";
@@ -33,6 +33,7 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLevelLock } from "@/lib/course-level-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import {
   isDiaryLesson,
@@ -125,6 +126,11 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
   if (!canSeeCourse(courseId)) notFound();
+
+  // Hard level lock: deep links into a locked level bounce to the course
+  // page, which renders the locked screen.
+  const levelLock = await getCourseLevelLock(currentUser, row.courseTitle);
+  if (levelLock.locked) redirect(`/dashboard/course-library/${courseId}`);
 
   const progress = currentUser
     ? await db.query.courseLibraryLessonProgress.findFirst({

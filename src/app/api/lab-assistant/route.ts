@@ -34,8 +34,14 @@ import {
 import { getStudentContext } from "@/lib/lab-assistant/student-context";
 import {
   createEscalationTask,
+  createLevelUnlockTask,
   createTestimonialTask,
 } from "@/lib/lab-assistant/escalation";
+import {
+  getNextLockedLevel,
+  grantLevelUnlock,
+  hasUsedAssistantUnlock,
+} from "@/lib/course-level-access";
 import {
   getGuidancePrompt,
   getIntentTalkTrack,
@@ -132,6 +138,7 @@ Intents:
 - my_coach: asking who their coach is / coach assignment
 - referral: asking about the referral program or their own referral status
 - testimonial_sheldon: wants to do a testimonial/interview/review with Sheldon
+- level_unlock: asking to unlock the next course level (Intermediate/Advanced), skip ahead on the roadmap, or why a course/level is locked
 - smalltalk: greetings, thanks, pleasantries, "ok great" — nothing to resolve
 - other: anything else (payments, bugs, lesson content, another person's data, unclear requests)
 
@@ -294,6 +301,24 @@ export async function POST(request: Request) {
         : `\n\nSERVER NOTE: This message was flagged urgent but the team task could not be created. Point the student to ${SUPPORT_EMAIL} directly.`;
     }
 
+    // Level-unlock intent: precompute the student's lock state so the model
+    // knows exactly what it may offer. The hard rules (one unlock per
+    // student, ever) are enforced server-side in the tool, not by the model.
+    let levelUnlockNote = "";
+    if (intent === "level_unlock") {
+      const [nextLocked, usedAssistantUnlock] = await Promise.all([
+        getNextLockedLevel(user),
+        hasUsedAssistantUnlock(user.id),
+      ]);
+      if (!nextLocked) {
+        levelUnlockNote = `\n\nSERVER NOTE (level unlock): Nothing is currently locked for this student — every level they can see is already open. Tell them so and point them back to their roadmap. Do NOT call requestLevelUnlock.`;
+      } else if (usedAssistantUnlock) {
+        levelUnlockNote = `\n\nSERVER NOTE (level unlock): The student is asking about the locked "${nextLocked.label}" level, but they have ALREADY used their one-time early unlock. Do NOT call requestLevelUnlock — it will be refused. Explain kindly that early unlocks beyond the first are handled by the team, and offer to pass the request on; if they accept, call escalateToTeam.`;
+      } else {
+        levelUnlockNote = `\n\nSERVER NOTE (level unlock): The "${nextLocked.label}" level is locked for this student${nextLocked.requiredCourse ? ` until they finish "${nextLocked.requiredCourse.title}"` : ""}. Policy: first recommend finishing the current level — the roadmap is designed to be done in order. If the student clearly insists they want to skip ahead, tell them they get ONE early unlock ever, confirm they want to use it now, and only then call requestLevelUnlock with confirm=true. Never call it without their explicit confirmation.`;
+      }
+    }
+
     // Guidance layer: team-editable prompt + allowlisted context only,
     // plus the team-authored talk track for the detected intent (if any).
     const [guidance, talkTrack] = await Promise.all([
@@ -310,7 +335,8 @@ export async function POST(request: Request) {
       `\n\nDetected intent for the latest message: ${intent}` +
       talkTrackNote +
       testimonialNote +
-      urgentNote;
+      urgentNote +
+      levelUnlockNote;
 
     const result = streamText({
       model: openai("gpt-4o"),
@@ -354,6 +380,79 @@ export async function POST(request: Request) {
                     SUPPORT_EMAIL +
                     " directly.",
                 };
+          },
+        },
+        requestLevelUnlock: {
+          description:
+            "Unlock the student's next locked course level early. HARD LIMIT: each student gets exactly one early unlock, ever — the server refuses a second one. Only call after the student explicitly confirms they want to use their one-time unlock now.",
+          inputSchema: z.object({
+            confirm: z
+              .boolean()
+              .describe(
+                "True only when the student explicitly confirmed they want to use their one-time early unlock"
+              ),
+          }),
+          execute: async ({ confirm }) => {
+            if (!confirm) {
+              return {
+                ok: false,
+                message:
+                  "Not unlocked — the student has not confirmed. Ask them to confirm they want to use their one-time early unlock.",
+              };
+            }
+            // Re-check everything server-side at execution time; the model's
+            // context may be stale and must never be the source of truth.
+            const nextLocked = await getNextLockedLevel(user);
+            if (!nextLocked) {
+              return {
+                ok: false,
+                message:
+                  "Nothing is locked for this student — every level is already open. Point them back to their roadmap.",
+              };
+            }
+            if (await hasUsedAssistantUnlock(user.id)) {
+              return {
+                ok: false,
+                message:
+                  "Refused: the student already used their one-time early unlock. Offer to pass the request to the team (escalateToTeam) instead.",
+              };
+            }
+            if (dryRun) {
+              return {
+                ok: true,
+                message: `DRY RUN — would unlock the ${nextLocked.label} level. Confirm to the student as if it happened.`,
+              };
+            }
+            const { created } = await grantLevelUnlock({
+              userId: user.id,
+              level: nextLocked.level,
+              source: "assistant",
+              note: "One-time early unlock via Lab Assistant",
+            });
+            if (!created) {
+              return {
+                ok: false,
+                message:
+                  "The level was already unlocked. Tell the student it's open and point them to their roadmap.",
+              };
+            }
+            // Team visibility in GHL: tag is mirrored by grantLevelUnlock;
+            // the task (with transcript) is created here fire-and-forget.
+            createLevelUnlockTask({
+              user,
+              ghlContactId: studentContext.ghlContactId,
+              levelLabel: nextLocked.label,
+              transcript,
+            }).catch((error) =>
+              console.error(
+                "[Lab Assistant] Level unlock task failed:",
+                error instanceof Error ? error.message : error
+              )
+            );
+            return {
+              ok: true,
+              message: `Done — the ${nextLocked.label} level is now unlocked for this student. Tell them warmly, remind them this was their one early unlock (future ones go through the team), and encourage them to still review "${nextLocked.requiredCourse?.title ?? "the previous level"}" as they go.`,
+            };
           },
         },
       },
