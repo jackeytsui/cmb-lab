@@ -13,6 +13,7 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLevelInfo } from "@/lib/course-library-levels";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 interface PageProps {
@@ -244,6 +245,7 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
             courseId={courseId}
             stops={stops}
             currentIndex={currentIndex}
+            nextLevelLabel={getCourseLevelInfo(course.title)?.nextLabel ?? null}
           />
         )}
       </div>
