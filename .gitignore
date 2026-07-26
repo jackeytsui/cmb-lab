@@ -64,3 +64,6 @@ venv/
 # GHL course scraper output (contains course content and blob URLs)
 /scripts/scraped-ghl/
 .env*.local
+
+# VideoAsk migration exports (raw form data, local only)
+.migration/
