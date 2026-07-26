@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, Mic, Video as VideoIcon, RefreshCcw, Trash2, Play, Pause } from "lucide-react";
-import MuxPlayer from "@mux/mux-player-react";
+import { SignedMuxPlayer } from "@/components/video/SignedMuxPlayer";
 import { toast } from "sonner";
 
 interface VideoRecorderProps {
@@ -156,7 +156,7 @@ export function VideoRecorder({
     if (!coachVideoUrl) return null;
     return (
       <div className="aspect-video bg-black rounded-lg overflow-hidden border border-zinc-800 mb-6">
-        <MuxPlayer
+        <SignedMuxPlayer
           streamType="on-demand"
           playbackId={coachVideoUrl.split("/").pop()?.replace(".m3u8", "")}
           className="w-full h-full"

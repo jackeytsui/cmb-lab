@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import MuxPlayer from "@mux/mux-player-react";
 import type MuxPlayerElement from "@mux/mux-player";
 import type { Interaction } from "@/db/schema/interactions";
+import { useMuxPlayback } from "@/hooks/useMuxPlayback";
 
 export interface VideoPreviewPlayerProps {
   /** Mux playback ID */
@@ -46,6 +47,8 @@ export function VideoPreviewPlayer({
   interactions,
   duration: initialDuration,
 }: VideoPreviewPlayerProps) {
+  // Signed playback: resolve the stored ID to a playable ID + tokens.
+  const playback = useMuxPlayback(playbackId);
   const playerRef = useRef<MuxPlayerElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [duration, setDuration] = useState(initialDuration || 0);
@@ -128,9 +131,16 @@ export function VideoPreviewPlayer({
       tabIndex={0}
     >
       {/* Video Player */}
+      {!playback.ready || !playback.playbackId ? (
+        <div
+          className="w-full animate-pulse bg-black/80"
+          style={{ aspectRatio: "16/9" }}
+        />
+      ) : (
       <MuxPlayer
         ref={playerRef}
-        playbackId={playbackId}
+        playbackId={playback.playbackId}
+        tokens={playback.tokens}
         streamType="on-demand"
         autoPlay={false}
         onTimeUpdate={handleTimeUpdate}
@@ -140,6 +150,7 @@ export function VideoPreviewPlayer({
         primaryColor="#ffffff"
         secondaryColor="#a1a1aa"
       />
+      )}
 
       {/* Current Time Display */}
       <div className="absolute left-4 top-4 rounded-md bg-black/80 px-3 py-1.5 text-lg font-mono text-white shadow-lg">

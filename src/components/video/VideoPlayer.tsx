@@ -2,6 +2,7 @@
 
 import MuxPlayer from "@mux/mux-player-react";
 import type { MuxPlayerProps } from "@mux/mux-player-react";
+import { useMuxPlayback } from "@/hooks/useMuxPlayback";
 
 export interface VideoPlayerProps {
   /** Mux playback ID (not asset ID) */
@@ -44,6 +45,9 @@ export function VideoPlayer({
   autoPlay = false,
   muted = false,
 }: VideoPlayerProps) {
+  // Signed playback: resolve the stored ID to a playable ID + tokens.
+  const playback = useMuxPlayback(playbackId);
+
   const handleTimeUpdate = (event: Event) => {
     if (onTimeUpdate) {
       const player = event.target as HTMLVideoElement;
@@ -51,16 +55,30 @@ export function VideoPlayer({
     }
   };
 
+  if (!playback.ready || !playback.playbackId) {
+    return (
+      <div className={className}>
+        <div
+          className="w-full animate-pulse bg-black/80"
+          style={{ aspectRatio: "16/9" }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
       <MuxPlayer
-        playbackId={playbackId}
+        playbackId={playback.playbackId}
+        tokens={playback.tokens}
         streamType="on-demand"
         // Playback controls
         playbackRates={[0.5, 0.75, 1, 1.25, 1.5, 2]}
-        // Poster/thumbnail - use custom or auto-generate from Mux
+        // Poster/thumbnail - use custom or auto-generate from Mux.
+        // thumbnailTime only applies tokenless: signed thumbnail URLs reject
+        // query params that aren't baked into the token.
         poster={poster}
-        thumbnailTime={thumbnailTime}
+        thumbnailTime={playback.tokens ? undefined : thumbnailTime}
         // Autoplay control
         autoPlay={autoPlay}
         muted={muted}

@@ -32,6 +32,7 @@ import {
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
+import { signMediaPath } from "@/lib/signed-media-url";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import {
@@ -355,7 +356,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             {content.videoUrl ? (
               <div className="rounded-lg overflow-hidden bg-black aspect-video">
                 <LessonVideoPlayer
-                  src={`/api/course-library/stream/${lessonId}#t=0.1`}
+                  src={`${signMediaPath(`/api/course-library/stream/${lessonId}`)}#t=0.1`}
                 />
               </div>
             ) : (

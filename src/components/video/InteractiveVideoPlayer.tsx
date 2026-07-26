@@ -21,6 +21,7 @@ import MuxPlayer from "@mux/mux-player-react";
 import type { MuxPlayerProps } from "@mux/mux-player-react";
 import { AnimatePresence } from "framer-motion";
 import { useInteractiveVideo } from "@/hooks/useInteractiveVideo";
+import { useMuxPlayback } from "@/hooks/useMuxPlayback";
 import { useSubtitlePreference } from "@/hooks/useSubtitlePreference";
 import { useProgress } from "@/hooks/useProgress";
 import { useCelebration } from "@/hooks/useCelebration";
@@ -129,6 +130,9 @@ export const InteractiveVideoPlayer = forwardRef<
   },
   ref
 ) {
+  // Signed playback: resolve the stored ID to a playable ID + tokens.
+  const playback = useMuxPlayback(playbackId);
+
   const {
     state,
     context,
@@ -400,9 +404,16 @@ export const InteractiveVideoPlayer = forwardRef<
 
   return (
     <div className={`relative ${className || ""}`}>
+      {!playback.ready || !playback.playbackId ? (
+        <div
+          className="w-full animate-pulse bg-black/80"
+          style={{ aspectRatio: "16/9" }}
+        />
+      ) : (
       <MuxPlayer
         ref={playerRef}
-        playbackId={playbackId}
+        playbackId={playback.playbackId}
+        tokens={playback.tokens}
         streamType="on-demand"
         playbackRates={[0.5, 0.75, 1, 1.25, 1.5, 2]}
         autoPlay={false}
@@ -420,6 +431,7 @@ export const InteractiveVideoPlayer = forwardRef<
         primaryColor="#ffffff"
         secondaryColor="#a1a1aa"
       />
+      )}
 
       {/* Subtitle overlay with Ruby annotations */}
       {subtitleCues.length > 0 && (

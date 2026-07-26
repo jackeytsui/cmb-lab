@@ -5,7 +5,7 @@ import { VideoPrompt } from "@/db/schema/video-prompts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Play, Copy, Trash2, Edit } from "lucide-react";
-import MuxPlayer from "@mux/mux-player-react";
+import { SignedMuxPlayer } from "@/components/video/SignedMuxPlayer";
 import { formatDistanceToNow } from "date-fns";
 
 interface VideoPromptListProps {
@@ -31,7 +31,7 @@ export function VideoPromptList({ prompts, onDelete, onEdit }: VideoPromptListPr
         <Card key={prompt.id} className="bg-zinc-900/50 border-zinc-800 overflow-hidden group">
           <div className="aspect-video bg-zinc-950 relative">
             {playingId === prompt.id && prompt.videoUrl ? (
-              <MuxPlayer
+              <SignedMuxPlayer
                 streamType="on-demand"
                 playbackId={prompt.videoUrl.split("/").pop()?.replace(".m3u8", "")}
                 metadata={{ video_title: prompt.title }}

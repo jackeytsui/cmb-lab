@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { MuxThumbnail } from "@/components/video/MuxThumbnail";
 
 type ViewMode = "build" | "flow" | "submissions";
 
@@ -510,8 +511,9 @@ export default function VideoThreadBuilderPage() {
                       <div className="aspect-video bg-black rounded-xl overflow-hidden relative group">
                         {selectedStep.upload?.muxPlaybackId ? (
                           <>
-                            <img
-                              src={`https://image.mux.com/${selectedStep.upload.muxPlaybackId}/thumbnail.webp?width=960&height=540&fit_mode=crop`}
+                            <MuxThumbnail
+                              playbackId={selectedStep.upload.muxPlaybackId ?? ""}
+                              params="width=960&height=540&fit_mode=crop"
                               alt="Video thumbnail"
                               className="w-full h-full object-cover"
                             />

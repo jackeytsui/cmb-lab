@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Video } from "lucide-react";
+import { MuxThumbnail } from "@/components/video/MuxThumbnail";
 
 interface VideoUpload {
   id: string;
@@ -128,11 +129,11 @@ export function VideoLibraryPicker({ open, onOpenChange, onSelect }: VideoLibrar
                   >
                     {/* Thumbnail */}
                     <div className="aspect-video bg-gray-100 relative overflow-hidden">
-                      <img
-                        src={`https://image.mux.com/${upload.muxPlaybackId}/thumbnail.webp?width=320&height=180`}
+                      <MuxThumbnail
+                        playbackId={upload.muxPlaybackId ?? ""}
+                        params="width=320&height=180"
                         alt={upload.filename}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        loading="lazy"
                       />
                       {upload.durationSeconds && (
                         <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] font-mono px-1.5 py-0.5 rounded">
