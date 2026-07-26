@@ -5,7 +5,7 @@
 
 import { db } from "@/db";
 import { ghlContacts, ghlFieldMappings } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getGhlClientForLocation } from "@/lib/ghl/client";
 import type { GhlFieldMapping } from "@/db/schema";
 
@@ -47,29 +47,56 @@ export interface FetchResult {
 
 /**
  * Fetch GHL contact data for a user with 5-minute cache TTL.
+ * Reads the user's first ACTIVE link (oldest first, deterministic — matching
+ * getGhlContactId so data and contact identity never diverge).
  * Returns cached data if fresh, otherwise fetches from GHL API.
  * On fetch failure, returns stale cache if available (graceful degradation).
  */
 export async function fetchGhlContactData(
   userId: string
 ): Promise<FetchResult> {
-  // Look up ghlContacts row for userId (first link only)
   const rows = await db
     .select({
       ghlContactId: ghlContacts.ghlContactId,
       ghlLocationId: ghlContacts.ghlLocationId,
-      cachedData: ghlContacts.cachedData,
-      lastFetchedAt: ghlContacts.lastFetchedAt,
     })
     .from(ghlContacts)
-    .where(eq(ghlContacts.userId, userId))
+    .where(
+      and(eq(ghlContacts.userId, userId), eq(ghlContacts.syncStatus, "active"))
+    )
+    .orderBy(asc(ghlContacts.createdAt))
     .limit(1);
 
   if (rows.length === 0) {
     return { data: null, lastFetchedAt: null };
   }
 
-  const { ghlContactId, ghlLocationId, cachedData, lastFetchedAt } = rows[0];
+  return fetchGhlContactDataForLink(rows[0]);
+}
+
+/**
+ * Fetch GHL contact data for one SPECIFIC contact link (contact + location
+ * pair) with 5-minute cache TTL. This is the primitive the Lab Assistant
+ * uses so field values are always read from — and cached against — the exact
+ * contact record they belong to.
+ */
+export async function fetchGhlContactDataForLink(link: {
+  ghlContactId: string;
+  ghlLocationId: string;
+}): Promise<FetchResult> {
+  const { ghlContactId, ghlLocationId } = link;
+
+  const rows = await db
+    .select({
+      cachedData: ghlContacts.cachedData,
+      lastFetchedAt: ghlContacts.lastFetchedAt,
+    })
+    .from(ghlContacts)
+    .where(eq(ghlContacts.ghlContactId, ghlContactId))
+    .limit(1);
+
+  const cachedData = rows[0]?.cachedData ?? null;
+  const lastFetchedAt = rows[0]?.lastFetchedAt ?? null;
 
   // Check cache freshness
   if (cachedData && lastFetchedAt) {
@@ -123,7 +150,7 @@ export async function fetchGhlContactData(
     return { data: freshData, lastFetchedAt: new Date() };
   } catch (error) {
     console.error(
-      `[GHL Contact Fields] Failed to fetch data for user ${userId}:`,
+      `[GHL Contact Fields] Failed to fetch data for contact ${ghlContactId}:`,
       error instanceof Error ? error.message : error
     );
 

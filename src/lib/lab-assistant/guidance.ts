@@ -8,6 +8,7 @@
 // are saved. This file only holds the fallbacks and the context assembly.
 
 import { SUPPORT_EMAIL } from "./allowlist";
+import { formatHumanDate } from "./field-merge";
 import type { StudentContext } from "./student-context";
 
 export const LAB_ASSISTANT_PROMPT_SLUG = "lab-assistant-guidance";
@@ -140,20 +141,30 @@ function line(label: string, value: string | null, emptyHint: string): string {
   return `- ${label}: ${value ?? `(not set — ${emptyHint})`}`;
 }
 
+function dateLine(
+  label: string,
+  value: string | null,
+  emptyHint: string
+): string {
+  // Dates are stored ISO but delivered as human language ("May 12, 2026")
+  // so the model states them naturally and never leaks raw formats.
+  return line(label, value ? formatHumanDate(value) : null, emptyHint);
+}
+
 /**
  * Render the allowlisted student context block appended to the guidance
  * prompt. This is the ONLY student data the model ever sees.
  */
 export function renderStudentContext(context: StudentContext): string {
   const { fields } = context;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatHumanDate(new Date().toISOString().slice(0, 10));
   return `
 STUDENT CONTEXT (server-verified for the signed-in session — your only data source):
 - Today's date: ${today}
 - First name: ${context.firstName ?? "(unknown)"}
 - Signed-in email: ${context.email}
-${line("Program start date", fields.start_date, "say it hasn't been scheduled yet and offer to check with the team")}
-${line("Program end date", fields.end_date, "say it hasn't been set yet and offer to check with the team")}
+${dateLine("Program start date", fields.start_date, "say it hasn't been scheduled yet and offer to check with the team")}
+${dateLine("Program end date", fields.end_date, "say it hasn't been set yet and offer to check with the team")}
 ${line("Assigned coach", fields.assigned_coach, "say no coach has been assigned yet and offer to pass it to the team")}
 ${line("Referral source", fields.referral_source, "not on record")}
 ${line("Referral status", fields.referral_status, "say they don't have any referral activity yet and explain how the program works")}`;

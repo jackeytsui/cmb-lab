@@ -4,7 +4,7 @@
 
 import { db } from "@/db";
 import { ghlContacts, ghlLocations, type GhlContact } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import {
   createGhlClient,
   getAnyActiveGhlLocation,
@@ -148,6 +148,36 @@ export async function findOrLinkContact(
 }
 
 /**
+ * List active GHL locations (id + name). Falls back to the legacy env
+ * credentials when the ghl_locations table is empty. Never throws.
+ */
+export async function getActiveGhlLocations(): Promise<
+  Array<{ ghlLocationId: string; name: string }>
+> {
+  try {
+    const rows = await db
+      .select({
+        ghlLocationId: ghlLocations.ghlLocationId,
+        name: ghlLocations.name,
+      })
+      .from(ghlLocations)
+      .where(eq(ghlLocations.isActive, true));
+    if (rows.length > 0) return rows;
+
+    const fallback = await getAnyActiveGhlLocation();
+    return fallback
+      ? [{ ghlLocationId: fallback.ghlLocationId, name: fallback.name }]
+      : [];
+  } catch (error) {
+    console.error(
+      "[GHL] Failed to list active locations:",
+      error instanceof Error ? error.message : error
+    );
+    return [];
+  }
+}
+
+/**
  * Get a single GHL contact ID for a user (first active link).
  * Backward-compatible helper for callers that expect a single contact.
  */
@@ -158,6 +188,7 @@ export async function getGhlContactId(
     .select({ ghlContactId: ghlContacts.ghlContactId })
     .from(ghlContacts)
     .where(and(eq(ghlContacts.userId, userId), eq(ghlContacts.syncStatus, "active")))
+    .orderBy(asc(ghlContacts.createdAt))
     .limit(1);
 
   return rows.length > 0 ? rows[0].ghlContactId : null;
@@ -176,7 +207,8 @@ export async function getGhlContactLinks(
       ghlLocationId: ghlContacts.ghlLocationId,
     })
     .from(ghlContacts)
-    .where(and(eq(ghlContacts.userId, userId), eq(ghlContacts.syncStatus, "active")));
+    .where(and(eq(ghlContacts.userId, userId), eq(ghlContacts.syncStatus, "active")))
+    .orderBy(asc(ghlContacts.createdAt));
 }
 
 /**
