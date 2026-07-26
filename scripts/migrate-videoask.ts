@@ -58,7 +58,7 @@ import { mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
-import { eq, like } from "drizzle-orm";
+import { desc, eq, like } from "drizzle-orm";
 import Mux from "@mux/mux-node";
 import * as schema from "../src/db/schema";
 import {
@@ -245,6 +245,39 @@ async function runExport(args: CliArgs): Promise<void> {
 // Phase 2: import
 // ---------------------------------------------------------------------------
 
+/**
+ * Create a Mux asset from a URL, retrying transient failures (429/5xx) with
+ * exponential backoff. Returns null on permanent failure (bad input URL).
+ */
+async function createMuxAssetWithRetry(
+  mux: Mux,
+  url: string,
+  passthrough: string
+): Promise<{ id: string } | null> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return await mux.video.assets.create({
+        inputs: [{ url }],
+        playback_policies: ["public"],
+        encoding_tier: "baseline",
+        passthrough,
+      });
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      const retryable = status === 429 || (status !== undefined && status >= 500);
+      if (retryable && attempt < 3) {
+        const wait = 2000 * 2 ** attempt;
+        console.warn(`  Mux ${status} — retrying in ${wait / 1000}s`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+      console.warn(`  Mux asset create failed: ${err instanceof Error ? err.message : err}`);
+      return null;
+    }
+  }
+  return null;
+}
+
 function createDb() {
   const url = process.env.DATABASE_URL;
   if (!url) {
@@ -345,15 +378,19 @@ async function runImport(args: CliArgs): Promise<void> {
 
   const db = createDb();
 
+  // Most recent account wins when the email has duplicate user rows
+  // (happens after Clerk re-signups).
   const [creator] = await db
     .select({ id: users.id, clerkId: users.clerkId, email: users.email })
     .from(users)
     .where(eq(users.email, args.creatorEmail))
+    .orderBy(desc(users.createdAt))
     .limit(1);
   if (!creator) {
     console.error(`No LMS user found with email ${args.creatorEmail}.`);
     process.exit(1);
   }
+  console.log(`Creator: ${creator.email} (user ${creator.id}, clerk ${creator.clerkId})`);
 
   const mux = args.skipVideos
     ? null
@@ -368,6 +405,8 @@ async function runImport(args: CliArgs): Promise<void> {
 
   let imported = 0;
   let skipped = 0;
+  // Assets awaiting Mux encode across ALL forms; polled once after the loop.
+  const pendingAssets: { vaQuestionId: string; muxAssetId: string; dbId: string }[] = [];
 
   for (const thread of threads) {
     if (thread.steps.length === 0) {
@@ -397,8 +436,9 @@ async function runImport(args: CliArgs): Promise<void> {
     console.log(`\nImporting "${thread.title}" (${thread.steps.length} steps)…`);
 
     // --- Mux ingest (reuses assets from previous partial runs) ---
+    // Assets are only created here; readiness is polled once globally after
+    // all forms are processed, so encoding runs in parallel on Mux's side.
     const uploadIdByQuestion = new Map<string, string>();
-    const pendingAssets: { vaQuestionId: string; muxAssetId: string; dbId: string }[] = [];
 
     if (mux) {
       for (const step of thread.steps) {
@@ -424,20 +464,11 @@ async function runImport(args: CliArgs): Promise<void> {
           continue;
         }
 
-        let asset;
-        try {
-          asset = await mux.video.assets.create({
-            inputs: [{ url: step.mediaUrl }],
-            playback_policies: ["public"],
-            encoding_tier: "baseline",
-            passthrough: syntheticUploadId,
-          });
-        } catch (err) {
+        const asset = await createMuxAssetWithRetry(mux, step.mediaUrl, syntheticUploadId);
+        if (!asset) {
           // e.g. non-direct-file URLs (one form points at a Vimeo player page).
           // Step keeps the original URL as videoUrl fallback.
-          console.warn(
-            `  video ${step.vaQuestionId}: Mux ingest FAILED for ${step.mediaUrl} — ${err instanceof Error ? err.message : err}`
-          );
+          console.warn(`  video ${step.vaQuestionId}: Mux ingest FAILED for ${step.mediaUrl}`);
           continue;
         }
 
@@ -461,41 +492,6 @@ async function runImport(args: CliArgs): Promise<void> {
           dbId: record.id,
         });
         console.log(`  video ${step.vaQuestionId}: Mux ingest started (asset ${asset.id})`);
-      }
-
-      // Wait for Mux to finish pulling/encoding so steps get playback ids
-      const deadline = Date.now() + args.waitMinutes * 60_000;
-      while (pendingAssets.length > 0 && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 5_000));
-        for (let i = pendingAssets.length - 1; i >= 0; i--) {
-          const pending = pendingAssets[i];
-          const asset = await mux.video.assets.retrieve(pending.muxAssetId);
-          if (asset.status === "ready") {
-            await db
-              .update(videoUploads)
-              .set({
-                status: "ready",
-                muxPlaybackId: asset.playback_ids?.[0]?.id ?? null,
-                durationSeconds: asset.duration ? Math.round(asset.duration) : null,
-              })
-              .where(eq(videoUploads.id, pending.dbId));
-            console.log(`  video ${pending.vaQuestionId}: ready`);
-            pendingAssets.splice(i, 1);
-          } else if (asset.status === "errored") {
-            await db
-              .update(videoUploads)
-              .set({ status: "errored", errorMessage: JSON.stringify(asset.errors ?? null) })
-              .where(eq(videoUploads.id, pending.dbId));
-            console.error(`  video ${pending.vaQuestionId}: Mux ERRORED`);
-            pendingAssets.splice(i, 1);
-          }
-        }
-      }
-      for (const still of pendingAssets) {
-        console.warn(
-          `  video ${still.vaQuestionId}: still processing after ${args.waitMinutes}m — ` +
-            "step will fall back to the VideoAsk URL until Mux finishes (re-run import later; it reuses the asset)."
-        );
       }
     }
 
@@ -547,6 +543,55 @@ async function runImport(args: CliArgs): Promise<void> {
 
     console.log(`  created thread ${threadRow.id} with ${thread.steps.length} step(s)`);
     imported++;
+  }
+
+  // --- Global Mux readiness pass: attach playback ids as encodes finish ---
+  if (mux && pendingAssets.length > 0) {
+    console.log(`\nWaiting for ${pendingAssets.length} Mux asset(s) to finish encoding (max ${args.waitMinutes}m)…`);
+    const deadline = Date.now() + args.waitMinutes * 60_000;
+    let ready = 0;
+    let errored = 0;
+    while (pendingAssets.length > 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5_000));
+      for (let i = pendingAssets.length - 1; i >= 0; i--) {
+        const pending = pendingAssets[i];
+        let asset;
+        try {
+          asset = await mux.video.assets.retrieve(pending.muxAssetId);
+        } catch {
+          continue; // transient; retry on next sweep
+        }
+        if (asset.status === "ready") {
+          await db
+            .update(videoUploads)
+            .set({
+              status: "ready",
+              muxPlaybackId: asset.playback_ids?.[0]?.id ?? null,
+              durationSeconds: asset.duration ? Math.round(asset.duration) : null,
+            })
+            .where(eq(videoUploads.id, pending.dbId));
+          ready++;
+          pendingAssets.splice(i, 1);
+        } else if (asset.status === "errored") {
+          await db
+            .update(videoUploads)
+            .set({ status: "errored", errorMessage: JSON.stringify(asset.errors ?? null) })
+            .where(eq(videoUploads.id, pending.dbId));
+          console.error(`  video ${pending.vaQuestionId}: Mux ERRORED`);
+          errored++;
+          pendingAssets.splice(i, 1);
+        }
+      }
+      if ((ready + errored) % 50 < 5) {
+        console.log(`  ${ready} ready, ${errored} errored, ${pendingAssets.length} still encoding…`);
+      }
+    }
+    console.log(`Encoding complete: ${ready} ready, ${errored} errored, ${pendingAssets.length} timed out.`);
+    if (pendingAssets.length > 0) {
+      console.warn(
+        "Timed-out videos keep the VideoAsk URL fallback; re-running import later reuses the assets and attaches playback ids."
+      );
+    }
   }
 
   console.log(`\nDone. Imported ${imported}, skipped ${skipped} (already migrated).`);
