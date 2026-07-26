@@ -5,6 +5,7 @@ import { hasMinimumRole } from "@/lib/auth";
 import { StudentProgressView } from "@/components/admin/StudentProgressView";
 import { GhlProfileSection } from "@/components/ghl/GhlProfileSection";
 import { StudentTagsSection } from "./StudentTagsSection";
+import { StudentLevelUnlocksSection } from "./StudentLevelUnlocksSection";
 import { StudentAccessAttribution } from "@/components/admin/StudentAccessAttribution";
 import { StudentPortalAccessControls } from "@/components/admin/StudentPortalAccessControls";
 import { StudentProfileEditor } from "@/components/admin/StudentProfileEditor";
@@ -24,6 +25,7 @@ import {
   ClipboardList,
   Key,
   UserCheck,
+  Unlock,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 
@@ -669,6 +671,17 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
             initialStatus={portalAccessStatus}
             initialCourseEndDate={courseEndDateIso}
           />
+        </div>
+      </section>
+
+      {/* Course level unlocks */}
+      <section className="mb-8">
+        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <Unlock className="w-5 h-5 text-cyan-400" />
+          Course Level Unlocks
+        </h2>
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+          <StudentLevelUnlocksSection studentId={studentId} />
         </div>
       </section>
 

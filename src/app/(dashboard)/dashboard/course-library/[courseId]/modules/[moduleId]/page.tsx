@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
@@ -25,6 +25,7 @@ import {
 import { and, asc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLevelLock } from "@/lib/course-level-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { baseLessonType, isCantoneseLessonType } from "@/lib/lesson-language";
 import { cn } from "@/lib/utils";
@@ -108,6 +109,11 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
 
   const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
   if (!canSeeCourse(courseId)) notFound();
+
+  // Hard level lock: deep links into a locked level bounce to the course
+  // page, which renders the locked screen.
+  const levelLock = await getCourseLevelLock(currentUser, row.courseTitle);
+  if (levelLock.locked) redirect(`/dashboard/course-library/${courseId}`);
 
   const mod = row.module;
 

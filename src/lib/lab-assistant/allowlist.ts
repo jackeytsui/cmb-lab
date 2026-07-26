@@ -36,6 +36,7 @@ export const LAB_ASSISTANT_INTENTS = [
   "my_coach",
   "referral",
   "testimonial_sheldon",
+  "level_unlock",
   "smalltalk",
   "other",
 ] as const;

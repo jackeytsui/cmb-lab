@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
 import { CourseMap, type CourseMapStop } from "@/components/course-library/CourseMap";
+import { LevelLockedScreen } from "@/components/course-library/LevelLockedScreen";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -13,6 +14,8 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLevelInfo } from "@/lib/course-library-levels";
+import { getCourseLevelLock } from "@/lib/course-level-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 interface PageProps {
@@ -42,6 +45,30 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
 
   const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
   if (!canSeeCourse(course.id)) notFound();
+
+  // Hard cross-course level lock: the previous level must be 100% complete
+  // (or an unlock grant must exist) before this course's content is viewable.
+  const levelLock = await getCourseLevelLock(currentUser, course.title);
+  if (levelLock.locked) {
+    return (
+      <CourseLibraryGate>
+        <div className="container mx-auto px-4 py-8 max-w-5xl">
+          <Link
+            href="/dashboard/course-library"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to courses
+          </Link>
+          <LevelLockedScreen
+            levelLabel={levelLock.levelLabel ?? course.title}
+            requiredLevelLabel={levelLock.requiredLevelLabel}
+            requiredCourse={levelLock.requiredCourse}
+          />
+        </div>
+      </CourseLibraryGate>
+    );
+  }
 
   const modules = await db
     .select()
@@ -244,6 +271,7 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
             courseId={courseId}
             stops={stops}
             currentIndex={currentIndex}
+            nextLevelLabel={getCourseLevelInfo(course.title)?.nextLabel ?? null}
           />
         )}
       </div>

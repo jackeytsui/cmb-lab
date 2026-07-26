@@ -184,6 +184,50 @@ export const courseLibraryLessonProgress = pgTable(
   ],
 );
 
+// Gated course levels. Foundations is always open; Intermediate/Advanced are
+// hard-locked until the previous level is 100% complete (see
+// lib/course-level-access.ts) unless an unlock grant exists here.
+export const courseLibraryLevelEnum = pgEnum("course_library_level", [
+  "intermediate",
+  "advanced",
+]);
+
+// Who granted the early unlock:
+// - team:      staff member via Admin → Students
+// - assistant: the Lab Assistant chatbot (hard-limited to once per student)
+export const courseLibraryLevelUnlockSourceEnum = pgEnum(
+  "course_library_level_unlock_source",
+  ["team", "assistant"],
+);
+
+// Per-student early-unlock grant for a gated level. One row per (user, level);
+// the unique index doubles as the "each level can only be unlocked once"
+// guarantee. Grants are mirrored to GHL as contact tags so the team sees the
+// student's unlock state in GoHighLevel.
+export const courseLibraryLevelUnlocks = pgTable(
+  "course_library_level_unlocks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    level: courseLibraryLevelEnum("level").notNull(),
+    source: courseLibraryLevelUnlockSourceEnum("source").notNull(),
+    grantedBy: uuid("granted_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    note: text("note"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("course_library_level_unlocks_user_level_unique").on(
+      table.userId,
+      table.level,
+    ),
+    index("course_library_level_unlocks_user_idx").on(table.userId),
+  ],
+);
+
 export const flashcardSaves = pgTable(
   "flashcard_saves",
   {
@@ -289,6 +333,13 @@ export type NewCourseLibraryLesson = typeof courseLibraryLessons.$inferInsert;
 
 export type CourseLibraryLessonProgress =
   typeof courseLibraryLessonProgress.$inferSelect;
+
+export type CourseLibraryLevel =
+  (typeof courseLibraryLevelEnum.enumValues)[number];
+export type CourseLibraryLevelUnlock =
+  typeof courseLibraryLevelUnlocks.$inferSelect;
+export type CourseLibraryLevelUnlockSource =
+  (typeof courseLibraryLevelUnlockSourceEnum.enumValues)[number];
 
 export type FlashcardSave = typeof flashcardSaves.$inferSelect;
 export type NewFlashcardSave = typeof flashcardSaves.$inferInsert;

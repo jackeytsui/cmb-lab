@@ -1,16 +1,24 @@
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
 import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
+import { LockedCourseCard } from "@/components/course-library/LockedCourseCard";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
   courseLibraryModules,
   courseLibraryLessons,
   courseLibraryLessonProgress,
+  courseLibraryLevelUnlocks,
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
+import {
+  COURSE_LEVEL_ORDER,
+  getCourseLevelInfo,
+  levelLabel,
+  type CourseLevelKey,
+} from "@/lib/course-library-levels";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 export const metadata = {
@@ -87,6 +95,55 @@ export default async function CourseLibraryStudentPage() {
     }
   }
 
+  // Hard cross-course level lock badges (mirrors lib/course-level-access.ts
+  // using the progress data already loaded above). Staff never see locks.
+  const isStaff =
+    currentUser?.role === "admin" || currentUser?.role === "coach";
+  const grantedLevels = new Set(
+    currentUser && !isStaff
+      ? (
+          await db.query.courseLibraryLevelUnlocks.findMany({
+            where: eq(courseLibraryLevelUnlocks.userId, currentUser.id),
+            columns: { level: true },
+          })
+        ).map((grant) => grant.level as string)
+      : [],
+  );
+  const courseByLevel = new Map<CourseLevelKey, string>();
+  for (const course of courses) {
+    const info = getCourseLevelInfo(course.title);
+    if (info && !courseByLevel.has(info.key)) {
+      courseByLevel.set(info.key, course.id);
+    }
+  }
+  // A gated course is locked while ANY earlier level is incomplete: the
+  // Intermediate prompt names Foundations; the Advanced prompt names both
+  // Foundations and Intermediate when both remain unfinished.
+  const lockFor = (
+    courseTitle: string,
+  ): { levelLabel: string; requiredLabels: string[] } | null => {
+    if (!currentUser || isStaff) return null;
+    const info = getCourseLevelInfo(courseTitle);
+    if (!info?.prevKey || grantedLevels.has(info.key)) return null;
+    const earlierLevels = COURSE_LEVEL_ORDER.slice(
+      0,
+      COURSE_LEVEL_ORDER.indexOf(info.key),
+    );
+    const requiredLabels: string[] = [];
+    for (const key of earlierLevels) {
+      const prevCourseId = courseByLevel.get(key);
+      if (!prevCourseId) continue; // fail-open: no visible course at this level
+      const prev = progressByCourse.get(prevCourseId);
+      if (!prev || prev.totalLessons === 0) continue; // fail-open
+      if (prev.completedLessons < prev.totalLessons) {
+        requiredLabels.push(levelLabel(key));
+      }
+    }
+    return requiredLabels.length > 0
+      ? { levelLabel: info.label, requiredLabels }
+      : null;
+  };
+
   return (
     <CourseLibraryGate>
       <div className="container mx-auto px-4 py-8 space-y-6">
@@ -117,6 +174,20 @@ export default async function CourseLibraryStudentPage() {
                       (progress.completedLessons / progress.totalLessons) * 100,
                     )
                   : 0;
+              const lock = lockFor(course.title);
+              if (lock) {
+                return (
+                  <LockedCourseCard
+                    key={course.id}
+                    courseId={course.id}
+                    title={course.title}
+                    summary={course.summary}
+                    levelLabel={lock.levelLabel}
+                    hasCoverImage={!!course.coverImageUrl}
+                    requiredLabels={lock.requiredLabels}
+                  />
+                );
+              }
 
               return (
                 <Link

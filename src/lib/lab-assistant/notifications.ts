@@ -55,7 +55,7 @@ const COLOR_FAILED = 0x991b1b; // dark red
 const COLOR_TEST = 0x3a49b8; // CMB blue
 
 export interface HandoverNotification {
-  kind: "escalation" | "testimonial";
+  kind: "escalation" | "testimonial" | "level_unlock";
   studentName: string;
   studentEmail: string;
   intent: string | null;
@@ -91,7 +91,9 @@ export async function sendDiscordHandoverNotification(
   const title =
     kind === "testimonial"
       ? `🎤 Testimonial interview request — ${studentName}`
-      : `${urgent ? "🚨" : "🔔"} Lab Bot escalation — ${intent ?? "unclassified"} — ${studentName}`;
+      : kind === "level_unlock"
+        ? `🔓 Early level unlock via Lab Bot — ${studentName}`
+        : `${urgent ? "🚨" : "🔔"} Lab Bot escalation — ${intent ?? "unclassified"} — ${studentName}`;
 
   const color =
     taskVia === "failed"
@@ -100,7 +102,9 @@ export async function sendDiscordHandoverNotification(
         ? COLOR_URGENT
         : kind === "testimonial"
           ? COLOR_TESTIMONIAL
-          : COLOR_ESCALATION;
+          : kind === "level_unlock"
+            ? COLOR_TEST
+            : COLOR_ESCALATION;
 
   const fields = [
     { name: "Student", value: `${studentName} (${studentEmail})`, inline: true },

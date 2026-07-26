@@ -6,10 +6,12 @@ import { and, eq, isNull } from "drizzle-orm";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 import { verifySignedMediaPath } from "@/lib/signed-media-url";
 
-// Each invocation now serves at most one bounded chunk (see blob-media-proxy),
-// so 60s is ample headroom — the timeout can no longer kill a transfer that a
-// browser is still waiting on.
-export const maxDuration = 60;
+// Each invocation serves at most one bounded chunk (see blob-media-proxy).
+// The timeout still bounds a single chunk transfer, so give slow connections
+// generous headroom: a chunk killed at the timeout reaches the browser as a
+// truncated 206 body, which Chrome reports as "FFmpegDemuxer: data source
+// error" and the player shows the load-failure screen.
+export const maxDuration = 300;
 
 /**
  * GET /api/course-library/stream/[lessonId]

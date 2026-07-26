@@ -25,6 +25,14 @@ export function LabAssistantWidget() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, close]);
 
+  // Other surfaces (e.g. the locked-level screen in the Course Library) can
+  // pop the assistant open by dispatching this window event.
+  useEffect(() => {
+    const open = () => setIsOpen(true);
+    window.addEventListener('cmb:open-lab-assistant', open);
+    return () => window.removeEventListener('cmb:open-lab-assistant', open);
+  }, []);
+
   // Access is gated server-side in the dashboard layout (staff always,
   // students via whitelist tag); this only guards against signed-out states.
   if (!isSignedIn) return null;

@@ -34,6 +34,10 @@ interface CourseMapProps {
   stops: CourseMapStop[];
   /** Index of the stop the student should do next; -1 when all complete. */
   currentIndex: number;
+  /** Display name of the level this course unlocks when finished (e.g.
+   *  "Intermediate" for the Foundations course); null/omitted when the course
+   *  is the final level or outside the leveled sequence. */
+  nextLevelLabel?: string | null;
 }
 
 // Brand palette from the roadmap PDFs: dark-blue chapter lessons, light-blue
@@ -162,11 +166,13 @@ function StopNode({
   courseId,
   state,
   onLockedTap,
+  unlockNote,
 }: {
   stop: CourseMapStop;
   courseId: string;
   state: StopState;
   onLockedTap: (stop: CourseMapStop) => void;
+  unlockNote?: string | null;
 }) {
   const meta = STYLE_META[stop.mapStyle];
   const locked = state === "locked";
@@ -234,6 +240,14 @@ function StopNode({
       >
         {label}
       </span>
+      {unlockNote && (
+        <span
+          className="mt-1.5 block rounded-lg border-2 border-amber-400/90 bg-amber-400/10 px-2 py-1 text-center text-[10px] font-bold leading-tight text-amber-600 dark:text-amber-300"
+          style={{ maxWidth: 132 }}
+        >
+          {unlockNote}
+        </span>
+      )}
     </>
   );
 
@@ -262,6 +276,7 @@ function BandGrid({
   width,
   courseId,
   stateFor,
+  unlockNoteFor,
   onLockedTap,
 }: {
   band: WeekBand;
@@ -269,14 +284,22 @@ function BandGrid({
   width: number;
   courseId: string;
   stateFor: (index: number) => StopState;
+  unlockNoteFor: (index: number) => string | null;
   onLockedTap: (stop: CourseMapStop) => void;
 }) {
   const n = band.items.length;
   const rows = Math.max(1, Math.ceil(n / columns));
   const cellW = width > 0 ? width / columns : 0;
+  const hasUnlockNote = band.items.some(({ index }) => unlockNoteFor(index));
   // Node centers sit at PAD_TOP + row*ROW_H + 46; leave room below the last
-  // row for the disc and its label.
-  const height = PAD_TOP + (rows - 1) * ROW_H + 46 + DISC / 2 + PAD_BOTTOM;
+  // row for the disc and its label (plus the unlock note when present).
+  const height =
+    PAD_TOP +
+    (rows - 1) * ROW_H +
+    46 +
+    DISC / 2 +
+    PAD_BOTTOM +
+    (hasUnlockNote ? 48 : 0);
 
   // Serpentine (boustrophedon) coordinates for each item in the band.
   const points = band.items.map((_, k) => {
@@ -339,6 +362,7 @@ function BandGrid({
             stop={stop}
             courseId={courseId}
             state={stateFor(index)}
+            unlockNote={unlockNoteFor(index)}
             onLockedTap={onLockedTap}
           />
         </div>
@@ -347,7 +371,12 @@ function BandGrid({
   );
 }
 
-export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
+export function CourseMap({
+  courseId,
+  stops,
+  currentIndex,
+  nextLevelLabel = null,
+}: CourseMapProps) {
   const router = useRouter();
   const [jumpTarget, setJumpTarget] = useState<CourseMapStop | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -393,8 +422,35 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
     return "unlocked";
   };
 
+  // The final stop on the map carries the "unlocks the next level" callout.
+  const unlockNoteFor = (index: number): string | null =>
+    nextLevelLabel && index === stops.length - 1
+      ? `Complete this to unlock the ${nextLevelLabel} level`
+      : null;
+
   return (
     <div ref={containerRef} className="mx-auto w-full max-w-5xl">
+      {/* How unlocking works — shown at the top of every roadmap. */}
+      <div className="mb-2 flex items-start gap-3 rounded-xl border border-border bg-card px-4 py-3">
+        <span
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+          style={{ background: "rgba(46, 58, 151, 0.12)" }}
+        >
+          <Lock className="h-4 w-4" style={{ color: BRAND }} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-foreground">
+            Lessons unlock step by step
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            Complete the previous chapter to view more course content — each
+            stop on the map opens the next one.
+            {nextLevelLabel &&
+              ` Finish this level to unlock the ${nextLevelLabel} level.`}
+          </p>
+        </div>
+      </div>
+
       {bands.map((band, bandIdx) => (
         <section key={bandIdx}>
           {band.label && <BandHeader label={band.label} />}
@@ -404,6 +460,7 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
             width={width}
             courseId={courseId}
             stateFor={stateFor}
+            unlockNoteFor={unlockNoteFor}
             onLockedTap={setJumpTarget}
           />
         </section>
@@ -433,10 +490,14 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
             strokeWidth={2.5}
           />
         </span>
-        <p className="mt-3 max-w-[240px] text-center text-sm font-semibold text-foreground">
+        <p className="mt-3 max-w-[260px] text-center text-sm font-semibold text-foreground">
           {allComplete
-            ? "Congratulations on completing this section!"
-            : "Complete every stop to finish this section"}
+            ? nextLevelLabel
+              ? `Congratulations! You've unlocked the ${nextLevelLabel} level`
+              : "Congratulations on completing this level!"
+            : nextLevelLabel
+              ? `Complete all the lessons here to unlock the ${nextLevelLabel} level`
+              : "Complete all the lessons here to finish this level"}
         </p>
       </div>
 
@@ -450,7 +511,7 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
             <AlertDialogTitle>Jumping ahead?</AlertDialogTitle>
             <AlertDialogDescription>
               {jumpTarget
-                ? `"${jumpTarget.title}" is further along the roadmap. We recommend following the stops in order, but you can jump ahead if you like.`
+                ? `"${jumpTarget.title}" is further along the roadmap. We recommend following the stops in order, but you can jump ahead if you like. Every stop still has to be completed${nextLevelLabel ? ` to unlock the ${nextLevelLabel} level` : " to finish this level"}.`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
