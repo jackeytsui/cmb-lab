@@ -21,6 +21,12 @@ export interface UseTTSReturn {
   preload: (text: string, options?: TTSOptions) => Promise<void>;
   /** Stop current playback immediately */
   stop: () => void;
+  /** Pause current playback, keeping position (resume() continues). */
+  pause: () => void;
+  /** Resume playback paused with pause(). */
+  resume: () => void;
+  /** True while playback is paused (resume() will continue it). */
+  isPaused: boolean;
   /** True while fetching audio from API */
   isLoading: boolean;
   /** True while audio is actively playing */
@@ -168,6 +174,7 @@ async function browserSpeak(
 export function useTTS(): UseTTSReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Refs persist across renders within the component lifecycle
@@ -244,6 +251,31 @@ export function useTTS(): UseTTSReturn {
       window.speechSynthesis.cancel();
     }
     setIsPlaying(false);
+    setIsPaused(false);
+  }, []);
+
+  /** Pause current playback in place; resume() picks up where it left off. */
+  const pause = useCallback(() => {
+    if (audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause();
+      setIsPaused(true);
+    }
+    if ("speechSynthesis" in window && window.speechSynthesis.speaking) {
+      window.speechSynthesis.pause();
+      setIsPaused(true);
+    }
+  }, []);
+
+  /** Resume playback previously paused with pause(). */
+  const resume = useCallback(() => {
+    if (audioRef.current && audioRef.current.paused) {
+      const attempt = audioRef.current.play();
+      if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
+    }
+    if ("speechSynthesis" in window && window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+    setIsPaused(false);
   }, []);
 
   /**
@@ -259,6 +291,7 @@ export function useTTS(): UseTTSReturn {
       try {
         // 1. Stop any current playback to prevent overlap
         stop();
+        setIsPaused(false);
 
         // 2. Reset error state
         setError(null);
@@ -436,5 +469,5 @@ export function useTTS(): UseTTSReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { speak, preload, stop, isLoading, isPlaying, error };
+  return { speak, preload, stop, pause, resume, isPaused, isLoading, isPlaying, error };
 }
