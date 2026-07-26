@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { BookOpen, Lock } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
+import { LockedCourseCard } from "@/components/course-library/LockedCourseCard";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -13,7 +14,9 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import {
+  COURSE_LEVEL_ORDER,
   getCourseLevelInfo,
+  levelLabel,
   type CourseLevelKey,
 } from "@/lib/course-library-levels";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
@@ -113,16 +116,31 @@ export default async function CourseLibraryStudentPage() {
       courseByLevel.set(info.key, course.id);
     }
   }
-  const lockFor = (courseTitle: string): { requiredLabel: string } | null => {
+  // A gated course is locked while ANY earlier level is incomplete: the
+  // Intermediate prompt names Foundations; the Advanced prompt names both
+  // Foundations and Intermediate when both remain unfinished.
+  const lockFor = (
+    courseTitle: string,
+  ): { levelLabel: string; requiredLabels: string[] } | null => {
     if (!currentUser || isStaff) return null;
     const info = getCourseLevelInfo(courseTitle);
     if (!info?.prevKey || grantedLevels.has(info.key)) return null;
-    const prevCourseId = courseByLevel.get(info.prevKey);
-    if (!prevCourseId) return null; // fail-open: no visible previous course
-    const prev = progressByCourse.get(prevCourseId);
-    if (!prev || prev.totalLessons === 0) return null; // fail-open
-    return prev.completedLessons < prev.totalLessons
-      ? { requiredLabel: info.prevLabel ?? "the previous level" }
+    const earlierLevels = COURSE_LEVEL_ORDER.slice(
+      0,
+      COURSE_LEVEL_ORDER.indexOf(info.key),
+    );
+    const requiredLabels: string[] = [];
+    for (const key of earlierLevels) {
+      const prevCourseId = courseByLevel.get(key);
+      if (!prevCourseId) continue; // fail-open: no visible course at this level
+      const prev = progressByCourse.get(prevCourseId);
+      if (!prev || prev.totalLessons === 0) continue; // fail-open
+      if (prev.completedLessons < prev.totalLessons) {
+        requiredLabels.push(levelLabel(key));
+      }
+    }
+    return requiredLabels.length > 0
+      ? { levelLabel: info.label, requiredLabels }
       : null;
   };
 
@@ -157,6 +175,19 @@ export default async function CourseLibraryStudentPage() {
                     )
                   : 0;
               const lock = lockFor(course.title);
+              if (lock) {
+                return (
+                  <LockedCourseCard
+                    key={course.id}
+                    courseId={course.id}
+                    title={course.title}
+                    summary={course.summary}
+                    levelLabel={lock.levelLabel}
+                    hasCoverImage={!!course.coverImageUrl}
+                    requiredLabels={lock.requiredLabels}
+                  />
+                );
+              }
 
               return (
                 <Link
@@ -170,23 +201,11 @@ export default async function CourseLibraryStudentPage() {
                       <img
                         src={`/api/course-library/course-image/${course.id}`}
                         alt={course.title}
-                        className={
-                          lock
-                            ? "w-full h-full object-cover opacity-50 grayscale"
-                            : "w-full h-full object-cover"
-                        }
+                        className="w-full h-full object-cover"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
                         <BookOpen className="w-12 h-12" />
-                      </div>
-                    )}
-                    {lock && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-background/95 border border-border px-3 py-1.5 text-[11px] font-bold text-foreground shadow">
-                          <Lock className="w-3.5 h-3.5" />
-                          Finish {lock.requiredLabel} to unlock
-                        </span>
                       </div>
                     )}
                   </div>

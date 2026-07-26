@@ -490,14 +490,14 @@ export function CourseMap({
             strokeWidth={2.5}
           />
         </span>
-        <p className="mt-3 max-w-[240px] text-center text-sm font-semibold text-foreground">
+        <p className="mt-3 max-w-[260px] text-center text-sm font-semibold text-foreground">
           {allComplete
             ? nextLevelLabel
               ? `Congratulations! You've unlocked the ${nextLevelLabel} level`
-              : "Congratulations on completing this section!"
+              : "Congratulations on completing this level!"
             : nextLevelLabel
-              ? `Complete every stop to unlock the ${nextLevelLabel} level`
-              : "Complete every stop to finish this section"}
+              ? `Complete all the lessons here to unlock the ${nextLevelLabel} level`
+              : "Complete all the lessons here to finish this level"}
         </p>
       </div>
 
@@ -511,7 +511,7 @@ export function CourseMap({
             <AlertDialogTitle>Jumping ahead?</AlertDialogTitle>
             <AlertDialogDescription>
               {jumpTarget
-                ? `"${jumpTarget.title}" is further along the roadmap. We recommend following the stops in order, but you can jump ahead if you like.`
+                ? `"${jumpTarget.title}" is further along the roadmap. We recommend following the stops in order, but you can jump ahead if you like. Every stop still has to be completed${nextLevelLabel ? ` to unlock the ${nextLevelLabel} level` : " to finish this level"}.`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>

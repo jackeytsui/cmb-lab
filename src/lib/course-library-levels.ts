@@ -65,6 +65,13 @@ export function levelLabel(key: CourseLevelKey): string {
   return LEVEL_SEQUENCE.find((step) => step.key === key)?.label ?? key;
 }
 
+/** All levels in course order, first to last. */
+export const COURSE_LEVEL_ORDER: CourseLevelKey[] = [
+  "foundations",
+  "intermediate",
+  "advanced",
+];
+
 /** Gated levels in unlock order (used to find a student's next locked level). */
 export const GATED_LEVELS: GatedCourseLevelKey[] = ["intermediate", "advanced"];
 
