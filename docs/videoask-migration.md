@@ -28,11 +28,15 @@ VideoAsk is a hosted SaaS (by Typeform); we access our data via its REST API.
 | Question fields | `question_id`, `type` (`standard`, `multiple_choice`, `thank_you`, …), `overlay_text`/`title`/`label`, `media_url` (CDN mp4), `thumbnail`, `allowed_answer_media_types` (`video`/`audio`/`text`), `options[]` with per-option logic-jump targets, question-level default jump |
 | Responses | `GET /forms/{form_id}/conversations` (**capped at ~100 responses per form via API**) and `GET /forms/{form_id}/contacts/{contact_id}?include_answers=true` |
 
-The API has used several field spellings for logic-jump targets over the
-years. The transform reads all known variants
-(`target_question_id`, `jump_to_question_id`, `next_question_id`,
-`target.question_id`); the raw export is kept on disk so any unrecognized
-shape can be added to the transform and re-imported without re-exporting.
+Field shapes were verified against a full export of our account
+(2026-07-26, 439 forms / 4,336 questions): question `type` is `standard` or
+`poll`, choices live in `poll_options[]` (`content` = label), and all
+branching lives in `logic_actions[]` — `op: "always"` for default jumps,
+`op: "is"` (question + option vars) for option-conditional jumps, with
+targets of type `question`, `goodbye` (end screen), or `url` (external
+link, 8 occurrences account-wide). `canvas_metadata.positions` preserves
+the builder layout. The raw export is kept on disk so the import can be
+tuned and re-run without re-exporting.
 
 ### CMB Lab (destination)
 
@@ -139,16 +143,21 @@ Useful flags: `--forms id1,id2` (specific forms), `--limit N`,
 
 ## 4. Small-batch test & confirmation
 
-### Validated offline (done, in CI-able form)
+### Validated (done)
 
-- `npx vitest run src/lib/__tests__/videoask-migration.test.ts` — 14 tests
-  covering option→logic mapping across API field spellings, response-type
-  mapping, end-screen detection, unresolved-target safety, and the
-  idempotency marker.
-- CLI dry-run against a fixture export (3-question branching form) produced
-  the expected thread plan: MC step with two jumps, audio step with default
-  jump, end screen.
-- Full project typecheck passes with the new script and transform.
+- **Full account export completed 2026-07-26**: 439 forms / 4,336 questions
+  saved to `.migration/videoask/` (local, gitignored). All media is on
+  `media.videoask.com` except one Vimeo player URL (ingest for that one is
+  skipped with a warning; the step keeps the URL fallback).
+- **Dry-run over the entire real export**: 432 threads would be created,
+  7 empty forms skipped, 0 unresolved logic targets, 0 cross-question
+  conditions, 8 external-URL jumps flagged for manual follow-up (links to
+  YouTube/Spotify/booking pages — not representable in the thread player).
+- `npx vitest run src/lib/__tests__/videoask-migration.test.ts` — 15 tests
+  covering poll→multiple-choice mapping, `logic_actions` translation
+  (always/is/goodbye/url), synthetic end screens, canvas position scaling,
+  unresolved-target safety, and the idempotency marker.
+- Full project typecheck and lint pass with the new script and transform.
 
 ### Live small-batch runbook (needs VideoAsk + DB + Mux credentials)
 

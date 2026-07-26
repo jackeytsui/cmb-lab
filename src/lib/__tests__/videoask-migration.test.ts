@@ -4,54 +4,98 @@ import {
   resolveStepConnections,
   videoaskMarker,
   extractVideoaskFormId,
+  GOODBYE_TARGET,
   type VideoAskForm,
 } from "../videoask-migration";
 
 /**
- * Fixture modeled on a real VideoAsk form export:
- * q1 welcome video with two buttons that branch,
- * q2 audio-response question, q3 text question, q4 thank-you end screen.
+ * Fixture mirroring the real export shape (verified against the 439-form
+ * account export of 2026-07-26): questions use `poll_options` for choices
+ * and `logic_actions` for branching (`op: "always"` default jumps,
+ * `op: "is"` option-conditional jumps, targets question/goodbye/url).
  */
 const fixtureForm: VideoAskForm = {
   form_id: "abc123FormId",
   title: "Placement Check-in",
-  description: "Weekly speaking check-in",
+  status: "active",
   share_url: "https://www.videoask.com/fabc123",
-  respondents_count: 42,
+  canvas_metadata: {
+    positions: {
+      "question:q1": { x: 0, y: 0 },
+      "question:q2": { x: 480, y: 0 },
+      "question:q3": { x: 960, y: 300 },
+    },
+  },
   questions: [
     {
       question_id: "q1",
-      type: "multiple_choice",
-      overlay_text: "Ready to practice?",
+      type: "poll",
+      label: "1 Ready to practice?",
       media_type: "video",
       media_url: "https://media.videoask.com/q1.mp4",
       thumbnail: "https://media.videoask.com/q1.jpg",
-      options: [
-        { option_id: "o1", label: "Yes, let's go", target_question_id: "q2" },
-        { option_id: "o2", label: "Just browsing", jump_to_question_id: "q4" },
+      media_duration: 12.6,
+      poll_options: [
+        { id: "opt-yes", option_id: "opt-yes", content: "Yes, let's go" },
+        { id: "opt-no", option_id: "opt-no", content: "Just browsing" },
+      ],
+      logic_actions: [
+        {
+          action: "jump",
+          details: { to: { type: "question", value: "q2" } },
+          condition: {
+            op: "is",
+            vars: [
+              { type: "question", value: "q1" },
+              { type: "option", value: "opt-yes" },
+            ],
+          },
+        },
+        {
+          action: "jump",
+          details: { to: { type: "goodbye", value: "default" } },
+          condition: {
+            op: "is",
+            vars: [
+              { type: "question", value: "q1" },
+              { type: "option", value: "opt-no" },
+            ],
+          },
+        },
+        {
+          action: "jump",
+          details: { to: { type: "question", value: "q2" } },
+          condition: { op: "always", vars: [] },
+        },
       ],
     },
     {
       question_id: "q2",
       type: "standard",
-      title: "Record your answer in Mandarin",
-      media_type: "video",
+      label: "2 Record this week's phrase",
       media_url: "https://media.videoask.com/q2.mp4",
       allowed_answer_media_types: ["audio", "video"],
-      jump_to_question_id: "q3",
+      logic_actions: [
+        {
+          action: "jump",
+          details: { to: { type: "question", value: "q3" } },
+          condition: { op: "always", vars: [] },
+        },
+      ],
     },
     {
       question_id: "q3",
       type: "standard",
-      label: "Type the sentence",
+      label: "3 Book your call",
       media_url: "https://media.videoask.com/q3.mp4",
       allowed_answer_media_types: ["text"],
-    },
-    {
-      question_id: "q4",
-      type: "thank_you",
-      overlay_text: "Thanks — see you next week!",
-      media_url: "https://media.videoask.com/q4.mp4",
+      logic_actions: [
+        {
+          action: "jump",
+          details: { to: { type: "url", value: "https://calendly.com/x" } },
+          condition: { op: "always", vars: [] },
+        },
+      ],
     },
   ],
 };
@@ -62,18 +106,20 @@ describe("transformForm", () => {
   it("maps form metadata and embeds the idempotency marker", () => {
     expect(thread.vaFormId).toBe("abc123FormId");
     expect(thread.title).toBe("Placement Check-in");
-    expect(thread.description).toContain("Weekly speaking check-in");
     expect(thread.description).toContain(videoaskMarker("abc123FormId"));
-    expect(thread.respondentsCount).toBe(42);
+    expect(thread.status).toBe("active");
   });
 
-  it("produces one step per question with stable sort order and positions", () => {
+  it("appends a synthetic goodbye end screen when jumps target goodbye", () => {
     expect(thread.steps).toHaveLength(4);
-    expect(thread.steps.map((s) => s.sortOrder)).toEqual([0, 1, 2, 3]);
-    expect(thread.steps[0].positionX).toBeLessThan(thread.steps[1].positionX);
+    const goodbye = thread.steps[3];
+    expect(goodbye.vaQuestionId).toBe(GOODBYE_TARGET);
+    expect(goodbye.isEndScreen).toBe(true);
+    expect(goodbye.responseType).toBe("button");
+    expect(goodbye.mediaUrl).toBeNull();
   });
 
-  it("maps option questions to multiple_choice with label/value options", () => {
+  it("maps poll questions to multiple_choice with content-based options", () => {
     const q1 = thread.steps[0];
     expect(q1.responseType).toBe("multiple_choice");
     expect(q1.responseOptions?.options).toEqual([
@@ -82,60 +128,83 @@ describe("transformForm", () => {
     ]);
   });
 
-  it("captures option jumps across API field spellings", () => {
+  it("translates op:is logic_actions into option jumps keyed by option content", () => {
     const q1 = thread.steps[0];
     expect(q1.optionJumps).toEqual([
       { optionValue: "Yes, let's go", vaTargetQuestionId: "q2" },
-      { optionValue: "Just browsing", vaTargetQuestionId: "q4" },
+      { optionValue: "Just browsing", vaTargetQuestionId: GOODBYE_TARGET },
     ]);
+    // op:always coexists as the default jump
+    expect(q1.defaultJumpVaQuestionId).toBe("q2");
   });
 
-  it("maps allowed answer media types to response types", () => {
+  it("translates op:always logic_actions into default jumps", () => {
     const q2 = thread.steps[1];
     expect(q2.responseType).toBe("audio");
     expect(q2.allowedResponseTypes).toEqual(["audio", "video"]);
     expect(q2.defaultJumpVaQuestionId).toBe("q3");
+    expect(q2.optionJumps).toEqual([]);
+  });
 
+  it("surfaces external url jumps instead of wiring them", () => {
     const q3 = thread.steps[2];
-    expect(q3.responseType).toBe("text");
-    expect(q3.allowedResponseTypes).toBeNull();
+    expect(q3.externalUrlJumps).toEqual(["https://calendly.com/x"]);
+    expect(q3.defaultJumpVaQuestionId).toBeNull();
   });
 
-  it("marks thank-you questions as end screens with button type", () => {
-    const q4 = thread.steps[3];
-    expect(q4.responseType).toBe("button");
-    expect(q4.isEndScreen).toBe(true);
+  it("scales canvas positions into builder coordinates", () => {
+    const [q1, q2, q3] = thread.steps;
+    expect(q1.positionX).toBe(60); // 0 scaled + offset
+    expect(q2.positionX).toBe(60 + 320); // 480 / 1.5
+    expect(q3.positionX).toBe(60 + 640); // 960 / 1.5
+    expect(q3.positionY).toBe(150 + 200); // 300 / 1.5
   });
 
-  it("keeps media urls for the Mux ingest phase", () => {
-    expect(thread.steps.map((s) => s.mediaUrl)).toEqual([
-      "https://media.videoask.com/q1.mp4",
-      "https://media.videoask.com/q2.mp4",
-      "https://media.videoask.com/q3.mp4",
-      "https://media.videoask.com/q4.mp4",
-    ]);
+  it("keeps media urls and durations for the Mux ingest phase", () => {
+    expect(thread.steps[0].mediaUrl).toBe("https://media.videoask.com/q1.mp4");
+    expect(thread.steps[0].mediaDurationSeconds).toBe(13);
   });
 
-  it("falls back to a generated title when the form has none", () => {
-    const untitled = transformForm({ form_id: "xyz" });
-    expect(untitled.title).toBe("VideoAsk xyz");
-    expect(untitled.steps).toHaveLength(0);
-  });
-
-  it("marks a trailing no-answer question as an end screen even without type", () => {
-    const linear = transformForm({
-      form_id: "lin",
+  it("counts cross-question conditions instead of miswiring them", () => {
+    const crossForm = transformForm({
+      form_id: "cross",
       questions: [
         {
           question_id: "a",
+          type: "standard",
           allowed_answer_media_types: ["text"],
-          media_url: "https://media.videoask.com/a.mp4",
+          logic_actions: [
+            {
+              action: "jump",
+              details: { to: { type: "question", value: "a" } },
+              condition: {
+                op: "is",
+                vars: [
+                  { type: "question", value: "other-question" },
+                  { type: "option", value: "opt-x" },
+                ],
+              },
+            },
+          ],
         },
-        { question_id: "b", media_url: "https://media.videoask.com/b.mp4" },
       ],
     });
-    expect(linear.steps[1].responseType).toBe("button");
-    expect(linear.steps[1].isEndScreen).toBe(true);
+    expect(crossForm.steps[0].crossQuestionConditions).toBe(1);
+    expect(crossForm.steps[0].optionJumps).toEqual([]);
+  });
+
+  it("falls back to index-based positions and generated titles", () => {
+    const bare = transformForm({
+      form_id: "xyz",
+      questions: [
+        { question_id: "only", type: "standard" },
+      ],
+    });
+    expect(bare.title).toBe("VideoAsk xyz");
+    expect(bare.steps[0].positionX).toBe(60);
+    // No answers collected and nothing after it → end screen
+    expect(bare.steps[0].responseType).toBe("button");
+    expect(bare.steps[0].isEndScreen).toBe(true);
   });
 });
 
@@ -145,16 +214,16 @@ describe("resolveStepConnections", () => {
     ["q1", "uuid-1"],
     ["q2", "uuid-2"],
     ["q3", "uuid-3"],
-    ["q4", "uuid-4"],
+    [GOODBYE_TARGET, "uuid-end"],
   ]);
 
-  it("resolves option jumps into legacy logic entries", () => {
+  it("resolves option jumps (including goodbye) into legacy logic entries", () => {
     const q1 = resolveStepConnections(thread.steps[0], idMap);
     expect(q1.logic).toEqual([
       { condition: "Yes, let's go", nextStepId: "uuid-2" },
-      { condition: "Just browsing", nextStepId: "uuid-4" },
+      { condition: "Just browsing", nextStepId: "uuid-end" },
     ]);
-    expect(q1.fallbackStepId).toBeNull();
+    expect(q1.fallbackStepId).toBe("uuid-2");
     expect(q1.unresolved).toEqual([]);
   });
 
@@ -168,15 +237,13 @@ describe("resolveStepConnections", () => {
     const partialMap = new Map([["q1", "uuid-1"]]);
     const q1 = resolveStepConnections(thread.steps[0], partialMap);
     expect(q1.logic).toBeNull();
-    expect(q1.unresolved).toEqual(["q2", "q4"]);
+    expect(q1.unresolved).toEqual(["q2", GOODBYE_TARGET, "q2"]);
   });
 });
 
 describe("idempotency marker", () => {
   it("round-trips through a thread description", () => {
-    const description = `Some notes\n\nMigrated from VideoAsk. ${videoaskMarker(
-      "form_42-A"
-    )}`;
+    const description = `Migrated from VideoAsk. ${videoaskMarker("form_42-A")}`;
     expect(extractVideoaskFormId(description)).toBe("form_42-A");
   });
 

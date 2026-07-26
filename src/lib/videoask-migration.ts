@@ -5,16 +5,22 @@
  * GET https://api.videoask.com/forms/{form_id}) into the normalized shape
  * the CMB Lab video-threads system stores:
  *
- *   VideoAsk form      → videoThreads row
- *   VideoAsk question  → videoThreadSteps row (media ingested to Mux separately)
- *   option logic jumps → step.logic  [{ condition, nextStepId }]
- *   default jump       → step.fallbackStepId
+ *   VideoAsk form           → videoThreads row
+ *   VideoAsk question       → videoThreadSteps row (media ingested to Mux separately)
+ *   logic_actions op "is"   → step.logic  [{ condition: optionContent, nextStepId }]
+ *   logic_actions op "always" → step.fallbackStepId
+ *   jump to "goodbye"       → synthetic end-screen step appended to the thread
+ *   canvas_metadata         → step positions (scaled to the React Flow builder)
  *
- * The VideoAsk API has shipped several field spellings for logic jumps over
- * the years, so target extraction is deliberately tolerant. The migration
- * script keeps the raw JSON export on disk, so if a real export uses a shape
- * not covered here, add it to `extractOptionTarget` / `extractDefaultTarget`
- * and re-run the import — no need to re-export.
+ * Field shapes here were verified against a real export of all 439 forms in
+ * the CantoMando VideoAsk account (2026-07-26):
+ *   - question.type is "standard" or "poll"
+ *   - choices live in question.poll_options[] with `content` labels
+ *   - branching lives in question.logic_actions[]:
+ *       { action: "jump",
+ *         details: { to: { type: "question"|"goodbye"|"url", value } },
+ *         condition: { op: "always"|"is",
+ *                      vars: [{type:"question",value},{type:"option",value}] } }
  *
  * No I/O happens here — fetching, Mux ingest, and DB writes live in
  * scripts/migrate-videoask.ts. That keeps this file unit-testable
@@ -22,47 +28,59 @@
  */
 
 // ---------------------------------------------------------------------------
-// VideoAsk API shapes (only fields we read; everything optional but ids)
+// VideoAsk API shapes (only fields we read)
 // ---------------------------------------------------------------------------
 
-export interface VideoAskOption {
-  option_id?: string | null;
-  label?: string | null;
+export interface VideoAskLogicVar {
+  type?: string | null; // "question" | "option"
   value?: string | null;
-  // Logic jump target — spelling varies by API era
-  target_question_id?: string | null;
-  jump_to_question_id?: string | null;
-  next_question_id?: string | null;
-  target?: { question_id?: string | null } | null;
+}
+
+export interface VideoAskLogicAction {
+  action?: string | null; // "jump"
+  details?: {
+    to?: { type?: string | null; value?: string | null } | null;
+  } | null;
+  condition?: {
+    op?: string | null; // "always" | "is"
+    vars?: VideoAskLogicVar[] | null;
+  } | null;
+}
+
+export interface VideoAskPollOption {
+  id?: string | null;
+  option_id?: string | null;
+  content?: string | null;
+  ref?: string | null;
 }
 
 export interface VideoAskQuestion {
   question_id: string;
-  type?: string | null; // "standard", "multiple_choice", "thank_you", ...
+  type?: string | null; // "standard" | "poll"
   label?: string | null;
   title?: string | null;
-  overlay_text?: string | null;
   transcription?: string | null;
   media_type?: string | null;
   media_url?: string | null;
+  media_duration?: number | null;
   thumbnail?: string | null;
   share_url?: string | null;
   allowed_answer_media_types?: string[] | null;
-  options?: VideoAskOption[] | null;
-  // Question-level default jump — spelling varies by API era
-  jump_to_question_id?: string | null;
-  default_target_question_id?: string | null;
-  target?: { question_id?: string | null } | null;
+  poll_options?: VideoAskPollOption[] | null;
+  allow_multiple_selection?: boolean | null;
+  logic_actions?: VideoAskLogicAction[] | null;
 }
 
 export interface VideoAskForm {
   form_id: string;
   title?: string | null;
-  label?: string | null;
-  description?: string | null;
+  status?: string | null;
   share_url?: string | null;
   respondents_count?: number | null;
   questions?: VideoAskQuestion[] | null;
+  canvas_metadata?: {
+    positions?: Record<string, { x?: number | null; y?: number | null }> | null;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,19 +94,31 @@ export type StepResponseType =
   | "multiple_choice"
   | "button";
 
+/**
+ * Sentinel jump target for VideoAsk's "goodbye" end screen. The transform
+ * appends one synthetic end step per thread and registers it in the id map
+ * under this key, so goodbye jumps resolve like any question jump.
+ */
+export const GOODBYE_TARGET = "__goodbye__";
+
 export interface NormalizedStep {
-  /** Original VideoAsk question_id — used to wire logic after DB insert */
+  /** Original VideoAsk question_id (or GOODBYE_TARGET for the synthetic end step) */
   vaQuestionId: string;
   promptText: string | null;
   responseType: StepResponseType;
   allowedResponseTypes: StepResponseType[] | null;
   responseOptions: { options: { label: string; value: string }[] } | null;
-  /** Per-option logic jumps, targets still in VideoAsk question ids */
+  /** Per-option jumps; target is a VideoAsk question id or GOODBYE_TARGET */
   optionJumps: { optionValue: string; vaTargetQuestionId: string }[];
-  /** Question-level default jump, target still a VideoAsk question id */
+  /** Unconditional jump; a VideoAsk question id or GOODBYE_TARGET */
   defaultJumpVaQuestionId: string | null;
+  /** Jumps to external URLs — not supported by the thread player, surfaced for review */
+  externalUrlJumps: string[];
+  /** Conditions referencing other questions — can't map to the player's per-step logic */
+  crossQuestionConditions: number;
   mediaUrl: string | null;
   thumbnailUrl: string | null;
+  mediaDurationSeconds: number | null;
   isEndScreen: boolean;
   sortOrder: number;
   positionX: number;
@@ -100,6 +130,7 @@ export interface NormalizedThread {
   title: string;
   description: string;
   shareUrl: string | null;
+  status: string | null;
   respondentsCount: number | null;
   steps: NormalizedStep[];
 }
@@ -130,37 +161,6 @@ export function extractVideoaskFormId(
 }
 
 // ---------------------------------------------------------------------------
-// Target extraction (tolerant across VideoAsk API field spellings)
-// ---------------------------------------------------------------------------
-
-function extractOptionTarget(option: VideoAskOption): string | null {
-  return (
-    option.target_question_id ??
-    option.jump_to_question_id ??
-    option.next_question_id ??
-    option.target?.question_id ??
-    null
-  );
-}
-
-function extractDefaultTarget(question: VideoAskQuestion): string | null {
-  return (
-    question.jump_to_question_id ??
-    question.default_target_question_id ??
-    question.target?.question_id ??
-    null
-  );
-}
-
-function optionValue(option: VideoAskOption, index: number): string {
-  return option.value ?? option.label ?? option.option_id ?? `option_${index + 1}`;
-}
-
-function optionLabel(option: VideoAskOption, index: number): string {
-  return option.label ?? option.value ?? `Option ${index + 1}`;
-}
-
-// ---------------------------------------------------------------------------
 // Response type mapping
 // ---------------------------------------------------------------------------
 
@@ -174,7 +174,7 @@ function mapResponseTypes(question: VideoAskQuestion): {
   responseType: StepResponseType;
   allowedResponseTypes: StepResponseType[] | null;
 } {
-  if (question.options && question.options.length > 0) {
+  if (question.poll_options && question.poll_options.length > 0) {
     return { responseType: "multiple_choice", allowedResponseTypes: null };
   }
 
@@ -193,65 +193,189 @@ function mapResponseTypes(question: VideoAskQuestion): {
   };
 }
 
-function isEndScreenQuestion(question: VideoAskQuestion): boolean {
-  const type = (question.type ?? "").toLowerCase();
-  if (type.includes("thank") || type.includes("end")) return true;
-  return false;
+function optionContent(option: VideoAskPollOption, index: number): string {
+  return option.content ?? option.option_id ?? option.id ?? `Option ${index + 1}`;
+}
+
+// ---------------------------------------------------------------------------
+// Logic actions → jumps
+// ---------------------------------------------------------------------------
+
+interface ExtractedJumps {
+  optionJumps: { optionValue: string; vaTargetQuestionId: string }[];
+  defaultJump: string | null;
+  externalUrlJumps: string[];
+  crossQuestionConditions: number;
+}
+
+function extractJumps(question: VideoAskQuestion): ExtractedJumps {
+  const optionContentById = new Map<string, string>();
+  (question.poll_options ?? []).forEach((opt, i) => {
+    const content = optionContent(opt, i);
+    if (opt.option_id) optionContentById.set(opt.option_id, content);
+    if (opt.id) optionContentById.set(opt.id, content);
+  });
+
+  const result: ExtractedJumps = {
+    optionJumps: [],
+    defaultJump: null,
+    externalUrlJumps: [],
+    crossQuestionConditions: 0,
+  };
+
+  for (const action of question.logic_actions ?? []) {
+    if (action.action !== "jump") continue;
+    const to = action.details?.to;
+    if (!to?.type) continue;
+
+    if (to.type === "url") {
+      if (to.value) result.externalUrlJumps.push(to.value);
+      continue;
+    }
+
+    const target =
+      to.type === "goodbye" ? GOODBYE_TARGET : to.type === "question" ? to.value : null;
+    if (!target) continue;
+
+    const op = action.condition?.op ?? "always";
+
+    if (op === "always") {
+      // Last "always" wins if several exist (VideoAsk UIs only produce one)
+      result.defaultJump = target;
+      continue;
+    }
+
+    if (op === "is") {
+      const vars = action.condition?.vars ?? [];
+      const questionVar = vars.find((v) => v.type === "question")?.value;
+      const optionVar = vars.find((v) => v.type === "option")?.value;
+
+      // The player evaluates step.logic against the CURRENT step's answer, so
+      // only same-question conditions can be wired. Cross-question conditions
+      // are counted and surfaced for manual review.
+      if (questionVar && questionVar !== question.question_id) {
+        result.crossQuestionConditions++;
+        continue;
+      }
+
+      const content = optionVar ? optionContentById.get(optionVar) : undefined;
+      if (content) {
+        result.optionJumps.push({
+          optionValue: content,
+          vaTargetQuestionId: target,
+        });
+      } else {
+        result.crossQuestionConditions++;
+      }
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Canvas positions
+// ---------------------------------------------------------------------------
+
+// VideoAsk's canvas spaces nodes ~480px apart; the CMB builder uses ~320px.
+const POSITION_SCALE = 1 / 1.5;
+const NODE_SPACING_X = 320;
+const NODE_START_X = 60;
+const NODE_Y = 150;
+
+function stepPosition(
+  form: VideoAskForm,
+  questionId: string,
+  index: number
+): { x: number; y: number } {
+  const pos = form.canvas_metadata?.positions?.[`question:${questionId}`];
+  if (pos && typeof pos.x === "number") {
+    return {
+      x: NODE_START_X + Math.round(pos.x * POSITION_SCALE),
+      y: NODE_Y + Math.round((pos.y ?? 0) * POSITION_SCALE),
+    };
+  }
+  return { x: NODE_START_X + index * NODE_SPACING_X, y: NODE_Y };
 }
 
 // ---------------------------------------------------------------------------
 // Form → normalized thread
 // ---------------------------------------------------------------------------
 
-const NODE_SPACING_X = 320;
-const NODE_START_X = 60;
-const NODE_Y = 150;
+const GOODBYE_PROMPT = "You're all done — thanks!";
 
 export function transformForm(form: VideoAskForm): NormalizedThread {
   const questions = form.questions ?? [];
-  const title = form.title ?? form.label ?? `VideoAsk ${form.form_id}`;
+  const title = form.title ?? `VideoAsk ${form.form_id}`;
 
-  const descriptionParts = [
-    form.description?.trim(),
-    `Migrated from VideoAsk. ${videoaskMarker(form.form_id)}`,
-  ].filter(Boolean);
+  const description = `Migrated from VideoAsk. ${videoaskMarker(form.form_id)}`;
 
   const steps: NormalizedStep[] = questions.map((question, index) => {
     const { responseType, allowedResponseTypes } = mapResponseTypes(question);
+    const jumps = extractJumps(question);
 
-    const options = (question.options ?? []).map((opt, i) => ({
-      label: optionLabel(opt, i),
-      value: optionValue(opt, i),
-    }));
-
-    const optionJumps = (question.options ?? []).flatMap((opt, i) => {
-      const target = extractOptionTarget(opt);
-      return target
-        ? [{ optionValue: optionValue(opt, i), vaTargetQuestionId: target }]
-        : [];
+    const options = (question.poll_options ?? []).map((opt, i) => {
+      const content = optionContent(opt, i);
+      return { label: content, value: content };
     });
+
+    const { x, y } = stepPosition(form, question.question_id, index);
 
     return {
       vaQuestionId: question.question_id,
-      promptText:
-        question.overlay_text ?? question.title ?? question.label ?? null,
+      promptText: question.title ?? question.label ?? null,
       responseType,
       allowedResponseTypes,
       responseOptions: options.length > 0 ? { options } : null,
-      optionJumps,
-      defaultJumpVaQuestionId: extractDefaultTarget(question),
+      optionJumps: jumps.optionJumps,
+      defaultJumpVaQuestionId: jumps.defaultJump,
+      externalUrlJumps: jumps.externalUrlJumps,
+      crossQuestionConditions: jumps.crossQuestionConditions,
       mediaUrl: question.media_url ?? null,
       thumbnailUrl: question.thumbnail ?? null,
-      isEndScreen: isEndScreenQuestion(question),
+      mediaDurationSeconds:
+        typeof question.media_duration === "number"
+          ? Math.round(question.media_duration)
+          : null,
+      isEndScreen: false,
       sortOrder: index,
-      positionX: NODE_START_X + index * NODE_SPACING_X,
-      positionY: NODE_Y,
+      positionX: x,
+      positionY: y,
     };
   });
 
-  // A question nothing jumps to and that collects no answer at the end of the
-  // form acts as an end screen even without an explicit type.
-  if (steps.length > 0) {
+  // Any jump to VideoAsk's "goodbye" screen needs a landing step, otherwise
+  // the player's implicit sortOrder+1 fallthrough would continue past the
+  // intended end of a branch. Append one synthetic end screen and route all
+  // goodbye jumps to it.
+  const needsGoodbye = steps.some(
+    (s) =>
+      s.defaultJumpVaQuestionId === GOODBYE_TARGET ||
+      s.optionJumps.some((j) => j.vaTargetQuestionId === GOODBYE_TARGET)
+  );
+
+  if (needsGoodbye) {
+    const rightmostX = Math.max(...steps.map((s) => s.positionX), 0);
+    steps.push({
+      vaQuestionId: GOODBYE_TARGET,
+      promptText: GOODBYE_PROMPT,
+      responseType: "button",
+      allowedResponseTypes: null,
+      responseOptions: null,
+      optionJumps: [],
+      defaultJumpVaQuestionId: null,
+      externalUrlJumps: [],
+      crossQuestionConditions: 0,
+      mediaUrl: null,
+      thumbnailUrl: null,
+      mediaDurationSeconds: null,
+      isEndScreen: true,
+      sortOrder: steps.length,
+      positionX: rightmostX + NODE_SPACING_X,
+      positionY: NODE_Y,
+    });
+  } else if (steps.length > 0) {
+    // Linear form with no explicit goodbye: the last step ends the thread.
     const last = steps[steps.length - 1];
     if (last.responseType === "button" && last.optionJumps.length === 0) {
       last.isEndScreen = true;
@@ -261,8 +385,9 @@ export function transformForm(form: VideoAskForm): NormalizedThread {
   return {
     vaFormId: form.form_id,
     title,
-    description: descriptionParts.join("\n\n"),
+    description,
     shareUrl: form.share_url ?? null,
+    status: form.status ?? null,
     respondentsCount: form.respondents_count ?? null,
     steps,
   };
@@ -275,13 +400,14 @@ export function transformForm(form: VideoAskForm): NormalizedThread {
 export interface ResolvedConnections {
   logic: StepLogicEntry[] | null;
   fallbackStepId: string | null;
-  /** VideoAsk question ids referenced by jumps but missing from the id map */
+  /** Jump targets missing from the id map (never silently written) */
   unresolved: string[];
 }
 
 /**
  * Convert a step's VideoAsk-id jumps into DB uuids.
- * `idMap` maps vaQuestionId → inserted videoThreadSteps.id.
+ * `idMap` maps vaQuestionId → inserted videoThreadSteps.id, and must include
+ * GOODBYE_TARGET when the thread has a synthetic end step.
  */
 export function resolveStepConnections(
   step: NormalizedStep,

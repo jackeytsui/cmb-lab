@@ -223,12 +223,12 @@ async function runExport(args: CliArgs): Promise<void> {
     const questionCount = detail.questions?.length ?? 0;
     manifest.forms.push({
       formId: detail.form_id,
-      title: detail.title ?? detail.label ?? null,
+      title: detail.title ?? null,
       questions: questionCount,
       respondents: detail.respondents_count ?? null,
     });
     console.log(
-      `  exported ${detail.form_id}  "${detail.title ?? detail.label ?? "(untitled)"}"  ${questionCount} question(s)`
+      `  exported ${detail.form_id}  "${detail.title ?? "(untitled)"}"  ${questionCount} question(s)`
     );
   }
 
@@ -283,9 +283,17 @@ async function loadExportedForms(args: CliArgs): Promise<VideoAskForm[]> {
 }
 
 function printDryRun(threads: NormalizedThread[]): void {
+  let empty = 0;
   for (const thread of threads) {
-    console.log(`\nThread: "${thread.title}"  (videoask form ${thread.vaFormId})`);
-    console.log(`  ${thread.steps.length} step(s), ${thread.respondentsCount ?? "?"} historical respondents (not migrated)`);
+    if (thread.steps.length === 0) {
+      empty++;
+      console.log(`\nThread: "${thread.title}" (${thread.vaFormId}) — 0 questions, would be SKIPPED`);
+      continue;
+    }
+    console.log(
+      `\nThread: "${thread.title}"  (videoask form ${thread.vaFormId}, status ${thread.status ?? "?"})`
+    );
+    console.log(`  ${thread.steps.length} step(s)`);
     for (const step of thread.steps) {
       const jumps =
         step.optionJumps.length > 0
@@ -294,13 +302,24 @@ function printDryRun(threads: NormalizedThread[]): void {
       const fallback = step.defaultJumpVaQuestionId
         ? ` default→${step.defaultJumpVaQuestionId}`
         : "";
+      const warnings = [
+        ...step.externalUrlJumps.map((u) => `URL jump (unsupported): ${u}`),
+        ...(step.crossQuestionConditions > 0
+          ? [`${step.crossQuestionConditions} cross-question condition(s) left unwired`]
+          : []),
+      ];
       console.log(
         `  [${step.sortOrder}] ${step.responseType}${step.isEndScreen ? " (end screen)" : ""}` +
           `  media=${step.mediaUrl ? "yes" : "no"}  "${(step.promptText ?? "").slice(0, 60)}"${jumps}${fallback}`
       );
+      for (const warning of warnings) console.log(`      ⚠ ${warning}`);
     }
   }
-  console.log(`\nDry run: ${threads.length} thread(s) would be created. No writes performed.`);
+  console.log(
+    `\nDry run: ${threads.length - empty} thread(s) would be created` +
+      (empty ? `, ${empty} empty form(s) skipped` : "") +
+      ". No writes performed."
+  );
 }
 
 async function runImport(args: CliArgs): Promise<void> {
@@ -351,6 +370,11 @@ async function runImport(args: CliArgs): Promise<void> {
   let skipped = 0;
 
   for (const thread of threads) {
+    if (thread.steps.length === 0) {
+      console.log(`SKIP  "${thread.title}" (${thread.vaFormId}) — form has no questions.`);
+      skipped++;
+      continue;
+    }
     const marker = videoaskMarker(thread.vaFormId);
 
     // Idempotency: skip (or replace) forms already migrated
@@ -400,12 +424,22 @@ async function runImport(args: CliArgs): Promise<void> {
           continue;
         }
 
-        const asset = await mux.video.assets.create({
-          inputs: [{ url: step.mediaUrl }],
-          playback_policies: ["public"],
-          encoding_tier: "baseline",
-          passthrough: syntheticUploadId,
-        });
+        let asset;
+        try {
+          asset = await mux.video.assets.create({
+            inputs: [{ url: step.mediaUrl }],
+            playback_policies: ["public"],
+            encoding_tier: "baseline",
+            passthrough: syntheticUploadId,
+          });
+        } catch (err) {
+          // e.g. non-direct-file URLs (one form points at a Vimeo player page).
+          // Step keeps the original URL as videoUrl fallback.
+          console.warn(
+            `  video ${step.vaQuestionId}: Mux ingest FAILED for ${step.mediaUrl} — ${err instanceof Error ? err.message : err}`
+          );
+          continue;
+        }
 
         const [record] = await db
           .insert(videoUploads)
