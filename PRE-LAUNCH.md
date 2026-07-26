@@ -58,6 +58,8 @@ Everything that needs to happen before going live in production.
 
 ## GoHighLevel (GHL) to LMS Migration Strategy
 
+> **Superseded:** the full migration process now lives in [`docs/migration/README.md`](./docs/migration/README.md) (playbook, cutover runbook, data mapping, comms templates, engineering gap list). The notes below are the original seed strategy, kept for context.
+
 Strategy for moving existing students from GHL CRM to the new LMS.
 
 ### 1. Invitation & Onboarding
