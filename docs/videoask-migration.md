@@ -179,6 +179,21 @@ Useful flags: `--forms id1,id2` (specific forms), `--limit N`,
 6. Re-run `import` — confirm the form is skipped (idempotency).
 7. Sign-off, then run the full import and spot-check ~10% of threads.
 
+### Final result (migration executed 2026-07-26)
+
+Full import completed with `--storage blob`:
+
+- **432 threads** created (431 + small-batch test), **4,767 steps**
+- **4,335 / 4,335** VideoAsk-hosted videos mirrored into the private Vercel
+  Blob store (~2.2 GB) — zero mirror failures
+- 4,310 steps carry branching/default-jump wiring; 431 synthetic end screens
+- 7 empty forms skipped (no questions)
+- 1 known-dead video: "FORM FOR ASKING PEOPLE FOR VIDOE" step
+  `a9a88379-1f1b-4d81-bea2-0ba7ea8621e5` pointed at a Vimeo link that 404s
+  at the source (already broken inside VideoAsk; internal recruiting form)
+- Mux is not used by any migrated content (the earlier Mux test thread was
+  re-imported onto Blob)
+
 ### Rollback
 
 Delete the migrated thread(s) in `/admin/video-threads` (steps, sessions,
