@@ -24,6 +24,7 @@ import {
 } from "@/lib/tag-feature-access";
 import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 import { LabAssistantWidget } from "@/components/lab-assistant/LabAssistantWidget";
+import { StudentContentGuard } from "@/components/layout/StudentContentGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -245,6 +246,7 @@ export default async function DashboardLayout({
 
   return (
     <>
+      {role === "student" && <StudentContentGuard />}
       {viewAsUser && (
         <ViewAsBanner
           userName={viewAsUser.name}

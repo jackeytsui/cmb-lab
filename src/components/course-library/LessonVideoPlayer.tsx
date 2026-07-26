@@ -89,6 +89,8 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
         autoPlay
         preload="metadata"
         controlsList="nodownload"
+        disablePictureInPicture
+        onContextMenu={(e) => e.preventDefault()}
         className="h-full w-full"
         onLoadedMetadata={() => setStatus("ready")}
         onCanPlay={() => setStatus("ready")}
