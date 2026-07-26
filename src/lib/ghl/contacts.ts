@@ -141,7 +141,14 @@ export async function findOrLinkContact(
   }
 
   if (results.length === 0) {
-    throw new Error(`No GHL contact found for email ${email} in any active location`);
+    // Name every location that was searched so a "not found" log pinpoints
+    // whether the right sub-account is even connected to the app.
+    const searched = locations
+      .map((location) => `${location.name} (${location.ghlLocationId})`)
+      .join(", ");
+    throw new Error(
+      `No GHL contact found for email ${email} in any active location. Searched: ${searched}`
+    );
   }
 
   return results;
