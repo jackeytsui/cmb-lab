@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "CMB Lab",
+    "slug": "cmb-lab",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "cmblab",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a0a0a",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.thecmblueprint.cmblab",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "CMB Lab uses the microphone for audio recording exercises and pronunciation practice.",
+        "NSCameraUsageDescription": "CMB Lab uses the camera for video response exercises."
+      }
+    },
+    "android": {
+      "package": "com.thecmblueprint.cmblab",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0a0a",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0a0a0a",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ]
+    ],
+    "extra": {
+      "appUrl": "https://YOUR-PRODUCTION-DOMAIN.com"
+    }
+  }
+}
