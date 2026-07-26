@@ -49,7 +49,9 @@ export async function POST(request: NextRequest) {
     const upload = await mux.video.uploads.create({
       cors_origin: getMuxCorsOrigin(request),
       new_asset_settings: {
-        playback_policy: ["public"],
+        // Signed-only playback: streaming requires a short-lived JWT from
+        // /api/video/playback-token, so bare stream.mux.com URLs are useless.
+        playback_policy: ["signed"],
         encoding_tier: "baseline",
       },
     });

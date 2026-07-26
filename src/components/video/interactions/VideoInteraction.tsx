@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, Mic, Video as VideoIcon, Send, RefreshCcw, Play, Pause } from "lucide-react";
-import MuxPlayer from "@mux/mux-player-react";
+import { SignedMuxPlayer } from "@/components/video/SignedMuxPlayer";
 import { toast } from "sonner";
 
 interface VideoInteractionProps {
@@ -175,7 +175,7 @@ export function VideoInteraction({
           <h2 className="text-xl font-semibold">{prompt}</h2>
           <div className="aspect-video bg-black rounded-lg overflow-hidden border border-zinc-800">
             {coachVideoUrl ? (
-              <MuxPlayer
+              <SignedMuxPlayer
                 streamType="on-demand"
                 playbackId={coachVideoUrl.split("/").pop()?.replace(".m3u8", "")}
                 className="w-full h-full"

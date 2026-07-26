@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { verifySignedMediaPath } from "@/lib/signed-media-url";
 
 // Each invocation now serves at most one bounded chunk (see blob-media-proxy),
 // so 60s is ample headroom — the timeout can no longer kill a transfer that a
@@ -25,6 +26,28 @@ export async function GET(
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Download deterrents on top of session auth. The URL must carry a fresh
+  // HMAC signature minted by the lesson page, so a URL copied out of dev
+  // tools expires within hours instead of working forever. And a direct
+  // browser navigation (address bar / "Save Page As" on the URL) is
+  // refused — only actual media playback fetches are served.
+  const url = request.nextUrl;
+  if (
+    !verifySignedMediaPath(
+      url.pathname,
+      url.searchParams.get("exp"),
+      url.searchParams.get("sig"),
+    )
+  ) {
+    return NextResponse.json(
+      { error: "This video link has expired — reload the lesson page." },
+      { status: 403 },
+    );
+  }
+  if (request.headers.get("sec-fetch-dest") === "document") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { lessonId } = await params;

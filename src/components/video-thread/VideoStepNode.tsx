@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Video, AlertCircle, PlayCircle, CheckCircle2 } from 'lucide-react';
 import { PlayerStep } from '@/types/video-thread-player';
+import { MuxThumbnail } from "@/components/video/MuxThumbnail";
 
 interface VideoStepNodeData {
     step: PlayerStep;
@@ -34,11 +35,11 @@ const VideoStepNode = ({ data }: NodeProps<any>) => {
             {/* Thumbnail / Video Preview */}
             <div className="h-32 bg-gray-900 relative flex items-center justify-center overflow-hidden">
                 {hasMuxPlayback ? (
-                    <img
-                        src={`https://image.mux.com/${step.upload!.muxPlaybackId}/thumbnail.webp?width=560&height=256&fit_mode=crop`}
+                    <MuxThumbnail
+                        playbackId={step.upload!.muxPlaybackId ?? ""}
+                        params="width=560&height=256&fit_mode=crop"
                         alt={step.promptText || "Video thumbnail"}
                         className="w-full h-full object-cover opacity-90"
-                        loading="lazy"
                     />
                 ) : step.videoUrl ? (
                     <video
