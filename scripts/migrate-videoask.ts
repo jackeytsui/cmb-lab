@@ -502,19 +502,24 @@ async function runImport(args: CliArgs): Promise<void> {
     const blobUrlByQuestion = new Map<string, string>();
 
     if (useBlob) {
-      for (const step of thread.steps) {
-        if (!step.mediaUrl) continue;
-        try {
-          const blobUrl = await mirrorVideoToBlob(step.mediaUrl, thread.vaFormId, step.vaQuestionId);
-          blobUrlByQuestion.set(step.vaQuestionId, blobUrl);
-          console.log(`  video ${step.vaQuestionId}: mirrored to blob`);
-        } catch (err) {
-          console.warn(
-            `  video ${step.vaQuestionId}: blob mirror FAILED — ${err instanceof Error ? err.message : err} ` +
-              "(step keeps the VideoAsk URL fallback; use --replace to retry this form)"
-          );
-        }
+      const mediaSteps = thread.steps.filter((s) => s.mediaUrl);
+      const CONCURRENCY = 4;
+      for (let i = 0; i < mediaSteps.length; i += CONCURRENCY) {
+        await Promise.all(
+          mediaSteps.slice(i, i + CONCURRENCY).map(async (step) => {
+            try {
+              const blobUrl = await mirrorVideoToBlob(step.mediaUrl!, thread.vaFormId, step.vaQuestionId);
+              blobUrlByQuestion.set(step.vaQuestionId, blobUrl);
+            } catch (err) {
+              console.warn(
+                `  video ${step.vaQuestionId}: blob mirror FAILED — ${err instanceof Error ? err.message : err} ` +
+                  "(step keeps the VideoAsk URL fallback; use --replace to retry this form)"
+              );
+            }
+          })
+        );
       }
+      console.log(`  mirrored ${blobUrlByQuestion.size}/${mediaSteps.length} video(s) to blob`);
     }
 
     // --- Mux ingest (--storage mux; reuses assets from previous partial runs) ---
