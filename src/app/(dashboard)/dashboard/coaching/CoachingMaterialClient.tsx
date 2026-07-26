@@ -405,6 +405,18 @@ function NoteCard({
     // Don't copy when the user is drag-selecting text
     const selection = window.getSelection();
     if (selection && selection.toString().length > 0) return;
+    // Clicking a pinyin/jyutping syllable copies the romanization itself.
+    const annotation = target.closest("[data-annotation]");
+    if (annotation) {
+      const syllable = (annotation.textContent ?? "").trim();
+      if (!syllable) return;
+      navigator.clipboard?.writeText(syllable).then(() => {
+        setCopiedText(syllable);
+        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+        copiedTimerRef.current = setTimeout(() => setCopiedText(null), 1200);
+      }).catch(() => {});
+      return;
+    }
     const own = (target.textContent ?? "").trim();
     const isSingleHanChar = [...own].length === 1 && /\p{Script=Han}/u.test(own);
     const word = target.closest("[data-word]")?.getAttribute("data-word") ?? "";
@@ -834,7 +846,8 @@ function NoteCard({
                                   return (
                                     <span key={ci} className="inline-flex flex-col items-center" style={{ minWidth: "1.1em" }}>
                                       <span
-                                        className={cn("text-center leading-tight select-none whitespace-nowrap", annotationColor)}
+                                        data-annotation={isCantoNote ? "jyutping" : "pinyin"}
+                                        className={cn("text-center leading-tight whitespace-nowrap", annotationColor)}
                                         style={{ fontSize: `${annotationSize}px` }}
                                       >
                                         {syllable}
@@ -863,6 +876,7 @@ function NoteCard({
                           showEnglish={false}
                           fontSize={fontSize}
                           toneColorsEnabled={toneColorsEnabled}
+                          selectableAnnotations
                         />
                       );
                     })}

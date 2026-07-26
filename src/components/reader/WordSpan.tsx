@@ -29,6 +29,12 @@ export interface WordSpanProps {
   showSandhi?: boolean;
   /** When true, color each character by its tone (Pleco scheme) */
   toneColorsEnabled?: boolean;
+  /**
+   * When true, pinyin/jyutping annotations are text-selectable (so students
+   * can highlight + copy them). Default false: annotations stay select-none
+   * so drag-selecting characters copies clean Chinese text only.
+   */
+  selectableAnnotations?: boolean;
 }
 
 function getPinyinArray(text: string): string[] {
@@ -107,6 +113,7 @@ export const WordSpan = React.memo(function WordSpan({
   annotationMode,
   showSandhi = true,
   toneColorsEnabled = false,
+  selectableAnnotations = false,
 }: WordSpanProps) {
   // Resolve props: legacy annotationMode overrides booleans
   const isLegacy = !!annotationMode;
@@ -197,7 +204,8 @@ export const WordSpan = React.memo(function WordSpan({
             <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.1em" }}>
               {showPinyin && (
                 <span
-                  className="text-center text-blue-400 leading-tight select-none whitespace-nowrap"
+                  data-annotation="pinyin"
+                  className={`text-center text-blue-400 leading-tight whitespace-nowrap${selectableAnnotations ? "" : " select-none"}`}
                   style={{ fontSize: `${annotationSize}px` }}
                 >
                   {pinyinArr[i] ?? "\u00A0"}
@@ -205,7 +213,8 @@ export const WordSpan = React.memo(function WordSpan({
               )}
               {showJyutping && (
                 <span
-                  className="text-center text-orange-400 leading-tight select-none whitespace-nowrap"
+                  data-annotation="jyutping"
+                  className={`text-center text-orange-400 leading-tight whitespace-nowrap${selectableAnnotations ? "" : " select-none"}`}
                   style={{ fontSize: `${annotationSize}px` }}
                 >
                   {jyutpingArr[i] ?? "\u00A0"}
