@@ -83,6 +83,7 @@ export async function findOrLinkContact(
   }
 
   const results: FindOrLinkResult[] = [];
+  const targetEmail = email.trim().toLowerCase();
 
   for (const location of locations) {
     try {
@@ -91,12 +92,25 @@ export async function findOrLinkContact(
         `/contacts/search/duplicate?locationId=${location.ghlLocationId}&email=${encodeURIComponent(email)}`
       );
 
-      const contacts = response.data.contacts;
-      if (!contacts || contacts.length === 0) {
-        continue; // Not found in this location
+      let ghlContactId: string | null = response.data.contacts?.[0]?.id ?? null;
+
+      // The duplicate-check endpoint is strict; fall back to a general
+      // contact query and match the EMAIL exactly (case-insensitive) —
+      // email is the student identifier, so only an exact email match may
+      // ever link.
+      if (!ghlContactId) {
+        const query = await client.get<GhlSearchResponse>(
+          `/contacts/?locationId=${location.ghlLocationId}&query=${encodeURIComponent(email)}&limit=20`
+        );
+        ghlContactId =
+          (query.data.contacts ?? []).find(
+            (contact) => contact.email?.trim().toLowerCase() === targetEmail
+          )?.id ?? null;
       }
 
-      const ghlContactId = contacts[0].id;
+      if (!ghlContactId) {
+        continue; // Not found in this location
+      }
 
       // Upsert mapping
       await db
