@@ -237,9 +237,13 @@ export async function POST(request: NextRequest) {
     // 8. Synthesize via selected provider only (no per-request provider mixing)
     if (isCantonese) {
       // Cantonese quality regressions have bitten twice — keep an explicit
-      // trail of which provider/voice served each fresh synthesis.
+      // trail of which provider/voice served each fresh synthesis, plus which
+      // provider credentials the runtime can actually see (names only). When
+      // the wrong provider serves, this line says whether it's a code problem
+      // or an env-var problem (missing/typo'd/wrong-environment key).
       console.log(
-        `TTS: cantonese synthesis via ${provider} (voice=${voice.voiceName}, rate=${rate})`,
+        `TTS: cantonese synthesis via ${provider} (voice=${voice.voiceName}, rate=${rate}) ` +
+          `[configured: minimax=${hasMiniMax} azure=${hasAzure} elevenlabs=${hasElevenLabs} openai=${hasOpenAI}]`,
       );
     }
     let audioBuffer: Buffer;
