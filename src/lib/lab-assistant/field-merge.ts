@@ -19,15 +19,40 @@ export interface CatalogField {
   name: string;
 }
 
-/** Name heuristics per concept, tried in order (first match wins). */
+/**
+ * Name heuristics per concept, tried in order (first match wins), so the
+ * most specific pattern is checked against the WHOLE catalog before a
+ * broader fallback runs — matching stays correct regardless of the order
+ * GHL returns fields in. Verified against the real Course sub-account field
+ * names ("Product Start Date", "Product END date", "Coach name") alongside
+ * their look-alikes ("CMS trial start date", "1 on 1 End Date",
+ * "1on1 coaching fathom link").
+ */
 export const CONCEPT_PATTERNS: Record<AllowlistedFieldConcept, RegExp[]> = {
-  start_date: [/start\s*date/i, /date.*start/i],
-  end_date: [/end\s*date/i, /date.*end/i],
-  assigned_coach: [/coach/i],
+  start_date: [
+    /product\s*start\s*date/i,
+    /program\s*start\s*date/i,
+    /start\s*date/i,
+    /date.*start/i,
+  ],
+  end_date: [
+    /product\s*end\s*date/i,
+    /program\s*end\s*date/i,
+    /end\s*date/i,
+    /date.*end/i,
+  ],
+  assigned_coach: [
+    /^coach\s*name$/i,
+    /assigned\s*coach/i,
+    /coach\s*name/i,
+    /coach(?!ing)/i,
+  ],
   referral_source: [
     /referral.*source/i,
     /referred\s*by/i,
-    /referral(?!.*status)/i,
+    // Never match referral bookkeeping fields: "Referral - email" holds the
+    // referred person's email (someone else's data — must not surface).
+    /referral(?!.*(status|email|link))/i,
   ],
   referral_status: [/referral.*status/i],
 };
@@ -45,6 +70,32 @@ export function suggestField(
 
 /** How a concept's value was found — surfaced in the audit trail. */
 export type ResolutionSource = "mapping" | "mapping-name" | "auto" | null;
+
+/**
+ * The program's system of record is the "Course" sub-account ("The Canto to
+ * Mando Blueprint Course"), not the marketing sub-account ("The Canto to
+ * Mando Blueprint"). Locations whose name matches this pattern are always
+ * preferred as the student's primary record.
+ */
+export const PREFERRED_LOCATION_NAME_PATTERN = /course/i;
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+] as const;
+
+/**
+ * Render an ISO date (YYYY-MM-DD) as human language ("May 12, 2026").
+ * Non-date text passes through unchanged so the model never sees raw codes.
+ */
+export function formatHumanDate(value: string): string {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  const [, year, month, day] = match;
+  const monthName = MONTHS[Number(month) - 1];
+  if (!monthName) return value;
+  return `${monthName} ${Number(day)}, ${year}`;
+}
 
 const DATE_CONCEPTS: ReadonlySet<AllowlistedFieldConcept> = new Set([
   "start_date",
@@ -150,12 +201,18 @@ function resolvedCount(resolution: LinkResolution): number {
 }
 
 /**
- * Merge per-link resolutions into one answer set. The link with the most
- * resolved concepts wins as primary (first wins ties, so ordering must be
- * deterministic); concepts it lacks are filled from the other links in order.
+ * Merge per-link resolutions into one answer set.
+ *
+ * Primary selection: a link in a PREFERRED location (the Course sub-account,
+ * the program's system of record) always wins, first in array order. Only
+ * when no preferred-location link exists does the link with the most
+ * resolved concepts win (first wins ties, so ordering must be
+ * deterministic). Concepts the primary lacks are filled from the other
+ * links in order.
  */
 export function mergeLinkResolutions(
-  resolutions: LinkResolution[]
+  resolutions: LinkResolution[],
+  options?: { preferredLocationIds?: ReadonlySet<string> }
 ): MergedFields {
   const fields = emptyConceptRecord<string | null>(null);
   const sources = emptyConceptRecord<MergedFieldSource | null>(null);
@@ -164,10 +221,17 @@ export function mergeLinkResolutions(
     return { fields, sources, primary: null };
   }
 
-  let primary = resolutions[0];
-  for (const candidate of resolutions.slice(1)) {
-    if (resolvedCount(candidate) > resolvedCount(primary)) {
-      primary = candidate;
+  const preferred = options?.preferredLocationIds;
+  let primary =
+    (preferred &&
+      resolutions.find((r) => preferred.has(r.ghlLocationId))) ||
+    null;
+  if (!primary) {
+    primary = resolutions[0];
+    for (const candidate of resolutions.slice(1)) {
+      if (resolvedCount(candidate) > resolvedCount(primary)) {
+        primary = candidate;
+      }
     }
   }
 

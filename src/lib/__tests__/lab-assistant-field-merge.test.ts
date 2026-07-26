@@ -4,6 +4,8 @@ import {
   normalizeFieldValue,
   mergeLinkResolutions,
   emptyConceptRecord,
+  formatHumanDate,
+  PREFERRED_LOCATION_NAME_PATTERN,
   type LinkResolution,
 } from "@/lib/lab-assistant/field-merge";
 import { ALLOWLISTED_FIELD_CONCEPTS } from "@/lib/lab-assistant/allowlist";
@@ -37,6 +39,32 @@ describe("suggestField", () => {
 
   it("returns null when nothing matches", () => {
     expect(suggestField("start_date", [{ id: "x", name: "Phone" }])).toBeNull();
+  });
+
+  it("prefers the product fields over look-alikes regardless of catalog order", () => {
+    // Real Course sub-account field names, deliberately listing decoys first.
+    const realCatalog = [
+      { id: "trial", name: "CMS trial start date" },
+      { id: "one2one", name: "1 on 1 End Date" },
+      { id: "trialEnd", name: "CMS trial end date" },
+      { id: "fathom", name: "1on1 coaching fathom link" },
+      { id: "coach1on1", name: "1on1 Coach Name" },
+      { id: "start", name: "Product Start Date" },
+      { id: "end", name: "Product END date" },
+      { id: "coach", name: "Coach name" },
+    ];
+    expect(suggestField("start_date", realCatalog)?.id).toBe("start");
+    expect(suggestField("end_date", realCatalog)?.id).toBe("end");
+    expect(suggestField("assigned_coach", realCatalog)?.id).toBe("coach");
+  });
+
+  it("never matches referral bookkeeping fields holding other people's data", () => {
+    expect(
+      suggestField("referral_source", [{ id: "x", name: "Referral - email" }])
+    ).toBeNull();
+    expect(
+      suggestField("referral_source", [{ id: "x", name: "Referral link" }])
+    ).toBeNull();
   });
 });
 
@@ -159,5 +187,65 @@ describe("mergeLinkResolutions", () => {
     const merged = mergeLinkResolutions([a, b]);
     expect(merged.primary?.ghlContactId).toBe("c-a");
     expect(merged.fields.end_date).toBe("2026-06-01");
+  });
+
+  it("always uses the preferred (Course) location as primary, even with fewer fields", () => {
+    const marketing = resolution("c-mkt", "loc-marketing", {
+      start_date: "2025-01-01",
+      end_date: "2025-06-01",
+      referral_source: "Instagram",
+    });
+    const course = resolution("c-course", "loc-course", {
+      start_date: "2026-05-12",
+    });
+    const merged = mergeLinkResolutions([marketing, course], {
+      preferredLocationIds: new Set(["loc-course"]),
+    });
+
+    expect(merged.primary?.ghlContactId).toBe("c-course");
+    // Course value wins where present…
+    expect(merged.fields.start_date).toBe("2026-05-12");
+    // …and gaps still fill from the marketing contact.
+    expect(merged.fields.end_date).toBe("2025-06-01");
+    expect(merged.fields.referral_source).toBe("Instagram");
+  });
+
+  it("falls back to most-resolved when no link is in a preferred location", () => {
+    const a = resolution("c-a", "loc-a", { referral_source: "YouTube" });
+    const b = resolution("c-b", "loc-b", {
+      start_date: "2026-05-12",
+      assigned_coach: "Jane",
+    });
+    const merged = mergeLinkResolutions([a, b], {
+      preferredLocationIds: new Set(["loc-course"]),
+    });
+    expect(merged.primary?.ghlContactId).toBe("c-b");
+  });
+});
+
+// ============================================================
+// Preferred location pattern + human dates
+// ============================================================
+
+describe("PREFERRED_LOCATION_NAME_PATTERN", () => {
+  it("matches the Course sub-account but not the marketing sub-account", () => {
+    expect(
+      PREFERRED_LOCATION_NAME_PATTERN.test("The Canto to Mando Blueprint Course")
+    ).toBe(true);
+    expect(
+      PREFERRED_LOCATION_NAME_PATTERN.test("The Canto to Mando Blueprint")
+    ).toBe(false);
+  });
+});
+
+describe("formatHumanDate", () => {
+  it("renders ISO dates as human language", () => {
+    expect(formatHumanDate("2026-05-12")).toBe("May 12, 2026");
+    expect(formatHumanDate("2026-11-02")).toBe("November 2, 2026");
+  });
+
+  it("passes non-ISO text through unchanged", () => {
+    expect(formatHumanDate("May 12, 2026")).toBe("May 12, 2026");
+    expect(formatHumanDate("TBC")).toBe("TBC");
   });
 });
