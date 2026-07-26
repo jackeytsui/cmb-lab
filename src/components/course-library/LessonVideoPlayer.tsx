@@ -27,12 +27,49 @@ const SLOW_LOAD_MS = 15000;
  * loaded after SLOW_LOAD_MS the overlay offers a retry instead of telling the
  * student to keep waiting forever.
  */
+const MEDIA_ERR_LABELS: Record<number, string> = {
+  1: "ABORTED",
+  2: "NETWORK",
+  3: "DECODE",
+  4: "SRC_NOT_SUPPORTED",
+};
+
 export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
   const [slow, setSlow] = useState(false);
+  const [diagnosis, setDiagnosis] = useState<string | null>(null);
+
+  // On error, capture the MediaError and probe the stream endpoint so the
+  // on-screen message (and any screenshot of it) pinpoints the real cause:
+  // e.g. "Error DECODE — HTTP 206, video/mp4" = codec problem, while
+  // "HTTP 502 (upstream 403)" = storage token problem.
+  const diagnose = useCallback(async () => {
+    const video = videoRef.current;
+    const err = video?.error;
+    const errPart = err
+      ? `Error ${err.code} (${MEDIA_ERR_LABELS[err.code] ?? "UNKNOWN"})${err.message ? `: ${err.message}` : ""}`
+      : "Unknown media error";
+    let httpPart = "";
+    try {
+      const res = await fetch(src.split("#")[0], {
+        headers: { Range: "bytes=0-1" },
+        cache: "no-store",
+      });
+      const type = res.headers.get("content-type") ?? "?";
+      let upstream = "";
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        if (body?.upstreamStatus) upstream = `, upstream ${body.upstreamStatus}`;
+      }
+      httpPart = ` — HTTP ${res.status}${upstream}, ${type}`;
+    } catch {
+      httpPart = " — network request failed";
+    }
+    setDiagnosis(`${errPart}${httpPart}`);
+  }, [src]);
 
   // Slow-load watchdog: if we're still loading after SLOW_LOAD_MS, stop
   // promising it will start automatically and offer a retry.
@@ -67,6 +104,7 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
     const video = videoRef.current;
     if (!video) return;
     setSlow(false);
+    setDiagnosis(null);
     setStatus("loading");
     // load() re-issues the request from scratch (fresh auth cookies included),
     // which recovers from transient network/session hiccups.
@@ -93,7 +131,10 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
         onLoadedMetadata={() => setStatus("ready")}
         onCanPlay={() => setStatus("ready")}
         onPlaying={() => setStatus("ready")}
-        onError={() => setStatus("error")}
+        onError={() => {
+          setStatus("error");
+          void diagnose();
+        }}
       />
       {status === "loading" && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 px-6 text-center">
@@ -137,6 +178,11 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
           >
             Try again
           </button>
+          {diagnosis && (
+            <p className="max-w-md font-mono text-[10px] text-white/50">
+              {diagnosis}
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -9,7 +9,7 @@ import { convertScript, ensureSimplifiedConverter } from "@/lib/chinese-convert"
 import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, GripVertical, ArrowRightLeft, NotebookPen } from "lucide-react";
+import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Pause, RotateCcw, Copy, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, GripVertical, ArrowRightLeft, NotebookPen } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import ToJyutping from "to-jyutping";
 import { smartRomanise } from "@/lib/romanise";
@@ -128,6 +128,9 @@ function useProcessedText({
   const {
     speak,
     stop,
+    pause,
+    resume,
+    isPaused,
     isPlaying,
     isLoading: ttsLoading,
     error: ttsError,
@@ -279,6 +282,9 @@ function useProcessedText({
     setTranslationCache,
     handleSpeakSentence,
     handleStopAll,
+    pause,
+    resume,
+    isPaused,
     isPlaying,
     ttsLoading,
     ttsError,
@@ -387,6 +393,29 @@ function NoteCard({
   visualFontClass?: string;
 }) {
   const baseText = note.textOverride ?? note.text;
+  // Click-to-copy: clicking a character copies it (a word if the click
+  // landed between characters), so students can paste straight into a
+  // dictionary. Shown briefly via the `copiedText` badge.
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleCharCopy = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement;
+    // Never hijack clicks on interactive controls
+    if (target.closest("button, a, select, input, textarea")) return;
+    // Don't copy when the user is drag-selecting text
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) return;
+    const own = (target.textContent ?? "").trim();
+    const isSingleHanChar = [...own].length === 1 && /\p{Script=Han}/u.test(own);
+    const word = target.closest("[data-word]")?.getAttribute("data-word") ?? "";
+    const toCopy = isSingleHanChar ? own : word;
+    if (!toCopy || !/\p{Script=Han}/u.test(toCopy)) return;
+    navigator.clipboard?.writeText(toCopy).then(() => {
+      setCopiedText(toCopy);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = setTimeout(() => setCopiedText(null), 1200);
+    }).catch(() => {});
+  }, []);
   // Derive language from the note's own pane field to ensure TTS always
   // speaks the correct language, even if the parent prop gets stale.
   const noteLanguage: "zh-CN" | "zh-HK" =
@@ -570,7 +599,15 @@ function NoteCard({
   const englishSize = Math.round(fontSize * 1.1);
 
   return (
-    <div className={cn("rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground", visualFontClass)}>
+    <div
+      className={cn("relative rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground", visualFontClass)}
+      onClick={handleCharCopy}
+    >
+      {copiedText && (
+        <span className="pointer-events-none absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded bg-cyan-500/90 px-2 py-0.5 text-[11px] font-medium text-white shadow">
+          <Copy className="size-3" /> Copied {copiedText}
+        </span>
+      )}
       <div className="flex items-start gap-2">
         <span className="self-center inline-flex min-w-5 justify-center text-[10px] text-muted-foreground">
           {index + 1}.
@@ -836,25 +873,64 @@ function NoteCard({
                   {processed.displayText || baseText}
                 </div>
               )}
-              {/* Inline controls: play, speed, translate */}
+              {/* Inline controls: play/pause, stop, replay, speed, translate */}
               <span className="inline-flex items-center gap-1 mt-1">
                 <button
                   type="button"
-                  onClick={() => processed.handleSpeakSentence(
-                    processed.displayText || baseText,
-                    ttsRate,
-                  )}
+                  onClick={() => {
+                    if (processed.isPlaying && !processed.isPaused) {
+                      processed.pause();
+                    } else if (processed.isPaused) {
+                      processed.resume();
+                    } else {
+                      processed.handleSpeakSentence(
+                        processed.displayText || baseText,
+                        ttsRate,
+                      );
+                    }
+                  }}
                   className="inline-flex items-center justify-center size-6 rounded hover:bg-muted text-muted-foreground hover:text-cyan-500 transition-colors"
-                  aria-label="Read aloud"
+                  aria-label={
+                    processed.isPlaying && !processed.isPaused
+                      ? "Pause"
+                      : processed.isPaused
+                        ? "Resume"
+                        : "Read aloud"
+                  }
                 >
                   {processed.ttsLoading ? (
                     <Loader2 className="size-3.5 animate-spin" />
-                  ) : processed.isPlaying ? (
-                    <Square className="size-3" />
+                  ) : processed.isPlaying && !processed.isPaused ? (
+                    <Pause className="size-3.5" />
                   ) : (
                     <Play className="size-3.5" />
                   )}
                 </button>
+                {(processed.isPlaying || processed.isPaused) && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => processed.handleStopAll()}
+                      className="inline-flex items-center justify-center size-6 rounded hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
+                      aria-label="Stop"
+                      title="Stop"
+                    >
+                      <Square className="size-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => processed.handleSpeakSentence(
+                        processed.displayText || baseText,
+                        ttsRate,
+                      )}
+                      className="inline-flex items-center justify-center size-6 rounded hover:bg-muted text-muted-foreground hover:text-cyan-500 transition-colors"
+                      aria-label="Replay from beginning"
+                      title="Replay from beginning"
+                    >
+                      <RotateCcw className="size-3.5" />
+                    </button>
+                  </>
+                )}
                 <select
                   value={ttsRate}
                   onChange={(e) => setTtsRate(e.target.value as "slow" | "medium" | "fast")}
@@ -1784,6 +1860,11 @@ function CoachingPanel({
   });
   const [mandarinDraft, setMandarinDraft] = useState("");
   const [draggingMando, setDraggingMando] = useState<number | null>(null);
+  // Dragging is armed only while the pointer is on a note's grip handle.
+  // With `draggable` always on, browsers start a card drag instead of a text
+  // selection — which made it impossible to select/copy Chinese characters
+  // from notes.
+  const [armedDragKey, setArmedDragKey] = useState<string | null>(null);
   const cantonesePane = useProcessedText({
     committedText: activeSession?.cantonese.committedText ?? "",
     scriptMode: activeSession?.cantonese.scriptMode ?? "simplified",
@@ -2598,10 +2679,11 @@ function CoachingPanel({
                 {mandarinNotes.map((note, index) => (
                   <div
                     key={note.id}
-                    draggable={canReorderNotes}
+                    draggable={canReorderNotes && armedDragKey === `mando-${note.id}`}
                     onDragStart={() => {
                       if (canReorderNotes) setDraggingMando(index);
                     }}
+                    onDragEnd={() => setArmedDragKey(null)}
                     onDragOver={(e) => {
                       if (canReorderNotes) e.preventDefault();
                     }}
@@ -2615,11 +2697,20 @@ function CoachingPanel({
                         );
                         setDraggingMando(null);
                       }
+                      setArmedDragKey(null);
                     }}
-                    className={cn(
-                      canReorderNotes ? "cursor-move" : "cursor-default",
-                    )}
+                    className="relative"
                   >
+                    {canReorderNotes && (
+                      <div
+                        className="absolute -left-1 top-1/2 -translate-y-1/2 z-10 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground"
+                        onMouseDown={() => setArmedDragKey(`mando-${note.id}`)}
+                        onMouseUp={() => setArmedDragKey(null)}
+                        title="Drag to reorder"
+                      >
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </div>
+                    )}
                     <NoteCard
                       note={note}
                       index={index}
@@ -2902,10 +2993,11 @@ function CoachingPanel({
                 {cantoneseNotes.map((note, index) => (
                   <div
                     key={note.id}
-                    draggable={canReorderNotes}
+                    draggable={canReorderNotes && armedDragKey === `canto-${note.id}`}
                     onDragStart={() => {
                       if (canReorderNotes) setDraggingCanto(index);
                     }}
+                    onDragEnd={() => setArmedDragKey(null)}
                     onDragOver={(e) => {
                       if (canReorderNotes) e.preventDefault();
                     }}
@@ -2919,11 +3011,20 @@ function CoachingPanel({
                         );
                         setDraggingCanto(null);
                       }
+                      setArmedDragKey(null);
                     }}
-                    className={cn(
-                      canReorderNotes ? "cursor-move" : "cursor-default",
-                    )}
+                    className="relative"
                   >
+                    {canReorderNotes && (
+                      <div
+                        className="absolute -left-1 top-1/2 -translate-y-1/2 z-10 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground"
+                        onMouseDown={() => setArmedDragKey(`canto-${note.id}`)}
+                        onMouseUp={() => setArmedDragKey(null)}
+                        title="Drag to reorder"
+                      >
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </div>
+                    )}
                     <NoteCard
                       note={note}
                       index={index}

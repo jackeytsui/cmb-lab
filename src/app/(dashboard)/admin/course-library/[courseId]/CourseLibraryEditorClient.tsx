@@ -242,7 +242,12 @@ function MoveableLesson({
         <GripVertical className="w-3.5 h-3.5" />
       </div>
       <meta.Icon className={cn("w-4 h-4 shrink-0", meta.color)} />
-      <span className="text-xs text-muted-foreground uppercase font-medium w-32 shrink-0 whitespace-nowrap">
+      {/* truncate (not whitespace-nowrap alone) so long labels like
+          "Text Assignment (Canto)" can't overflow into the lesson title */}
+      <span
+        className="text-xs text-muted-foreground uppercase font-medium w-32 shrink-0 truncate"
+        title={meta.label}
+      >
         {meta.label}
       </span>
       <Link
