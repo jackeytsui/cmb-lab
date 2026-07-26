@@ -1,52 +1,36 @@
 // src/app/api/coaching/student-end-date/route.ts
 // Course end date for a student, resolved live from GoHighLevel.
-// GHL is the single source of truth here: the value comes from the contact's
-// custom fields (explicit mapping -> mapping by name -> "end date" name
-// heuristic) and is never read from LMS-side tables, so what the coach sees
-// always matches the CRM.
+// GHL is the single source of truth here. The value is resolved through the
+// same gatekept pipeline the Lab Assistant uses (getStudentContext): the
+// student is identified by EMAIL, every linked contact is email-verified,
+// the Course sub-account wins as the primary record, and each contact's
+// fields resolve against its own location's catalog. What the coach sees
+// always matches what the chatbot tells the student.
 
 import { NextRequest, NextResponse } from "next/server";
-import { ilike } from "drizzle-orm";
+import { eq, ilike } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { ghlContacts, users } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
-import { findOrLinkContact, getGhlContactId } from "@/lib/ghl/contacts";
-import {
-  fetchGhlContactData,
-  refreshGhlContactData,
-} from "@/lib/ghl/contact-fields";
-import { resolveAllowlistedFields } from "@/lib/lab-assistant/field-resolution";
+import { getStudentContext } from "@/lib/lab-assistant/student-context";
 
 /**
- * Normalize a GHL custom field value to a calendar date string (YYYY-MM-DD).
- * GHL date fields arrive as "YYYY-MM-DD", ISO timestamps, or epoch millis
- * depending on how the field was populated. Returning a plain date string
- * (not a Date) keeps the client from shifting the day across timezones.
+ * Normalize a resolved end-date value to a calendar date string (YYYY-MM-DD).
+ * getStudentContext already normalizes epoch/ISO datetimes; this handles the
+ * remaining human-formatted strings ("Feb 06 2026") from GHL date fields.
+ * Returning a plain date string (not a Date) keeps the client from shifting
+ * the day across timezones.
  */
-function normalizeToDateString(value: unknown): string | null {
-  if (value == null) return null;
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    const dateOnly = trimmed.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s].*)?$/);
-    if (dateOnly) return dateOnly[1];
-    const parsed = new Date(trimmed);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(0, 10);
-    }
-    return null;
+function normalizeToDateString(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const dateOnly = trimmed.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s].*)?$/);
+  if (dateOnly) return dateOnly[1];
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
   }
-
-  if (typeof value === "number") {
-    // Epoch seconds vs millis: anything below 1e12 is seconds.
-    const ms = value < 1e12 ? value * 1000 : value;
-    const parsed = new Date(ms);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(0, 10);
-    }
-  }
-
   return null;
 }
 
@@ -70,7 +54,6 @@ export async function GET(request: NextRequest) {
   try {
     const student = await db.query.users.findFirst({
       where: ilike(users.email, email),
-      columns: { id: true },
     });
 
     if (!student) {
@@ -82,19 +65,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Self-heal a missing GHL link so the coach doesn't need an admin to
-    // link the contact first. Search failures just leave the link absent.
-    let ghlContactId = await getGhlContactId(student.id);
-    if (!ghlContactId) {
-      try {
-        const links = await findOrLinkContact(student.id, email);
-        ghlContactId = links[0]?.ghlContactId ?? null;
-      } catch {
-        ghlContactId = null;
-      }
+    // refresh=true invalidates the per-contact GHL cache so the reads below
+    // hit the API fresh.
+    if (refresh) {
+      await db
+        .update(ghlContacts)
+        .set({ lastFetchedAt: null })
+        .where(eq(ghlContacts.userId, student.id));
     }
 
-    if (!ghlContactId) {
+    // Same pipeline as the Lab Assistant: email-verified links only,
+    // Course sub-account first, per-location field resolution, merged.
+    const context = await getStudentContext(student);
+
+    if (!context.ghlContactId) {
       return NextResponse.json({
         linked: false,
         endDate: null,
@@ -103,29 +87,10 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const result = refresh
-      ? await refreshGhlContactData(student.id)
-      : await fetchGhlContactData(student.id);
-
-    if (!result.data) {
-      return NextResponse.json({
-        linked: true,
-        endDate: null,
-        lastFetchedAt: null,
-        reason: "ghl_unavailable",
-      });
-    }
-
-    const { values, via } = await resolveAllowlistedFields(
-      ghlContactId,
-      result.data.customFields ?? []
-    );
-
     return NextResponse.json({
       linked: true,
-      endDate: normalizeToDateString(values.end_date),
-      resolvedVia: via.end_date,
-      lastFetchedAt: result.lastFetchedAt,
+      endDate: normalizeToDateString(context.fields.end_date),
+      lastFetchedAt: new Date(),
       reason: null,
     });
   } catch (error) {
