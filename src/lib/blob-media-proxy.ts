@@ -20,8 +20,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-/** Max bytes served per invocation for open-ended range requests. */
-export const CHUNK_BYTES = 10 * 1024 * 1024; // 10MB — seconds per request, even on slow links
+/** Max bytes served per invocation for range requests.
+ *  Sized so a chunk finishes well inside the function timeout even on slow
+ *  links: 4MB needs only ~0.1 Mbps sustained against a 300s maxDuration. A
+ *  chunk cut off by the timeout reaches the browser as a truncated 206 body,
+ *  which Chrome surfaces as PIPELINE_ERROR_READ / "FFmpegDemuxer: data source
+ *  error" — the exact failure this bound exists to prevent. */
+export const CHUNK_BYTES = 4 * 1024 * 1024; // 4MB
 
 interface ProxyOptions {
   /** Content-Type to use when upstream doesn't send one. */
@@ -33,18 +38,33 @@ interface ProxyOptions {
 }
 
 /**
- * Clamp an open-ended `bytes=N-` range to `bytes=N-(N+CHUNK_BYTES-1)`.
- * Bounded ranges (`bytes=N-M`, Safari's normal pattern) and suffix ranges
- * (`bytes=-N`, used to grab the moov atom at the tail of an MP4) pass through
- * untouched. Anything unparseable passes through untouched too — upstream
- * decides what to do with it.
+ * Clamp a range request to at most CHUNK_BYTES per invocation:
+ * - open-ended `bytes=N-` becomes `bytes=N-(N+CHUNK_BYTES-1)`
+ * - bounded `bytes=N-M` is shortened when the span exceeds CHUNK_BYTES
+ *   (a browser asking for hundreds of MB in one request would otherwise hit
+ *   the same mid-stream timeout the chunking exists to prevent; it simply
+ *   re-requests the rest, exactly like the open-ended case)
+ * - suffix ranges (`bytes=-N`, used to grab the moov atom at the tail of an
+ *   MP4) and anything unparseable pass through untouched — upstream decides.
  */
 export function clampRangeHeader(range: string): string {
-  const match = /^bytes=(\d+)-$/.exec(range.trim());
-  if (!match) return range;
-  const start = Number(match[1]);
-  if (!Number.isFinite(start)) return range;
-  return `bytes=${start}-${start + CHUNK_BYTES - 1}`;
+  const trimmed = range.trim();
+  const open = /^bytes=(\d+)-$/.exec(trimmed);
+  if (open) {
+    const start = Number(open[1]);
+    if (!Number.isFinite(start)) return range;
+    return `bytes=${start}-${start + CHUNK_BYTES - 1}`;
+  }
+  const bounded = /^bytes=(\d+)-(\d+)$/.exec(trimmed);
+  if (bounded) {
+    const start = Number(bounded[1]);
+    const end = Number(bounded[2]);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+      return range;
+    }
+    return `bytes=${start}-${Math.min(end, start + CHUNK_BYTES - 1)}`;
+  }
+  return range;
 }
 
 /**
@@ -128,10 +148,24 @@ export async function proxyBlobMedia(
   if (etag) responseHeaders.set("ETag", etag);
   const lastModified = blobResponse.headers.get("last-modified");
   if (lastModified) responseHeaders.set("Last-Modified", lastModified);
-  responseHeaders.set("Cache-Control", "private, max-age=3600");
+  // Partial (206) chunk windows are never cached: a cached window replayed
+  // for a different byte offset corrupts playback, and the windows shift
+  // whenever CHUNK_BYTES changes. Full responses stay cacheable.
+  responseHeaders.set(
+    "Cache-Control",
+    blobResponse.status === 206 ? "no-store" : "private, max-age=3600",
+  );
   for (const [key, value] of Object.entries(options.extraHeaders ?? {})) {
     responseHeaders.set(key, value);
   }
+
+  // One compact line per invocation so a playback failure can be matched to
+  // the exact request/response shape in the Vercel logs (the browser-side
+  // demuxer error alone doesn't say which byte range died).
+  console.log(
+    `[${options.label}] range=${range ?? "none"} → ${blobResponse.status}` +
+      ` content-range=${contentRange ?? "none"} content-length=${contentLength ?? "none"}`,
+  );
 
   return new NextResponse(blobResponse.body, {
     status: blobResponse.status,

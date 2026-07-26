@@ -7,7 +7,7 @@ import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 
 // Each invocation serves at most one bounded chunk (see blob-media-proxy), so
 // 60s is ample headroom even for long-form audio.
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * GET /api/course-library/audio/[lessonId]

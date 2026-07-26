@@ -13,12 +13,12 @@ const SLOW_LOAD_MS = 15000;
 /**
  * Native <video> player for Course Library lessons.
  *
- * Rendered as a client component so autoplay actually works: React does not
- * emit the `muted` attribute into server-rendered HTML (it only sets the
- * `muted` DOM property after hydration), so a server-rendered
- * `<video autoplay muted>` is parsed as unmuted — and browsers block unmuted
- * autoplay. Here we set `muted` on the element imperatively and call play()
- * on mount, which browsers allow. The student unmutes from the controls.
+ * Videos default to UNMUTED (team request: students shouldn't have to find
+ * the unmute button). Browsers only allow autoplay with sound after the user
+ * has interacted with the site, so we attempt an unmuted play() on mount and,
+ * if the browser blocks it, simply leave the video paused and unmuted — the
+ * student presses play and gets sound immediately. We never fall back to
+ * muted autoplay.
  *
  * While the video buffers for the first time (it streams through an
  * authenticated proxy) we show a short overlay so students know to wait.
@@ -88,12 +88,11 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
     const raf = requestAnimationFrame(() => {
       if (video.readyState >= 3) setStatus("ready");
     });
-    // Guarantee muted is set before attempting playback so the browser's
-    // autoplay policy permits it.
-    video.muted = true;
+    // Attempt unmuted autoplay. If the browser's autoplay policy blocks it,
+    // stay paused AND unmuted — the student presses play and hears sound
+    // right away instead of discovering the video was silently muted.
+    video.muted = false;
     const attempt = video.play();
-    // play() rejects if the browser still blocks it; ignore so it doesn't
-    // throw an unhandled rejection — the student can press play manually.
     if (attempt && typeof attempt.catch === "function") {
       attempt.catch(() => {});
     }
@@ -107,9 +106,10 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
     setDiagnosis(null);
     setStatus("loading");
     // load() re-issues the request from scratch (fresh auth cookies included),
-    // which recovers from transient network/session hiccups.
+    // which recovers from transient network/session hiccups. Retry is a user
+    // gesture, so unmuted play() is allowed here.
     video.load();
-    video.muted = true;
+    video.muted = false;
     const attempt = video.play();
     if (attempt && typeof attempt.catch === "function") {
       attempt.catch(() => {});
@@ -123,7 +123,6 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
         src={src}
         controls
         playsInline
-        muted
         autoPlay
         preload="metadata"
         controlsList="nodownload"
@@ -159,7 +158,7 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
           ) : (
             <p className="max-w-xs text-xs text-white/70">
               This can take up to 10 seconds. Please don&apos;t refresh or
-              leave the page — it&apos;ll start playing automatically.
+              leave the page — it&apos;ll be ready to play in a moment.
             </p>
           )}
         </div>

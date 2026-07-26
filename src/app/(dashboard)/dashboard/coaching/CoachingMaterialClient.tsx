@@ -393,11 +393,22 @@ function NoteCard({
   visualFontClass?: string;
 }) {
   const baseText = note.textOverride ?? note.text;
-  // Click-to-copy: clicking a character copies it (a word if the click
-  // landed between characters), so students can paste straight into a
-  // dictionary. Shown briefly via the `copiedText` badge.
+  // Click-to-copy: copy exactly the unit that was clicked — a single Chinese
+  // character copies that character, a pinyin/jyutping syllable copies that
+  // syllable, and a plain multi-character word span copies the word. No
+  // fallback to the enclosing segmented word: that made a click on the
+  // annotation copy the whole word (e.g. clicking 分's pinyin copied
+  // 三十分鐘), which read as random behavior. Shown via the `copiedText`
+  // badge.
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashCopied = useCallback((text: string) => {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopiedText(text);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = setTimeout(() => setCopiedText(null), 1200);
+    }).catch(() => {});
+  }, []);
   const handleCharCopy = useCallback((e: React.MouseEvent<HTMLElement>) => {
     const target = e.target as HTMLElement;
     // Never hijack clicks on interactive controls
@@ -406,16 +417,25 @@ function NoteCard({
     const selection = window.getSelection();
     if (selection && selection.toString().length > 0) return;
     const own = (target.textContent ?? "").trim();
-    const isSingleHanChar = [...own].length === 1 && /\p{Script=Han}/u.test(own);
-    const word = target.closest("[data-word]")?.getAttribute("data-word") ?? "";
-    const toCopy = isSingleHanChar ? own : word;
-    if (!toCopy || !/\p{Script=Han}/u.test(toCopy)) return;
-    navigator.clipboard?.writeText(toCopy).then(() => {
-      setCopiedText(toCopy);
-      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-      copiedTimerRef.current = setTimeout(() => setCopiedText(null), 1200);
-    }).catch(() => {});
-  }, []);
+    if (!own) return;
+    const chars = [...own];
+    // Single Chinese character → copy it.
+    if (chars.length === 1 && /\p{Script=Han}/u.test(own)) {
+      flashCopied(own);
+      return;
+    }
+    // A romanization syllable (pinyin/jyutping annotation above a character,
+    // e.g. "fēn" or "faan6") → copy the syllable.
+    if (chars.length <= 8 && /^[a-zA-ZÀ-ɏḀ-ỿ]+[1-6]?$/.test(own)) {
+      flashCopied(own);
+      return;
+    }
+    // A plain word span rendered as one element (no per-character spans) →
+    // copy the word the click actually landed on.
+    if (chars.length <= 8 && chars.every((c) => /\p{Script=Han}/u.test(c))) {
+      flashCopied(own);
+    }
+  }, [flashCopied]);
   // Derive language from the note's own pane field to ensure TTS always
   // speaks the correct language, even if the parent prop gets stale.
   const noteLanguage: "zh-CN" | "zh-HK" =
@@ -604,8 +624,9 @@ function NoteCard({
       onClick={handleCharCopy}
     >
       {copiedText && (
-        <span className="pointer-events-none absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded bg-cyan-500/90 px-2 py-0.5 text-[11px] font-medium text-white shadow">
-          <Copy className="size-3" /> Copied {copiedText}
+        <span className="pointer-events-none absolute right-2 top-2 z-10 inline-flex max-w-[280px] items-center gap-1 rounded bg-cyan-500/90 px-2 py-0.5 text-[11px] font-medium text-white shadow">
+          <Copy className="size-3 shrink-0" />
+          <span className="truncate">Copied {copiedText}</span>
         </span>
       )}
       <div className="flex items-start gap-2">
@@ -954,6 +975,23 @@ function NoteCard({
                     <Languages className="size-3.5" />
                   )}
                 </button>
+                {(note.romanizationOverride || defaultRomanization) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      flashCopied(note.romanizationOverride ?? defaultRomanization)
+                    }
+                    className="inline-flex items-center justify-center size-6 rounded hover:bg-muted text-muted-foreground hover:text-cyan-500 transition-colors"
+                    aria-label={
+                      noteLanguage === "zh-HK" ? "Copy jyutping" : "Copy pinyin"
+                    }
+                    title={
+                      noteLanguage === "zh-HK" ? "Copy jyutping" : "Copy pinyin"
+                    }
+                  >
+                    <Copy className="size-3.5" />
+                  </button>
+                )}
               </span>
               {/* On-demand translation */}
               {showTranslation && processed.translationCache.get(processed.displayText || baseText) && (
