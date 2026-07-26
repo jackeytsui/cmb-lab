@@ -4,7 +4,7 @@
 
 import { db } from "@/db";
 import { ghlContacts, ghlLocations, type GhlContact } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import {
   createGhlClient,
   getAnyActiveGhlLocation,
@@ -158,6 +158,7 @@ export async function getGhlContactId(
     .select({ ghlContactId: ghlContacts.ghlContactId })
     .from(ghlContacts)
     .where(and(eq(ghlContacts.userId, userId), eq(ghlContacts.syncStatus, "active")))
+    .orderBy(asc(ghlContacts.createdAt))
     .limit(1);
 
   return rows.length > 0 ? rows[0].ghlContactId : null;
@@ -176,7 +177,8 @@ export async function getGhlContactLinks(
       ghlLocationId: ghlContacts.ghlLocationId,
     })
     .from(ghlContacts)
-    .where(and(eq(ghlContacts.userId, userId), eq(ghlContacts.syncStatus, "active")));
+    .where(and(eq(ghlContacts.userId, userId), eq(ghlContacts.syncStatus, "active")))
+    .orderBy(asc(ghlContacts.createdAt));
 }
 
 /**

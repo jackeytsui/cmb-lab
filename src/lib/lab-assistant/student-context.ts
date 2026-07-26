@@ -2,23 +2,41 @@
 // Data gatekeeper for the CMB Lab Assistant.
 //
 // The AI never calls GHL directly. This middleware:
-//   session user (server-resolved) → single-record GHL lookup (cached)
-//   → allowlisted fields ONLY → injected into model context.
+//   session user (server-resolved) → the user's OWN linked GHL contacts
+//   (one per sub-account, each read against its own location)
+//   → allowlisted fields ONLY, merged across links → injected into context.
 //
 // Identity is always the signed-in session user — identity claims typed in
-// chat are never trusted. One student's data per request; no other contact
-// is ever loaded, so cross-student leakage is structurally impossible.
+// chat are never trusted. Only contacts linked to that one user are ever
+// loaded, so cross-student leakage is structurally impossible.
 // Every field fetch is audit-logged (field names + presence only, no values).
+//
+// Why merge across links: students can exist in more than one GHL
+// sub-account (e.g. marketing + program locations). Their start date or
+// coach may live on only one of those contacts. Reading a single arbitrary
+// link made the bot answer "not set" for data that exists — so each active
+// link is resolved against its own location's field catalog, the link that
+// resolves the most concepts becomes the primary record (escalation tasks go
+// there), and gaps are filled from the remaining links deterministically.
 
 import type { User } from "@/db/schema";
-import { fetchGhlContactData } from "@/lib/ghl/contact-fields";
-import { findOrLinkContact, getGhlContactId } from "@/lib/ghl/contacts";
+import { fetchGhlContactDataForLink } from "@/lib/ghl/contact-fields";
+import { findOrLinkContact, getGhlContactLinks } from "@/lib/ghl/contacts";
 import { resolveAllowlistedFields } from "./field-resolution";
+import {
+  emptyConceptRecord,
+  mergeLinkResolutions,
+  normalizeFieldValue,
+  type LinkResolution,
+} from "./field-merge";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import {
   ALLOWLISTED_FIELD_CONCEPTS,
   type AllowlistedFieldConcept,
 } from "./allowlist";
+
+/** Safety cap on how many linked sub-accounts are read per request. */
+const MAX_LINKS = 5;
 
 export interface StudentContext {
   /** First name for greeting (GHL contact first, LMS profile fallback). */
@@ -27,39 +45,33 @@ export interface StudentContext {
   email: string;
   /** Allowlisted GHL fields; null when empty or unmapped (default DENY for all others). */
   fields: Record<AllowlistedFieldConcept, string | null>;
-  /** Linked GHL contact for task creation; null when the student isn't linked. */
+  /**
+   * Contact for task creation — the primary link (the one the student's
+   * program data resolved from); null when the student isn't linked.
+   */
   ghlContactId: string | null;
 }
 
-function emptyFields(): Record<AllowlistedFieldConcept, string | null> {
-  return Object.fromEntries(
-    ALLOWLISTED_FIELD_CONCEPTS.map((concept) => [concept, null])
-  ) as Record<AllowlistedFieldConcept, string | null>;
-}
-
-function toDisplayValue(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  const text = String(value).trim();
-  return text.length > 0 ? text : null;
-}
-
 /**
- * Resolve the signed-in student's assistant context from their GHL contact.
- * Single-record lookup, allowlisted fields only, audit-logged.
+ * Resolve the signed-in student's assistant context from their linked GHL
+ * contacts. Allowlisted fields only, audit-logged, merged across links so
+ * the answer comes from whichever sub-account actually holds the data.
  * Degrades gracefully: on any GHL failure the assistant still works with
  * empty fields (friendly null phrasing + escalation path).
  */
 export async function getStudentContext(user: User): Promise<StudentContext> {
-  const fields = emptyFields();
   const firstNameFallback = user.name?.trim().split(/\s+/)[0] ?? null;
 
-  // Ensure the user is linked to their GHL contact (by session email, server-side).
-  let ghlContactId: string | null = null;
+  // Ensure the user is linked to their GHL contact(s) (by session email,
+  // server-side). getGhlContactLinks returns active links oldest-first.
+  let links: Array<{ ghlContactId: string; ghlLocationId: string }> = [];
   try {
-    ghlContactId = await getGhlContactId(user.id);
-    if (!ghlContactId) {
-      const links = await findOrLinkContact(user.id, user.email);
-      ghlContactId = links[0]?.ghlContactId ?? null;
+    links = await getGhlContactLinks(user.id);
+    if (links.length === 0) {
+      links = (await findOrLinkContact(user.id, user.email)).map((link) => ({
+        ghlContactId: link.ghlContactId,
+        ghlLocationId: link.ghlLocationId,
+      }));
     }
   } catch (error) {
     console.error(
@@ -68,43 +80,56 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
     );
   }
 
-  if (!ghlContactId) {
+  if (links.length === 0) {
     return {
       firstName: firstNameFallback,
       email: user.email,
-      fields,
+      fields: emptyConceptRecord<string | null>(null),
       ghlContactId: null,
     };
   }
 
-  let firstName = firstNameFallback;
-  let resolvedVia: Record<string, string | null> = {};
-  try {
-    const { data } = await fetchGhlContactData(user.id);
-    if (data) {
-      firstName = data.firstName?.trim() || firstNameFallback;
+  // Read each linked contact against its OWN location and resolve the
+  // allowlisted concepts there. Per-link failures degrade to that link
+  // resolving nothing — the others still count.
+  const resolutions: LinkResolution[] = [];
+  const firstNameByContact = new Map<string, string | null>();
+  for (const link of links.slice(0, MAX_LINKS)) {
+    try {
+      const { data } = await fetchGhlContactDataForLink(link);
+      if (!data) continue;
+      firstNameByContact.set(link.ghlContactId, data.firstName?.trim() || null);
 
-      // Self-healing resolution: explicit mapping by ID, then by field name,
-      // then built-in name heuristics — strictly allowlist-scoped.
       const resolution = await resolveAllowlistedFields(
-        ghlContactId,
+        link.ghlLocationId,
         data.customFields
       );
-      resolvedVia = resolution.via;
+      const values = emptyConceptRecord<string | null>(null);
       for (const concept of ALLOWLISTED_FIELD_CONCEPTS) {
-        fields[concept] = toDisplayValue(resolution.values[concept]);
+        values[concept] = normalizeFieldValue(
+          concept,
+          resolution.values[concept]
+        );
       }
+      resolutions.push({ ...link, values, via: resolution.via });
+    } catch (error) {
+      console.error(
+        `[Lab Assistant] Field fetch failed for contact ${link.ghlContactId}:`,
+        error instanceof Error ? error.message : error
+      );
     }
-  } catch (error) {
-    console.error(
-      "[Lab Assistant] Field fetch failed:",
-      error instanceof Error ? error.message : error
-    );
   }
 
+  const merged = mergeLinkResolutions(resolutions);
+  const ghlContactId = merged.primary?.ghlContactId ?? links[0].ghlContactId;
+  const firstName =
+    firstNameByContact.get(ghlContactId) ??
+    [...firstNameByContact.values()].find(Boolean) ??
+    firstNameFallback;
+
   // Audit trail: which fields were fetched, whether they had values, and how
-  // each resolved (mapping / mapping-name / auto). Values are intentionally
-  // omitted (PII stays out of analytics).
+  // each resolved (mapping / mapping-name / auto + which link it came from).
+  // Values are intentionally omitted (PII stays out of analytics).
   await logSyncEvent({
     eventType: "lab_assistant.field_fetch",
     direction: "outbound",
@@ -113,17 +138,33 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
     ghlContactId,
     payload: {
       allowlist: [...ALLOWLISTED_FIELD_CONCEPTS],
+      linksRead: resolutions.length,
       present: Object.fromEntries(
         ALLOWLISTED_FIELD_CONCEPTS.map((concept) => [
           concept,
-          fields[concept] !== null,
+          merged.fields[concept] !== null,
         ])
       ),
-      resolvedVia,
+      resolvedVia: Object.fromEntries(
+        ALLOWLISTED_FIELD_CONCEPTS.map((concept) => [
+          concept,
+          merged.sources[concept]
+            ? {
+                via: merged.sources[concept].via,
+                locationId: merged.sources[concept].ghlLocationId,
+              }
+            : null,
+        ])
+      ),
     },
   }).catch((error) => {
     console.error("[Lab Assistant] Failed to write field-fetch audit log:", error);
   });
 
-  return { firstName, email: user.email, fields, ghlContactId };
+  return {
+    firstName: firstName ?? firstNameFallback,
+    email: user.email,
+    fields: merged.fields,
+    ghlContactId,
+  };
 }

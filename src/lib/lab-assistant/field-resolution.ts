@@ -17,40 +17,24 @@ import { db } from "@/db";
 import { ghlFieldMappings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getGhlClientForLocation } from "@/lib/ghl/client";
-import { getLocationForContact } from "@/lib/ghl/contacts";
 import {
   ALLOWLISTED_FIELD_CONCEPTS,
   type AllowlistedFieldConcept,
 } from "./allowlist";
+import {
+  suggestField,
+  type CatalogField,
+  type ResolutionSource,
+} from "./field-merge";
 
-export interface CatalogField {
-  id: string;
-  name: string;
-}
-
-/** Name heuristics per concept, tried in order (first match wins). */
-export const CONCEPT_PATTERNS: Record<AllowlistedFieldConcept, RegExp[]> = {
-  start_date: [/start\s*date/i, /date.*start/i],
-  end_date: [/end\s*date/i, /date.*end/i],
-  assigned_coach: [/coach/i],
-  referral_source: [
-    /referral.*source/i,
-    /referred\s*by/i,
-    /referral(?!.*status)/i,
-  ],
-  referral_status: [/referral.*status/i],
-};
-
-export function suggestField(
-  concept: AllowlistedFieldConcept,
-  fields: CatalogField[]
-): CatalogField | null {
-  for (const pattern of CONCEPT_PATTERNS[concept]) {
-    const match = fields.find((f) => pattern.test(f.name));
-    if (match) return match;
-  }
-  return null;
-}
+// Pure helpers live in field-merge.ts (unit-testable, no db imports);
+// re-exported here for existing importers.
+export {
+  CONCEPT_PATTERNS,
+  suggestField,
+  type CatalogField,
+  type ResolutionSource,
+} from "./field-merge";
 
 // In-memory catalog cache (per serverless instance) — field definitions
 // change rarely; 10 minutes keeps GHL calls off the hot path.
@@ -96,8 +80,6 @@ export async function getLocationFieldCatalog(
   }
 }
 
-export type ResolutionSource = "mapping" | "mapping-name" | "auto" | null;
-
 export interface AllowlistedFieldResolution {
   values: Record<AllowlistedFieldConcept, unknown>;
   /** How each concept resolved — surfaced in the audit trail for debugging. */
@@ -106,10 +88,13 @@ export interface AllowlistedFieldResolution {
 
 /**
  * Resolve the five allowlisted concepts from a contact's custom field values.
+ * The location is passed explicitly by the caller (the same link the field
+ * values were fetched from), so values are always matched against the catalog
+ * of the location they actually belong to.
  * Never throws; unresolvable concepts come back null/with via null.
  */
 export async function resolveAllowlistedFields(
-  ghlContactId: string,
+  ghlLocationId: string | null,
   contactCustomFields: Array<{ id: string; value: unknown }>
 ): Promise<AllowlistedFieldResolution> {
   const values = Object.fromEntries(
@@ -150,8 +135,9 @@ export async function resolveAllowlistedFields(
   const loadCatalog = async (): Promise<CatalogField[]> => {
     if (catalog) return catalog;
     try {
-      const locationId = await getLocationForContact(ghlContactId);
-      catalog = locationId ? await getLocationFieldCatalog(locationId) : [];
+      catalog = ghlLocationId
+        ? await getLocationFieldCatalog(ghlLocationId)
+        : [];
     } catch {
       catalog = [];
     }
