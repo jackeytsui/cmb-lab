@@ -94,7 +94,33 @@ export default async function DashboardLayout({
     isPast(courseEndAt);
   const isAccessActive = rawStatus === "active" && !isCourseEnded;
 
-  if (!isAccessActive) {
+  // Staff are NEVER expired/locked by portal-access metadata. Course end
+  // dates only apply to students; if a coach/admin account ends up carrying
+  // stale student metadata (bad webhook match, shared email alias, manual
+  // mistake), locking them out of the dashboard is always wrong — log it
+  // loudly instead so the metadata can be cleaned up.
+  const isStaffAccount =
+    dbUser?.role === "admin" ||
+    dbUser?.role === "coach" ||
+    role === "admin" ||
+    role === "coach" ||
+    resolveRoleFromEmail(email) !== "student";
+
+  if (!isAccessActive && isStaffAccount) {
+    console.warn(
+      `[access-gate] staff account ${email} (clerkId=${userId}) carries expired/paused portal metadata ` +
+        `(status=${rawStatus}, courseEndDate=${courseEndDateRaw ?? "none"}) — bypassing lock. ` +
+        `Clean up this Clerk user's publicMetadata and find out what keeps writing it.`,
+    );
+  }
+
+  if (!isAccessActive && !isStaffAccount) {
+    // Log the redirect with its inputs so "user keeps getting logged out"
+    // reports are diagnosable from Vercel logs.
+    console.warn(
+      `[access-gate] redirecting ${email} (clerkId=${userId}) to sign-in?access=expired: ` +
+        `status=${rawStatus}, courseEndDate=${courseEndDateRaw ?? "none"}`,
+    );
     // Auto-lock expired students once the end date passes.
     if (isCourseEnded && rawStatus !== "expired" && userId) {
       try {

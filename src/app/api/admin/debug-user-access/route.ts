@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import {
@@ -180,6 +181,36 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  // Clerk-side identity: which Clerk account(s) this email resolves to, every
+  // email attached to them, lock state, and portal-access metadata. Catches
+  // crossed identities — e.g. a student email attached as a secondary address
+  // on a staff account, which makes student portal-expiry metadata (and the
+  // dashboard's auto-lock) land on the staff member instead.
+  let clerkIdentity: unknown = null;
+  try {
+    const clerk = await clerkClient();
+    const matches = await clerk.users.getUserList({ emailAddress: [email.trim()] });
+    clerkIdentity = matches.data.map((cu) => {
+      const meta = (cu.publicMetadata ?? {}) as Record<string, unknown>;
+      return {
+        clerkId: cu.id,
+        matchesLmsUser: cu.id === user.clerkId,
+        locked: cu.locked ?? false,
+        emailAddresses: cu.emailAddresses.map((e) => e.emailAddress),
+        portalMetadata: {
+          cmbPortalAccessStatus: meta.cmbPortalAccessStatus ?? null,
+          cmbPortalAccessRevoked: meta.cmbPortalAccessRevoked ?? null,
+          cmbPortalAccessRevokedReason: meta.cmbPortalAccessRevokedReason ?? null,
+          cmbCourseEndDate: meta.cmbCourseEndDate ?? null,
+        },
+      };
+    });
+  } catch (error) {
+    clerkIdentity = {
+      error: error instanceof Error ? error.message : "clerk lookup failed",
+    };
+  }
+
   return NextResponse.json({
     user: {
       id: user.id,
@@ -187,6 +218,7 @@ export async function GET(req: NextRequest) {
       role: user.role,
       clerkId: user.clerkId,
     },
+    clerkIdentity,
     tags: userTags,
     defaultStudentFeatures: DEFAULT_STUDENT_FEATURES,
     baseFeatures,
