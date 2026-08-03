@@ -901,9 +901,14 @@ export function AudioCourseManager() {
                   </h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Submit this RSS feed URL to Spotify, Apple Podcasts, and YouTube Music
-                  so students can listen on their favorite app. The feed updates
-                  automatically when you add or modify lessons.
+                  Submit this RSS feed URL to Apple Podcasts and YouTube Music so
+                  students can listen on their favorite app. The feed updates
+                  automatically when you add or modify lessons. Note: Spotify does
+                  not accept listener-added RSS URLs — to reach Spotify, either
+                  submit this feed via Spotify for Creators (makes it publicly
+                  listed) or use HelloAudio&rsquo;s push-to-Spotify (keeps it
+                  private, students unlock with an access code), then paste the
+                  Spotify link below so students see the guided steps.
                 </p>
 
                 {/* RSS Feed URL */}

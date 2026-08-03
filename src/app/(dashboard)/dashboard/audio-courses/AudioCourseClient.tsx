@@ -54,7 +54,17 @@ type AudioCourse = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; courseTitle: string }) {
+function OfflinePodcastSection({
+  courseId,
+  courseTitle,
+  spotifyUrl,
+  helloAudioSeriesUrl,
+}: {
+  courseId: string;
+  courseTitle: string;
+  spotifyUrl?: string;
+  helloAudioSeriesUrl?: string;
+}) {
   const [feedUrl, setFeedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -168,10 +178,53 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
                 </ol>
               </div>
 
-              <div className="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
-                <p className="font-semibold text-amber-600 dark:text-amber-400">Spotify</p>
-                <p>Spotify does not currently support adding private RSS feeds as a listener. Use Apple Podcasts, YouTube Music, or another podcast app listed above instead.</p>
-              </div>
+              {spotifyUrl ? (
+                <div className="rounded border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5">
+                  <p className="font-semibold text-emerald-600 dark:text-emerald-400">Spotify</p>
+                  <p className="mb-1">
+                    Spotify doesn&rsquo;t accept pasted feed URLs, but this course is
+                    available directly on Spotify:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                    <li>
+                      <a
+                        href={spotifyUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-emerald-600 dark:text-emerald-400 underline underline-offset-2"
+                      >
+                        Open this course on Spotify
+                      </a>{" "}
+                      and tap Follow
+                    </li>
+                    <li>
+                      If episodes show a lock icon, tap &ldquo;Get Access&rdquo;, enter
+                      the email you use for this course, and paste the access code from
+                      your invitation email
+                    </li>
+                    <li>Download episodes for offline listening (requires Spotify Premium)</li>
+                  </ol>
+                  {helloAudioSeriesUrl && (
+                    <p className="mt-1">
+                      Can&rsquo;t find your access code?{" "}
+                      <a
+                        href={helloAudioSeriesUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-2"
+                      >
+                        Open your HelloAudio invitation
+                      </a>{" "}
+                      to retrieve it.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
+                  <p className="font-semibold text-amber-600 dark:text-amber-400">Spotify</p>
+                  <p>Spotify does not support adding private RSS feed URLs as a listener, and this course is not yet listed on Spotify. Use Apple Podcasts, YouTube Music, or another podcast app listed above instead.</p>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-border/50 pt-2 space-y-1">
@@ -537,7 +590,12 @@ export function AudioCourseClient({
                 )}
 
                 {/* Private podcast feed for offline listening */}
-                <OfflinePodcastSection courseId={course.id} courseTitle={course.title} />
+                <OfflinePodcastSection
+                  courseId={course.id}
+                  courseTitle={course.title}
+                  spotifyUrl={course.spotifyUrl}
+                  helloAudioSeriesUrl={course.helloAudioSeriesUrl}
+                />
 
                 {/* Lesson list */}
                 <div className="divide-y divide-border/60">
