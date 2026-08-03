@@ -9,6 +9,11 @@ import { webhookLimiter, rateLimitResponse, getClientIp } from "@/lib/rate-limit
 import { z } from "zod";
 import { processInboundTagUpdate } from "@/lib/ghl/tag-sync";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
+import {
+  normalizeWebhookBody,
+  extractSecretFromBody,
+  secretMatches,
+} from "@/lib/ghl/webhook-auth";
 import { db } from "@/db";
 import { ghlLocations } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -57,11 +62,16 @@ export async function POST(req: NextRequest) {
   if (!rl.success) return rateLimitResponse(rl);
 
   try {
-    const body = await parseBody(req);
-    if (!body) {
+    const rawBody = await parseBody(req);
+    if (!rawBody) {
       console.error("[GHL Webhook] Could not parse body");
       return NextResponse.json({ received: true, error: "invalid_payload" });
     }
+
+    // GHL Custom Webhook configs are hand-typed — trim stray whitespace from
+    // keys/values, and pull any secret out of the body before logging it.
+    const body = normalizeWebhookBody(rawBody);
+    const bodySecret = extractSecretFromBody(body);
 
     console.log("[GHL Webhook] Received body:", JSON.stringify(body));
 
@@ -71,10 +81,16 @@ export async function POST(req: NextRequest) {
     const locationId = body.locationId ?? body.location_id;
     const rawTags = body.tags;
 
-    const secret = req.headers.get("x-webhook-secret");
+    // Secret may arrive via header (preferred) or body field (fallback for
+    // workflows that can't set custom headers).
+    const headerSecret = req.headers.get("x-webhook-secret");
+    const providedSecret = headerSecret?.trim() || bodySecret;
+    const globalSecret = process.env.GHL_INBOUND_WEBHOOK_SECRET;
 
-    // Verify secret
-    let verified = false;
+    // Verify secret: the per-location secret (when configured) and the
+    // global secret are both accepted, so a stale row in ghl_locations can't
+    // lock out a workflow that still sends the valid global secret.
+    let locationSecret: string | null = null;
     if (locationId && typeof locationId === "string") {
       const locationRows = await db
         .select({ webhookSecret: ghlLocations.webhookSecret })
@@ -94,18 +110,21 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ received: true, error: "unknown_location" });
       }
 
-      if (locationRows[0].webhookSecret) {
-        verified = secret === locationRows[0].webhookSecret;
-      } else {
-        verified = secret === process.env.GHL_INBOUND_WEBHOOK_SECRET;
-      }
-    } else {
-      // No locationId — fall back to global secret
-      verified = secret === process.env.GHL_INBOUND_WEBHOOK_SECRET;
+      locationSecret = locationRows[0].webhookSecret;
     }
 
+    const verified = secretMatches(providedSecret, [locationSecret, globalSecret]);
+
     if (!verified) {
-      console.warn("[GHL Webhook] Unauthorized — secret mismatch");
+      // Log enough to diagnose which side of the comparison is broken,
+      // without ever logging secret values.
+      console.warn("[GHL Webhook] Unauthorized — secret mismatch", {
+        locationId: typeof locationId === "string" ? locationId : null,
+        headerSecretPresent: !!headerSecret,
+        bodySecretPresent: !!bodySecret,
+        locationSecretConfigured: !!locationSecret,
+        globalSecretConfigured: !!globalSecret,
+      });
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         name: parsed.data.name,
         ghlLocationId: parsed.data.ghlLocationId,
         apiToken: parsed.data.apiToken,
-        webhookSecret: parsed.data.webhookSecret || null,
+        webhookSecret: parsed.data.webhookSecret?.trim() || null,
       })
       .returning({
         id: ghlLocations.id,

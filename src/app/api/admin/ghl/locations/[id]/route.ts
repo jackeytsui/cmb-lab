@@ -8,7 +8,8 @@ import { z } from "zod";
 const updateLocationSchema = z.object({
   name: z.string().min(1).optional(),
   apiToken: z.string().min(1).optional(),
-  webhookSecret: z.string().optional(),
+  // Empty string = keep current secret; explicit null = clear it.
+  webhookSecret: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -39,7 +40,14 @@ export async function PUT(
     const updates: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) updates.name = parsed.data.name;
     if (parsed.data.apiToken !== undefined) updates.apiToken = parsed.data.apiToken;
-    if (parsed.data.webhookSecret !== undefined) updates.webhookSecret = parsed.data.webhookSecret || null;
+    if (parsed.data.webhookSecret === null) {
+      // Explicit null clears the secret (falls back to the global secret).
+      updates.webhookSecret = null;
+    } else if (parsed.data.webhookSecret !== undefined && parsed.data.webhookSecret.trim() !== "") {
+      // Empty string means "leave unchanged" — never wipe a secret because a
+      // client sent a blank field along with other edits.
+      updates.webhookSecret = parsed.data.webhookSecret.trim();
+    }
     if (parsed.data.isActive !== undefined) updates.isActive = parsed.data.isActive;
 
     if (Object.keys(updates).length === 0) {

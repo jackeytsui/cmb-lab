@@ -147,7 +147,7 @@ export function LocationManager() {
 
   function startEdit(location: GhlLocation) {
     setEditingId(location.id);
-    setEditFields({ name: location.name, webhookSecret: "" });
+    setEditFields({ name: location.name });
   }
 
   async function handleSaveEdit(locationId: string) {
@@ -157,7 +157,9 @@ export function LocationManager() {
       const updates: Record<string, unknown> = {};
       if (editFields.name) updates.name = editFields.name;
       if (editFields.apiToken) updates.apiToken = editFields.apiToken;
-      if (editFields.webhookSecret !== undefined) updates.webhookSecret = editFields.webhookSecret;
+      // Only send a webhook secret when one was actually entered — sending an
+      // empty value used to wipe the stored secret on every edit.
+      if (editFields.webhookSecret) updates.webhookSecret = editFields.webhookSecret;
 
       const res = await fetch(`/api/admin/ghl/locations/${locationId}`, {
         method: "PUT",
@@ -349,6 +351,23 @@ export function LocationManager() {
                           setEditFields((prev) => ({
                             ...prev,
                             apiToken: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 mb-1">
+                        New Webhook Secret (leave blank to keep current)
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="Leave blank to keep current secret"
+                        value={editFields.webhookSecret ?? ""}
+                        onChange={(e) =>
+                          setEditFields((prev) => ({
+                            ...prev,
+                            webhookSecret: e.target.value,
                           }))
                         }
                         className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500"
