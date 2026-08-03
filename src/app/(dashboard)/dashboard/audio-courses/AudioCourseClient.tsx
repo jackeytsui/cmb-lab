@@ -45,7 +45,6 @@ type AudioCourse = {
   spotifyUrl: string;
   youtubeMusicUrl: string;
   applePodcastUrl: string;
-  helloAudioSeriesUrl: string;
   studentInstructions: string;
   lessons: AudioLesson[];
 };
@@ -58,12 +57,10 @@ function OfflinePodcastSection({
   courseId,
   courseTitle,
   spotifyUrl,
-  helloAudioSeriesUrl,
 }: {
   courseId: string;
   courseTitle: string;
   spotifyUrl?: string;
-  helloAudioSeriesUrl?: string;
 }) {
   const [feedUrl, setFeedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -197,32 +194,13 @@ function OfflinePodcastSection({
                       </a>{" "}
                       and tap Follow
                     </li>
-                    <li>
-                      If episodes show a lock icon, tap &ldquo;Get Access&rdquo;, enter
-                      the email you use for this course, and paste the access code from
-                      your invitation email
-                    </li>
                     <li>Download episodes for offline listening (requires Spotify Premium)</li>
                   </ol>
-                  {helloAudioSeriesUrl && (
-                    <p className="mt-1">
-                      Can&rsquo;t find your access code?{" "}
-                      <a
-                        href={helloAudioSeriesUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline underline-offset-2"
-                      >
-                        Open your HelloAudio invitation
-                      </a>{" "}
-                      to retrieve it.
-                    </p>
-                  )}
                 </div>
               ) : (
                 <div className="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
                   <p className="font-semibold text-amber-600 dark:text-amber-400">Spotify</p>
-                  <p>Spotify does not support adding private RSS feed URLs as a listener, and this course is not yet listed on Spotify. Use Apple Podcasts, YouTube Music, or another podcast app listed above instead.</p>
+                  <p>Spotify does not support adding private RSS feed URLs as a listener, and this course is not listed on Spotify. Use Apple Podcasts, YouTube Music, or another podcast app listed above instead.</p>
                 </div>
               )}
             </div>
@@ -571,12 +549,8 @@ export function AudioCourseClient({
                 {/* External platform links */}
                 {(course.spotifyUrl ||
                   course.youtubeMusicUrl ||
-                  course.applePodcastUrl ||
-                  course.helloAudioSeriesUrl) && (
+                  course.applePodcastUrl) && (
                   <div className="flex flex-wrap gap-2 border-b border-border/60 px-3 sm:px-4 py-3">
-                    {course.helloAudioSeriesUrl && (
-                      <ExternalLinkBadge href={course.helloAudioSeriesUrl} label="HelloAudio" />
-                    )}
                     {course.spotifyUrl && (
                       <ExternalLinkBadge href={course.spotifyUrl} label="Spotify" />
                     )}
@@ -594,7 +568,6 @@ export function AudioCourseClient({
                   courseId={course.id}
                   courseTitle={course.title}
                   spotifyUrl={course.spotifyUrl}
-                  helloAudioSeriesUrl={course.helloAudioSeriesUrl}
                 />
 
                 {/* Lesson list */}

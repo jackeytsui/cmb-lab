@@ -45,7 +45,6 @@ type AudioSeries = {
   id: string;
   title: string;
   summary: string;
-  helloAudioSeriesUrl: string;
   spotifyUrl: string;
   youtubeMusicUrl: string;
   applePodcastUrl: string;
@@ -904,11 +903,12 @@ export function AudioCourseManager() {
                   Submit this RSS feed URL to Apple Podcasts and YouTube Music so
                   students can listen on their favorite app. The feed updates
                   automatically when you add or modify lessons. Note: Spotify does
-                  not accept listener-added RSS URLs — to reach Spotify, either
-                  submit this feed via Spotify for Creators (makes it publicly
-                  listed) or use HelloAudio&rsquo;s push-to-Spotify (keeps it
-                  private, students unlock with an access code), then paste the
-                  Spotify link below so students see the guided steps.
+                  not accept listener-added RSS URLs and cannot carry private
+                  feeds — the only way to reach Spotify is to submit this feed
+                  via Spotify for Creators, which makes the course publicly
+                  listed and searchable. Only do this for free/promotional
+                  content. If you do, paste the Spotify link below so students
+                  see the guided steps.
                 </p>
 
                 {/* RSS Feed URL */}
@@ -966,13 +966,6 @@ export function AudioCourseManager() {
                     value={activeSeries.applePodcastUrl}
                     onSave={(v) => saveSeries({ applePodcastUrl: v })}
                     placeholder="https://podcasts.apple.com/..."
-                  />
-                  <EditableField
-                    key={`ha-${activeSeries.id}-${activeSeries.helloAudioSeriesUrl}`}
-                    label="HelloAudio Link (optional)"
-                    value={activeSeries.helloAudioSeriesUrl}
-                    onSave={(v) => saveSeries({ helloAudioSeriesUrl: v })}
-                    placeholder="https://app.helloaudio.fm/..."
                   />
                 </div>
               </section>

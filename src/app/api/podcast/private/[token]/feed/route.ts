@@ -8,8 +8,8 @@ import { courses, lessons, modules, podcastTokens, users } from "@/db/schema";
  * Private RSS podcast feed authenticated by unique student token.
  * Compatible with Apple Podcasts, YouTube Music, Overcast, Pocket Casts, and
  * any other app that accepts RSS feeds by URL. Spotify does NOT accept
- * listener-added RSS URLs — Spotify delivery goes through HelloAudio's
- * Spotify Open Access integration instead (see the course's spotifyUrl).
+ * listener-added RSS URLs, so this private feed cannot be used in Spotify;
+ * Spotify only carries courses published publicly via Spotify for Creators.
  */
 
 function escapeXml(str: string): string {
