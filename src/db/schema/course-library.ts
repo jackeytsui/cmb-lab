@@ -31,6 +31,7 @@ export const courseLibraryLessonTypeEnum = pgEnum(
     "download",
     "audio",
     "form",
+    "video_thread",
     "text_assignment",
     "listening_practice",
     "vocal_hack",
@@ -356,6 +357,15 @@ export interface CourseLibraryAudioContent {
   transcript?: string;
   description?: string;
   attachments?: CourseLibraryAttachment[];
+}
+
+/** Native interactive video lesson backed by CMB Lab's Video Thread player. */
+export interface CourseLibraryVideoThreadContent {
+  threadId: string;
+  description?: string;
+  sourceProvider?: "videoask";
+  sourceFormId?: string;
+  sourceShareUrl?: string;
 }
 
 export interface CourseLibraryFormContent {

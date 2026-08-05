@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import {
@@ -26,6 +27,7 @@ import {
   ArrowDown,
   Sparkles,
   BarChart3,
+  MessagesSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { extractEmbedUrl, looksLikeIframeSnippet } from "@/lib/embed";
@@ -44,6 +46,7 @@ type LessonType =
   | "quiz"
   | "download"
   | "form"
+  | "video_thread"
   | "text_assignment"
   | "listening_practice"
   | "vocal_hack"
@@ -67,6 +70,11 @@ const TYPE_META: Record<LessonType, { label: string; Icon: typeof Video; color: 
   quiz: { label: "Quiz Lesson", Icon: HelpCircle, color: "text-amber-500" },
   download: { label: "Download Lesson", Icon: Download, color: "text-emerald-500" },
   form: { label: "Form Embed", Icon: ExternalLink, color: "text-pink-500" },
+  video_thread: {
+    label: "Interactive Video",
+    Icon: MessagesSquare,
+    color: "text-cyan-500",
+  },
   text_assignment: {
     label: "Text Assignment",
     Icon: ClipboardList,
@@ -334,6 +342,9 @@ export function LessonEditorClient({
           onUpdate={updateContent}
         />
       )}
+      {lesson.lessonType === "video_thread" && (
+        <ImportedVideoThreadPanel content={lesson.content} />
+      )}
       {(lesson.lessonType === "text_assignment" ||
         lesson.lessonType === "text_assignment_canto") && (
         <TextAssignmentLessonForm
@@ -381,6 +392,62 @@ export function LessonEditorClient({
       )}
 
       <button type="button" onClick={() => router.refresh()} className="hidden" />
+    </div>
+  );
+}
+
+function ImportedVideoThreadPanel({
+  content,
+}: {
+  content: Record<string, unknown>;
+}) {
+  const threadId = typeof content.threadId === "string" ? content.threadId : null;
+  const sourceFormId =
+    typeof content.sourceFormId === "string" ? content.sourceFormId : null;
+  const sourceShareUrl =
+    typeof content.sourceShareUrl === "string" ? content.sourceShareUrl : null;
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">
+          Imported interactive lesson
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Questions, response choices, branching, prompt text, and media are
+          managed in the Video Thread builder. Re-importing the source form
+          replaces this lesson only after the new copy is complete.
+        </p>
+      </div>
+
+      {sourceFormId && (
+        <p className="text-xs text-muted-foreground">
+          VideoAsk form ID: <span className="font-mono text-foreground">{sourceFormId}</span>
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {threadId && (
+          <Link
+            href={`/admin/video-threads/${threadId}/builder`}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <MessagesSquare className="h-3.5 w-3.5" />
+            Open Video Thread builder
+          </Link>
+        )}
+        {sourceShareUrl && (
+          <a
+            href={sourceShareUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-accent"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open source in VideoAsk
+          </a>
+        )}
+      </div>
     </div>
   );
 }

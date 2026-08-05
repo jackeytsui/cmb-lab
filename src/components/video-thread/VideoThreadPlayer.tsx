@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useReducer, useState } from "react";
+import React, { useEffect, useReducer, useState } from "react";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,6 +110,9 @@ interface VideoThreadPlayerProps {
   className?: string;
   resumeSessionId?: string | null;
   resumeStepId?: string | null;
+  courseLessonId?: string;
+  completionHref?: string;
+  completionLabel?: string;
 }
 
 export function VideoThreadPlayer({
@@ -118,6 +121,9 @@ export function VideoThreadPlayer({
   className,
   resumeSessionId,
   resumeStepId,
+  courseLessonId,
+  completionHref = "/dashboard",
+  completionLabel = "Back to Dashboard",
 }: VideoThreadPlayerProps) {
   // Determine initial step: resume from lastStepId if it exists in steps, otherwise first step
   const resolvedInitialStepId = (() => {
@@ -138,9 +144,28 @@ export function VideoThreadPlayer({
 
   // Local state for text input
   const [textValue, setTextValue] = useState("");
+  const [selectedResponseType, setSelectedResponseType] =
+    useState<PlayerResponse["responseType"] | null>(null);
 
   const currentStep = state.steps.find((s) => s.id === state.currentStepId);
   const currentIndex = state.steps.findIndex((s) => s.id === state.currentStepId);
+
+  useEffect(() => {
+    setTextValue("");
+    setSelectedResponseType(null);
+  }, [state.currentStepId]);
+
+  const responseChoices: PlayerResponse["responseType"][] = currentStep
+    ? currentStep.responseType === "button" ||
+      currentStep.responseType === "multiple_choice"
+      ? [currentStep.responseType]
+      : currentStep.allowedResponseTypes?.length
+        ? currentStep.allowedResponseTypes
+        : [currentStep.responseType]
+    : [];
+  const activeResponseType =
+    selectedResponseType ??
+    (responseChoices.length === 1 ? responseChoices[0] : null);
 
   // API-backed response handler
   const handleResponse = async (
@@ -197,6 +222,16 @@ export function VideoThreadPlayer({
 
       // Advance or complete
       if (data.completed) {
+        if (courseLessonId) {
+          await fetch(
+            `/api/course-library/lessons/${courseLessonId}/progress`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ completed: true }),
+            },
+          ).catch(() => null);
+        }
         dispatch({ type: "SET_STATUS", payload: "completed" });
       } else if (data.nextStepId) {
         dispatch({ type: "SET_CURRENT_STEP", payload: data.nextStepId });
@@ -249,10 +284,10 @@ export function VideoThreadPlayer({
             You&apos;ve finished all steps in this thread.
           </p>
           <Link
-            href="/dashboard"
+            href={completionHref}
             className="inline-block mt-4 px-6 py-3 bg-white text-black font-semibold rounded-lg hover:bg-gray-200 transition-colors"
           >
-            Back to Dashboard
+            {completionLabel}
           </Link>
           <div className="mt-2">
             <button
@@ -296,17 +331,28 @@ export function VideoThreadPlayer({
           playbackId={currentStep.upload.muxPlaybackId}
           className="w-full h-full object-cover"
           autoPlay
-          muted
+          muted={false}
         />
+      ) : currentStep.videoUrl && currentStep.mediaType === "audio" ? (
+        <div className="flex h-full w-full items-center justify-center bg-gray-900 px-8">
+          <audio
+            key={currentStep.id}
+            src={currentStep.videoUrl}
+            className="w-full max-w-xl"
+            autoPlay
+            controls
+          />
+        </div>
       ) : currentStep.videoUrl ? (
         <video
           key={currentStep.id}
           src={currentStep.videoUrl}
           className="w-full h-full object-cover"
           autoPlay
-          controls={false}
+          controls
           loop
-          muted
+          playsInline
+          poster={currentStep.sourceThumbnailUrl || undefined}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white">
@@ -341,6 +387,17 @@ export function VideoThreadPlayer({
             </h2>
           )}
 
+          {currentStep.transcriptText && (
+            <details className="max-h-32 overflow-auto rounded-md bg-black/45 px-3 py-2 text-sm text-white/80 backdrop-blur-sm">
+              <summary className="cursor-pointer font-medium text-white">
+                Transcript
+              </summary>
+              <p className="mt-2 whitespace-pre-wrap">
+                {currentStep.transcriptText}
+              </p>
+            </details>
+          )}
+
           {/* Error message */}
           {state.error && (
             <div className="bg-red-500/80 text-white text-sm px-4 py-2 rounded-lg">
@@ -356,7 +413,9 @@ export function VideoThreadPlayer({
               currentStep.responseOptions?.options?.map((opt) => (
                 <Button
                   key={opt.value}
-                  onClick={() => handleResponse(opt.value, "button")}
+                  onClick={() =>
+                    handleResponse(opt.value, currentStep.responseType)
+                  }
                   disabled={state.isSubmitting}
                   variant="secondary"
                   className="text-lg px-6 py-3 bg-white/20 hover:bg-white/40 text-white border border-white/30 rounded-full backdrop-blur-sm transition-all disabled:opacity-50"
@@ -367,7 +426,26 @@ export function VideoThreadPlayer({
                   {opt.label}
                 </Button>
               ))
-            ) : currentStep.responseType === "text" ? (
+            ) : responseChoices.length > 1 && !activeResponseType ? (
+              <div className="flex flex-wrap gap-3">
+                {responseChoices.map((type) => (
+                  <Button
+                    key={type}
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setSelectedResponseType(type)}
+                    className="bg-white/20 text-white hover:bg-white/40"
+                  >
+                    {type === "video" ? (
+                      <Video className="h-4 w-4" />
+                    ) : type === "audio" ? (
+                      <Mic className="h-4 w-4" />
+                    ) : null}
+                    Respond with {type.replace("_", " ")}
+                  </Button>
+                ))}
+              </div>
+            ) : activeResponseType === "text" ? (
               // Text input response
               <div className="flex w-full gap-3">
                 <input
@@ -396,7 +474,7 @@ export function VideoThreadPlayer({
                   )}
                 </Button>
               </div>
-            ) : currentStep.responseType === "audio" ? (
+            ) : activeResponseType === "audio" ? (
               // Audio recording response
               state.recordingMode === "audio" ? (
                 <StudentMediaRecorder
@@ -416,7 +494,7 @@ export function VideoThreadPlayer({
                   Record Audio
                 </button>
               )
-            ) : currentStep.responseType === "video" ? (
+            ) : activeResponseType === "video" ? (
               // Video recording response
               state.recordingMode === "video" ? (
                 <StudentMediaRecorder
@@ -439,7 +517,7 @@ export function VideoThreadPlayer({
             ) : (
               // Fallback for unsupported response types
               <div className="text-white/70 text-sm">
-                Response type &quot;{currentStep.responseType}&quot; is not yet
+                Response type &quot;{activeResponseType ?? currentStep.responseType}&quot; is not yet
                 supported.
               </div>
             )}

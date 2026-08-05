@@ -3,7 +3,10 @@ import { db } from "@/db";
 import { videoThreadSteps, videoThreadSessions, videoThreadResponses } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { evaluateRules } from "@/lib/logic-engine";
-import { LogicRule } from "@/types/video-thread-player";
+import {
+  LogicRule,
+  VIDEO_THREAD_COMPLETE_TARGET,
+} from "@/types/video-thread-player";
 import { getCurrentUser } from "@/lib/auth";
 
 interface RouteParams {
@@ -28,6 +31,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!response || !response.type) {
       return NextResponse.json({ error: "response with type required" }, { status: 400 });
+    }
+
+    // Resolve and validate the step before creating a session or storing a
+    // response. This prevents a step from another thread being submitted here.
+    const currentStep = await db.query.videoThreadSteps.findFirst({
+      where: and(
+        eq(videoThreadSteps.id, stepId),
+        eq(videoThreadSteps.threadId, threadId),
+      ),
+    });
+
+    if (!currentStep) {
+      return NextResponse.json({ error: "Step not found" }, { status: 404 });
     }
 
     // --- Session Handling ---
@@ -77,33 +93,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // --- Next Step Resolution (preserved logic engine) ---
 
-    // 1. Fetch current step to determine immediate next connection
-    const currentStep = await db.query.videoThreadSteps.findFirst({
-      where: eq(videoThreadSteps.id, stepId),
-    });
-
-    if (!currentStep) {
-      return NextResponse.json({ error: "Step not found" }, { status: 404 });
-    }
-
     let nextStepId: string | null = null;
+    let forcedComplete = Boolean(currentStep.isEndScreen);
 
     // Resolve Next Step from Current Step
     // Priority: 1. Logic (legacy/buttons), 2. Fallback (new default connection), 3. Sort Order
-    if (currentStep.logic && Array.isArray(currentStep.logic)) {
+    if (!forcedComplete && currentStep.logic && Array.isArray(currentStep.logic)) {
       // e.g. Button choice
       const match = (currentStep.logic as Array<{ condition: string; nextStepId: string }>).find(
         (l) => l.condition === response?.content || l.condition === "default"
       );
-      if (match) nextStepId = match.nextStepId;
+      if (match?.nextStepId === VIDEO_THREAD_COMPLETE_TARGET) {
+        forcedComplete = true;
+      } else if (match) {
+        nextStepId = match.nextStepId;
+      }
     }
 
-    if (!nextStepId && currentStep.fallbackStepId) {
+    if (!forcedComplete && !nextStepId && currentStep.fallbackStepId) {
       nextStepId = currentStep.fallbackStepId;
     }
 
     // If still null, try sortOrder + 1 (implicit linear)
-    if (!nextStepId) {
+    if (!forcedComplete && !nextStepId) {
       const nextInOrder = await db.query.videoThreadSteps.findFirst({
         where: and(
           eq(videoThreadSteps.threadId, threadId),
@@ -116,7 +128,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 2. Logic Engine Evaluation Loop (Recursively resolve Logic Nodes)
     // We loop until we find a "Content Node" (or end)
-    let finalStepId = nextStepId;
+    let finalStepId = forcedComplete ? null : nextStepId;
     const visited = new Set<string>();
 
     while (finalStepId && !visited.has(finalStepId)) {
@@ -124,7 +136,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       // Fetch the candidate next step
       const candidate = await db.query.videoThreadSteps.findFirst({
-        where: eq(videoThreadSteps.id, finalStepId),
+        where: and(
+          eq(videoThreadSteps.id, finalStepId),
+          eq(videoThreadSteps.threadId, threadId),
+        ),
       });
 
       if (!candidate) {
@@ -159,7 +174,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // --- Session Updates ---
-    const completed = finalStepId === null;
+    const completed = forcedComplete || finalStepId === null;
 
     if (completed) {
       // Thread is finished -- mark session as completed

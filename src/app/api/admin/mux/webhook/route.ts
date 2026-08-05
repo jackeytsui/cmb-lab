@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { videoUploads } from "@/db/schema";
+import { videoaskMediaImports, videoUploads } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -81,14 +81,22 @@ export async function POST(request: NextRequest) {
         const playbackId = data.playback_ids?.[0]?.id;
         const duration = data.duration;
 
-        await db
+        const updatedUploads = await db
           .update(videoUploads)
           .set({
             muxPlaybackId: playbackId,
             durationSeconds: duration ? Math.round(duration) : null,
             status: "ready",
           })
-          .where(eq(videoUploads.muxAssetId, assetId));
+          .where(eq(videoUploads.muxAssetId, assetId))
+          .returning({ id: videoUploads.id });
+
+        for (const upload of updatedUploads) {
+          await db
+            .update(videoaskMediaImports)
+            .set({ status: "ready", lastError: null, updatedAt: new Date() })
+            .where(eq(videoaskMediaImports.videoUploadId, upload.id));
+        }
         break;
       }
 
@@ -98,13 +106,25 @@ export async function POST(request: NextRequest) {
         const errorMessage =
           data.errors?.messages?.[0] || "Processing failed";
 
-        await db
+        const updatedUploads = await db
           .update(videoUploads)
           .set({
             status: "errored",
             errorMessage,
           })
-          .where(eq(videoUploads.muxAssetId, assetId));
+          .where(eq(videoUploads.muxAssetId, assetId))
+          .returning({ id: videoUploads.id });
+
+        for (const upload of updatedUploads) {
+          await db
+            .update(videoaskMediaImports)
+            .set({
+              status: "failed",
+              lastError: errorMessage,
+              updatedAt: new Date(),
+            })
+            .where(eq(videoaskMediaImports.videoUploadId, upload.id));
+        }
         break;
       }
 
@@ -113,13 +133,25 @@ export async function POST(request: NextRequest) {
         const uploadId = data.id;
         const errorMessage = data.error?.message || "Upload failed";
 
-        await db
+        const updatedUploads = await db
           .update(videoUploads)
           .set({
             status: "errored",
             errorMessage,
           })
-          .where(eq(videoUploads.muxUploadId, uploadId));
+          .where(eq(videoUploads.muxUploadId, uploadId))
+          .returning({ id: videoUploads.id });
+
+        for (const upload of updatedUploads) {
+          await db
+            .update(videoaskMediaImports)
+            .set({
+              status: "failed",
+              lastError: errorMessage,
+              updatedAt: new Date(),
+            })
+            .where(eq(videoaskMediaImports.videoUploadId, upload.id));
+        }
         break;
       }
     }

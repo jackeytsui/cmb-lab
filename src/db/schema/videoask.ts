@@ -1,5 +1,21 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
+import {
+  courseLibraryCourses,
+  courseLibraryLessons,
+  courseLibraryModules,
+} from "./course-library";
 import { users } from "./users";
+import { videoThreadSteps, videoThreads } from "./video-threads";
+import { videoUploads } from "./uploads";
 
 /**
  * The single VideoAsk organization connected to CMB Lab.
@@ -35,3 +51,172 @@ export const videoaskIntegration = pgTable(
 );
 
 export type VideoAskIntegration = typeof videoaskIntegration.$inferSelect;
+
+/** One managed draft course that receives all forms for an organization. */
+export const videoaskImportProjects = pgTable(
+  "videoask_import_projects",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courseLibraryCourses.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("videoask_import_projects_organization_unique").on(
+      table.organizationId,
+    ),
+    uniqueIndex("videoask_import_projects_course_unique").on(table.courseId),
+  ],
+);
+
+/** Maps a VideoAsk folder (or root) to a Course Library module. */
+export const videoaskImportModules = pgTable(
+  "videoask_import_modules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => videoaskImportProjects.id, { onDelete: "cascade" }),
+    sourceFolderKey: text("source_folder_key").notNull(),
+    sourceFolderId: text("source_folder_id"),
+    sourceFolderName: text("source_folder_name"),
+    moduleId: uuid("module_id")
+      .notNull()
+      .references(() => courseLibraryModules.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("videoask_import_modules_project_folder_unique").on(
+      table.projectId,
+      table.sourceFolderKey,
+    ),
+    uniqueIndex("videoask_import_modules_module_unique").on(table.moduleId),
+  ],
+);
+
+/** Durable, duplicate-safe import record for a single VideoAsk form. */
+export const videoaskFormImports = pgTable(
+  "videoask_form_imports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => videoaskImportProjects.id, { onDelete: "cascade" }),
+    sourceFormId: text("source_form_id").notNull(),
+    sourceFormTitle: text("source_form_title").notNull(),
+    sourceFolderKey: text("source_folder_key").notNull(),
+    sourceUpdatedAt: timestamp("source_updated_at"),
+    status: text("status").notNull().default("pending"),
+    threadId: uuid("thread_id").references(() => videoThreads.id, {
+      onDelete: "set null",
+    }),
+    lessonId: uuid("lesson_id").references(() => courseLibraryLessons.id, {
+      onDelete: "set null",
+    }),
+    sourceSnapshot: jsonb("source_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    stats: jsonb("stats")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    lastError: text("last_error"),
+    importedBy: uuid("imported_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("videoask_form_imports_project_form_unique").on(
+      table.projectId,
+      table.sourceFormId,
+    ),
+    index("videoask_form_imports_status_idx").on(table.status),
+    index("videoask_form_imports_thread_idx").on(table.threadId),
+    index("videoask_form_imports_lesson_idx").on(table.lessonId),
+  ],
+);
+
+/** Source-to-destination step mapping and immutable source snapshot. */
+export const videoaskStepImports = pgTable(
+  "videoask_step_imports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    formImportId: uuid("form_import_id")
+      .notNull()
+      .references(() => videoaskFormImports.id, { onDelete: "cascade" }),
+    sourceQuestionId: text("source_question_id").notNull(),
+    sourceMediaId: text("source_media_id"),
+    mediaImportId: uuid("media_import_id").references(
+      () => videoaskMediaImports.id,
+      { onDelete: "set null" },
+    ),
+    stepId: uuid("step_id")
+      .notNull()
+      .references(() => videoThreadSteps.id, { onDelete: "cascade" }),
+    sourceSnapshot: jsonb("source_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("videoask_step_imports_form_question_unique").on(
+      table.formImportId,
+      table.sourceQuestionId,
+    ),
+    uniqueIndex("videoask_step_imports_step_unique").on(table.stepId),
+  ],
+);
+
+/** Dedupe map for VideoAsk media copied into signed Mux assets. */
+export const videoaskMediaImports = pgTable(
+  "videoask_media_imports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    sourceMediaKey: text("source_media_key").notNull(),
+    sourceMediaId: text("source_media_id"),
+    sourceUrl: text("source_url").notNull(),
+    videoUploadId: uuid("video_upload_id").references(() => videoUploads.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("pending"),
+    lastError: text("last_error"),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("videoask_media_imports_organization_media_unique").on(
+      table.organizationId,
+      table.sourceMediaKey,
+    ),
+    index("videoask_media_imports_video_upload_idx").on(table.videoUploadId),
+    index("videoask_media_imports_status_idx").on(table.status),
+  ],
+);
+
+export type VideoAskImportProject = typeof videoaskImportProjects.$inferSelect;
+export type VideoAskFormImport = typeof videoaskFormImports.$inferSelect;
+export type VideoAskStepImport = typeof videoaskStepImports.$inferSelect;
+export type VideoAskMediaImport = typeof videoaskMediaImports.$inferSelect;

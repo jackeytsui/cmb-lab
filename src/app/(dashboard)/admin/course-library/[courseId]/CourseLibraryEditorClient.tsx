@@ -24,6 +24,7 @@ import {
   Headphones,
   Mic,
   NotebookPen,
+  MessagesSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DragDropProvider, useDroppable } from "@dnd-kit/react";
@@ -38,6 +39,7 @@ type LessonType =
   | "quiz"
   | "download"
   | "form"
+  | "video_thread"
   | "text_assignment"
   | "listening_practice"
   | "vocal_hack"
@@ -113,6 +115,11 @@ const LESSON_TYPE_META: Record<
   quiz: { label: "Quiz", Icon: HelpCircle, color: "text-amber-500" },
   download: { label: "Download", Icon: Download, color: "text-emerald-500" },
   form: { label: "HTML Embed", Icon: ExternalLink, color: "text-pink-500" },
+  video_thread: {
+    label: "Interactive Video",
+    Icon: MessagesSquare,
+    color: "text-cyan-500",
+  },
   text_assignment: {
     label: "Text Assignment",
     Icon: ClipboardList,

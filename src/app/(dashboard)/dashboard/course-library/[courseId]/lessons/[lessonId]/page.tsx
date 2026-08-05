@@ -18,6 +18,7 @@ import {
   type VocalHackSubmissionDto,
 } from "./VocalHackViewer";
 import { DiaryViewer, type DiarySubmissionDto } from "./DiaryViewer";
+import { NativeVideoThreadLesson } from "./NativeVideoThreadLesson";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
 import { LessonVideoPlayer } from "@/components/course-library/LessonVideoPlayer";
 import { AssignmentInstructions } from "@/components/course-library/AssignmentInstructions";
@@ -559,6 +560,22 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               initialCompleted={!!progress?.completedAt}
             />
           </div>
+        )}
+
+        {lessonType === "video_thread" && (
+          <NativeVideoThreadLesson
+            threadId={typeof content.threadId === "string" ? content.threadId : ""}
+            courseId={courseId}
+            moduleId={row.moduleId}
+            lessonId={lessonId}
+            userId={currentUser?.id ?? null}
+            initialCompleted={!!progress?.completedAt}
+            description={
+              typeof content.description === "string"
+                ? content.description
+                : undefined
+            }
+          />
         )}
 
         {isTextAssignmentLesson(lessonType) && (

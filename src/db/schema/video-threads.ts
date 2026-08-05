@@ -60,9 +60,12 @@ export const videoThreadSteps = pgTable("video_thread_steps", {
     onDelete: "set null",
   }),
   videoUrl: text("video_url"), // Fallback/direct URL
+  mediaType: text("media_type"), // video/audio hint for native playback
+  sourceThumbnailUrl: text("source_thumbnail_url"),
   
   // Content
   promptText: text("prompt_text"), // Text overlay or question
+  transcriptText: text("transcript_text"), // Source video/audio transcript
   
   // Student Response Configuration
   responseType: responseTypeEnum("response_type").notNull().default("video"),

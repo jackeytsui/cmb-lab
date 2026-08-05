@@ -1,5 +1,8 @@
 import { VideoThreadStep, VideoThread } from "@/db/schema/video-threads";
 
+/** Sentinel used by imported branching rules to finish a thread conditionally. */
+export const VIDEO_THREAD_COMPLETE_TARGET = "__complete__";
+
 // Logic Rule
 export interface StepLogic {
   condition: string; // The value of the option selected (e.g., "Yes", "Option A")
@@ -40,7 +43,7 @@ export interface PlayerResponse {
   stepId: string;
   responseType: ResponseType;
   content: string | Blob; // For text/MC, it's the value. For video/audio, it's the blob URL or ID.
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 // Player State

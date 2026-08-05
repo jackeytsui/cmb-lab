@@ -38,6 +38,8 @@ export type VideoAskFormSummary = {
   id: string;
   title: string;
   folderId: string | null;
+  folderName: string | null;
+  shareUrl: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -354,18 +356,67 @@ async function getAuthenticatedConnection(forceRefresh = false) {
 function formSummary(item: Record<string, unknown>): VideoAskFormSummary | null {
   const id = String(item.id || item.form_id || item.videoask_id || "");
   if (!id) return null;
+  const folder =
+    item.folder && typeof item.folder === "object"
+      ? (item.folder as Record<string, unknown>)
+      : null;
   return {
     id,
     title: String(item.title || item.name || "Untitled form"),
     folderId:
       typeof item.folder_id === "string" && item.folder_id
         ? item.folder_id
+        : typeof folder?.id === "string" && folder.id
+          ? folder.id
+          : null,
+    folderName:
+      typeof item.folder_name === "string" && item.folder_name
+        ? item.folder_name
+        : typeof folder?.name === "string" && folder.name
+          ? folder.name
+          : null,
+    shareUrl:
+      typeof item.share_url === "string" && item.share_url
+        ? item.share_url
         : null,
     createdAt:
       typeof item.created_at === "string" ? item.created_at : null,
     updatedAt:
       typeof item.updated_at === "string" ? item.updated_at : null,
   };
+}
+
+export async function fetchVideoAskForm(
+  formId: string,
+): Promise<Record<string, unknown>> {
+  let authenticated = await getAuthenticatedConnection();
+  const path = `/forms/${encodeURIComponent(formId)}`;
+  let response = await videoAskFetch(
+    path,
+    authenticated.accessToken,
+    authenticated.connection.organizationId,
+  );
+
+  if (response.status === 401) {
+    authenticated = await getAuthenticatedConnection(true);
+    response = await videoAskFetch(
+      path,
+      authenticated.accessToken,
+      authenticated.connection.organizationId,
+    );
+  }
+
+  const payload = await parseApiResponse(response, "form");
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("VideoAsk returned an invalid form definition");
+  }
+
+  await db
+    .update(videoaskIntegration)
+    .set({ lastValidatedAt: new Date(), lastError: null, updatedAt: new Date() })
+    .where(eq(videoaskIntegration.id, PRIMARY_CONNECTION_ID));
+
+  return payload as Record<string, unknown>;
 }
 
 async function fetchFormsPage(
