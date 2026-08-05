@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS "videoask_vocal_hack_sentences" (
   "step_import_id" uuid NOT NULL REFERENCES "videoask_step_imports"("id") ON DELETE cascade,
   "sort_order" integer NOT NULL,
   "video_url" text NOT NULL,
+  "source_prompt_text" text,
   "source_transcript" text,
+  "ai_transcript" text,
   "chinese" text,
   "pinyin" text,
   "english" text,
@@ -73,3 +75,8 @@ CREATE INDEX IF NOT EXISTS "videoask_vocal_hack_sentences_status_idx"
   ON "videoask_vocal_hack_sentences" ("status");
 CREATE INDEX IF NOT EXISTS "videoask_vocal_hack_sentences_placement_idx"
   ON "videoask_vocal_hack_sentences" ("placement_id");
+
+ALTER TABLE "videoask_vocal_hack_sentences"
+  ADD COLUMN IF NOT EXISTS "source_prompt_text" text;
+ALTER TABLE "videoask_vocal_hack_sentences"
+  ADD COLUMN IF NOT EXISTS "ai_transcript" text;

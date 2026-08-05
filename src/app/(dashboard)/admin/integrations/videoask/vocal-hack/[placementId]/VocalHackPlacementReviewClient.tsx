@@ -49,7 +49,9 @@ type PlacementDetail = {
     id: string;
     sortOrder: number;
     videoUrl: string;
+    sourcePromptText: string | null;
     sourceTranscript: string | null;
+    aiTranscript: string | null;
     chinese: string | null;
     pinyin: string | null;
     english: string | null;
@@ -601,10 +603,23 @@ export function VocalHackPlacementReviewClient({
                 <p className="mt-2 text-xs capitalize text-muted-foreground">
                   {humanStatus(sentence.status)} · attempt {sentence.attempts}
                 </p>
-                {sentence.sourceTranscript ? (
+                {sentence.sourcePromptText ? (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Raw AI transcript: {sentence.sourceTranscript}
+                    Source VideoAsk prompt: {sentence.sourcePromptText}
                   </p>
+                ) : null}
+                {sentence.aiTranscript ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    New AI transcript: {sentence.aiTranscript}
+                  </p>
+                ) : null}
+                {sentence.sourceTranscript ? (
+                  <details className="mt-2 text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">
+                      Original VideoAsk transcript
+                    </summary>
+                    <p className="mt-1">{sentence.sourceTranscript}</p>
+                  </details>
                 ) : null}
                 {sentence.lastError ? (
                   <p className="mt-2 text-xs text-destructive">

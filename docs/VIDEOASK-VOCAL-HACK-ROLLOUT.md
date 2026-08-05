@@ -27,15 +27,18 @@ is not the student-facing destination for this rollout.
 1. Preparing drafts only writes to `videoask_vocal_hack_*` staging tables.
 2. AI transcription only writes to staging and processes one private clip per
    request, making it resumable.
-3. Only an authenticated CMB Lab admin can publish or roll back.
-4. Publishing requires a destination and complete Chinese, romanisation, and
+3. The original VideoAsk prompt and transcript are retained separately from the
+   new Mandarin/Cantonese AI transcript. Generic source labels such as `Step 2`
+   remain audit metadata rather than student-facing lesson copy.
+4. Only an authenticated CMB Lab admin can publish or roll back.
+5. Publishing requires a destination and complete Chinese, romanisation, and
    English for every sentence.
-5. Publishing happens one placement at a time after a confirmation naming its
+6. Publishing happens one placement at a time after a confirmation naming its
    course, module, and lesson.
-6. Replacing a placeholder preserves its original content in an audit snapshot.
+7. Replacing a placeholder preserves its original content in an audit snapshot.
    Rolling back restores that snapshot. Rolling back a newly created lesson
    soft-deletes that lesson.
-7. Rollback refuses to overwrite a lesson that was edited after publication.
+8. Rollback refuses to overwrite a lesson that was edited after publication.
 
 ## Production rollout
 

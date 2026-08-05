@@ -423,6 +423,8 @@ export interface CourseLibraryVocalHackSentence {
   order: number;
   /** Coach demonstration video (private blob URL; streamed via proxy). */
   videoUrl?: string | null;
+  /** Original VideoAsk prompt retained for source fidelity/audit. */
+  sourcePromptText?: string | null;
   chinese: string;
   /** Display pinyin (space-separated, one syllable per character). */
   pinyin: string;
