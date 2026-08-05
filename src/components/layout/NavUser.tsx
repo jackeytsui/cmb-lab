@@ -3,7 +3,14 @@
 import { UserButton } from "@clerk/nextjs";
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
-import { FileText, KeyRound, LayoutDashboard, Settings, Wrench } from "lucide-react";
+import {
+  FileText,
+  KeyRound,
+  LayoutDashboard,
+  PlugZap,
+  Settings,
+  Wrench,
+} from "lucide-react";
 import {
   SidebarFooter,
   SidebarMenu,
@@ -27,7 +34,6 @@ export function NavUser() {
     normalizedEmail === "jackey.tsui@thecmblueprint.com" ||
     normalizedEmail === "contact@thecmblueprint.com";
   const isAdminRole = typeof roleRaw === "string" && roleRaw.toLowerCase() === "admin";
-  const isCoachRole = typeof roleRaw === "string" && roleRaw.toLowerCase() === "coach";
   const showAdminMenu = isAdminEmail || isAdminRole;
   const displayRole = showAdminMenu ? "Admin" : role;
 
@@ -64,6 +70,11 @@ export function NavUser() {
                     label="API Keys"
                     labelIcon={<KeyRound className="h-4 w-4" />}
                     href="/admin/api-keys"
+                  />
+                  <UserButton.Link
+                    label="VideoAsk Import"
+                    labelIcon={<PlugZap className="h-4 w-4" />}
+                    href="/admin/integrations/videoask"
                   />
                   <UserButton.Link
                     label="Dev Toolkit"
