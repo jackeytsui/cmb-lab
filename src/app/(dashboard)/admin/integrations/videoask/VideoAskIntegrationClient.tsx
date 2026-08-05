@@ -7,7 +7,6 @@ import {
   ArrowRight,
   BookOpenCheck,
   CheckCircle2,
-  ExternalLink,
   Eye,
   Loader2,
   MapPinned,
@@ -265,7 +264,13 @@ export function VideoAskIntegrationClient(props: Props) {
       setStatus(nextStatus);
       if (forms === null && nextStatus.inventory) {
         setForms(nextStatus.inventory.forms);
-        setSelected(new Set(nextStatus.inventory.forms.map((form) => form.id)));
+        // Source ingestion is an advanced, potentially large operation. Keep
+        // it opt-in so the primary blended-course workflow cannot accidentally
+        // stage every unrelated VideoAsk workflow.
+        setSelected(new Set());
+      }
+      if (nextStatus.imports.length > 0 && !placementPreview) {
+        void loadPlacementPreview(true);
       }
     } catch (error) {
       if (!silent) {
@@ -316,7 +321,7 @@ export function VideoAskIntegrationClient(props: Props) {
       });
       const payload = await jsonResponse<{ forms: FormSummary[] }>(response);
       setForms(payload.forms);
-      setSelected(new Set(payload.forms.map((form) => form.id)));
+      setSelected(new Set());
       await loadImportStatus(true);
     } catch (error) {
       setScanError(error instanceof Error ? error.message : "Inventory scan failed");
@@ -342,9 +347,11 @@ export function VideoAskIntegrationClient(props: Props) {
     }
   }
 
-  async function loadPlacementPreview() {
-    setPlacementLoading(true);
-    setImportError(null);
+  async function loadPlacementPreview(silent = false) {
+    if (!silent) {
+      setPlacementLoading(true);
+      setImportError(null);
+    }
     try {
       const response = await fetch(
         "/api/admin/integrations/videoask/vocal-hack/preview",
@@ -354,13 +361,15 @@ export function VideoAskIntegrationClient(props: Props) {
         await jsonResponse<VocalHackPlacementPreview>(response),
       );
     } catch (error) {
-      setImportError(
-        error instanceof Error
-          ? error.message
-          : "Could not build the blended-course preview",
-      );
+      if (!silent) {
+        setImportError(
+          error instanceof Error
+            ? error.message
+            : "Could not build the blended-course preview",
+        );
+      }
     } finally {
-      setPlacementLoading(false);
+      if (!silent) setPlacementLoading(false);
     }
   }
 
@@ -646,31 +655,33 @@ export function VideoAskIntegrationClient(props: Props) {
         </CardContent>
       </Card>
 
+      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-200">
+        <p className="font-medium">VideoAsk is the source—not a separate course.</p>
+        <p className="mt-1 text-emerald-700 dark:text-emerald-300">
+          Coach videos and sentence content are staged privately, reviewed, and
+          then published as native Vocal Hack components inside the existing CMB
+          Lab course and module selected below.
+        </p>
+      </div>
+
       {status.inventory || status.project || status.imports.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-center justify-between gap-3">
-              <span>Migration audit</span>
-              {status.project ? (
-                <Button asChild size="sm" variant="outline">
-                  <Link href={status.project.courseUrl}>
-                    Open draft course <ExternalLink />
-                  </Link>
-                </Button>
-              ) : null}
-            </CardTitle>
+            <CardTitle>Source sync</CardTitle>
             <CardDescription>
-              Durable Neon records make every form and media transfer safe to resume.
+              VideoAsk source records and private media copies are tracked in
+              Neon so the migration can resume safely. These records are staging,
+              not a student-facing course.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-6">
-              <div><dt className="text-muted-foreground">Source forms</dt><dd className="text-lg font-semibold">{status.inventory?.formCount ?? 0}</dd></div>
-              <div><dt className="text-muted-foreground">Forms complete</dt><dd className="text-lg font-semibold">{importSummary.completed}</dd></div>
+              <div><dt className="text-muted-foreground">Forms scanned</dt><dd className="text-lg font-semibold">{status.inventory?.formCount ?? 0}</dd></div>
+              <div><dt className="text-muted-foreground">Forms staged</dt><dd className="text-lg font-semibold">{importSummary.completed}</dd></div>
               <div><dt className="text-muted-foreground">With warnings</dt><dd className="text-lg font-semibold">{importSummary.warnings}</dd></div>
               <div><dt className="text-muted-foreground">Failed</dt><dd className="text-lg font-semibold">{importSummary.failed}</dd></div>
-              <div><dt className="text-muted-foreground">Media ready</dt><dd className="text-lg font-semibold">{status.media.ready ?? 0}</dd></div>
-              <div><dt className="text-muted-foreground">Media tracked</dt><dd className="text-lg font-semibold">{mediaTotal}</dd></div>
+              <div><dt className="text-muted-foreground">Private videos ready</dt><dd className="text-lg font-semibold">{status.media.ready ?? 0}</dd></div>
+              <div><dt className="text-muted-foreground">Videos tracked</dt><dd className="text-lg font-semibold">{mediaTotal}</dd></div>
             </dl>
             {status.inventory?.completedAt ? (
               <p className="text-xs text-muted-foreground">
@@ -692,7 +703,7 @@ export function VideoAskIntegrationClient(props: Props) {
               type="button"
               size="sm"
               className="w-fit"
-              onClick={loadPlacementPreview}
+              onClick={() => loadPlacementPreview()}
               disabled={placementLoading || progress.running}
             >
               {placementLoading ? (
@@ -702,7 +713,7 @@ export function VideoAskIntegrationClient(props: Props) {
               )}
               {placementLoading
                 ? "Building course plan…"
-                : "Review blended-course plan"}
+                : "Open blended-course plan"}
             </Button>
           </CardContent>
         </Card>
@@ -1153,15 +1164,24 @@ export function VideoAskIntegrationClient(props: Props) {
       ) : null}
 
       {forms ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{forms.length} VideoAsk forms found</CardTitle>
-            <CardDescription>
-              All forms are selected by default. Imports create or update one native
-              Interactive Video lesson per form in a draft CMB Lab course.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <details className="group rounded-lg border bg-muted/20 p-3">
+          <summary className="cursor-pointer list-none text-sm font-medium text-muted-foreground marker:hidden">
+            Advanced source ingestion ({forms.length} VideoAsk forms)
+            <span className="ml-2 text-xs font-normal">
+              — only needed when new source forms have not been staged yet
+            </span>
+          </summary>
+          <Card className="mt-3">
+            <CardHeader>
+              <CardTitle>VideoAsk source inventory</CardTitle>
+              <CardDescription>
+                Select only source forms that still need to be copied into
+                private staging. This does not publish a student course; use the
+                blended-course plan above to place staged content into native
+                Vocal Hack components.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
@@ -1188,7 +1208,7 @@ export function VideoAskIntegrationClient(props: Props) {
                 disabled={progress.running || selectedForms.length === 0}
               >
                 {progress.running ? <Loader2 className="animate-spin" /> : <Play />}
-                Import selected ({selectedForms.length})
+                Stage selected ({selectedForms.length})
               </Button>
               <Button
                 type="button"
@@ -1197,10 +1217,10 @@ export function VideoAskIntegrationClient(props: Props) {
                 onClick={() => runImport(forms)}
                 disabled={progress.running || forms.length === 0}
               >
-                <RefreshCw /> Resume/import all ({forms.length})
+                <RefreshCw /> Resume full source sync ({forms.length})
               </Button>
               <span className="text-xs text-muted-foreground">
-                Destination remains draft until you publish it.
+                Staging never changes the live Course Library.
               </span>
             </div>
 
@@ -1272,8 +1292,9 @@ export function VideoAskIntegrationClient(props: Props) {
                 </tbody>
               </table>
             </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </details>
       ) : null}
     </div>
   );
