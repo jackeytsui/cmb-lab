@@ -274,9 +274,120 @@ export const videoaskMediaImports = pgTable(
   ],
 );
 
+/**
+ * Review-gated conversion of one imported VideoAsk form into a native Vocal
+ * Hack lesson inside an existing Course Library module. The destination lesson
+ * is not changed until the placement has complete sentence drafts and an admin
+ * explicitly publishes it.
+ */
+export const videoaskVocalHackPlacements = pgTable(
+  "videoask_vocal_hack_placements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    formImportId: uuid("form_import_id")
+      .notNull()
+      .references(() => videoaskFormImports.id, { onDelete: "cascade" }),
+    sourceGroup: text("source_group").notNull(),
+    language: text("language").notNull(),
+    targetCourseId: uuid("target_course_id").references(
+      () => courseLibraryCourses.id,
+      { onDelete: "set null" },
+    ),
+    targetModuleId: uuid("target_module_id").references(
+      () => courseLibraryModules.id,
+      { onDelete: "set null" },
+    ),
+    targetLessonId: uuid("target_lesson_id").references(
+      () => courseLibraryLessons.id,
+      { onDelete: "set null" },
+    ),
+    publishedLessonId: uuid("published_lesson_id").references(
+      () => courseLibraryLessons.id,
+      { onDelete: "set null" },
+    ),
+    targetLessonTitle: text("target_lesson_title"),
+    action: text("action").notNull(),
+    confidence: text("confidence").notNull(),
+    matchScore: integer("match_score").notNull().default(0),
+    mappingReason: text("mapping_reason").notNull().default(""),
+    instructions: text("instructions").notNull().default(""),
+    status: text("status").notNull().default("planned"),
+    totalSentences: integer("total_sentences").notNull().default(0),
+    readySentences: integer("ready_sentences").notNull().default(0),
+    approvedBy: uuid("approved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at"),
+    publishedAt: timestamp("published_at"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("videoask_vocal_hack_placements_form_unique").on(
+      table.formImportId,
+    ),
+    index("videoask_vocal_hack_placements_status_idx").on(table.status),
+    index("videoask_vocal_hack_placements_module_idx").on(
+      table.targetModuleId,
+    ),
+  ],
+);
+
+/** One staged sentence/video inside a review-gated Vocal Hack placement. */
+export const videoaskVocalHackSentences = pgTable(
+  "videoask_vocal_hack_sentences",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    placementId: uuid("placement_id")
+      .notNull()
+      .references(() => videoaskVocalHackPlacements.id, {
+        onDelete: "cascade",
+      }),
+    stepImportId: uuid("step_import_id")
+      .notNull()
+      .references(() => videoaskStepImports.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull(),
+    videoUrl: text("video_url").notNull(),
+    sourceTranscript: text("source_transcript"),
+    chinese: text("chinese"),
+    pinyin: text("pinyin"),
+    english: text("english"),
+    status: text("status").notNull().default("held"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    transcribedAt: timestamp("transcribed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("videoask_vocal_hack_sentences_step_unique").on(
+      table.stepImportId,
+    ),
+    index("videoask_vocal_hack_sentences_order_idx").on(
+      table.placementId,
+      table.sortOrder,
+    ),
+    index("videoask_vocal_hack_sentences_status_idx").on(table.status),
+    index("videoask_vocal_hack_sentences_placement_idx").on(
+      table.placementId,
+    ),
+  ],
+);
+
 export type VideoAskImportProject = typeof videoaskImportProjects.$inferSelect;
 export type VideoAskInventoryScan = typeof videoaskInventoryScans.$inferSelect;
 export type VideoAskInventoryForm = typeof videoaskInventoryForms.$inferSelect;
 export type VideoAskFormImport = typeof videoaskFormImports.$inferSelect;
 export type VideoAskStepImport = typeof videoaskStepImports.$inferSelect;
 export type VideoAskMediaImport = typeof videoaskMediaImports.$inferSelect;
+export type VideoAskVocalHackPlacement =
+  typeof videoaskVocalHackPlacements.$inferSelect;
+export type VideoAskVocalHackSentence =
+  typeof videoaskVocalHackSentences.$inferSelect;

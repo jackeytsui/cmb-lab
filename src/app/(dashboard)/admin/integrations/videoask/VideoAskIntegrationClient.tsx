@@ -124,6 +124,34 @@ type VocalHackPlacementPreview = {
   }>;
 };
 
+type VocalHackWorkflowStatus = {
+  placements: Array<{
+    id: string;
+    sourceTitle: string;
+    sourceGroup: string;
+    language: string;
+    status: string;
+    confidence: string;
+    action: string;
+    targetCourseId: string | null;
+    targetCourseTitle: string | null;
+    targetModuleTitle: string | null;
+    targetLessonTitle: string | null;
+    publishedLessonId: string | null;
+    totalSentences: number;
+    readySentences: number;
+    lastError: string | null;
+    updatedAt: string;
+  }>;
+  sentences: Record<string, number>;
+};
+
+type VocalHackTranscriptionProgress = {
+  running: boolean;
+  processed: number;
+  failed: number;
+};
+
 type ImportProgress = {
   running: boolean;
   current: string | null;
@@ -199,9 +227,19 @@ export function VideoAskIntegrationClient(props: Props) {
   const [placementPreview, setPlacementPreview] =
     useState<VocalHackPlacementPreview | null>(null);
   const [placementLoading, setPlacementLoading] = useState(false);
+  const [workflow, setWorkflow] = useState<VocalHackWorkflowStatus | null>(null);
+  const [workflowLoading, setWorkflowLoading] = useState(false);
+  const [preparingWorkflow, setPreparingWorkflow] = useState(false);
+  const [transcription, setTranscription] =
+    useState<VocalHackTranscriptionProgress>({
+      running: false,
+      processed: 0,
+      failed: 0,
+    });
   const [progress, setProgress] = useState<ImportProgress>(EMPTY_PROGRESS);
   const [importError, setImportError] = useState<string | null>(null);
   const stopRequested = useRef(false);
+  const transcriptionStopRequested = useRef(false);
 
   const importsByFormId = useMemo(
     () => new Map(status.imports.map((item) => [item.sourceFormId, item])),
@@ -242,9 +280,32 @@ export function VideoAskIntegrationClient(props: Props) {
 
   useEffect(() => {
     void loadImportStatus(true);
+    void loadWorkflowStatus(true);
     // The connection state is the only server prop that should trigger this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.connected]);
+
+  async function loadWorkflowStatus(silent = false) {
+    if (!props.connected) return;
+    if (!silent) setWorkflowLoading(true);
+    try {
+      const response = await fetch(
+        "/api/admin/integrations/videoask/vocal-hack/status",
+        { cache: "no-store" },
+      );
+      setWorkflow(await jsonResponse<VocalHackWorkflowStatus>(response));
+    } catch (error) {
+      if (!silent) {
+        setImportError(
+          error instanceof Error
+            ? error.message
+            : "Could not load the Vocal Hack review workflow",
+        );
+      }
+    } finally {
+      if (!silent) setWorkflowLoading(false);
+    }
+  }
 
   async function scanInventory() {
     setScanning(true);
@@ -300,6 +361,90 @@ export function VideoAskIntegrationClient(props: Props) {
       );
     } finally {
       setPlacementLoading(false);
+    }
+  }
+
+  async function prepareReviewDrafts() {
+    setPreparingWorkflow(true);
+    setImportError(null);
+    try {
+      const response = await fetch(
+        "/api/admin/integrations/videoask/vocal-hack/prepare",
+        { method: "POST" },
+      );
+      await jsonResponse<{ result: { placements: number; sentences: number } }>(
+        response,
+      );
+      await loadWorkflowStatus(true);
+    } catch (error) {
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : "Could not prepare Vocal Hack review drafts",
+      );
+    } finally {
+      setPreparingWorkflow(false);
+    }
+  }
+
+  async function runSafeTranscription() {
+    if (transcription.running) return;
+    const approved = window.confirm(
+      "Start AI transcription for exact and high-confidence course matches? " +
+        "CMB Lab will send each private coach-video clip to OpenAI one at a time. " +
+        "No live course lesson will be changed.",
+    );
+    if (!approved) return;
+
+    transcriptionStopRequested.current = false;
+    setImportError(null);
+    setTranscription({ running: true, processed: 0, failed: 0 });
+    try {
+      const queueResponse = await fetch(
+        "/api/admin/integrations/videoask/vocal-hack/queue",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "safe" }),
+        },
+      );
+      await jsonResponse<{ result: { placements: number; sentences: number } }>(
+        queueResponse,
+      );
+
+      let processed = 0;
+      let failed = 0;
+      while (!transcriptionStopRequested.current) {
+        const response = await fetch(
+          "/api/admin/integrations/videoask/vocal-hack/process",
+          { method: "POST" },
+        );
+        const payload = await jsonResponse<{
+          result: {
+            status: "empty" | "ready" | "failed";
+            remaining?: number;
+          };
+        }>(response);
+        if (payload.result.status === "empty") {
+          if ((payload.result.remaining ?? 0) > 0) {
+            setImportError(
+              `${payload.result.remaining} sentence transcription(s) need manual review or another retry.`,
+            );
+          }
+          break;
+        }
+        processed += 1;
+        if (payload.result.status === "failed") failed += 1;
+        setTranscription({ running: true, processed, failed });
+        if (processed % 5 === 0) await loadWorkflowStatus(true);
+      }
+    } catch (error) {
+      setImportError(
+        error instanceof Error ? error.message : "AI transcription paused",
+      );
+    } finally {
+      await loadWorkflowStatus(true);
+      setTranscription((current) => ({ ...current, running: false }));
     }
   }
 
@@ -647,6 +792,27 @@ export function VideoAskIntegrationClient(props: Props) {
               copies will be reused—nothing needs to be uploaded again.
             </div>
 
+            <div className="flex flex-wrap items-center gap-3 rounded-md border p-3">
+              <Button
+                type="button"
+                onClick={prepareReviewDrafts}
+                disabled={preparingWorkflow || transcription.running}
+              >
+                {preparingWorkflow ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <BookOpenCheck />
+                )}
+                {preparingWorkflow
+                  ? "Preparing review drafts…"
+                  : "Prepare review drafts"}
+              </Button>
+              <p className="max-w-2xl text-xs text-muted-foreground">
+                This creates review records and sentence rows in staging only.
+                Existing CMB Lab course lessons remain unchanged.
+              </p>
+            </div>
+
             <div className="max-h-[38rem] overflow-auto rounded-md border">
               <table className="w-full min-w-[900px] text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-muted">
@@ -727,6 +893,167 @@ export function VideoAskIntegrationClient(props: Props) {
                         <p className="mt-1 text-xs text-muted-foreground">
                           AI transcript pending
                         </p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {workflow && workflow.placements.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center justify-between gap-3">
+              <span>Vocal Hack review workflow</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => loadWorkflowStatus()}
+                disabled={workflowLoading || transcription.running}
+              >
+                {workflowLoading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <RefreshCw />
+                )}
+                Refresh
+              </Button>
+            </CardTitle>
+            <CardDescription>
+              AI output stays in staging. Open each placement to correct the
+              destination and sentence text, then publish that lesson explicitly.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+              <div>
+                <dt className="text-muted-foreground">Placements</dt>
+                <dd className="text-lg font-semibold">
+                  {workflow.placements.length}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Awaiting AI</dt>
+                <dd className="text-lg font-semibold">
+                  {(workflow.sentences.held ?? 0) +
+                    (workflow.sentences.pending ?? 0)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Ready sentences</dt>
+                <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+                  {workflow.sentences.ready ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Needs attention</dt>
+                <dd className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                  {workflow.sentences.failed ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Published lessons</dt>
+                <dd className="text-lg font-semibold">
+                  {
+                    workflow.placements.filter(
+                      (placement) => placement.status === "published",
+                    ).length
+                  }
+                </dd>
+              </div>
+            </dl>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {transcription.running ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    transcriptionStopRequested.current = true;
+                  }}
+                >
+                  <Pause /> Pause after this clip
+                </Button>
+              ) : (
+                <Button type="button" onClick={runSafeTranscription}>
+                  <Play /> Start/resume safe AI transcription
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {transcription.running || transcription.processed > 0
+                  ? `${transcription.processed} processed this run · ${transcription.failed} failed`
+                  : "Starts with exact and high-confidence mappings only."}
+              </p>
+            </div>
+
+            <div className="max-h-[38rem] overflow-auto rounded-md border">
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead className="sticky top-0 z-10 bg-muted">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">VideoAsk source</th>
+                    <th className="px-3 py-2 font-medium">CMB Lab destination</th>
+                    <th className="px-3 py-2 font-medium">Sentence review</th>
+                    <th className="px-3 py-2 font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {workflow.placements.map((placement) => (
+                    <tr key={placement.id} className="border-t align-top">
+                      <td className="px-3 py-3">
+                        <p className="font-medium">{placement.sourceTitle}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {placement.sourceGroup} · {placement.language}
+                        </p>
+                      </td>
+                      <td className="px-3 py-3">
+                        {placement.targetCourseTitle &&
+                        placement.targetModuleTitle ? (
+                          <>
+                            <p className="text-xs text-muted-foreground">
+                              {placement.targetCourseTitle}
+                            </p>
+                            <p className="font-medium">
+                              {placement.targetModuleTitle}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {placement.targetLessonTitle}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-amber-600 dark:text-amber-400">
+                            Destination required
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <p className="font-medium">
+                          {placement.readySentences}/{placement.totalSentences}
+                          {" "}ready
+                        </p>
+                        <p className="mt-1 text-xs capitalize text-muted-foreground">
+                          {statusLabel(placement.status)}
+                        </p>
+                        {placement.lastError ? (
+                          <p className="mt-1 max-w-xs text-xs text-destructive">
+                            {placement.lastError}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-3">
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={`/admin/integrations/videoask/vocal-hack/${placement.id}`}
+                          >
+                            <Eye />
+                            {placement.status === "published"
+                              ? "View audit"
+                              : "Review"}
+                          </Link>
+                        </Button>
                       </td>
                     </tr>
                   ))}
