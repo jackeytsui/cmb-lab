@@ -48,7 +48,11 @@ type ImportRow = {
 };
 
 type ImportStatus = {
-  project: { id: string; courseId: string; courseUrl: string } | null;
+  project: {
+    id: string;
+    courseId: string | null;
+    courseUrl: string | null;
+  } | null;
   inventory: {
     scanId: string;
     formCount: number;

@@ -7,23 +7,17 @@ import {
   asc,
   count,
   eq,
-  inArray,
   isNull,
   lt,
+  notInArray,
   or,
 } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  courseLibraryCourses,
-  courseLibraryLessons,
-  courseLibraryModules,
   videoaskFormImports,
-  videoaskImportModules,
   videoaskImportProjects,
   videoaskMediaImports,
   videoaskStepImports,
-  videoThreadSteps,
-  videoThreads,
   type User,
   type VideoAskIntegration,
 } from "@/db/schema";
@@ -37,13 +31,8 @@ import {
   type NormalizedVideoAskForm,
   type NormalizedVideoAskQuestion,
 } from "./mapper";
-import {
-  resolvedVideoAskMediaUrl,
-  videoAskBlobPath,
-} from "./media-storage";
-import { VIDEO_THREAD_COMPLETE_TARGET } from "@/types/video-thread-player";
+import { videoAskBlobPath } from "./media-storage";
 
-const ROOT_FOLDER_KEY = "__root__";
 const MAX_MEDIA_ATTEMPTS = 6;
 const STALE_MEDIA_PROCESSING_MS = 10 * 60 * 1_000;
 const MEDIA_TRANSFER_TIMEOUT_MS = 280 * 1_000;
@@ -54,23 +43,10 @@ export type VideoAskImportResult = {
   formImportId: string;
   formId: string;
   formTitle: string;
-  courseId: string;
-  moduleId: string;
-  lessonId: string;
-  threadId: string;
   stats: Record<string, unknown>;
 };
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-async function ensureImportProject(
+async function ensureSourceProject(
   connection: VideoAskIntegration,
   user: User,
 ) {
@@ -81,77 +57,18 @@ async function ensureImportProject(
     .limit(1);
   if (existing) return existing;
 
-  const [course] = await db
-    .insert(courseLibraryCourses)
-    .values({
-      title: `VideoAsk Migration — ${connection.organizationName}`,
-      summary:
-        "Native interactive lessons imported automatically from VideoAsk. " +
-        "This course remains a draft until an administrator reviews and publishes it.",
-      status: "draft",
-      isPublished: false,
-      createdBy: user.id,
-      sortOrder: 0,
-    })
-    .returning();
-
   const [project] = await db
     .insert(videoaskImportProjects)
     .values({
       organizationId: connection.organizationId,
-      courseId: course.id,
       createdBy: user.id,
+    })
+    .onConflictDoUpdate({
+      target: videoaskImportProjects.organizationId,
+      set: { updatedAt: new Date() },
     })
     .returning();
   return project;
-}
-
-async function ensureImportModule(
-  project: typeof videoaskImportProjects.$inferSelect,
-  form: NormalizedVideoAskForm,
-) {
-  const sourceFolderKey = videoAskFolderKey(form.folderId);
-  const [existing] = await db
-    .select()
-    .from(videoaskImportModules)
-    .where(
-      and(
-        eq(videoaskImportModules.projectId, project.id),
-        eq(videoaskImportModules.sourceFolderKey, sourceFolderKey),
-      ),
-    )
-    .limit(1);
-  if (existing) return existing;
-
-  const [moduleCount] = await db
-    .select({ value: count() })
-    .from(videoaskImportModules)
-    .where(eq(videoaskImportModules.projectId, project.id));
-  const title =
-    form.folderName ||
-    (sourceFolderKey === ROOT_FOLDER_KEY
-      ? "Unfiled VideoAsk Forms"
-      : `VideoAsk Folder ${sourceFolderKey.slice(0, 8)}`);
-
-  const [module] = await db
-    .insert(courseLibraryModules)
-    .values({
-      courseId: project.courseId,
-      title,
-      sortOrder: moduleCount?.value ?? 0,
-    })
-    .returning();
-  const [mapping] = await db
-    .insert(videoaskImportModules)
-    .values({
-      projectId: project.id,
-      sourceFolderKey,
-      sourceFolderId: form.folderId,
-      sourceFolderName: form.folderName,
-      moduleId: module.id,
-    })
-    .returning();
-  return mapping;
 }
 
 function mediaKey(question: NormalizedVideoAskQuestion) {
@@ -199,67 +116,16 @@ async function enqueueMedia(
   return media;
 }
 
-function destinationForQuestion(
-  sourceQuestionId: string | null,
-  stepIds: Map<string, string>,
-  warnings: string[],
-) {
-  if (sourceQuestionId === null) return VIDEO_THREAD_COMPLETE_TARGET;
-  const destination = stepIds.get(sourceQuestionId);
-  if (!destination) {
-    warnings.push(`Logic target ${sourceQuestionId} is not present in the form`);
-    return null;
-  }
-  return destination;
-}
-
-async function createNativeThread(
+async function stageSourceSteps(
   connection: VideoAskIntegration,
   form: NormalizedVideoAskForm,
   formImportId: string,
-  user: User,
 ) {
-  const [thread] = await db
-    .insert(videoThreads)
-    .values({
-      title: form.title,
-      description:
-        form.description || `Imported from VideoAsk form ${form.id}`,
-      createdBy: user.id,
-    })
-    .returning();
-
-  const stepIds = new Map<string, string>();
-  const stepRows = new Map<string, typeof videoThreadSteps.$inferSelect>();
-  const warnings = [...form.warnings];
   let mediaQueued = 0;
 
   for (const [index, question] of form.questions.entries()) {
     const media = await enqueueMedia(connection, question);
     if (media && media.status === "pending") mediaQueued += 1;
-    const [step] = await db
-      .insert(videoThreadSteps)
-      .values({
-        threadId: thread.id,
-        videoUrl: resolvedVideoAskMediaUrl(question.mediaUrl, media),
-        mediaType: question.mediaType,
-        sourceThumbnailUrl: question.thumbnailUrl,
-        promptText: question.promptText,
-        transcriptText: question.transcription,
-        responseType: question.responseType,
-        allowedResponseTypes: question.allowedResponseTypes,
-        responseOptions: { options: question.options },
-        logic: [],
-        logicRules: [],
-        isEndScreen: false,
-        sortOrder: index,
-        positionX: 0,
-        positionY: 150 + index * 220,
-      })
-      .returning();
-    stepIds.set(question.id, step.id);
-    stepRows.set(question.id, step);
-
     await db
       .insert(videoaskStepImports)
       .values({
@@ -267,7 +133,10 @@ async function createNativeThread(
         sourceQuestionId: question.id,
         sourceMediaId: question.mediaId,
         mediaImportId: media?.id ?? null,
-        stepId: step.id,
+        stepId: null,
+        sortOrder: index,
+        sourcePromptText: question.promptText,
+        sourceTranscript: question.transcription,
         sourceSnapshot: question.source,
       })
       .onConflictDoUpdate({
@@ -278,66 +147,32 @@ async function createNativeThread(
         set: {
           sourceMediaId: question.mediaId,
           mediaImportId: media?.id ?? null,
-          stepId: step.id,
+          stepId: null,
+          sortOrder: index,
+          sourcePromptText: question.promptText,
+          sourceTranscript: question.transcription,
           sourceSnapshot: question.source,
         },
       });
   }
 
-  for (const question of form.questions) {
-    const step = stepRows.get(question.id);
-    if (!step) continue;
-
-    const conditionalLogic: Array<{
-      condition: string;
-      nextStepId: string;
-    }> = [];
-    let fallbackStepId: string | null = null;
-    let defaultCompletes = false;
-
-    for (const edge of question.logicEdges) {
-      const destination = destinationForQuestion(
-        edge.targetQuestionId,
-        stepIds,
-        warnings,
-      );
-      if (!destination) continue;
-      if (edge.isDefault) {
-        if (destination === VIDEO_THREAD_COMPLETE_TARGET) {
-          defaultCompletes = true;
-        } else {
-          fallbackStepId = destination;
-        }
-      } else if (edge.conditionValue) {
-        conditionalLogic.push({
-          condition: edge.conditionValue,
-          nextStepId: destination,
-        });
-      }
-    }
-
-    if (defaultCompletes && conditionalLogic.length > 0) {
-      conditionalLogic.push({
-        condition: "default",
-        nextStepId: VIDEO_THREAD_COMPLETE_TARGET,
-      });
-    }
-
+  const sourceQuestionIds = form.questions.map((question) => question.id);
+  if (sourceQuestionIds.length === 0) {
     await db
-      .update(videoThreadSteps)
-      .set({
-        logic: conditionalLogic,
-        fallbackStepId,
-        isEndScreen: defaultCompletes && conditionalLogic.length === 0,
-      })
-      .where(eq(videoThreadSteps.id, step.id));
+      .delete(videoaskStepImports)
+      .where(eq(videoaskStepImports.formImportId, formImportId));
+  } else {
+    await db
+      .delete(videoaskStepImports)
+      .where(
+        and(
+          eq(videoaskStepImports.formImportId, formImportId),
+          notInArray(videoaskStepImports.sourceQuestionId, sourceQuestionIds),
+        ),
+      );
   }
 
-  return {
-    thread,
-    warnings: uniqueStrings(warnings),
-    mediaQueued,
-  };
+  return { mediaQueued };
 }
 
 function uniqueStrings(values: string[]) {
@@ -365,8 +200,7 @@ export async function importVideoAskForm(input: {
   const sourceFingerprint = createHash("sha256")
     .update(JSON.stringify(form.source))
     .digest("hex");
-  const project = await ensureImportProject(connection, input.user);
-  const moduleMapping = await ensureImportModule(project, form);
+  const project = await ensureSourceProject(connection, input.user);
 
   const [existing] = await db
     .select()
@@ -383,8 +217,6 @@ export async function importVideoAskForm(input: {
     !input.force &&
     (existing?.status === "completed" ||
       existing?.status === "completed_with_warnings") &&
-    existing.threadId &&
-    existing.lessonId &&
     (sourceTimestampMatches(form.updatedAt, existing.sourceUpdatedAt) ||
       existing.stats.sourceFingerprint === sourceFingerprint)
   ) {
@@ -393,10 +225,6 @@ export async function importVideoAskForm(input: {
       formImportId: existing.id,
       formId: form.id,
       formTitle: form.title,
-      courseId: project.courseId,
-      moduleId: moduleMapping.moduleId,
-      lessonId: existing.lessonId,
-      threadId: existing.threadId,
       stats: existing.stats,
     };
   }
@@ -412,6 +240,8 @@ export async function importVideoAskForm(input: {
       sourceUpdatedAt: form.updatedAt,
       status: "importing",
       sourceSnapshot: form.source,
+      threadId: null,
+      lessonId: null,
       importedBy: input.user.id,
       startedAt: now,
       completedAt: null,
@@ -428,6 +258,8 @@ export async function importVideoAskForm(input: {
         sourceUpdatedAt: form.updatedAt,
         status: "importing",
         sourceSnapshot: form.source,
+        threadId: null,
+        lessonId: null,
         importedBy: input.user.id,
         startedAt: now,
         completedAt: null,
@@ -437,40 +269,9 @@ export async function importVideoAskForm(input: {
     })
     .returning();
 
-  let newThreadId: string | null = null;
-  let newLessonId: string | null = null;
   try {
-    const native = await createNativeThread(
-      connection,
-      form,
-      formImport.id,
-      input.user,
-    );
-    newThreadId = native.thread.id;
-
-    const [lessonCount] = await db
-      .select({ value: count() })
-      .from(courseLibraryLessons)
-      .where(eq(courseLibraryLessons.moduleId, moduleMapping.moduleId));
-    const [lesson] = await db
-      .insert(courseLibraryLessons)
-      .values({
-        moduleId: moduleMapping.moduleId,
-        title: form.title,
-        lessonType: "video_thread",
-        content: {
-          threadId: native.thread.id,
-          description: form.description
-            ? `<p>${escapeHtml(form.description)}</p>`
-            : undefined,
-          sourceProvider: "videoask",
-          sourceFormId: form.id,
-          sourceShareUrl: form.shareUrl,
-        },
-        sortOrder: lessonCount?.value ?? 0,
-      })
-      .returning();
-    newLessonId = lesson.id;
+    const staged = await stageSourceSteps(connection, form, formImport.id);
+    const warnings = uniqueStrings(form.warnings);
 
     const stats = {
       questions: form.questions.length,
@@ -478,21 +279,21 @@ export async function importVideoAskForm(input: {
       transcriptions: form.questions.filter((question) => question.transcription)
         .length,
       sourceMedia: form.questions.filter((question) => question.mediaUrl).length,
-      mediaQueued: native.mediaQueued,
+      mediaQueued: staged.mediaQueued,
       logicActions: form.questions.reduce(
         (total, question) => total + question.logicEdges.length,
         0,
       ),
-      warnings: native.warnings,
+      warnings,
       sourceFingerprint,
     };
 
     await db
       .update(videoaskFormImports)
       .set({
-        status: native.warnings.length > 0 ? "completed_with_warnings" : "completed",
-        threadId: native.thread.id,
-        lessonId: lesson.id,
+        status: warnings.length > 0 ? "completed_with_warnings" : "completed",
+        threadId: null,
+        lessonId: null,
         stats,
         completedAt: new Date(),
         lastError: null,
@@ -500,25 +301,11 @@ export async function importVideoAskForm(input: {
       })
       .where(eq(videoaskFormImports.id, formImport.id));
 
-    // Remove the previous destination only after the replacement is complete.
-    if (existing?.lessonId && existing.lessonId !== lesson.id) {
-      await db
-        .delete(courseLibraryLessons)
-        .where(eq(courseLibraryLessons.id, existing.lessonId));
-    }
-    if (existing?.threadId && existing.threadId !== native.thread.id) {
-      await db.delete(videoThreads).where(eq(videoThreads.id, existing.threadId));
-    }
-
     return {
       status: "imported",
       formImportId: formImport.id,
       formId: form.id,
       formTitle: form.title,
-      courseId: project.courseId,
-      moduleId: moduleMapping.moduleId,
-      lessonId: lesson.id,
-      threadId: native.thread.id,
       stats,
     };
   } catch (error) {
@@ -527,14 +314,6 @@ export async function importVideoAskForm(input: {
       .update(videoaskFormImports)
       .set({ status: "failed", lastError: message.slice(0, 2_000) })
       .where(eq(videoaskFormImports.id, formImport.id));
-    if (newLessonId) {
-      await db
-        .delete(courseLibraryLessons)
-        .where(eq(courseLibraryLessons.id, newLessonId));
-    }
-    if (newThreadId) {
-      await db.delete(videoThreads).where(eq(videoThreads.id, newThreadId));
-    }
     throw error;
   }
 }
@@ -678,22 +457,6 @@ export async function processNextVideoAskMedia() {
         abortSignal,
       },
     );
-
-    const mappedSteps = await db
-      .select({ stepId: videoaskStepImports.stepId })
-      .from(videoaskStepImports)
-      .where(eq(videoaskStepImports.mediaImportId, media.id));
-    if (mappedSteps.length > 0) {
-      await db
-        .update(videoThreadSteps)
-        .set({ videoUrl: blob.url, uploadId: null, updatedAt: new Date() })
-        .where(
-          inArray(
-            videoThreadSteps.id,
-            mappedSteps.map((row) => row.stepId),
-          ),
-        );
-    }
 
     await db
       .update(videoaskMediaImports)

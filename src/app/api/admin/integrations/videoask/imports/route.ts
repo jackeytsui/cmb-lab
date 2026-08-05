@@ -96,7 +96,9 @@ export async function GET() {
         ? {
             id: project.id,
             courseId: project.courseId,
-            courseUrl: `/admin/course-library/${project.courseId}`,
+            courseUrl: project.courseId
+              ? `/admin/course-library/${project.courseId}`
+              : null,
           }
         : null,
       inventory: latestScan

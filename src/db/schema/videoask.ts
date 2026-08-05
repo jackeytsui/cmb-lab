@@ -106,15 +106,18 @@ export const videoaskInventoryForms = pgTable(
   ],
 );
 
-/** One managed draft course that receives all forms for an organization. */
+/** One source-staging project per connected VideoAsk organization. */
 export const videoaskImportProjects = pgTable(
   "videoask_import_projects",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     organizationId: text("organization_id").notNull(),
-    courseId: uuid("course_id")
-      .notNull()
-      .references(() => courseLibraryCourses.id, { onDelete: "cascade" }),
+    // Legacy imports used a generated draft Course Library course. New source
+    // staging is deliberately course-independent; this nullable reference only
+    // remains so migration 0078 can retire old generated courses safely.
+    courseId: uuid("course_id").references(() => courseLibraryCourses.id, {
+      onDelete: "set null",
+    }),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -132,7 +135,7 @@ export const videoaskImportProjects = pgTable(
   ],
 );
 
-/** Maps a VideoAsk folder (or root) to a Course Library module. */
+/** Legacy folder-to-module map retained for migration/audit compatibility. */
 export const videoaskImportModules = pgTable(
   "videoask_import_modules",
   {
@@ -221,9 +224,15 @@ export const videoaskStepImports = pgTable(
       () => videoaskMediaImports.id,
       { onDelete: "set null" },
     ),
-    stepId: uuid("step_id")
-      .notNull()
-      .references(() => videoThreadSteps.id, { onDelete: "cascade" }),
+    // Legacy imports created a native video-thread step. Source staging now
+    // keeps the normalized fields directly and has no Course Library/thread
+    // destination until an administrator publishes a Vocal Hack placement.
+    stepId: uuid("step_id").references(() => videoThreadSteps.id, {
+      onDelete: "set null",
+    }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    sourcePromptText: text("source_prompt_text"),
+    sourceTranscript: text("source_transcript"),
     sourceSnapshot: jsonb("source_snapshot")
       .$type<Record<string, unknown>>()
       .notNull()

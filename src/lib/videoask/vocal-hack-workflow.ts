@@ -25,7 +25,6 @@ import {
   videoaskStepImports,
   videoaskVocalHackPlacements,
   videoaskVocalHackSentences,
-  videoThreadSteps,
 } from "@/db/schema";
 import { smartRomanise } from "@/lib/romanise";
 import { buildVocalHackPlacementPreview } from "./vocal-hack-preview";
@@ -193,17 +192,12 @@ export async function prepareVocalHackPlacements() {
           .select({
             formImportId: videoaskStepImports.formImportId,
             stepImportId: videoaskStepImports.id,
-            sortOrder: videoThreadSteps.sortOrder,
-            sourcePromptText: videoThreadSteps.promptText,
-            sourceTranscript: videoThreadSteps.transcriptText,
-            stepVideoUrl: videoThreadSteps.videoUrl,
+            sortOrder: videoaskStepImports.sortOrder,
+            sourcePromptText: videoaskStepImports.sourcePromptText,
+            sourceTranscript: videoaskStepImports.sourceTranscript,
             durableVideoUrl: videoaskMediaImports.destinationUrl,
           })
           .from(videoaskStepImports)
-          .innerJoin(
-            videoThreadSteps,
-            eq(videoThreadSteps.id, videoaskStepImports.stepId),
-          )
           .leftJoin(
             videoaskMediaImports,
             eq(videoaskMediaImports.id, videoaskStepImports.mediaImportId),
@@ -211,13 +205,13 @@ export async function prepareVocalHackPlacements() {
           .where(inArray(videoaskStepImports.formImportId, formIds))
           .orderBy(
             asc(videoaskStepImports.formImportId),
-            asc(videoThreadSteps.sortOrder),
+            asc(videoaskStepImports.sortOrder),
           )
       : [];
 
   const sentenceValues = sourceSteps.flatMap((step) => {
     const placement = placementByForm.get(step.formImportId);
-    const videoUrl = step.durableVideoUrl ?? step.stepVideoUrl;
+    const videoUrl = step.durableVideoUrl;
     if (!placement || !videoUrl) return [];
     return [
       {

@@ -7,8 +7,9 @@ Hack lessons. A VideoAsk form becomes one lesson inside an existing CMB Lab
 module. Each coach-video step becomes one reviewable sentence row containing
 the coach video, Chinese, pinyin or jyutping, and English.
 
-The original all-forms VideoAsk import course remains an audit/source copy; it
-is not the student-facing destination for this rollout.
+VideoAsk forms, question snapshots, and private media copies remain in dedicated
+source-staging tables for audit and resync. No generated VideoAsk Course Library
+course is used or retained.
 
 ## Verified scope
 
@@ -39,6 +40,8 @@ is not the student-facing destination for this rollout.
    Rolling back restores that snapshot. Rolling back a newly created lesson
    soft-deletes that lesson.
 8. Rollback refuses to overwrite a lesson that was edited after publication.
+9. Source ingestion writes only to `videoask_*` staging/media tables. It does
+   not create Course Library courses, modules, lessons, or video threads.
 
 ## Production rollout
 
@@ -46,13 +49,18 @@ is not the student-facing destination for this rollout.
 
 Push the approved commit to `main`. The Vercel production build runs
 `node scripts/apply-migrations.mjs` before `next build`, so migration
-`0077_videoask_vocal_hack_staging.sql` is applied to the production Neon
-database automatically. Confirm both the migration and build succeeded in the
-Vercel deployment log before continuing.
+`0077_videoask_vocal_hack_staging.sql` and
+`0078_videoask_source_staging.sql` are applied to the production Neon database
+automatically. Migration 0078 backfills normalized source-step fields and
+retires the verified legacy generated course only while it remains an
+unpublished draft. Its duplicated 457 lessons/threads are removed without
+deleting form, media, or Vocal Hack staging records. Confirm both migrations
+and the build succeeded in the Vercel deployment log before continuing.
 
 ### 2. Verify the read-only placement plan
 
-Open `/admin/integrations/videoask` and select **Review blended-course plan**.
+Open `/admin/integrations/videoask`; the blended-course plan loads
+automatically. Select **Open blended-course plan** if it was closed.
 The expected totals are:
 
 - 121 course forms
@@ -138,6 +146,7 @@ The rollout is complete only when:
 - the six source groups have no unexplained pending/failed sentences;
 - the three pilot flows and a final sample from each source group pass the
   student-view checks above;
-- the separate imported VideoAsk course is not assigned as the student-facing
-  course for this content;
+- no generated `VideoAsk Migration — …` course remains in the Course Library;
+- the durable VideoAsk source/form/question/media staging records remain
+  available for audit and resync;
 - Vercel deployment and Neon migration logs are retained with the rollout audit.
