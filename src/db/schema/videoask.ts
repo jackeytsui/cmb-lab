@@ -1,4 +1,5 @@
 import {
+  bigint,
   index,
   integer,
   jsonb,
@@ -238,7 +239,7 @@ export const videoaskStepImports = pgTable(
   ],
 );
 
-/** Dedupe map for VideoAsk media copied into signed Mux assets. */
+/** Dedupe map for VideoAsk media copied into CMB Lab-owned storage. */
 export const videoaskMediaImports = pgTable(
   "videoask_media_imports",
   {
@@ -247,6 +248,10 @@ export const videoaskMediaImports = pgTable(
     sourceMediaKey: text("source_media_key").notNull(),
     sourceMediaId: text("source_media_id"),
     sourceUrl: text("source_url").notNull(),
+    storageProvider: text("storage_provider"),
+    destinationUrl: text("destination_url"),
+    contentType: text("content_type"),
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
     videoUploadId: uuid("video_upload_id").references(() => videoUploads.id, {
       onDelete: "set null",
     }),

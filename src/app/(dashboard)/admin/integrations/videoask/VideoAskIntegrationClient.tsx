@@ -292,9 +292,17 @@ export function VideoAskIntegrationClient(props: Props) {
           result: {
             status: "empty" | "ready" | "processing" | "failed";
             action?: "created" | "checked";
+            failed?: number;
           };
         }>(response);
-        if (payload.result.status === "empty") break;
+        if (payload.result.status === "empty") {
+          if ((payload.result.failed ?? 0) > 0) {
+            setImportError(
+              `${payload.result.failed} media transfer(s) still need attention. Resume the import after reviewing the audit details.`,
+            );
+          }
+          break;
+        }
         if (payload.result.action === "created") mediaStarted += 1;
         consecutiveMediaFailures = 0;
         setProgress((current) => ({ ...current, mediaStarted }));
@@ -305,7 +313,7 @@ export function VideoAskIntegrationClient(props: Props) {
           processingPolls += 1;
           if (processingPolls >= 300) {
             setImportError(
-              "Media is still processing in Mux. The import is safe; use Resume/import all later to continue readiness checks.",
+              "Media is still processing in storage. The import is safe; use Resume/import all later to continue readiness checks.",
             );
             break;
           }

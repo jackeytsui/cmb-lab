@@ -8,6 +8,8 @@ import {
 import { VideoThreadPlayer } from "@/components/video-thread/VideoThreadPlayer";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
 import type { PlayerStep } from "@/types/video-thread-player";
+import { signMediaPath } from "@/lib/signed-media-url";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 
 export async function NativeVideoThreadLesson({
   threadId,
@@ -61,6 +63,9 @@ export async function NativeVideoThreadLesson({
   const { steps: rawSteps, ...threadData } = thread;
   const steps: PlayerStep[] = rawSteps.map((step) => ({
     ...step,
+    playbackUrl: isPrivateVercelBlobUrl(step.videoUrl)
+      ? signMediaPath(`/api/video-threads/${thread.id}/media/${step.id}`)
+      : step.videoUrl,
     logic: step.logic as PlayerStep["logic"],
     logicRules: step.logicRules as PlayerStep["logicRules"],
     responseOptions: step.responseOptions as PlayerStep["responseOptions"],

@@ -1,15 +1,18 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, type Node } from '@xyflow/react';
 import { Play } from 'lucide-react';
 import { PlayerStep } from '@/types/video-thread-player';
 
-interface StartNodeData {
+interface StartNodeData extends Record<string, unknown> {
     step: PlayerStep;
     isSelected: boolean;
 }
 
-const StartNode = ({ data }: NodeProps<any>) => {
-    const { step } = data as StartNodeData;
+type StartNodeType = Node<StartNodeData, "start">;
+
+const StartNode = ({ data }: NodeProps<StartNodeType>) => {
+    const { step } = data;
+    const directMediaUrl = step.playbackUrl || step.videoUrl;
 
     return (
         <div className={`
@@ -34,9 +37,9 @@ const StartNode = ({ data }: NodeProps<any>) => {
                     {step.promptText || "Welcome Message"}
                 </div>
 
-                {step.videoUrl ? (
+                {directMediaUrl ? (
                     <div className="aspect-video bg-gray-900 rounded-md overflow-hidden relative">
-                         <video src={step.videoUrl} className="w-full h-full object-cover opacity-80" />
+                         <video src={directMediaUrl} className="w-full h-full object-cover opacity-80" />
                     </div>
                 ) : (
                     <div className="aspect-video bg-green-50/50 rounded-md flex items-center justify-center text-green-600/40 text-xs border border-green-100">

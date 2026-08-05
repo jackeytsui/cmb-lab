@@ -149,6 +149,7 @@ export function VideoThreadPlayer({
 
   const currentStep = state.steps.find((s) => s.id === state.currentStepId);
   const currentIndex = state.steps.findIndex((s) => s.id === state.currentStepId);
+  const currentMediaUrl = currentStep?.playbackUrl || currentStep?.videoUrl;
 
   useEffect(() => {
     setTextValue("");
@@ -333,20 +334,20 @@ export function VideoThreadPlayer({
           autoPlay
           muted={false}
         />
-      ) : currentStep.videoUrl && currentStep.mediaType === "audio" ? (
+      ) : currentMediaUrl && currentStep.mediaType === "audio" ? (
         <div className="flex h-full w-full items-center justify-center bg-gray-900 px-8">
           <audio
             key={currentStep.id}
-            src={currentStep.videoUrl}
+            src={currentMediaUrl}
             className="w-full max-w-xl"
             autoPlay
             controls
           />
         </div>
-      ) : currentStep.videoUrl ? (
+      ) : currentMediaUrl ? (
         <video
           key={currentStep.id}
-          src={currentStep.videoUrl}
+          src={currentMediaUrl}
           className="w-full h-full object-cover"
           autoPlay
           controls

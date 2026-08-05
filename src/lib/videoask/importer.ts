@@ -1,13 +1,14 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { put } from "@vercel/blob";
 import {
   and,
   asc,
   count,
   eq,
   inArray,
-  isNotNull,
+  isNull,
   lt,
   or,
 } from "drizzle-orm";
@@ -23,11 +24,9 @@ import {
   videoaskStepImports,
   videoThreadSteps,
   videoThreads,
-  videoUploads,
   type User,
   type VideoAskIntegration,
 } from "@/db/schema";
-import { mux } from "@/lib/mux";
 import {
   fetchVideoAskForm,
   getVideoAskConnection,
@@ -38,9 +37,14 @@ import {
   type NormalizedVideoAskForm,
   type NormalizedVideoAskQuestion,
 } from "./mapper";
+import { videoAskBlobPath } from "./media-storage";
 import { VIDEO_THREAD_COMPLETE_TARGET } from "@/types/video-thread-player";
 
 const ROOT_FOLDER_KEY = "__root__";
+const MAX_MEDIA_ATTEMPTS = 6;
+const STALE_MEDIA_PROCESSING_MS = 10 * 60 * 1_000;
+const MEDIA_TRANSFER_TIMEOUT_MS = 280 * 1_000;
+const MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024;
 
 export type VideoAskImportResult = {
   status: "imported" | "skipped";
@@ -532,103 +536,99 @@ export async function importVideoAskForm(input: {
   }
 }
 
-export async function processNextVideoAskMedia(user: User) {
+async function refreshMediaSourceUrl(
+  media: typeof videoaskMediaImports.$inferSelect,
+) {
+  const [mapping] = await db
+    .select({ sourceFormId: videoaskFormImports.sourceFormId })
+    .from(videoaskStepImports)
+    .innerJoin(
+      videoaskFormImports,
+      eq(videoaskStepImports.formImportId, videoaskFormImports.id),
+    )
+    .where(eq(videoaskStepImports.mediaImportId, media.id))
+    .limit(1);
+  if (!mapping) {
+    throw new Error("Could not locate the source VideoAsk form for this media");
+  }
+
+  const form = normalizeVideoAskForm(
+    await fetchVideoAskForm(mapping.sourceFormId),
+  );
+  const question = form.questions.find((candidate) =>
+    media.sourceMediaId
+      ? candidate.mediaId === media.sourceMediaId
+      : mediaKey(candidate) === media.sourceMediaKey,
+  );
+  if (!question?.mediaUrl) {
+    throw new Error("VideoAsk no longer returned a URL for this source media");
+  }
+
+  await db
+    .update(videoaskMediaImports)
+    .set({ sourceUrl: question.mediaUrl, updatedAt: new Date() })
+    .where(eq(videoaskMediaImports.id, media.id));
+  return question.mediaUrl;
+}
+
+async function fetchMediaStream(
+  media: typeof videoaskMediaImports.$inferSelect,
+  signal: AbortSignal,
+) {
+  let response = await fetch(media.sourceUrl, {
+    cache: "no-store",
+    signal,
+  });
+  if (response.ok && response.body) return response;
+
+  await response.body?.cancel().catch(() => undefined);
+  const refreshedUrl = await refreshMediaSourceUrl(media);
+  response = await fetch(refreshedUrl, { cache: "no-store", signal });
+  if (!response.ok || !response.body) {
+    throw new Error(
+      `VideoAsk media download failed after refreshing its URL (${response.status})`,
+    );
+  }
+  return response;
+}
+
+export async function processNextVideoAskMedia() {
+  const staleBefore = new Date(Date.now() - STALE_MEDIA_PROCESSING_MS);
   const [media] = await db
     .select()
     .from(videoaskMediaImports)
     .where(
       and(
         or(
-          eq(videoaskMediaImports.status, "pending"),
-          eq(videoaskMediaImports.status, "failed"),
+          and(
+            or(
+              eq(videoaskMediaImports.status, "pending"),
+              eq(videoaskMediaImports.status, "failed"),
+            ),
+            lt(videoaskMediaImports.attempts, MAX_MEDIA_ATTEMPTS),
+          ),
+          and(
+            eq(videoaskMediaImports.status, "processing"),
+            lt(videoaskMediaImports.updatedAt, staleBefore),
+            lt(videoaskMediaImports.attempts, MAX_MEDIA_ATTEMPTS),
+          ),
         ),
-        lt(videoaskMediaImports.attempts, 3),
+        or(
+          eq(videoaskMediaImports.storageProvider, "vercel_blob"),
+          eq(videoaskMediaImports.storageProvider, "mux"),
+          isNull(videoaskMediaImports.storageProvider),
+        ),
       ),
     )
     .orderBy(asc(videoaskMediaImports.createdAt))
     .limit(1);
 
   if (!media) {
-    const [processing] = await db
-      .select({
-        mediaId: videoaskMediaImports.id,
-        uploadId: videoUploads.id,
-        assetId: videoUploads.muxAssetId,
-      })
+    const [failed] = await db
+      .select({ value: count() })
       .from(videoaskMediaImports)
-      .innerJoin(
-        videoUploads,
-        eq(videoaskMediaImports.videoUploadId, videoUploads.id),
-      )
-      .where(
-        and(
-          eq(videoaskMediaImports.status, "processing"),
-          isNotNull(videoUploads.muxAssetId),
-        ),
-      )
-      .orderBy(asc(videoaskMediaImports.createdAt))
-      .limit(1);
-
-    if (!processing?.assetId) return { status: "empty" as const };
-
-    const asset = await mux.video.assets.retrieve(processing.assetId);
-    if (asset.status === "ready") {
-      const playbackId = asset.playback_ids?.[0]?.id ?? null;
-      await db
-        .update(videoUploads)
-        .set({
-          muxPlaybackId: playbackId,
-          durationSeconds: asset.duration ? Math.round(asset.duration) : null,
-          status: "ready",
-          errorMessage: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(videoUploads.id, processing.uploadId));
-      await db
-        .update(videoaskMediaImports)
-        .set({ status: "ready", lastError: null, updatedAt: new Date() })
-        .where(eq(videoaskMediaImports.id, processing.mediaId));
-      return {
-        status: "ready" as const,
-        action: "checked" as const,
-        mediaId: processing.mediaId,
-        assetId: processing.assetId,
-      };
-    }
-
-    if (asset.status === "errored") {
-      const errorMessage =
-        asset.errors?.messages?.[0] || "Mux asset processing failed";
-      await db
-        .update(videoUploads)
-        .set({
-          status: "errored",
-          errorMessage,
-          updatedAt: new Date(),
-        })
-        .where(eq(videoUploads.id, processing.uploadId));
-      await db
-        .update(videoaskMediaImports)
-        .set({
-          status: "failed",
-          lastError: errorMessage,
-          updatedAt: new Date(),
-        })
-        .where(eq(videoaskMediaImports.id, processing.mediaId));
-      return {
-        status: "failed" as const,
-        action: "checked" as const,
-        mediaId: processing.mediaId,
-        assetId: processing.assetId,
-      };
-    }
-
-    return {
-      status: "processing" as const,
-      action: "checked" as const,
-      mediaId: processing.mediaId,
-      assetId: processing.assetId,
-    };
+      .where(eq(videoaskMediaImports.status, "failed"));
+    return { status: "empty" as const, failed: failed?.value ?? 0 };
   }
 
   await db
@@ -636,57 +636,45 @@ export async function processNextVideoAskMedia(user: User) {
     .set({
       status: "processing",
       attempts: media.attempts + 1,
+      storageProvider: "vercel_blob",
       lastError: null,
       updatedAt: new Date(),
     })
     .where(eq(videoaskMediaImports.id, media.id));
 
   try {
-    const asset = await mux.video.assets.create({
-      inputs: [{ url: media.sourceUrl }],
-      playback_policies: ["signed"],
-      video_quality: "basic",
-      passthrough: `videoask:${media.id}`,
-      meta: {
-        external_id: media.id,
-        creator_id: user.id,
-        title: `VideoAsk media ${media.sourceMediaId || media.id}`,
-      },
-    });
-    const playbackId = asset.playback_ids?.[0]?.id ?? null;
-    const isReady = asset.status === "ready";
-    const [upload] = await db
-      .insert(videoUploads)
-      .values({
-        muxUploadId: `videoask-import:${media.id}`,
-        muxAssetId: asset.id,
-        muxPlaybackId: playbackId,
-        filename: `${media.sourceMediaId || media.id}.mp4`,
-        status: isReady ? "ready" : "processing",
-        category: "lesson",
-        tags: ["videoask-import"],
-        uploadedBy: user.clerkId,
-      })
-      .onConflictDoUpdate({
-        target: videoUploads.muxUploadId,
-        set: {
-          muxAssetId: asset.id,
-          muxPlaybackId: playbackId,
-          status: isReady ? "ready" : "processing",
-          errorMessage: null,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+    const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+    if (!token) throw new Error("BLOB_READ_WRITE_TOKEN is not configured");
 
-    await db
-      .update(videoaskMediaImports)
-      .set({
-        videoUploadId: upload.id,
-        status: isReady ? "ready" : "processing",
-        updatedAt: new Date(),
-      })
-      .where(eq(videoaskMediaImports.id, media.id));
+    const abortSignal = AbortSignal.timeout(MEDIA_TRANSFER_TIMEOUT_MS);
+    const source = await fetchMediaStream(media, abortSignal);
+    const sourceBody = source.body;
+    if (!sourceBody) throw new Error("VideoAsk media response had no body");
+    const contentType =
+      source.headers.get("content-type")?.split(";", 1)[0]?.trim() ||
+      "video/mp4";
+    const contentLength = source.headers.get("content-length");
+    const parsedSize = contentLength ? Number(contentLength) : Number.NaN;
+    const sizeBytes =
+      Number.isFinite(parsedSize) && parsedSize >= 0 ? parsedSize : null;
+    const blob = await put(
+      videoAskBlobPath({
+        organizationId: media.organizationId,
+        sourceMediaId: media.sourceMediaId,
+        sourceMediaKey: media.sourceMediaKey,
+        contentType,
+      }),
+      sourceBody,
+      {
+        access: "private",
+        allowOverwrite: true,
+        contentType,
+        multipart:
+          sizeBytes === null || sizeBytes > MULTIPART_THRESHOLD_BYTES,
+        token,
+        abortSignal,
+      },
+    );
 
     const mappedSteps = await db
       .select({ stepId: videoaskStepImports.stepId })
@@ -695,7 +683,7 @@ export async function processNextVideoAskMedia(user: User) {
     if (mappedSteps.length > 0) {
       await db
         .update(videoThreadSteps)
-        .set({ uploadId: upload.id })
+        .set({ videoUrl: blob.url, uploadId: null, updatedAt: new Date() })
         .where(
           inArray(
             videoThreadSteps.id,
@@ -704,15 +692,29 @@ export async function processNextVideoAskMedia(user: User) {
         );
     }
 
+    await db
+      .update(videoaskMediaImports)
+      .set({
+        storageProvider: "vercel_blob",
+        destinationUrl: blob.url,
+        contentType,
+        sizeBytes,
+        videoUploadId: null,
+        status: "ready",
+        lastError: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(videoaskMediaImports.id, media.id));
+
     return {
-      status: isReady ? ("ready" as const) : ("processing" as const),
+      status: "ready" as const,
       action: "created" as const,
       mediaId: media.id,
-      assetId: asset.id,
+      destinationUrl: blob.url,
     };
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Mux media import failed";
+      error instanceof Error ? error.message : "Blob media import failed";
     await db
       .update(videoaskMediaImports)
       .set({
@@ -721,6 +723,11 @@ export async function processNextVideoAskMedia(user: User) {
         updatedAt: new Date(),
       })
       .where(eq(videoaskMediaImports.id, media.id));
-    throw error;
+    return {
+      status: "failed" as const,
+      action: "checked" as const,
+      mediaId: media.id,
+      error: message,
+    };
   }
 }

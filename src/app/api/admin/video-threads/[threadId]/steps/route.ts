@@ -3,6 +3,9 @@ import { db } from "@/db";
 import { videoThreadSteps } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
 import { eq, asc } from "drizzle-orm";
+import { signMediaPath } from "@/lib/signed-media-url";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+import type { PlayerStep } from "@/types/video-thread-player";
 
 interface RouteParams {
   params: Promise<{ threadId: string }>;
@@ -22,7 +25,14 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       .where(eq(videoThreadSteps.threadId, threadId))
       .orderBy(asc(videoThreadSteps.sortOrder));
 
-    return NextResponse.json({ steps });
+    return NextResponse.json({
+      steps: steps.map((step) => ({
+        ...step,
+        playbackUrl: isPrivateVercelBlobUrl(step.videoUrl)
+          ? signMediaPath(`/api/video-threads/${threadId}/media/${step.id}`)
+          : step.videoUrl,
+      })),
+    });
   } catch (error) {
     console.error("Failed to fetch thread steps:", error);
     return NextResponse.json(
@@ -95,7 +105,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
 
     // Process updates in parallel
-    await Promise.all(steps.map(async (step: any) => {
+    await Promise.all(steps.map(async (step: PlayerStep) => {
         // Only process if it has a valid ID (simple check)
         if (!step.id) return;
 

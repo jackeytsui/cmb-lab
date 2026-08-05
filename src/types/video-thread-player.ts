@@ -31,6 +31,8 @@ export interface PlayerStep extends Omit<VideoThreadStep, "logic" | "responseOpt
   logicRules: LogicRule[] | null;
   responseOptions: StepResponseOptions | null;
   allowedResponseTypes: ResponseType[] | null;
+  /** Short-lived first-party URL used when the stored media is private. */
+  playbackUrl?: string | null;
   upload?: {
     muxPlaybackId: string | null;
   } | null;

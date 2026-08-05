@@ -4,7 +4,7 @@ import { processNextVideoAskMedia } from "@/lib/videoask/importer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST() {
   if (!(await hasMinimumRole("admin"))) {
@@ -17,7 +17,7 @@ export async function POST() {
   }
 
   try {
-    return NextResponse.json({ result: await processNextVideoAskMedia(user) });
+    return NextResponse.json({ result: await processNextVideoAskMedia() });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Media transfer failed";

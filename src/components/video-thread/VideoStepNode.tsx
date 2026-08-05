@@ -1,22 +1,25 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, type Node } from '@xyflow/react';
 import { Video, AlertCircle, PlayCircle, CheckCircle2 } from 'lucide-react';
 import { PlayerStep } from '@/types/video-thread-player';
 import { MuxThumbnail } from "@/components/video/MuxThumbnail";
 
-interface VideoStepNodeData {
+interface VideoStepNodeData extends Record<string, unknown> {
     step: PlayerStep;
     isSelected: boolean;
     label: string;
 }
 
-const VideoStepNode = ({ data }: NodeProps<any>) => {
-    const { step } = data as VideoStepNodeData;
+type VideoStepNodeType = Node<VideoStepNodeData, "videoStep">;
+
+const VideoStepNode = ({ data }: NodeProps<VideoStepNodeType>) => {
+    const { step } = data;
     const options = step.responseOptions?.options || [];
 
     // Determine status
     const hasMuxPlayback = !!step.upload?.muxPlaybackId;
-    const hasVideo = hasMuxPlayback || !!step.videoUrl;
+    const directMediaUrl = step.playbackUrl || step.videoUrl;
+    const hasVideo = hasMuxPlayback || !!directMediaUrl;
 
     return (
         <div className={`
@@ -41,9 +44,9 @@ const VideoStepNode = ({ data }: NodeProps<any>) => {
                         alt={step.promptText || "Video thumbnail"}
                         className="w-full h-full object-cover opacity-90"
                     />
-                ) : step.videoUrl ? (
+                ) : directMediaUrl ? (
                     <video
-                        src={step.videoUrl}
+                        src={directMediaUrl}
                         className="w-full h-full object-cover opacity-80"
                         muted
                         playsInline
@@ -90,7 +93,7 @@ const VideoStepNode = ({ data }: NodeProps<any>) => {
             {/* Dynamic Output Handles */}
             <div className="border-t border-gray-100 bg-gray-50/50">
                 {options.length > 0 ? (
-                    options.map((option, idx) => (
+                    options.map((option) => (
                         <div key={option.value} className="relative flex items-center h-9 px-4 border-b border-gray-50 last:border-b-0">
                             <span className="text-xs text-gray-700 font-medium truncate flex-1">{option.label}</span>
                             <Handle

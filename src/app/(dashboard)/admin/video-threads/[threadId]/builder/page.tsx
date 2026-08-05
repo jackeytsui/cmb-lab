@@ -173,6 +173,7 @@ export default function VideoThreadBuilderPage() {
     updateStepById(selectedStepId, {
       uploadId: result.dbUploadId,
       upload: { muxPlaybackId: result.muxPlaybackId || null },
+      playbackUrl: null,
       videoUrl: result.muxPlaybackId
         ? `https://stream.mux.com/${result.muxPlaybackId}.m3u8`
         : "",
@@ -189,6 +190,7 @@ export default function VideoThreadBuilderPage() {
     updateStepById(selectedStepId, {
       uploadId: upload.id,
       upload: { muxPlaybackId: upload.muxPlaybackId },
+      playbackUrl: null,
       videoUrl: `https://stream.mux.com/${upload.muxPlaybackId}.m3u8`,
     });
     setIsLibraryOpen(false);
@@ -200,6 +202,7 @@ export default function VideoThreadBuilderPage() {
     updateStepById(selectedStepId, {
       uploadId: null,
       upload: null,
+      playbackUrl: null,
       videoUrl: "",
     });
   };
@@ -455,7 +458,7 @@ export default function VideoThreadBuilderPage() {
                       {step.promptText || "Untitled Step"}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      {step.videoUrl || step.upload?.muxPlaybackId ? (
+                      {step.playbackUrl || step.videoUrl || step.upload?.muxPlaybackId ? (
                         <Video className="w-3 h-3 text-green-600" />
                       ) : (
                         <AlertCircle className="w-3 h-3 text-amber-600" />
@@ -536,9 +539,9 @@ export default function VideoThreadBuilderPage() {
                               </Button>
                             </div>
                           </>
-                        ) : selectedStep.videoUrl ? (
+                        ) : selectedStep.playbackUrl || selectedStep.videoUrl ? (
                           <>
-                            <video src={selectedStep.videoUrl} controls className="w-full h-full object-cover" />
+                            <video src={selectedStep.playbackUrl || selectedStep.videoUrl || undefined} controls className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
                               <Button variant="secondary" size="sm" onClick={handleClearVideo}>
                                 <RotateCcw className="w-4 h-4 mr-2" /> Replace Video
@@ -557,7 +560,7 @@ export default function VideoThreadBuilderPage() {
                         )}
                       </div>
 
-                      {!selectedStep.videoUrl && !selectedStep.upload?.muxPlaybackId && (
+                      {!selectedStep.playbackUrl && !selectedStep.videoUrl && !selectedStep.upload?.muxPlaybackId && (
                         <div className="flex justify-center py-3">
                           <Button
                             variant="ghost"
