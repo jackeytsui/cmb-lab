@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isPrivateVercelBlobUrl,
   mediaExtension,
+  resolvedVideoAskMediaUrl,
   videoAskBlobPath,
 } from "../media-storage";
 
@@ -38,5 +39,30 @@ describe("VideoAsk media storage", () => {
         contentType: "video/mp4",
       }),
     ).toBe("videoask/org-one/media-123.mp4");
+  });
+
+  it("reuses a completed durable copy for later deduplicated steps", () => {
+    const sourceUrl = "https://media.videoask.com/temporary.mp4";
+    const destinationUrl =
+      "https://store.private.blob.vercel-storage.com/videoask/durable.mp4";
+
+    expect(
+      resolvedVideoAskMediaUrl(sourceUrl, {
+        status: "ready",
+        destinationUrl,
+      }),
+    ).toBe(destinationUrl);
+    expect(
+      resolvedVideoAskMediaUrl(sourceUrl, {
+        status: "pending",
+        destinationUrl,
+      }),
+    ).toBe(sourceUrl);
+    expect(
+      resolvedVideoAskMediaUrl(sourceUrl, {
+        status: "ready",
+        destinationUrl: null,
+      }),
+    ).toBe(sourceUrl);
   });
 });

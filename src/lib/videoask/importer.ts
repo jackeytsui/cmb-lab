@@ -37,7 +37,10 @@ import {
   type NormalizedVideoAskForm,
   type NormalizedVideoAskQuestion,
 } from "./mapper";
-import { videoAskBlobPath } from "./media-storage";
+import {
+  resolvedVideoAskMediaUrl,
+  videoAskBlobPath,
+} from "./media-storage";
 import { VIDEO_THREAD_COMPLETE_TARGET } from "@/types/video-thread-player";
 
 const ROOT_FOLDER_KEY = "__root__";
@@ -238,7 +241,7 @@ async function createNativeThread(
       .insert(videoThreadSteps)
       .values({
         threadId: thread.id,
-        videoUrl: question.mediaUrl,
+        videoUrl: resolvedVideoAskMediaUrl(question.mediaUrl, media),
         mediaType: question.mediaType,
         sourceThumbnailUrl: question.thumbnailUrl,
         promptText: question.promptText,

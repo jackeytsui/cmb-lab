@@ -17,6 +17,23 @@ export function isPrivateVercelBlobUrl(value: string | null | undefined) {
   }
 }
 
+/**
+ * Prefer CMB Lab-owned media when a deduplicated source file was transferred
+ * by an earlier form import. New steps must not fall back to VideoAsk's signed,
+ * short-lived source URL just because the media row already existed.
+ */
+export function resolvedVideoAskMediaUrl(
+  sourceUrl: string | null,
+  media:
+    | { status: string; destinationUrl: string | null }
+    | null
+    | undefined,
+) {
+  return media?.status === "ready" && media.destinationUrl
+    ? media.destinationUrl
+    : sourceUrl;
+}
+
 export function mediaExtension(contentType: string | null | undefined) {
   const normalized = contentType?.split(";", 1)[0]?.trim().toLowerCase();
   switch (normalized) {
