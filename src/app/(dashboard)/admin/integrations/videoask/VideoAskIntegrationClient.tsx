@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
+  BookOpenCheck,
   CheckCircle2,
   ExternalLink,
   Eye,
   Loader2,
+  MapPinned,
   Pause,
   Play,
   RefreshCw,
@@ -81,6 +84,46 @@ type Preview = {
   }>;
 };
 
+type VocalHackPlacementPreview = {
+  summary: {
+    importedTotal: number;
+    targetTotal: number;
+    ignoredTotal: number;
+    mapped: number;
+    exact: number;
+    high: number;
+    review: number;
+    manual: number;
+    mediaReady: number;
+    targetSentenceVideos: number;
+    aiTranscriptionRequired: number;
+  };
+  forms: Array<{
+    formImportId: string;
+    sourceFormId: string;
+    sourceTitle: string;
+    sourceFolderKey: string;
+    sourceGroup: string;
+    language: "mandarin" | "cantonese";
+    stepCount: number;
+    mediaReady: number;
+    mediaComplete: boolean;
+    targetCourse: { id: string; title: string } | null;
+    targetModule: { id: string; title: string } | null;
+    targetLesson: {
+      id: string;
+      title: string;
+      lessonType: string;
+      sortOrder: number;
+    } | null;
+    targetLessonTitle: string | null;
+    action: "replace_placeholder" | "create_lesson" | "manual";
+    confidence: "exact" | "high" | "review" | "manual";
+    score: number;
+    reason: string;
+  }>;
+};
+
 type ImportProgress = {
   running: boolean;
   current: string | null;
@@ -132,6 +175,13 @@ function isComplete(status: string) {
   return status === "completed" || status === "completed_with_warnings";
 }
 
+function confidenceLabel(confidence: string) {
+  if (confidence === "exact") return "Exact";
+  if (confidence === "high") return "High confidence";
+  if (confidence === "review") return "Review";
+  return "Choose destination";
+}
+
 export function VideoAskIntegrationClient(props: Props) {
   const [scanning, setScanning] = useState(false);
   const [forms, setForms] = useState<FormSummary[] | null>(null);
@@ -146,6 +196,9 @@ export function VideoAskIntegrationClient(props: Props) {
   const [statusLoading, setStatusLoading] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [placementPreview, setPlacementPreview] =
+    useState<VocalHackPlacementPreview | null>(null);
+  const [placementLoading, setPlacementLoading] = useState(false);
   const [progress, setProgress] = useState<ImportProgress>(EMPTY_PROGRESS);
   const [importError, setImportError] = useState<string | null>(null);
   const stopRequested = useRef(false);
@@ -225,6 +278,28 @@ export function VideoAskIntegrationClient(props: Props) {
       setImportError(error instanceof Error ? error.message : "Preview failed");
     } finally {
       setPreviewingId(null);
+    }
+  }
+
+  async function loadPlacementPreview() {
+    setPlacementLoading(true);
+    setImportError(null);
+    try {
+      const response = await fetch(
+        "/api/admin/integrations/videoask/vocal-hack/preview",
+        { cache: "no-store" },
+      );
+      setPlacementPreview(
+        await jsonResponse<VocalHackPlacementPreview>(response),
+      );
+    } catch (error) {
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : "Could not build the blended-course preview",
+      );
+    } finally {
+      setPlacementLoading(false);
     }
   }
 
@@ -468,6 +543,196 @@ export function VideoAskIntegrationClient(props: Props) {
               {statusLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
               Refresh audit
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="w-fit"
+              onClick={loadPlacementPreview}
+              disabled={placementLoading || progress.running}
+            >
+              {placementLoading ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <MapPinned />
+              )}
+              {placementLoading
+                ? "Building course plan…"
+                : "Review blended-course plan"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {placementPreview ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center justify-between gap-3">
+              <span className="flex items-center gap-2">
+                <BookOpenCheck className="h-5 w-5 text-emerald-500" />
+                Vocal Hack course placement
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setPlacementPreview(null)}
+              >
+                Close
+              </Button>
+            </CardTitle>
+            <CardDescription>
+              Read-only plan based on the six folders from the team Loom. No
+              published lesson changes until the mapping and AI transcripts are
+              reviewed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-8">
+              <div>
+                <dt className="text-muted-foreground">Course forms</dt>
+                <dd className="text-lg font-semibold">
+                  {placementPreview.summary.targetTotal}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Ignored workflows</dt>
+                <dd className="text-lg font-semibold">
+                  {placementPreview.summary.ignoredTotal}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Exact</dt>
+                <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+                  {placementPreview.summary.exact}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">High confidence</dt>
+                <dd className="text-lg font-semibold">
+                  {placementPreview.summary.high}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Needs review</dt>
+                <dd className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                  {placementPreview.summary.review}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Manual</dt>
+                <dd className="text-lg font-semibold">
+                  {placementPreview.summary.manual}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Media complete</dt>
+                <dd className="text-lg font-semibold">
+                  {placementPreview.summary.mediaReady}/
+                  {placementPreview.summary.targetTotal}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Sentence videos</dt>
+                <dd className="text-lg font-semibold">
+                  {placementPreview.summary.targetSentenceVideos}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-700 dark:text-blue-300">
+              Existing VideoAsk transcripts are English phonetic guesses, so the
+              {" "}
+              {placementPreview.summary.aiTranscriptionRequired} coach videos
+              need fresh Mandarin/Cantonese speech-to-text. Their private Blob
+              copies will be reused—nothing needs to be uploaded again.
+            </div>
+
+            <div className="max-h-[38rem] overflow-auto rounded-md border">
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead className="sticky top-0 z-10 bg-muted">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">VideoAsk source</th>
+                    <th className="w-10 px-1 py-2">
+                      <span className="sr-only">Maps to</span>
+                    </th>
+                    <th className="px-3 py-2 font-medium">CMB Lab destination</th>
+                    <th className="px-3 py-2 font-medium">Action</th>
+                    <th className="px-3 py-2 font-medium">Readiness</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {placementPreview.forms.map((form) => (
+                    <tr key={form.formImportId} className="border-t align-top">
+                      <td className="px-3 py-3">
+                        <p className="font-medium">{form.sourceTitle}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {form.sourceGroup} · {form.stepCount} sentence video
+                          {form.stepCount === 1 ? "" : "s"}
+                        </p>
+                      </td>
+                      <td className="px-1 py-4 text-muted-foreground">
+                        <ArrowRight className="h-4 w-4" />
+                      </td>
+                      <td className="px-3 py-3">
+                        {form.targetCourse && form.targetModule ? (
+                          <>
+                            <p className="text-xs text-muted-foreground">
+                              {form.targetCourse.title}
+                            </p>
+                            <p className="font-medium">
+                              {form.targetModule.title}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {form.targetLessonTitle}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="font-medium text-amber-600 dark:text-amber-400">
+                            Administrator must choose a course and module
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={
+                            form.confidence === "exact"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : form.confidence === "review"
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-foreground"
+                          }
+                        >
+                          {confidenceLabel(form.confidence)}
+                        </span>
+                        <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                          {form.action === "replace_placeholder"
+                            ? "Replace existing placeholder after review"
+                            : form.action === "create_lesson"
+                              ? "Add beside the matching course material"
+                              : form.reason}
+                        </p>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={
+                            form.mediaComplete
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-amber-600 dark:text-amber-400"
+                          }
+                        >
+                          {form.mediaComplete
+                            ? `${form.mediaReady}/${form.stepCount} media ready`
+                            : `${form.mediaReady}/${form.stepCount} media ready`}
+                        </span>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          AI transcript pending
+                        </p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
       ) : null}
