@@ -11,6 +11,8 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { CourseLibraryVocalHackContent } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { isVocalHackLesson } from "@/lib/lesson-language";
+import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { verifySignedMediaPath } from "@/lib/signed-media-url";
 
 // Video blobs are large; the default function timeout can cut the stream off
 // mid-transfer (perpetual loading spinner). Match the 60s used by the other
@@ -34,8 +36,25 @@ export async function GET(
   }
   const viewer = await db.query.users.findFirst({
     where: eq(users.clerkId, clerkId),
-    columns: { role: true },
+    columns: { id: true, role: true },
   });
+
+  const url = request.nextUrl;
+  if (
+    !verifySignedMediaPath(
+      url.pathname,
+      url.searchParams.get("exp"),
+      url.searchParams.get("sig"),
+    )
+  ) {
+    return NextResponse.json(
+      { error: "This video link has expired — reload the lesson page." },
+      { status: 403 },
+    );
+  }
+  if (request.headers.get("sec-fetch-dest") === "document") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { lessonId } = await params;
   const sentenceId = request.nextUrl.searchParams.get("sentence");
@@ -47,6 +66,7 @@ export async function GET(
     .select({
       content: courseLibraryLessons.content,
       lessonType: courseLibraryLessons.lessonType,
+      courseId: courseLibraryCourses.id,
     })
     .from(courseLibraryLessons)
     .innerJoin(
@@ -72,6 +92,10 @@ export async function GET(
     .limit(1);
 
   if (!lesson || !isVocalHackLesson(lesson.lessonType)) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
+  const canSeeCourse = await getCourseLibraryCourseAccess(viewer);
+  if (!canSeeCourse(lesson.courseId)) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 

@@ -38,11 +38,14 @@ const LOCKED_STATUSES = new Set(["in_review", "reviewed"]);
 
 export function VocalHackViewer({
   lessonId,
+  videoBaseUrl,
   sentences,
   initialSubmission,
   lang = "mandarin",
 }: {
   lessonId: string;
+  /** Server-minted, expiring URL for the private coach-video proxy. */
+  videoBaseUrl: string;
   sentences: VocalHackSentenceDto[];
   initialSubmission: VocalHackSubmissionDto | null;
   lang?: "mandarin" | "cantonese";
@@ -194,7 +197,7 @@ export function VocalHackViewer({
               {sentence.hasVideo && (
                 <div className="flex justify-center sm:block sm:shrink-0">
                   <SentenceVideo
-                    src={`/api/course-library/vocal-hack-video/${lessonId}?sentence=${encodeURIComponent(sentence.id)}#t=0.1`}
+                    src={`${videoBaseUrl}&sentence=${encodeURIComponent(sentence.id)}#t=0.1`}
                   />
                 </div>
               )}

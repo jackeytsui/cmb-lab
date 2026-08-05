@@ -624,6 +624,9 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             {vocalHackSentences.length > 0 ? (
               <VocalHackViewer
                 lessonId={lessonId}
+                videoBaseUrl={signMediaPath(
+                  `/api/course-library/vocal-hack-video/${lessonId}`,
+                )}
                 sentences={vocalHackSentences}
                 initialSubmission={vocalHackSubmission}
                 lang={lang}
