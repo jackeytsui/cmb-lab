@@ -52,6 +52,59 @@ export const videoaskIntegration = pgTable(
 
 export type VideoAskIntegration = typeof videoaskIntegration.$inferSelect;
 
+/** Durable record of each source inventory scan. */
+export const videoaskInventoryScans = pgTable(
+  "videoask_inventory_scans",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    status: text("status").notNull().default("scanning"),
+    formCount: integer("form_count").notNull().default(0),
+    lastError: text("last_error"),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("videoask_inventory_scans_organization_idx").on(
+      table.organizationId,
+    ),
+    index("videoask_inventory_scans_status_idx").on(table.status),
+  ],
+);
+
+/** Latest known VideoAsk form summaries, keyed by organization + form. */
+export const videoaskInventoryForms = pgTable(
+  "videoask_inventory_forms",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    sourceFormId: text("source_form_id").notNull(),
+    title: text("title").notNull(),
+    folderId: text("folder_id"),
+    folderName: text("folder_name"),
+    shareUrl: text("share_url"),
+    sourceCreatedAt: timestamp("source_created_at"),
+    sourceUpdatedAt: timestamp("source_updated_at"),
+    lastScanId: uuid("last_scan_id")
+      .notNull()
+      .references(() => videoaskInventoryScans.id, { onDelete: "cascade" }),
+    lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("videoask_inventory_forms_organization_form_unique").on(
+      table.organizationId,
+      table.sourceFormId,
+    ),
+    index("videoask_inventory_forms_scan_idx").on(table.lastScanId),
+  ],
+);
+
 /** One managed draft course that receives all forms for an organization. */
 export const videoaskImportProjects = pgTable(
   "videoask_import_projects",
@@ -217,6 +270,8 @@ export const videoaskMediaImports = pgTable(
 );
 
 export type VideoAskImportProject = typeof videoaskImportProjects.$inferSelect;
+export type VideoAskInventoryScan = typeof videoaskInventoryScans.$inferSelect;
+export type VideoAskInventoryForm = typeof videoaskInventoryForms.$inferSelect;
 export type VideoAskFormImport = typeof videoaskFormImports.$inferSelect;
 export type VideoAskStepImport = typeof videoaskStepImports.$inferSelect;
 export type VideoAskMediaImport = typeof videoaskMediaImports.$inferSelect;

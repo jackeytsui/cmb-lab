@@ -1,9 +1,11 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import {
   videoaskFormImports,
   videoaskImportProjects,
+  videoaskInventoryForms,
+  videoaskInventoryScans,
   videoaskMediaImports,
 } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
@@ -20,8 +22,40 @@ export async function GET() {
   try {
     const connection = await getVideoAskConnection();
     if (!connection) {
-      return NextResponse.json({ project: null, imports: [], media: {} });
+      return NextResponse.json({
+        project: null,
+        inventory: null,
+        imports: [],
+        media: {},
+      });
     }
+
+    const [latestScan] = await db
+      .select()
+      .from(videoaskInventoryScans)
+      .where(
+        and(
+          eq(videoaskInventoryScans.organizationId, connection.organizationId),
+          eq(videoaskInventoryScans.status, "completed"),
+        ),
+      )
+      .orderBy(desc(videoaskInventoryScans.completedAt))
+      .limit(1);
+    const inventoryForms = latestScan
+      ? await db
+          .select({
+            id: videoaskInventoryForms.sourceFormId,
+            title: videoaskInventoryForms.title,
+            folderId: videoaskInventoryForms.folderId,
+            folderName: videoaskInventoryForms.folderName,
+            shareUrl: videoaskInventoryForms.shareUrl,
+            createdAt: videoaskInventoryForms.sourceCreatedAt,
+            updatedAt: videoaskInventoryForms.sourceUpdatedAt,
+          })
+          .from(videoaskInventoryForms)
+          .where(eq(videoaskInventoryForms.lastScanId, latestScan.id))
+          .orderBy(asc(videoaskInventoryForms.title))
+      : [];
 
     const [project] = await db
       .select()
@@ -63,6 +97,18 @@ export async function GET() {
             id: project.id,
             courseId: project.courseId,
             courseUrl: `/admin/course-library/${project.courseId}`,
+          }
+        : null,
+      inventory: latestScan
+        ? {
+            scanId: latestScan.id,
+            formCount: latestScan.formCount,
+            completedAt: latestScan.completedAt?.toISOString() ?? null,
+            forms: inventoryForms.map((form) => ({
+              ...form,
+              createdAt: form.createdAt?.toISOString() ?? null,
+              updatedAt: form.updatedAt?.toISOString() ?? null,
+            })),
           }
         : null,
       imports: imports.map((item) => ({

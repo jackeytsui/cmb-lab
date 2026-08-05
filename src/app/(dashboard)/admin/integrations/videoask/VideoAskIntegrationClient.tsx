@@ -47,6 +47,12 @@ type ImportRow = {
 
 type ImportStatus = {
   project: { id: string; courseId: string; courseUrl: string } | null;
+  inventory: {
+    scanId: string;
+    formCount: number;
+    completedAt: string | null;
+    forms: FormSummary[];
+  } | null;
   imports: ImportRow[];
   media: Record<string, number>;
 };
@@ -133,6 +139,7 @@ export function VideoAskIntegrationClient(props: Props) {
   const [scanError, setScanError] = useState<string | null>(null);
   const [status, setStatus] = useState<ImportStatus>({
     project: null,
+    inventory: null,
     imports: [],
     media: {},
   });
@@ -163,7 +170,12 @@ export function VideoAskIntegrationClient(props: Props) {
       const response = await fetch("/api/admin/integrations/videoask/imports", {
         cache: "no-store",
       });
-      setStatus(await jsonResponse<ImportStatus>(response));
+      const nextStatus = await jsonResponse<ImportStatus>(response);
+      setStatus(nextStatus);
+      if (forms === null && nextStatus.inventory) {
+        setForms(nextStatus.inventory.forms);
+        setSelected(new Set(nextStatus.inventory.forms.map((form) => form.id)));
+      }
     } catch (error) {
       if (!silent) {
         setImportError(
@@ -406,7 +418,7 @@ export function VideoAskIntegrationClient(props: Props) {
         </CardContent>
       </Card>
 
-      {status.project || status.imports.length > 0 ? (
+      {status.inventory || status.project || status.imports.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center justify-between gap-3">
@@ -424,13 +436,19 @@ export function VideoAskIntegrationClient(props: Props) {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-6">
+              <div><dt className="text-muted-foreground">Source forms</dt><dd className="text-lg font-semibold">{status.inventory?.formCount ?? 0}</dd></div>
               <div><dt className="text-muted-foreground">Forms complete</dt><dd className="text-lg font-semibold">{importSummary.completed}</dd></div>
               <div><dt className="text-muted-foreground">With warnings</dt><dd className="text-lg font-semibold">{importSummary.warnings}</dd></div>
               <div><dt className="text-muted-foreground">Failed</dt><dd className="text-lg font-semibold">{importSummary.failed}</dd></div>
               <div><dt className="text-muted-foreground">Media ready</dt><dd className="text-lg font-semibold">{status.media.ready ?? 0}</dd></div>
               <div><dt className="text-muted-foreground">Media tracked</dt><dd className="text-lg font-semibold">{mediaTotal}</dd></div>
             </dl>
+            {status.inventory?.completedAt ? (
+              <p className="text-xs text-muted-foreground">
+                Last complete source scan: {new Date(status.inventory.completedAt).toLocaleString()}
+              </p>
+            ) : null}
             <Button
               type="button"
               size="sm"
