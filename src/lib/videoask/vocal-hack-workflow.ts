@@ -17,6 +17,7 @@ import {
 import { db } from "@/db";
 import {
   courseLibraryCourses,
+  courseLibraryLessonTypeEnum,
   courseLibraryLessons,
   courseLibraryModules,
   videoaskFormImports,
@@ -43,6 +44,25 @@ const cleanedTranscriptSchema = z.object({
     .describe("The single Chinese sentence spoken by the coach, without repetition"),
   english: z.string().describe("A concise natural English translation"),
 });
+
+const destinationSnapshotSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("replaced"),
+    publishedContent: z.record(z.string(), z.unknown()),
+    lesson: z.object({
+      id: z.string().uuid(),
+      moduleId: z.string().uuid(),
+      title: z.string(),
+      lessonType: z.enum(courseLibraryLessonTypeEnum.enumValues),
+      content: z.record(z.string(), z.unknown()),
+      sortOrder: z.number().int(),
+    }),
+  }),
+  z.object({
+    kind: z.literal("created"),
+    publishedContent: z.record(z.string(), z.unknown()),
+  }),
+]);
 
 type PlacementPreview = Awaited<
   ReturnType<typeof buildVocalHackPlacementPreview>
@@ -594,6 +614,8 @@ export async function getVocalHackWorkflowStatus() {
         targetLessonId: videoaskVocalHackPlacements.targetLessonId,
         targetLessonTitle: videoaskVocalHackPlacements.targetLessonTitle,
         publishedLessonId: videoaskVocalHackPlacements.publishedLessonId,
+        publishedAt: videoaskVocalHackPlacements.publishedAt,
+        rolledBackAt: videoaskVocalHackPlacements.rolledBackAt,
         totalSentences: videoaskVocalHackPlacements.totalSentences,
         readySentences: videoaskVocalHackPlacements.readySentences,
         lastError: videoaskVocalHackPlacements.lastError,
@@ -1018,7 +1040,37 @@ export async function publishVocalHackPlacement(
       placement.language === "cantonese" ? "vocal_hack_canto" : "vocal_hack";
 
     let lessonId: string;
+    let destinationSnapshot: z.infer<typeof destinationSnapshotSchema>;
     if (placement.targetLessonId) {
+      const [originalLesson] = await tx
+        .select({
+          id: courseLibraryLessons.id,
+          moduleId: courseLibraryLessons.moduleId,
+          title: courseLibraryLessons.title,
+          lessonType: courseLibraryLessons.lessonType,
+          content: courseLibraryLessons.content,
+          sortOrder: courseLibraryLessons.sortOrder,
+        })
+        .from(courseLibraryLessons)
+        .where(
+          and(
+            eq(courseLibraryLessons.id, placement.targetLessonId),
+            eq(courseLibraryLessons.moduleId, placement.targetModuleId),
+            isNull(courseLibraryLessons.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!originalLesson) {
+        throw new Error("The destination lesson no longer exists");
+      }
+      destinationSnapshot = {
+        kind: "replaced",
+        publishedContent: lessonContent,
+        lesson: {
+          ...originalLesson,
+          content: originalLesson.content as Record<string, unknown>,
+        },
+      };
       const [lesson] = await tx
         .update(courseLibraryLessons)
         .set({
@@ -1038,6 +1090,10 @@ export async function publishVocalHackPlacement(
       if (!lesson) throw new Error("The destination lesson no longer exists");
       lessonId = lesson.id;
     } else {
+      destinationSnapshot = {
+        kind: "created",
+        publishedContent: lessonContent,
+      };
       const siblings = await tx
         .select({ sortOrder: courseLibraryLessons.sortOrder })
         .from(courseLibraryLessons)
@@ -1073,6 +1129,9 @@ export async function publishVocalHackPlacement(
         approvedBy: adminUserId,
         approvedAt: now,
         publishedAt: now,
+        destinationSnapshot,
+        rolledBackBy: null,
+        rolledBackAt: null,
         lastError: null,
         updatedAt: now,
       })
@@ -1084,4 +1143,105 @@ export async function publishVocalHackPlacement(
     ...published,
     lessonUrl: `/admin/course-library/${published.targetCourseId}/lessons/${published.lessonId}`,
   };
+}
+
+/** Restore the original placeholder, or soft-delete a newly created lesson. */
+export async function rollbackVocalHackPlacement(
+  placementId: string,
+  adminUserId: string,
+) {
+  return db.transaction(async (tx) => {
+    const [placement] = await tx
+      .update(videoaskVocalHackPlacements)
+      .set({ status: "rolling_back", updatedAt: new Date() })
+      .where(
+        and(
+          eq(videoaskVocalHackPlacements.id, placementId),
+          eq(videoaskVocalHackPlacements.status, "published"),
+          sql`${videoaskVocalHackPlacements.publishedLessonId} is not null`,
+        ),
+      )
+      .returning();
+    if (!placement?.publishedLessonId) {
+      throw new Error("This placement is not currently published");
+    }
+    const snapshot = destinationSnapshotSchema.safeParse(
+      placement.destinationSnapshot,
+    );
+    if (!snapshot.success) {
+      throw new Error("The original destination snapshot is unavailable");
+    }
+
+    const [currentLesson] = await tx
+      .select({
+        id: courseLibraryLessons.id,
+        content: courseLibraryLessons.content,
+      })
+      .from(courseLibraryLessons)
+      .where(
+        and(
+          eq(courseLibraryLessons.id, placement.publishedLessonId),
+          isNull(courseLibraryLessons.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!currentLesson) throw new Error("The published lesson no longer exists");
+    const currentContent = currentLesson.content as Record<string, unknown>;
+    if (
+      currentContent.sourceProvider !== "videoask" ||
+      currentContent.sourceFormImportId !== placement.formImportId
+    ) {
+      throw new Error(
+        "The lesson has changed since publication; restore it manually to avoid overwriting newer work",
+      );
+    }
+    if (
+      JSON.stringify(currentContent) !==
+      JSON.stringify(snapshot.data.publishedContent)
+    ) {
+      throw new Error(
+        "The lesson was edited after publication; restore it manually to preserve those edits",
+      );
+    }
+
+    if (snapshot.data.kind === "replaced") {
+      if (snapshot.data.lesson.id !== currentLesson.id) {
+        throw new Error("The destination snapshot does not match this lesson");
+      }
+      await tx
+        .update(courseLibraryLessons)
+        .set({
+          moduleId: snapshot.data.lesson.moduleId,
+          title: snapshot.data.lesson.title,
+          lessonType: snapshot.data.lesson.lessonType,
+          content: snapshot.data.lesson.content,
+          sortOrder: snapshot.data.lesson.sortOrder,
+          deletedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(courseLibraryLessons.id, currentLesson.id));
+    } else {
+      await tx
+        .update(courseLibraryLessons)
+        .set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(eq(courseLibraryLessons.id, currentLesson.id));
+    }
+
+    const now = new Date();
+    await tx
+      .update(videoaskVocalHackPlacements)
+      .set({
+        status: "rolled_back",
+        publishedLessonId: null,
+        rolledBackBy: adminUserId,
+        rolledBackAt: now,
+        lastError: null,
+        updatedAt: now,
+      })
+      .where(eq(videoaskVocalHackPlacements.id, placement.id));
+    return {
+      restored: snapshot.data.kind === "replaced",
+      withdrawn: snapshot.data.kind === "created",
+    };
+  });
 }

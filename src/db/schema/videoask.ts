@@ -319,6 +319,13 @@ export const videoaskVocalHackPlacements = pgTable(
     }),
     approvedAt: timestamp("approved_at"),
     publishedAt: timestamp("published_at"),
+    destinationSnapshot: jsonb("destination_snapshot").$type<
+      Record<string, unknown>
+    >(),
+    rolledBackBy: uuid("rolled_back_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    rolledBackAt: timestamp("rolled_back_at"),
     lastError: text("last_error"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at")

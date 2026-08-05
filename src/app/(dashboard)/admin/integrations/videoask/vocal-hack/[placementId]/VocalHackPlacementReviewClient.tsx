@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Loader2,
   Play,
+  RotateCcw,
   Save,
   Send,
 } from "lucide-react";
@@ -33,6 +34,8 @@ type PlacementDetail = {
     targetLessonId: string | null;
     targetLessonTitle: string | null;
     publishedLessonId: string | null;
+    publishedAt: string | null;
+    rolledBackAt: string | null;
     action: string;
     confidence: string;
     mappingReason: string;
@@ -101,7 +104,9 @@ export function VocalHackPlacementReviewClient({
   const [transcribing, setTranscribing] = useState(false);
   const [transcribedThisRun, setTranscribedThisRun] = useState(0);
   const [publishing, setPublishing] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [rollbackNotice, setRollbackNotice] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadDetail = useCallback(async () => {
@@ -331,6 +336,46 @@ export function VocalHackPlacementReviewClient({
     }
   }
 
+  async function rollbackPlacement() {
+    if (!detail || !isPublished) return;
+    const action = placement.targetLessonId
+      ? "restore the exact lesson content that existed before this import"
+      : "withdraw the newly created Vocal Hack lesson";
+    if (
+      !window.confirm(
+        `Roll back this publication? CMB Lab will ${action}. This action is audited.`,
+      )
+    ) {
+      return;
+    }
+    setRollingBack(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/admin/integrations/videoask/vocal-hack/placements/${placementId}/rollback`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm: true }),
+        },
+      );
+      await jsonResponse<{ result: { restored: boolean; withdrawn: boolean } }>(
+        response,
+      );
+      setPublishedUrl(null);
+      setRollbackNotice(true);
+      await loadDetail();
+    } catch (rollbackError) {
+      setError(
+        rollbackError instanceof Error
+          ? rollbackError.message
+          : "Could not roll back this lesson",
+      );
+    } finally {
+      setRollingBack(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-64 items-center justify-center text-muted-foreground">
@@ -391,6 +436,12 @@ export function VocalHackPlacementReviewClient({
           <Link href={publishedUrl} className="inline-flex items-center gap-1 underline">
             Open lesson <ExternalLink className="h-3.5 w-3.5" />
           </Link>
+        </p>
+      ) : null}
+      {rollbackNotice ? (
+        <p className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <RotateCcw className="h-4 w-4" /> Publication rolled back. The staged
+          VideoAsk review remains available if you want to correct and republish it.
         </p>
       ) : null}
 
@@ -650,6 +701,19 @@ export function VocalHackPlacementReviewClient({
                   </Link>
                 </Button>
               ) : null}
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={rollbackPlacement}
+                disabled={rollingBack}
+              >
+                {rollingBack ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <RotateCcw />
+                )}
+                Roll back publication
+              </Button>
             </div>
           )}
           <p className="text-xs text-muted-foreground">

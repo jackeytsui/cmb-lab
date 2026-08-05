@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS "videoask_vocal_hack_placements" (
   "approved_by" uuid REFERENCES "users"("id") ON DELETE set null,
   "approved_at" timestamp,
   "published_at" timestamp,
+  "destination_snapshot" jsonb,
+  "rolled_back_by" uuid REFERENCES "users"("id") ON DELETE set null,
+  "rolled_back_at" timestamp,
   "last_error" text,
   "created_at" timestamp NOT NULL DEFAULT now(),
   "updated_at" timestamp NOT NULL DEFAULT now()
@@ -36,6 +39,13 @@ CREATE INDEX IF NOT EXISTS "videoask_vocal_hack_placements_status_idx"
   ON "videoask_vocal_hack_placements" ("status");
 CREATE INDEX IF NOT EXISTS "videoask_vocal_hack_placements_module_idx"
   ON "videoask_vocal_hack_placements" ("target_module_id");
+
+ALTER TABLE "videoask_vocal_hack_placements"
+  ADD COLUMN IF NOT EXISTS "destination_snapshot" jsonb;
+ALTER TABLE "videoask_vocal_hack_placements"
+  ADD COLUMN IF NOT EXISTS "rolled_back_by" uuid REFERENCES "users"("id") ON DELETE set null;
+ALTER TABLE "videoask_vocal_hack_placements"
+  ADD COLUMN IF NOT EXISTS "rolled_back_at" timestamp;
 
 CREATE TABLE IF NOT EXISTS "videoask_vocal_hack_sentences" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
