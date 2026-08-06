@@ -125,6 +125,7 @@ async function main() {
         `Published ${published}; ${batch.remaining} strong placements remain.`,
       );
       if (batch.failures.length > 0) {
+        console.error(JSON.stringify({ failures: batch.failures }));
         throw new Error(
           `${batch.failures.length} publication(s) failed: ${batch.failures[0].error}`,
         );

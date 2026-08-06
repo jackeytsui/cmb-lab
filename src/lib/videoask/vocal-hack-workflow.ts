@@ -1122,7 +1122,7 @@ export async function publishVocalHackPlacement(
          WHERE p.id = $1::uuid
            AND p.status = 'ready_for_review'
            AND p.published_lesson_id IS NULL
-           AND p.updated_at = $2::timestamp
+           AND date_trunc('milliseconds', p.updated_at) = $2::timestamp
            AND EXISTS (
              SELECT 1
              FROM course_library_modules AS m
@@ -1143,7 +1143,7 @@ export async function publishVocalHackPlacement(
          WHERE l.id = $6::uuid
            AND l.module_id = claimed.target_module_id
            AND l.deleted_at IS NULL
-           AND l.updated_at = $7::timestamp
+           AND date_trunc('milliseconds', l.updated_at) = $7::timestamp
          RETURNING l.id
        )
        UPDATE videoask_vocal_hack_placements AS p
@@ -1185,7 +1185,7 @@ export async function publishVocalHackPlacement(
          WHERE p.id = $1::uuid
            AND p.status = 'ready_for_review'
            AND p.published_lesson_id IS NULL
-           AND p.updated_at = $2::timestamp
+           AND date_trunc('milliseconds', p.updated_at) = $2::timestamp
            AND EXISTS (
              SELECT 1
              FROM course_library_modules AS m
