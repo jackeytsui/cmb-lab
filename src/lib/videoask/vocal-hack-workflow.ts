@@ -1184,6 +1184,74 @@ export async function publishVocalHackPlacement(
   };
 }
 
+/**
+ * Publish a bounded batch of fully prepared exact/high-confidence placements.
+ * The per-placement publisher retains all destination, content, snapshot, and
+ * rollback checks; this helper only removes repetitive admin clicking.
+ */
+export async function publishReadyStrongVocalHackPlacements(
+  adminUserId: string,
+  limit = 10,
+) {
+  const batchLimit = Math.min(25, Math.max(1, Math.round(limit)));
+  const candidates = await db
+    .select({ id: videoaskVocalHackPlacements.id })
+    .from(videoaskVocalHackPlacements)
+    .where(
+      and(
+        eq(videoaskVocalHackPlacements.status, "ready_for_review"),
+        inArray(videoaskVocalHackPlacements.confidence, ["exact", "high"]),
+        isNull(videoaskVocalHackPlacements.publishedLessonId),
+        sql`${videoaskVocalHackPlacements.targetCourseId} is not null`,
+        sql`${videoaskVocalHackPlacements.targetModuleId} is not null`,
+        sql`${videoaskVocalHackPlacements.targetLessonTitle} is not null`,
+      ),
+    )
+    .orderBy(asc(videoaskVocalHackPlacements.updatedAt))
+    .limit(batchLimit);
+
+  const results = await mapWithConcurrency(
+    candidates,
+    3,
+    async (candidate) => {
+      try {
+        const published = await publishVocalHackPlacement(
+          candidate.id,
+          adminUserId,
+        );
+        return { placementId: candidate.id, published, error: null };
+      } catch (error) {
+        return {
+          placementId: candidate.id,
+          published: null,
+          error:
+            error instanceof Error ? error.message : "Could not publish lesson",
+        };
+      }
+    },
+  );
+
+  const [remaining] = await db
+    .select({ value: count() })
+    .from(videoaskVocalHackPlacements)
+    .where(
+      and(
+        eq(videoaskVocalHackPlacements.status, "ready_for_review"),
+        inArray(videoaskVocalHackPlacements.confidence, ["exact", "high"]),
+        isNull(videoaskVocalHackPlacements.publishedLessonId),
+      ),
+    );
+
+  return {
+    attempted: results.length,
+    published: results.filter((result) => result.published).length,
+    failures: results
+      .filter((result) => result.error)
+      .map(({ placementId, error }) => ({ placementId, error })),
+    remaining: Number(remaining?.value ?? 0),
+  };
+}
+
 /** Restore the original placeholder, or soft-delete a newly created lesson. */
 export async function rollbackVocalHackPlacement(
   placementId: string,

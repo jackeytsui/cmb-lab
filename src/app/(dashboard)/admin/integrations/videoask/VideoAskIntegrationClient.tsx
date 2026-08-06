@@ -269,6 +269,10 @@ export function VideoAskIntegrationClient(props: Props) {
       processed: 0,
       failed: 0,
     });
+  const [bulkPublishing, setBulkPublishing] = useState({
+    running: false,
+    published: 0,
+  });
   const [progress, setProgress] = useState<ImportProgress>(EMPTY_PROGRESS);
   const [importError, setImportError] = useState<string | null>(null);
   const stopRequested = useRef(false);
@@ -342,6 +346,15 @@ export function VideoAskIntegrationClient(props: Props) {
       ).length,
     }),
     [destinationFocused, displayedWorkflowPlacements, workflow],
+  );
+  const readyStrongPlacementCount = useMemo(
+    () =>
+      (workflow?.placements ?? []).filter(
+        (placement) =>
+          placement.status === "ready_for_review" &&
+          (placement.confidence === "exact" || placement.confidence === "high"),
+      ).length,
+    [workflow],
   );
   const focusedDestination =
     displayedPlacementForms[0]?.targetCourse &&
@@ -603,6 +616,60 @@ export function VideoAskIntegrationClient(props: Props) {
     } finally {
       await loadWorkflowStatus(true);
       setTranscription((current) => ({ ...current, running: false }));
+    }
+  }
+
+  async function publishReadyStrongPlacements() {
+    if (bulkPublishing.running || readyStrongPlacementCount === 0) return;
+    if (
+      !window.confirm(
+        `Publish ${readyStrongPlacementCount} fully prepared exact/high-confidence Vocal Hacks into their mapped CMB Lab course lessons?\n\nEvery lesson keeps an automatic rollback snapshot. Review/manual mappings are excluded.`,
+      )
+    ) {
+      return;
+    }
+
+    setBulkPublishing({ running: true, published: 0 });
+    setImportError(null);
+    let published = 0;
+    try {
+      while (true) {
+        const response = await fetch(
+          "/api/admin/integrations/videoask/vocal-hack/bulk-publish",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ confirm: true, limit: 10 }),
+          },
+        );
+        const payload = await jsonResponse<{
+          result: {
+            attempted: number;
+            published: number;
+            failures: Array<{ placementId: string; error: string }>;
+            remaining: number;
+          };
+        }>(response);
+        published += payload.result.published;
+        setBulkPublishing({ running: true, published });
+        if (payload.result.failures.length > 0) {
+          setImportError(
+            `${payload.result.failures.length} lesson(s) were not published: ${payload.result.failures[0].error}`,
+          );
+          break;
+        }
+        if (payload.result.remaining === 0 || payload.result.attempted === 0) {
+          break;
+        }
+        await loadWorkflowStatus(true);
+      }
+    } catch (error) {
+      setImportError(
+        error instanceof Error ? error.message : "Bulk publication paused",
+      );
+    } finally {
+      await loadWorkflowStatus(true);
+      setBulkPublishing((current) => ({ ...current, running: false }));
     }
   }
 
@@ -1256,6 +1323,38 @@ export function VideoAskIntegrationClient(props: Props) {
                   : "Runs four clips at a time for exact and high-confidence mappings only."}
               </p>
             </div>
+
+            {!destinationFocused && readyStrongPlacementCount > 0 ? (
+              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {readyStrongPlacementCount} strong lesson
+                      {readyStrongPlacementCount === 1 ? " is" : "s are"} ready
+                      to replace VideoAsk
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Publishes only exact/high mappings and stores a rollback
+                      snapshot for every destination.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={publishReadyStrongPlacements}
+                    disabled={bulkPublishing.running || transcription.running}
+                  >
+                    {bulkPublishing.running ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <BookOpenCheck />
+                    )}
+                    {bulkPublishing.running
+                      ? `Publishing… ${bulkPublishing.published}`
+                      : `Publish ${readyStrongPlacementCount} native lessons`}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="max-h-[38rem] overflow-auto rounded-md border">
               <table className="w-full min-w-[900px] text-left text-sm">
