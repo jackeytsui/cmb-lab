@@ -239,13 +239,24 @@ export default async function AssignmentFeedbackDetailPage({
                   <p className="mb-1 text-xs font-medium text-muted-foreground">
                     Your recording
                   </p>
-                  <audio
-                    controls
-                    preload="none"
-                    controlsList="nodownload"
-                    src={`/api/course-library/assignment-recordings/${sentence.id}`}
-                    className="w-full"
-                  />
+                  {sentence.responseMediaType === "video" ? (
+                    <video
+                      controls
+                      playsInline
+                      preload="metadata"
+                      controlsList="nodownload"
+                      src={`/api/course-library/assignment-recordings/${sentence.id}`}
+                      className="max-h-80 w-full rounded-md bg-black"
+                    />
+                  ) : (
+                    <audio
+                      controls
+                      preload="none"
+                      controlsList="nodownload"
+                      src={`/api/course-library/assignment-recordings/${sentence.id}`}
+                      className="w-full"
+                    />
+                  )}
                 </div>
               )}
               {(() => {

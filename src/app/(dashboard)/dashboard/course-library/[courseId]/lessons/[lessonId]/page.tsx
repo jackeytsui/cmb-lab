@@ -43,6 +43,7 @@ import {
   isVocalHackLesson,
   lessonLanguage,
 } from "@/lib/lesson-language";
+import { studentFacingSourcePrompt } from "@/lib/videoask/vocal-hack-content";
 
 interface Attachment {
   url: string;
@@ -245,6 +246,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
   // Vocal Hack: sentence config + the student's existing submission.
   let vocalHackSentences: VocalHackSentenceDto[] = [];
   let vocalHackSubmission: VocalHackSubmissionDto | null = null;
+  const vocalHackMaxResponseSeconds =
+    typeof content.maxResponseSeconds === "number"
+      ? Math.min(600, Math.max(10, Math.round(content.maxResponseSeconds)))
+      : 300;
   if (isVocalHackLesson(lessonType)) {
     const rawSentences = Array.isArray(content.sentences)
       ? (content.sentences as Array<Record<string, unknown>>)
@@ -258,14 +263,26 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
         english: typeof s.english === "string" ? s.english : "",
         hasVideo:
           typeof s.videoUrl === "string" && s.videoUrl.trim().length > 0,
+        sourcePromptText: studentFacingSourcePrompt(s.sourcePromptText),
+        allowedResponseTypes: Array.isArray(s.allowedResponseTypes)
+          ? s.allowedResponseTypes.filter(
+              (value): value is "audio" | "video" =>
+                value === "audio" || value === "video",
+            )
+          : (["audio"] as Array<"audio" | "video">),
       }))
       .sort((a, b) => a.order - b.order)
-      .map(({ id, chinese, pinyin, english, hasVideo }) => ({
+      .map(({ id, chinese, pinyin, english, hasVideo, sourcePromptText, allowedResponseTypes }) => ({
         id,
         chinese,
         pinyin,
         english,
         hasVideo,
+        sourcePromptText,
+        allowedResponseTypes:
+          allowedResponseTypes.length > 0
+            ? allowedResponseTypes
+            : (["audio"] as Array<"audio" | "video">),
       }));
 
     if (currentUser) {
@@ -286,11 +303,14 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           });
         const recordings: Record<string, string> = {};
         const playbackUrls: Record<string, string> = {};
+        const recordingMediaTypes: Record<string, "audio" | "video"> = {};
         for (const s of sentenceRows) {
           if (s.audioUrl) {
             recordings[s.promptId] = s.audioUrl;
             playbackUrls[s.promptId] =
               `/api/course-library/assignment-recordings/${s.id}`;
+            recordingMediaTypes[s.promptId] =
+              s.responseMediaType === "video" ? "video" : "audio";
           }
         }
         vocalHackSubmission = {
@@ -299,6 +319,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           submittedAt: submission.submittedAt?.toISOString() ?? null,
           recordings,
           playbackUrls,
+          recordingMediaTypes,
         };
       }
     }
@@ -629,6 +650,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 )}
                 sentences={vocalHackSentences}
                 initialSubmission={vocalHackSubmission}
+                maxResponseSeconds={vocalHackMaxResponseSeconds}
                 lang={lang}
               />
             ) : (

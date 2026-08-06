@@ -206,6 +206,8 @@ const EMPTY_PROGRESS: ImportProgress = {
   mediaStarted: 0,
 };
 
+const TRANSCRIPTION_CONCURRENCY = 4;
+
 async function jsonResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => null)) as
     | (T & { error?: string })
@@ -546,35 +548,53 @@ export function VideoAskIntegrationClient(props: Props) {
           body: JSON.stringify({ mode: "safe" }),
         },
       );
-      await jsonResponse<{ result: { placements: number; sentences: number } }>(
-        queueResponse,
-      );
+      const queued = await jsonResponse<{
+        result: { placements: number; sentences: number };
+      }>(queueResponse);
 
       let processed = 0;
       let failed = 0;
+      let remaining = 0;
+      const workerCount = Math.min(
+        TRANSCRIPTION_CONCURRENCY,
+        Math.max(1, queued.result.sentences),
+      );
       while (!transcriptionStopRequested.current) {
-        const response = await fetch(
-          "/api/admin/integrations/videoask/vocal-hack/process",
-          { method: "POST" },
-        );
-        const payload = await jsonResponse<{
-          result: {
-            status: "empty" | "ready" | "failed";
-            remaining?: number;
-          };
-        }>(response);
-        if (payload.result.status === "empty") {
-          if ((payload.result.remaining ?? 0) > 0) {
-            setImportError(
-              `${payload.result.remaining} sentence transcription(s) need manual review or another retry.`,
+        const results = await Promise.all(
+          Array.from({ length: workerCount }, async () => {
+            const response = await fetch(
+              "/api/admin/integrations/videoask/vocal-hack/process",
+              { method: "POST" },
             );
-          }
+            return jsonResponse<{
+              result: {
+                status: "empty" | "ready" | "failed";
+                remaining?: number;
+              };
+            }>(response);
+          }),
+        );
+        const completed = results.filter(
+          (payload) => payload.result.status !== "empty",
+        );
+        if (completed.length === 0) {
+          remaining = Math.max(
+            0,
+            ...results.map((payload) => payload.result.remaining ?? 0),
+          );
           break;
         }
-        processed += 1;
-        if (payload.result.status === "failed") failed += 1;
+        processed += completed.length;
+        failed += completed.filter(
+          (payload) => payload.result.status === "failed",
+        ).length;
         setTranscription({ running: true, processed, failed });
-        if (processed % 5 === 0) await loadWorkflowStatus(true);
+        if (processed % 20 < workerCount) await loadWorkflowStatus(true);
+      }
+      if (remaining > 0 && !transcriptionStopRequested.current) {
+        setImportError(
+          `${remaining} sentence transcription(s) need manual review or another retry.`,
+        );
       }
     } catch (error) {
       setImportError(
@@ -822,12 +842,32 @@ export function VideoAskIntegrationClient(props: Props) {
       </Card>
 
       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-200">
-        <p className="font-medium">VideoAsk is the source—not a separate course.</p>
-        <p className="mt-1 text-emerald-700 dark:text-emerald-300">
-          Coach videos and sentence content are staged privately, reviewed, and
-          then published as native Vocal Hack components inside the existing CMB
-          Lab course and module selected below.
+        <p className="font-medium">
+          VideoAsk is the migration source—not a separate course.
         </p>
+        <p className="mt-1 text-emerald-700 dark:text-emerald-300">
+          Each mapped item becomes an in-course CMB Lab Vocal Hack: private coach
+          video, visible task text, student audio or camera-video response,
+          re-recording, completion tracking, and coach feedback. AI only turns
+          the speech in each clip into editable native sentence text; it does not
+          replace or omit the videos.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ["Coach content", "Videos, order, prompts, Chinese, romanisation, English"],
+            ["Student response", "Audio or video, file upload, five-minute limit, re-record"],
+            ["Coach workflow", "Assignment queue, corrections, feedback recording, notification"],
+            ["CMB Lab upgrades", "One login, course progress, private media, resumable import, rollback"],
+          ].map(([title, detail]) => (
+            <div
+              key={title}
+              className="rounded-md border border-emerald-500/20 bg-background/60 p-3"
+            >
+              <p className="text-xs font-semibold text-foreground">{title}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {status.inventory || status.project || status.imports.length > 0 ? (
@@ -1155,8 +1195,9 @@ export function VideoAskIntegrationClient(props: Props) {
               </Button>
             </CardTitle>
             <CardDescription>
-              AI output stays in staging. Open each placement to correct the
-              destination and sentence text, then publish that lesson explicitly.
+              Videos are already copied. AI creates the missing searchable
+              sentence text in staging; open any placement to inspect or edit it
+              before publishing the native lesson.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1202,17 +1243,17 @@ export function VideoAskIntegrationClient(props: Props) {
                     transcriptionStopRequested.current = true;
                   }}
                 >
-                  <Pause /> Pause after this clip
+                  <Pause /> Pause after active clips
                 </Button>
               ) : (
                 <Button type="button" onClick={runSafeTranscription}>
-                  <Play /> Start/resume safe AI transcription
+                  <Play /> Generate native sentence text
                 </Button>
               )}
               <p className="text-xs text-muted-foreground">
                 {transcription.running || transcription.processed > 0
                   ? `${transcription.processed} processed this run · ${transcription.failed} failed`
-                  : "Starts with exact and high-confidence mappings only."}
+                  : "Runs four clips at a time for exact and high-confidence mappings only."}
               </p>
             </div>
 

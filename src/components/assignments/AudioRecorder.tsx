@@ -1,7 +1,16 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { Mic, Square, Play, Pause, RotateCcw, Loader2, Upload } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import {
+  Mic,
+  Square,
+  Play,
+  Pause,
+  RotateCcw,
+  Loader2,
+  Upload,
+  Video,
+} from "lucide-react";
 import { upload } from "@vercel/blob/client";
 
 // Upload a recording straight to Vercel Blob (private). Direct-to-blob avoids
@@ -21,12 +30,17 @@ async function uploadRecording(blob: Blob, filename: string): Promise<string> {
   return result.url;
 }
 
+export type RecordingMediaType = "audio" | "video";
+
 interface AudioRecorderProps {
-  onUpload: (blobUrl: string) => void;
+  onUpload: (blobUrl: string, mediaType: RecordingMediaType) => void;
   existingUrl?: string | null;
+  existingMediaType?: RecordingMediaType;
   maxSeconds?: number; // default 60
   /** Show an "upload a file instead" fallback next to the mic recorder. */
   allowFileUpload?: boolean;
+  /** Native Vocal Hacks preserve VideoAsk's enabled audio/video response modes. */
+  allowedMediaTypes?: RecordingMediaType[];
 }
 
 type RecorderState = "idle" | "recording" | "recorded" | "uploading";
@@ -34,18 +48,27 @@ type RecorderState = "idle" | "recording" | "recorded" | "uploading";
 export function AudioRecorder({
   onUpload,
   existingUrl,
+  existingMediaType = "audio",
   maxSeconds = 60,
   allowFileUpload = false,
+  allowedMediaTypes = ["audio"],
 }: AudioRecorderProps) {
-  const [state, setState] = useState<RecorderState>(existingUrl ? "recorded" : "idle");
+  const [state, setState] = useState<RecorderState>(
+    existingUrl ? "recorded" : "idle",
+  );
   const [audioUrl, setAudioUrl] = useState<string | null>(existingUrl ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [mediaType, setMediaType] =
+    useState<RecordingMediaType>(existingMediaType);
+  const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const liveVideoRef = useRef<HTMLVideoElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopTimer = useCallback(() => {
@@ -62,34 +85,69 @@ export function AudioRecorder({
     }
   }, [stopTimer]);
 
-  const startRecording = useCallback(async () => {
-    setError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-          ? "audio/webm;codecs=opus"
-          : "audio/webm",
-      });
+  useEffect(() => {
+    const video = liveVideoRef.current;
+    if (!video || !liveStream) return;
+    video.srcObject = liveStream;
+    void video.play().catch(() => undefined);
+    return () => {
+      video.srcObject = null;
+    };
+  }, [liveStream, state]);
+
+  const startRecording = useCallback(
+    async (kind: RecordingMediaType) => {
+      setError(null);
+      try {
+      const stream = await navigator.mediaDevices.getUserMedia(
+        kind === "video"
+          ? { audio: true, video: { facingMode: "user" } }
+          : { audio: true },
+      );
+      const mimeCandidates =
+        kind === "video"
+          ? [
+              "video/webm;codecs=vp9,opus",
+              "video/webm;codecs=vp8,opus",
+              "video/webm",
+            ]
+          : ["audio/webm;codecs=opus", "audio/webm"];
+      const mimeType = mimeCandidates.find((candidate) =>
+        MediaRecorder.isTypeSupported(candidate),
+      );
+      const mr = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       chunksRef.current = [];
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType });
+        setLiveStream(null);
+        const blob = new Blob(chunksRef.current, {
+          type: mr.mimeType || `${kind}/webm`,
+        });
         const localUrl = URL.createObjectURL(blob);
         setAudioUrl(localUrl);
+        setMediaType(kind);
         setState("uploading");
 
         // Upload straight to Blob (direct-to-blob; no 4.5MB serverless cap).
         try {
-          const url = await uploadRecording(blob, "recording.webm");
-          onUpload(url);
+          const url = await uploadRecording(
+            blob,
+            kind === "video"
+              ? "video-response.webm"
+              : "audio-response.webm",
+          );
+          onUpload(url, kind);
           setState("recorded");
         } catch (err) {
           setError(
-            err instanceof Error ? err.message : "Upload failed. Please try again.",
+            err instanceof Error
+              ? err.message
+              : "Upload failed. Please try again.",
           );
           setState("recorded");
         }
@@ -97,13 +155,13 @@ export function AudioRecorder({
 
       mr.start();
       mediaRecorderRef.current = mr;
+      setLiveStream(stream);
+      setMediaType(kind);
       setState("recording");
       setElapsed(0);
       timerRef.current = setInterval(() => {
         setElapsed((s) => {
           if (s + 1 >= maxSeconds) {
-            // Inline stop (rather than calling stopRecording) so this callback
-            // has no forward reference and a clean dependency list.
             stopTimer();
             if (mediaRecorderRef.current?.state === "recording") {
               mediaRecorderRef.current.stop();
@@ -113,10 +171,16 @@ export function AudioRecorder({
           return s + 1;
         });
       }, 1000);
-    } catch {
-      setError("Microphone access denied. Please allow microphone use.");
-    }
-  }, [maxSeconds, stopTimer, onUpload]);
+      } catch {
+        setError(
+          kind === "video"
+            ? "Camera or microphone access was denied. Please allow both and try again."
+            : "Microphone access was denied. Please allow it and try again.",
+        );
+      }
+    },
+    [maxSeconds, onUpload, stopTimer],
+  );
 
   const reset = useCallback(() => {
     stopTimer();
@@ -126,12 +190,17 @@ export function AudioRecorder({
     if (audioRef.current) {
       audioRef.current.pause();
     }
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
     setAudioUrl(null);
     setState("idle");
     setIsPlaying(false);
     setElapsed(0);
     setError(null);
-  }, [stopTimer]);
+    setMediaType(allowedMediaTypes[0] ?? "audio");
+    setLiveStream(null);
+  }, [allowedMediaTypes, stopTimer]);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,24 +208,36 @@ export function AudioRecorder({
       e.target.value = "";
       if (!file) return;
       setError(null);
-      if (file.size > 50_000_000) {
-        setError("File exceeds 50 MB.");
+      if (file.size > 200 * 1024 * 1024) {
+        setError("File exceeds 200 MB.");
+        return;
+      }
+      const selectedType: RecordingMediaType = file.type.startsWith("video/")
+        ? "video"
+        : "audio";
+      if (!allowedMediaTypes.includes(selectedType)) {
+        setError(
+          `${selectedType === "video" ? "Video" : "Audio"} responses are not enabled for this step.`,
+        );
         return;
       }
       const localUrl = URL.createObjectURL(file);
       setAudioUrl(localUrl);
+      setMediaType(selectedType);
       setState("uploading");
       try {
         const url = await uploadRecording(file, file.name || "recording.m4a");
-        onUpload(url);
+        onUpload(url, selectedType);
         setState("recorded");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
+        setError(
+          err instanceof Error ? err.message : "Upload failed. Please try again.",
+        );
         setAudioUrl(null);
         setState("idle");
       }
     },
-    [onUpload],
+    [allowedMediaTypes, onUpload],
   );
 
   const togglePlay = useCallback(() => {
@@ -176,8 +257,7 @@ export function AudioRecorder({
     <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4 space-y-3">
       {error && <p className="text-xs text-red-400">{error}</p>}
 
-      {audioUrl && (
-         
+      {audioUrl && mediaType === "audio" && (
         <audio
           ref={audioRef}
           src={audioUrl}
@@ -186,22 +266,57 @@ export function AudioRecorder({
         />
       )}
 
+      {audioUrl && mediaType === "video" && (
+        <video
+          ref={videoRef}
+          src={audioUrl}
+          controls
+          playsInline
+          preload="metadata"
+          className="max-h-64 w-full rounded-md bg-black"
+        />
+      )}
+
+      {state === "recording" && mediaType === "video" && (
+        <video
+          ref={liveVideoRef}
+          muted
+          autoPlay
+          playsInline
+          className="max-h-64 w-full rounded-md bg-black object-contain"
+        />
+      )}
+
       <div className="flex items-center gap-3">
         {state === "idle" && (
           <>
-            <button
-              type="button"
-              onClick={startRecording}
-              className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
-            >
-              <Mic className="w-4 h-4" />
-              Record
-            </button>
+            {allowedMediaTypes.includes("audio") && (
+              <button
+                type="button"
+                onClick={() => startRecording("audio")}
+                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+              >
+                <Mic className="w-4 h-4" />
+                {allowedMediaTypes.length > 1 ? "Record audio" : "Record"}
+              </button>
+            )}
+            {allowedMediaTypes.includes("video") && (
+              <button
+                type="button"
+                onClick={() => startRecording("video")}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              >
+                <Video className="w-4 h-4" />
+                Record video
+              </button>
+            )}
             {allowFileUpload && (
               <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700 transition-colors">
                 <input
                   type="file"
-                  accept="audio/*"
+                  accept={allowedMediaTypes
+                    .map((type) => `${type}/*`)
+                    .join(",")}
                   className="hidden"
                   onChange={handleFileUpload}
                 />
@@ -238,14 +353,20 @@ export function AudioRecorder({
 
         {state === "recorded" && (
           <>
-            <button
-              type="button"
-              onClick={togglePlay}
-              className="flex items-center gap-2 rounded-lg bg-zinc-700 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-600 transition-colors"
-            >
-              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              {isPlaying ? "Pause" : "Play Back"}
-            </button>
+            {mediaType === "audio" && (
+              <button
+                type="button"
+                onClick={togglePlay}
+                className="flex items-center gap-2 rounded-lg bg-zinc-700 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-600 transition-colors"
+              >
+                {isPlaying ? (
+                  <Pause className="w-4 h-4" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                {isPlaying ? "Pause" : "Play Back"}
+              </button>
+            )}
             <button
               type="button"
               onClick={reset}

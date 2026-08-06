@@ -5,7 +5,10 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { CheckCircle2, Loader2, Lock, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AudioRecorder } from "@/components/assignments/AudioRecorder";
+import {
+  AudioRecorder,
+  type RecordingMediaType,
+} from "@/components/assignments/AudioRecorder";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import { SentenceVideo } from "@/components/assignments/SentenceVideo";
 
@@ -22,6 +25,8 @@ export interface VocalHackSentenceDto {
   pinyin: string;
   english: string;
   hasVideo: boolean;
+  sourcePromptText: string | null;
+  allowedResponseTypes: RecordingMediaType[];
 }
 
 export interface VocalHackSubmissionDto {
@@ -32,6 +37,8 @@ export interface VocalHackSubmissionDto {
   recordings: Record<string, string>;
   /** sentenceId (promptId) → authenticated proxy URL for playback. */
   playbackUrls: Record<string, string>;
+  /** sentenceId (promptId) → submitted recording type. */
+  recordingMediaTypes: Record<string, RecordingMediaType>;
 }
 
 const LOCKED_STATUSES = new Set(["in_review", "reviewed"]);
@@ -41,6 +48,7 @@ export function VocalHackViewer({
   videoBaseUrl,
   sentences,
   initialSubmission,
+  maxResponseSeconds = 300,
   lang = "mandarin",
 }: {
   lessonId: string;
@@ -48,6 +56,7 @@ export function VocalHackViewer({
   videoBaseUrl: string;
   sentences: VocalHackSentenceDto[];
   initialSubmission: VocalHackSubmissionDto | null;
+  maxResponseSeconds?: number;
   lang?: "mandarin" | "cantonese";
 }) {
   const [submission, setSubmission] = useState<VocalHackSubmissionDto | null>(
@@ -61,6 +70,9 @@ export function VocalHackViewer({
   const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>(
     () => ({ ...(initialSubmission?.playbackUrls ?? {}) }),
   );
+  const [recordingMediaTypes, setRecordingMediaTypes] = useState<
+    Record<string, RecordingMediaType>
+  >(() => ({ ...(initialSubmission?.recordingMediaTypes ?? {}) }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,6 +101,7 @@ export function VocalHackViewer({
             recordings: sentences.map((s) => ({
               sentenceId: s.id,
               audioUrl: recordings[s.id],
+              mediaType: recordingMediaTypes[s.id] ?? "audio",
             })),
           }),
         },
@@ -105,19 +118,24 @@ export function VocalHackViewer({
       }
       const sub = data.submission;
       const nextPlayback: Record<string, string> = {};
+      const nextMediaTypes: Record<string, RecordingMediaType> = {};
       for (const s of sub.sentences ?? []) {
         if (s.audioUrl) {
           nextPlayback[s.promptId] =
             `/api/course-library/assignment-recordings/${s.id}`;
+          nextMediaTypes[s.promptId] =
+            s.responseMediaType === "video" ? "video" : "audio";
         }
       }
       setPlaybackUrls(nextPlayback);
+      setRecordingMediaTypes(nextMediaTypes);
       setSubmission({
         id: sub.id,
         status: sub.status,
         submittedAt: sub.submittedAt,
         recordings,
         playbackUrls: nextPlayback,
+        recordingMediaTypes: nextMediaTypes,
       });
       toast.success(
         isResubmit ? "Recordings resubmitted!" : "Recordings submitted!",
@@ -202,6 +220,11 @@ export function VocalHackViewer({
                 </div>
               )}
               <div className="min-w-0 flex-1 space-y-3">
+                {sentence.sourcePromptText && (
+                  <p className="text-sm font-medium text-foreground">
+                    {sentence.sourcePromptText}
+                  </p>
+                )}
                 <div className="rounded-md bg-background px-3 py-3">
                   <ModelAnnotatedSentence
                     chinese={sentence.chinese}
@@ -213,26 +236,45 @@ export function VocalHackViewer({
                 {!locked ? (
                   <AudioRecorder
                     existingUrl={playbackUrls[sentence.id] ?? null}
+                    existingMediaType={
+                      recordingMediaTypes[sentence.id] ?? "audio"
+                    }
+                    allowedMediaTypes={sentence.allowedResponseTypes}
                     allowFileUpload
-                    maxSeconds={60}
-                    onUpload={(url) =>
+                    maxSeconds={maxResponseSeconds}
+                    onUpload={(url, mediaType) => {
                       setRecordings((prev) => ({
                         ...prev,
                         [sentence.id]: url,
-                      }))
-                    }
+                      }));
+                      setRecordingMediaTypes((prev) => ({
+                        ...prev,
+                        [sentence.id]: mediaType,
+                      }));
+                    }}
                   />
                 ) : (
                   playbackUrls[sentence.id] && (
-                     
-                    <audio
-                      controls
-                      preload="none"
-                      controlsList="nodownload"
-                      onContextMenu={(e) => e.preventDefault()}
-                      src={playbackUrls[sentence.id]}
-                      className="w-full"
-                    />
+                    recordingMediaTypes[sentence.id] === "video" ? (
+                      <video
+                        controls
+                        playsInline
+                        preload="metadata"
+                        controlsList="nodownload"
+                        onContextMenu={(e) => e.preventDefault()}
+                        src={playbackUrls[sentence.id]}
+                        className="max-h-80 w-full rounded-md bg-black"
+                      />
+                    ) : (
+                      <audio
+                        controls
+                        preload="none"
+                        controlsList="nodownload"
+                        onContextMenu={(e) => e.preventDefault()}
+                        src={playbackUrls[sentence.id]}
+                        className="w-full"
+                      />
+                    )
                   )
                 )}
               </div>

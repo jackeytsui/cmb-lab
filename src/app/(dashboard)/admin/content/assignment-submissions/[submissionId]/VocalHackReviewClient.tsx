@@ -33,6 +33,7 @@ export interface VocalHackReviewSentenceDto {
   generatedEnglish: string;
   hasVideo: boolean;
   hasRecording: boolean;
+  responseMediaType: "audio" | "video";
   corrections: VocalHackCorrection[];
 }
 
@@ -273,14 +274,24 @@ export function VocalHackReviewClient({
                       Student&apos;s recording
                     </p>
                     {sentence.hasRecording ? (
-                       
-                      <audio
-                        controls
-                        preload="metadata"
-                        controlsList="nodownload"
-                        src={`/api/course-library/assignment-recordings/${sentence.id}`}
-                        className="w-full"
-                      />
+                      sentence.responseMediaType === "video" ? (
+                        <video
+                          controls
+                          playsInline
+                          preload="metadata"
+                          controlsList="nodownload"
+                          src={`/api/course-library/assignment-recordings/${sentence.id}`}
+                          className="max-h-80 w-full rounded-md bg-black"
+                        />
+                      ) : (
+                        <audio
+                          controls
+                          preload="metadata"
+                          controlsList="nodownload"
+                          src={`/api/course-library/assignment-recordings/${sentence.id}`}
+                          className="w-full"
+                        />
+                      )
                     ) : (
                       <p className="text-sm italic text-muted-foreground">
                         No recording submitted.

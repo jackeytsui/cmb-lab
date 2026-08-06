@@ -425,6 +425,8 @@ export interface CourseLibraryVocalHackSentence {
   videoUrl?: string | null;
   /** Original VideoAsk prompt retained for source fidelity/audit. */
   sourcePromptText?: string | null;
+  /** Response modes enabled on the source VideoAsk step. */
+  allowedResponseTypes?: ("audio" | "video")[];
   chinese: string;
   /** Display pinyin (space-separated, one syllable per character). */
   pinyin: string;
@@ -434,6 +436,8 @@ export interface CourseLibraryVocalHackSentence {
 export interface CourseLibraryVocalHackContent {
   /** Instructions shown above the sentences — rich text HTML. */
   description: string;
+  /** Source response limit; VideoAsk course forms use five minutes. */
+  maxResponseSeconds?: number;
   sentences: CourseLibraryVocalHackSentence[];
 }
 

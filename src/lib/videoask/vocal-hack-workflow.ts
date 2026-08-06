@@ -28,6 +28,10 @@ import {
 } from "@/db/schema";
 import { smartRomanise } from "@/lib/romanise";
 import { buildVocalHackPlacementPreview } from "./vocal-hack-preview";
+import {
+  sourceResponseMediaTypes,
+  sourceResponseTimeLimitSeconds,
+} from "./vocal-hack-content";
 
 export const DEFAULT_VOCAL_HACK_INSTRUCTIONS =
   "<p>Watch each coach video, then record yourself imitating the sentence as closely as you can. Submit all recordings for personalized feedback from our coaching team.</p>";
@@ -1014,9 +1018,28 @@ export async function publishVocalHackPlacement(
       .limit(1);
     if (!targetModule) throw new Error("The destination module no longer exists");
 
+    const [sourceForm] = await tx
+      .select({ sourceSnapshot: videoaskFormImports.sourceSnapshot })
+      .from(videoaskFormImports)
+      .where(eq(videoaskFormImports.id, placement.formImportId))
+      .limit(1);
     const sentences = await tx
-      .select()
+      .select({
+        id: videoaskVocalHackSentences.id,
+        sortOrder: videoaskVocalHackSentences.sortOrder,
+        videoUrl: videoaskVocalHackSentences.videoUrl,
+        sourcePromptText: videoaskVocalHackSentences.sourcePromptText,
+        status: videoaskVocalHackSentences.status,
+        chinese: videoaskVocalHackSentences.chinese,
+        pinyin: videoaskVocalHackSentences.pinyin,
+        english: videoaskVocalHackSentences.english,
+        sourceStepSnapshot: videoaskStepImports.sourceSnapshot,
+      })
       .from(videoaskVocalHackSentences)
+      .innerJoin(
+        videoaskStepImports,
+        eq(videoaskStepImports.id, videoaskVocalHackSentences.stepImportId),
+      )
       .where(eq(videoaskVocalHackSentences.placementId, placement.id))
       .orderBy(asc(videoaskVocalHackSentences.sortOrder));
     if (
@@ -1034,11 +1057,17 @@ export async function publishVocalHackPlacement(
 
     const lessonContent = {
       description: placement.instructions,
+      maxResponseSeconds: sourceResponseTimeLimitSeconds(
+        sourceForm?.sourceSnapshot,
+      ),
       sentences: sentences.map((sentence, index) => ({
         id: sentence.id,
         order: index,
         videoUrl: sentence.videoUrl,
         sourcePromptText: sentence.sourcePromptText,
+        allowedResponseTypes: sourceResponseMediaTypes(
+          sentence.sourceStepSnapshot,
+        ),
         chinese: sentence.chinese!.trim(),
         pinyin: sentence.pinyin!.trim(),
         english: sentence.english!.trim(),

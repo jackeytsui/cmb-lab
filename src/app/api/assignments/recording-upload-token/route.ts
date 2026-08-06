@@ -19,6 +19,9 @@ const PATHNAME_PREFIX = "assignment-recordings/";
 const ALLOWED_CONTENT_TYPES = [
   "audio/webm",
   "video/webm",
+  "video/mp4",
+  "video/quicktime",
+  "video/x-m4v",
   "audio/mpeg",
   "audio/mp3",
   "audio/mp4",

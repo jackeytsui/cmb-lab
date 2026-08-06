@@ -57,11 +57,13 @@ export default async function VideoAskIntegrationPage({
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground">VideoAsk Import</h1>
+        <h1 className="text-3xl font-bold text-foreground">
+          VideoAsk → native CMB Lab
+        </h1>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Connect the source organization, verify its inventory, then map selected
-          VideoAsk forms into CMB Lab courses without manually copying questions,
-          text, or videos.
+          Replace course VideoAsk links with native Vocal Hack lessons. CMB Lab
+          migrates the coach videos, prompts, sentence content, response rules,
+          and review workflow without manual downloading or re-uploading.
         </p>
       </header>
 

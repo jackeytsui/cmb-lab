@@ -256,32 +256,44 @@ export function VocalHackPlacementReviewClient({
       );
       await jsonResponse<{ result: { sentences: number } }>(queueResponse);
       let processed = 0;
+      let remaining = 0;
       while (true) {
-        const response = await fetch(
-          "/api/admin/integrations/videoask/vocal-hack/process",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ placementId }),
-          },
-        );
-        const payload = await jsonResponse<{
-          result: {
-            status: "empty" | "ready" | "failed";
-            remaining?: number;
-            error?: string;
-          };
-        }>(response);
-        if (payload.result.status === "empty") {
-          if ((payload.result.remaining ?? 0) > 0) {
-            setError(
-              `${payload.result.remaining} sentence(s) still need manual review or retry.`,
+        const results = await Promise.all(
+          Array.from({ length: 3 }, async () => {
+            const response = await fetch(
+              "/api/admin/integrations/videoask/vocal-hack/process",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ placementId }),
+              },
             );
-          }
+            return jsonResponse<{
+              result: {
+                status: "empty" | "ready" | "failed";
+                remaining?: number;
+                error?: string;
+              };
+            }>(response);
+          }),
+        );
+        const completed = results.filter(
+          (payload) => payload.result.status !== "empty",
+        );
+        if (completed.length === 0) {
+          remaining = Math.max(
+            0,
+            ...results.map((payload) => payload.result.remaining ?? 0),
+          );
           break;
         }
-        processed += 1;
+        processed += completed.length;
         setTranscribedThisRun(processed);
+      }
+      if (remaining > 0) {
+        setError(
+          `${remaining} sentence(s) still need manual review or retry.`,
+        );
       }
       await loadDetail();
     } catch (transcriptionError) {

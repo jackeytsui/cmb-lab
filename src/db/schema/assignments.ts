@@ -128,9 +128,10 @@ export const assignmentSubmissionSentences = pgTable(
     chineseText: text("chinese_text").notNull(),
     generatedPinyin: text("generated_pinyin").notNull().default(""),
     generatedEnglish: text("generated_english").notNull().default(""),
-    // Vocal hack: the student's audio recording for this sentence (private
-    // blob URL; always streamed through the authenticated recordings proxy).
+    // Vocal hack: the student's audio/video recording for this sentence
+    // (private blob URL; always streamed through the authenticated proxy).
     audioUrl: text("audio_url"),
+    responseMediaType: text("response_media_type").notNull().default("audio"),
     // Vocal hack review: the reviewer's corrected/model sentence for this
     // recording (free text, with generated-then-editable pinyin + English).
     // Legacy single-value columns; kept in sync with the first alternative.

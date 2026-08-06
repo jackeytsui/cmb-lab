@@ -15,6 +15,7 @@ import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { listChallengeReviewers } from "@/lib/assignment-review";
 import { isVocalHackLesson } from "@/lib/lesson-language";
 import type { CourseLibraryVocalHackContent } from "@/db/schema/course-library";
+import { studentFacingSourcePrompt } from "@/lib/videoask/vocal-hack-content";
 
 interface RouteParams {
   params: Promise<{ lessonId: string }>;
@@ -27,6 +28,7 @@ const EDITABLE_STATUSES = ["draft", "submitted", "assigned"] as const;
 const recordingSchema = z.object({
   sentenceId: z.string().min(1).max(100),
   audioUrl: z.string().url().max(2000),
+  mediaType: z.enum(["audio", "video"]).default("audio"),
 });
 
 const submitSchema = z.object({
@@ -188,6 +190,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       { status: 400 },
     );
   }
+  const disallowed = configured.find((sentence) => {
+    const requested = recordingsBySentence.get(sentence.id)?.mediaType;
+    const allowed = sentence.allowedResponseTypes?.length
+      ? sentence.allowedResponseTypes
+      : ["audio"];
+    return requested ? !allowed.includes(requested) : false;
+  });
+  if (disallowed) {
+    return NextResponse.json(
+      { error: "That recording type is not enabled for this sentence." },
+      { status: 400 },
+    );
+  }
 
   const existing = await db.query.assignmentSubmissions.findFirst({
     where: and(
@@ -255,16 +270,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   await db.insert(assignmentSubmissionSentences).values(
     configured.map((sentence, idx) => {
       const recording = recordingsBySentence.get(sentence.id)!;
+      const sourcePrompt = studentFacingSourcePrompt(
+        sentence.sourcePromptText,
+      );
       return {
         submissionId,
         promptId: sentence.id,
         sortOrder: idx,
-        promptLabel: `Sentence ${idx + 1}`,
+        promptLabel: sourcePrompt ?? `Sentence ${idx + 1}`,
         promptDescription: "",
         chineseText: sentence.chinese,
         generatedPinyin: sentence.pinyin ?? "",
         generatedEnglish: sentence.english ?? "",
         audioUrl: recording.audioUrl,
+        responseMediaType: recording.mediaType,
       };
     }),
   );

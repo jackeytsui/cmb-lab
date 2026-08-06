@@ -119,6 +119,8 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
         generatedEnglish: sentence.generatedEnglish,
         hasVideo: videoByPrompt.get(sentence.promptId) ?? false,
         hasRecording: Boolean(sentence.audioUrl),
+        responseMediaType:
+          sentence.responseMediaType === "video" ? "video" : "audio",
         corrections:
           sentence.correctedAlternatives ??
           (sentence.correctedChinese
