@@ -12,7 +12,10 @@ import {
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { COURSE_LIBRARY_COURSE_CONTENT_TYPE } from "@/lib/tag-feature-access";
-import { videoAskMigrationHref } from "@/lib/videoask/vocal-hack-routing";
+import {
+  isVideoAskVocalHackDestination,
+  videoAskMigrationHref,
+} from "@/lib/videoask/vocal-hack-routing";
 import { CourseLibraryEditorClient } from "./CourseLibraryEditorClient";
 
 interface PageProps {
@@ -75,9 +78,7 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
     lessonsByModule.set(l.moduleId, list);
   }
   const vocalHackLessonCount = lessons.filter(
-    (lesson) =>
-      lesson.lessonType === "vocal_hack" ||
-      lesson.lessonType === "vocal_hack_canto",
+    isVideoAskVocalHackDestination,
   ).length;
 
   const [allTags, grantRows] = await Promise.all([

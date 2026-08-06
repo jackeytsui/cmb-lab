@@ -11,7 +11,10 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import { LessonEditorClient } from "./LessonEditorClient";
 import type { CourseLibraryLesson } from "@/db/schema/course-library";
-import { videoAskMigrationHref } from "@/lib/videoask/vocal-hack-routing";
+import {
+  isVideoAskVocalHackDestination,
+  videoAskMigrationHref,
+} from "@/lib/videoask/vocal-hack-routing";
 
 type LessonEditorLessonType = NonNullable<CourseLibraryLesson["lessonType"]>;
 
@@ -57,8 +60,10 @@ export default async function LessonEditorPage({ params }: PageProps) {
     .limit(1);
 
   if (!row) notFound();
-  const isVocalHack =
-    row.lessonType === "vocal_hack" || row.lessonType === "vocal_hack_canto";
+  const isVocalHack = isVideoAskVocalHackDestination({
+    title: row.lessonTitle,
+    lessonType: row.lessonType,
+  });
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">

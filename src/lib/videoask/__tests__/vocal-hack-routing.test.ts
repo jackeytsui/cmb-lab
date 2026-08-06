@@ -1,12 +1,34 @@
 import { describe, expect, it } from "vitest";
 import {
   courseLibraryReturnHref,
+  isVideoAskVocalHackDestination,
   matchesVideoAskDestination,
   videoAskDestinationFocusFromSearchParams,
   videoAskMigrationHref,
 } from "../vocal-hack-routing";
 
 describe("VideoAsk Course Library routing", () => {
+  it("recognizes legacy Text and Video Vocal Hack placeholders by title", () => {
+    expect(
+      isVideoAskVocalHackDestination({
+        title: "VOCAL Messaging Hack 1",
+        lessonType: "text",
+      }),
+    ).toBe(true);
+    expect(
+      isVideoAskVocalHackDestination({
+        title: "Tone Pair Vocal Hack (Tone 1)",
+        lessonType: "video",
+      }),
+    ).toBe(true);
+    expect(
+      isVideoAskVocalHackDestination({
+        title: "Lesson Breakdown",
+        lessonType: "text",
+      }),
+    ).toBe(false);
+  });
+
   it("builds a destination-aware migration URL", () => {
     expect(
       videoAskMigrationHref({

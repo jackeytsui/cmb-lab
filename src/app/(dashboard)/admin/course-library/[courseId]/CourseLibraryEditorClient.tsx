@@ -32,7 +32,10 @@ import { DragDropProvider, useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { move } from "@dnd-kit/helpers";
 import { CollisionPriority } from "@dnd-kit/abstract";
-import { videoAskMigrationHref } from "@/lib/videoask/vocal-hack-routing";
+import {
+  isVideoAskVocalHackDestination,
+  videoAskMigrationHref,
+} from "@/lib/videoask/vocal-hack-routing";
 
 type LessonType =
   | "video"
@@ -237,9 +240,7 @@ function MoveableLesson({
   });
   const moduleId = group;
   const meta = LESSON_TYPE_META[lesson.lessonType];
-  const isVocalHack =
-    lesson.lessonType === "vocal_hack" ||
-    lesson.lessonType === "vocal_hack_canto";
+  const isVocalHack = isVideoAskVocalHackDestination(lesson);
 
   return (
     <div

@@ -4,6 +4,17 @@ export type VideoAskDestinationFocus = {
   lessonId: string | null;
 };
 
+export function isVideoAskVocalHackDestination(lesson: {
+  title: string;
+  lessonType: string;
+}) {
+  return (
+    lesson.lessonType === "vocal_hack" ||
+    lesson.lessonType === "vocal_hack_canto" ||
+    /vocal\s+(?:messaging\s+)?hacks?/i.test(lesson.title)
+  );
+}
+
 type SearchParamValue = string | string[] | undefined;
 
 function firstSearchParam(value: SearchParamValue) {
