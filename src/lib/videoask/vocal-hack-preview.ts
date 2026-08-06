@@ -139,7 +139,7 @@ export async function buildVocalHackPlacementPreview() {
   );
   const forms = sourceRows
     .filter((row) =>
-      isTargetVocalHackForm(row.sourceFolderKey, row.sourceTitle),
+      isTargetVocalHackForm(row.sourceFolderKey),
     )
     .map((row) => {
       const placement = recommendVocalHackPlacement(

@@ -53,6 +53,20 @@ const catalog: PlacementCatalog = {
       ],
     },
     {
+      id: "personal-intro",
+      courseId: "foundation",
+      title: "CM School: Personal Introduction",
+      sortOrder: 3,
+      lessons: [
+        {
+          id: "personal-intro-vocal",
+          title: "Personal Introduction (Vocal Hack)",
+          lessonType: "text",
+          sortOrder: 2,
+        },
+      ],
+    },
+    {
       id: "family",
       courseId: "foundation",
       title: "CM School: Talking About Your Family",
@@ -61,6 +75,34 @@ const catalog: PlacementCatalog = {
         {
           id: "family-vocal",
           title: "Asking about Family (Vocal Hack)",
+          lessonType: "text",
+          sortOrder: 2,
+        },
+      ],
+    },
+    {
+      id: "making-plans",
+      courseId: "intermediate",
+      title: "CM School: Making plans",
+      sortOrder: 4,
+      lessons: [
+        {
+          id: "making-plans-vocal",
+          title: "Making plans (Vocal Hack)",
+          lessonType: "text",
+          sortOrder: 2,
+        },
+      ],
+    },
+    {
+      id: "passing-immigration",
+      courseId: "intermediate",
+      title: "CM School: Passing Immigration",
+      sortOrder: 5,
+      lessons: [
+        {
+          id: "immigration-vocal",
+          title: "Passing Immigration in China (Vocal Hacks)",
           lessonType: "text",
           sortOrder: 2,
         },
@@ -153,13 +195,54 @@ describe("VideoAsk Vocal Hack placement", () => {
     });
   });
 
-  it("keeps Customized Vocal Hacks manual and excludes hiring forms", () => {
+  it("excludes audited Customized and hiring artifacts from course migration", () => {
     const key = groupKey("Customized");
-    expect(isTargetVocalHackForm(key, "VOCAL HACK 1")).toBe(true);
-    expect(isTargetVocalHackForm(key, "Job App - Host")).toBe(false);
-    expect(
-      recommendVocalHackPlacement(key, "VOCAL HACK 1", catalog),
-    ).toMatchObject({ confidence: "manual", action: "manual" });
+    expect(isTargetVocalHackForm(key)).toBe(false);
+    expect(recommendVocalHackPlacement(key, "VOCAL HACK 1", catalog)).toBeNull();
+  });
+
+  it("maps Basic Introduction to the Personal Introduction placeholder", () => {
+    const placement = recommendVocalHackPlacement(
+      groupKey("CM School"),
+      "Foundations (Basic Introduction)",
+      catalog,
+    );
+    expect(placement).toMatchObject({
+      confidence: "exact",
+      action: "replace_placeholder",
+      targetModule: { id: "personal-intro" },
+      targetLesson: { id: "personal-intro-vocal" },
+    });
+  });
+
+  it("adds Airport Check-in beside Passing Immigration without overwriting it", () => {
+    const placement = recommendVocalHackPlacement(
+      groupKey("CM School"),
+      "Intermediate (Tourist checking in at the airport)",
+      catalog,
+    );
+    expect(placement).toMatchObject({
+      confidence: "high",
+      action: "create_lesson",
+      targetModule: { id: "passing-immigration" },
+      targetLesson: null,
+      targetLessonTitle: "Checking in at the Airport (Vocal Hack)",
+    });
+  });
+
+  it("adds Travel Recommendations beside Making Plans", () => {
+    const placement = recommendVocalHackPlacement(
+      groupKey("CM School"),
+      "Intermediate (Customers Travelling Recommendations)",
+      catalog,
+    );
+    expect(placement).toMatchObject({
+      confidence: "high",
+      action: "create_lesson",
+      targetModule: { id: "making-plans" },
+      targetLesson: null,
+      targetLessonTitle: "Travel Recommendations (Vocal Hack)",
+    });
   });
 
   it("normalizes harmless title differences", () => {

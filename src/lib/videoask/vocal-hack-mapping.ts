@@ -122,6 +122,7 @@ export function normalizePlacementTitle(value: string) {
     .replace(/\bdirections\b/g, "direction")
     .replace(/\bsee\s+a\s+doctor\b/g, "seeing doctor")
     .replace(/\bseeing\s+a\s+doctor\b/g, "seeing doctor")
+    .replace(/\bbasic\s+introduction\b/g, "personal introduction")
     .replace(/\bfoundations\b/g, "foundation")
     .replace(/[^a-z0-9\u3400-\u9fff]+/g, " ")
     .trim();
@@ -150,17 +151,16 @@ export function placementTitleScore(source: string, target: string) {
   return (2 * shared) / (leftTokens.size + rightTokens.size);
 }
 
-export function isTargetVocalHackForm(
-  sourceFolderKey: string,
-  formTitle: string,
-) {
+export function isTargetVocalHackForm(sourceFolderKey: string) {
   const group = VIDEOASK_VOCAL_HACK_GROUPS.find(
     (candidate) => candidate.key === sourceFolderKey,
   );
   if (!group) return false;
-  // The Customized folder also contains two hiring forms. Only its three
-  // explicit Vocal Hack forms are course material.
-  return group.label !== "Customized" || /vocal\s+hack/i.test(formTitle);
+  // The three "Vocal Hack" records in Customized were audited as personalized
+  // onboarding / research artifacts, not reusable course lessons. They remain
+  // in the source inventory and Blob archive but must not be published into a
+  // shared course. The same folder also contains unrelated hiring forms.
+  return group.label !== "Customized";
 }
 
 function findCourse(catalog: PlacementCatalog, title: string) {
@@ -278,6 +278,36 @@ function manualPlacement(
   };
 }
 
+function createSiblingPlacement(input: {
+  group: VideoAskVocalHackGroup;
+  catalog: PlacementCatalog;
+  courseTitle: string;
+  moduleTitle: string;
+  lessonTitle: string;
+  reason: string;
+}): VideoAskVocalHackPlacement | null {
+  const course = findCourse(input.catalog, input.courseTitle);
+  if (!course) return null;
+  const targetModule = modulesForCourse(input.catalog, course.id).find(
+    (module) =>
+      normalizePlacementTitle(module.title) ===
+      normalizePlacementTitle(input.moduleTitle),
+  );
+  if (!targetModule) return null;
+  return {
+    sourceGroup: input.group,
+    language: input.group.language,
+    targetCourse: course,
+    targetModule,
+    targetLesson: null,
+    targetLessonTitle: input.lessonTitle,
+    action: "create_lesson",
+    confidence: "high",
+    score: 0.9,
+    reason: input.reason,
+  };
+}
+
 export function recommendVocalHackPlacement(
   sourceFolderKey: string,
   sourceTitle: string,
@@ -286,15 +316,8 @@ export function recommendVocalHackPlacement(
   const group = VIDEOASK_VOCAL_HACK_GROUPS.find(
     (candidate) => candidate.key === sourceFolderKey,
   );
-  if (!group || !isTargetVocalHackForm(sourceFolderKey, sourceTitle)) {
+  if (!group || !isTargetVocalHackForm(sourceFolderKey)) {
     return null;
-  }
-
-  if (group.label === "Customized") {
-    return manualPlacement(
-      group,
-      "Customized Vocal Hacks need a student/course destination selected by an administrator.",
-    );
   }
 
   const numberedMatch = sourceTitle.match(
@@ -374,6 +397,41 @@ export function recommendVocalHackPlacement(
       : /^intermediate/i.test(schoolMatch[1])
         ? "intermediate"
         : "advanced";
+    const normalizedTopic = normalizePlacementTitle(schoolMatch[2]);
+    if (
+      level === "intermediate" &&
+      normalizedTopic === "tourist checking in at the airport"
+    ) {
+      return (
+        createSiblingPlacement({
+          group,
+          catalog,
+          courseTitle: VIDEOASK_VOCAL_HACK_COURSES.intermediate,
+          moduleTitle: "CM School: Passing Immigration",
+          lessonTitle: "Checking in at the Airport (Vocal Hack)",
+          reason:
+            "Airport check-in belongs beside Passing Immigration and is kept as a separate lesson so neither source overwrites the other.",
+        }) ??
+        manualPlacement(group, "The Passing Immigration section was not found.")
+      );
+    }
+    if (
+      level === "intermediate" &&
+      normalizedTopic === "customers travelling recommendations"
+    ) {
+      return (
+        createSiblingPlacement({
+          group,
+          catalog,
+          courseTitle: VIDEOASK_VOCAL_HACK_COURSES.intermediate,
+          moduleTitle: "CM School: Making plans",
+          lessonTitle: "Travel Recommendations (Vocal Hack)",
+          reason:
+            "Travel recommendations are a planning conversation and are kept as a separate lesson beside the existing Making Plans content.",
+        }) ??
+        manualPlacement(group, "The Making Plans section was not found.")
+      );
+    }
     return (
       topicPlacement(
         group,
