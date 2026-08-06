@@ -14,7 +14,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import { db } from "@/db";
+import { db, getNeonSql } from "@/db";
 import {
   courseLibraryCourses,
   courseLibraryLessonTypeEnum,
@@ -976,207 +976,278 @@ export async function publishVocalHackPlacement(
   placementId: string,
   adminUserId: string,
 ) {
-  const published = await db.transaction(async (tx) => {
-    const [placement] = await tx
-      .update(videoaskVocalHackPlacements)
-      .set({ status: "publishing", updatedAt: new Date() })
-      .where(
-        and(
-          eq(videoaskVocalHackPlacements.id, placementId),
-          eq(videoaskVocalHackPlacements.status, "ready_for_review"),
-          isNull(videoaskVocalHackPlacements.publishedLessonId),
-        ),
-      )
-      .returning();
-    if (!placement) {
-      throw new Error(
-        "This placement is not ready, was already published, or is being published",
-      );
-    }
-    if (!placement.targetCourseId || !placement.targetModuleId) {
-      throw new Error("Choose a destination course and module before publishing");
-    }
-    if (!placement.targetLessonTitle?.trim()) {
-      throw new Error("Enter a destination lesson title before publishing");
-    }
-
-    const [targetModule] = await tx
-      .select({ id: courseLibraryModules.id })
-      .from(courseLibraryModules)
-      .innerJoin(
-        courseLibraryCourses,
-        eq(courseLibraryCourses.id, courseLibraryModules.courseId),
-      )
-      .where(
-        and(
-          eq(courseLibraryModules.id, placement.targetModuleId),
-          eq(courseLibraryModules.courseId, placement.targetCourseId),
-          isNull(courseLibraryModules.deletedAt),
-          isNull(courseLibraryCourses.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (!targetModule) throw new Error("The destination module no longer exists");
-
-    const [sourceForm] = await tx
-      .select({ sourceSnapshot: videoaskFormImports.sourceSnapshot })
-      .from(videoaskFormImports)
-      .where(eq(videoaskFormImports.id, placement.formImportId))
-      .limit(1);
-    const sentences = await tx
-      .select({
-        id: videoaskVocalHackSentences.id,
-        sortOrder: videoaskVocalHackSentences.sortOrder,
-        videoUrl: videoaskVocalHackSentences.videoUrl,
-        sourcePromptText: videoaskVocalHackSentences.sourcePromptText,
-        status: videoaskVocalHackSentences.status,
-        chinese: videoaskVocalHackSentences.chinese,
-        pinyin: videoaskVocalHackSentences.pinyin,
-        english: videoaskVocalHackSentences.english,
-        sourceStepSnapshot: videoaskStepImports.sourceSnapshot,
-      })
-      .from(videoaskVocalHackSentences)
-      .innerJoin(
-        videoaskStepImports,
-        eq(videoaskStepImports.id, videoaskVocalHackSentences.stepImportId),
-      )
-      .where(eq(videoaskVocalHackSentences.placementId, placement.id))
-      .orderBy(asc(videoaskVocalHackSentences.sortOrder));
-    if (
-      sentences.length === 0 ||
-      sentences.some(
-        (sentence) =>
-          sentence.status !== "ready" ||
-          !sentence.chinese?.trim() ||
-          !sentence.pinyin?.trim() ||
-          !sentence.english?.trim(),
-      )
-    ) {
-      throw new Error("Review and complete every sentence before publishing");
-    }
-
-    const lessonContent = {
-      description: placement.instructions,
-      maxResponseSeconds: sourceResponseTimeLimitSeconds(
-        sourceForm?.sourceSnapshot,
+  const [placement] = await db
+    .select()
+    .from(videoaskVocalHackPlacements)
+    .where(
+      and(
+        eq(videoaskVocalHackPlacements.id, placementId),
+        eq(videoaskVocalHackPlacements.status, "ready_for_review"),
+        isNull(videoaskVocalHackPlacements.publishedLessonId),
       ),
-      sentences: sentences.map((sentence, index) => ({
-        id: sentence.id,
-        order: index,
-        videoUrl: sentence.videoUrl,
-        sourcePromptText: sentence.sourcePromptText,
-        allowedResponseTypes: sourceResponseMediaTypes(
-          sentence.sourceStepSnapshot,
-        ),
-        chinese: sentence.chinese!.trim(),
-        pinyin: sentence.pinyin!.trim(),
-        english: sentence.english!.trim(),
-      })),
-      sourceProvider: "videoask",
-      sourceFormImportId: placement.formImportId,
-    };
-    const lessonType =
-      placement.language === "cantonese" ? "vocal_hack_canto" : "vocal_hack";
+    )
+    .limit(1);
+  if (!placement) {
+    throw new Error(
+      "This placement is not ready, was already published, or is being published",
+    );
+  }
+  if (!placement.targetCourseId || !placement.targetModuleId) {
+    throw new Error("Choose a destination course and module before publishing");
+  }
+  if (!placement.targetLessonTitle?.trim()) {
+    throw new Error("Enter a destination lesson title before publishing");
+  }
 
-    let lessonId: string;
-    let destinationSnapshot: z.infer<typeof destinationSnapshotSchema>;
-    if (placement.targetLessonId) {
-      const [originalLesson] = await tx
-        .select({
-          id: courseLibraryLessons.id,
-          moduleId: courseLibraryLessons.moduleId,
-          title: courseLibraryLessons.title,
-          lessonType: courseLibraryLessons.lessonType,
-          content: courseLibraryLessons.content,
-          sortOrder: courseLibraryLessons.sortOrder,
-        })
-        .from(courseLibraryLessons)
-        .where(
-          and(
-            eq(courseLibraryLessons.id, placement.targetLessonId),
-            eq(courseLibraryLessons.moduleId, placement.targetModuleId),
-            isNull(courseLibraryLessons.deletedAt),
-          ),
-        )
-        .limit(1);
-      if (!originalLesson) {
-        throw new Error("The destination lesson no longer exists");
-      }
-      destinationSnapshot = {
-        kind: "replaced",
-        publishedContent: lessonContent,
-        lesson: {
-          ...originalLesson,
-          content: originalLesson.content as Record<string, unknown>,
-        },
-      };
-      const [lesson] = await tx
-        .update(courseLibraryLessons)
-        .set({
-          title: placement.targetLessonTitle.trim(),
-          lessonType,
-          content: lessonContent,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(courseLibraryLessons.id, placement.targetLessonId),
-            eq(courseLibraryLessons.moduleId, placement.targetModuleId),
-            isNull(courseLibraryLessons.deletedAt),
-          ),
-        )
-        .returning({ id: courseLibraryLessons.id });
-      if (!lesson) throw new Error("The destination lesson no longer exists");
-      lessonId = lesson.id;
-    } else {
-      destinationSnapshot = {
-        kind: "created",
-        publishedContent: lessonContent,
-      };
-      const siblings = await tx
-        .select({ sortOrder: courseLibraryLessons.sortOrder })
-        .from(courseLibraryLessons)
-        .where(
-          and(
-            eq(courseLibraryLessons.moduleId, placement.targetModuleId),
-            isNull(courseLibraryLessons.deletedAt),
-          ),
-        );
-      const nextSortOrder =
-        siblings.length > 0
-          ? Math.max(...siblings.map((sibling) => sibling.sortOrder)) + 1
-          : 0;
-      const [lesson] = await tx
-        .insert(courseLibraryLessons)
-        .values({
-          moduleId: placement.targetModuleId,
-          title: placement.targetLessonTitle.trim(),
-          lessonType,
-          content: lessonContent,
-          sortOrder: nextSortOrder,
-        })
-        .returning({ id: courseLibraryLessons.id });
-      lessonId = lesson.id;
-    }
+  const [targetModule] = await db
+    .select({ id: courseLibraryModules.id })
+    .from(courseLibraryModules)
+    .innerJoin(
+      courseLibraryCourses,
+      eq(courseLibraryCourses.id, courseLibraryModules.courseId),
+    )
+    .where(
+      and(
+        eq(courseLibraryModules.id, placement.targetModuleId),
+        eq(courseLibraryModules.courseId, placement.targetCourseId),
+        isNull(courseLibraryModules.deletedAt),
+        isNull(courseLibraryCourses.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!targetModule) throw new Error("The destination module no longer exists");
 
-    const now = new Date();
-    await tx
-      .update(videoaskVocalHackPlacements)
-      .set({
-        status: "published",
-        publishedLessonId: lessonId,
-        approvedBy: adminUserId,
-        approvedAt: now,
-        publishedAt: now,
-        destinationSnapshot,
-        rolledBackBy: null,
-        rolledBackAt: null,
-        lastError: null,
-        updatedAt: now,
+  const [sourceForm] = await db
+    .select({ sourceSnapshot: videoaskFormImports.sourceSnapshot })
+    .from(videoaskFormImports)
+    .where(eq(videoaskFormImports.id, placement.formImportId))
+    .limit(1);
+  const sentences = await db
+    .select({
+      id: videoaskVocalHackSentences.id,
+      sortOrder: videoaskVocalHackSentences.sortOrder,
+      videoUrl: videoaskVocalHackSentences.videoUrl,
+      sourcePromptText: videoaskVocalHackSentences.sourcePromptText,
+      status: videoaskVocalHackSentences.status,
+      chinese: videoaskVocalHackSentences.chinese,
+      pinyin: videoaskVocalHackSentences.pinyin,
+      english: videoaskVocalHackSentences.english,
+      sourceStepSnapshot: videoaskStepImports.sourceSnapshot,
+    })
+    .from(videoaskVocalHackSentences)
+    .innerJoin(
+      videoaskStepImports,
+      eq(videoaskStepImports.id, videoaskVocalHackSentences.stepImportId),
+    )
+    .where(eq(videoaskVocalHackSentences.placementId, placement.id))
+    .orderBy(asc(videoaskVocalHackSentences.sortOrder));
+  if (
+    sentences.length === 0 ||
+    sentences.some(
+      (sentence) =>
+        sentence.status !== "ready" ||
+        !sentence.chinese?.trim() ||
+        !sentence.pinyin?.trim() ||
+        !sentence.english?.trim(),
+    )
+  ) {
+    throw new Error("Review and complete every sentence before publishing");
+  }
+
+  const lessonContent = {
+    description: placement.instructions,
+    maxResponseSeconds: sourceResponseTimeLimitSeconds(
+      sourceForm?.sourceSnapshot,
+    ),
+    sentences: sentences.map((sentence, index) => ({
+      id: sentence.id,
+      order: index,
+      videoUrl: sentence.videoUrl,
+      sourcePromptText: sentence.sourcePromptText,
+      allowedResponseTypes: sourceResponseMediaTypes(
+        sentence.sourceStepSnapshot,
+      ),
+      chinese: sentence.chinese!.trim(),
+      pinyin: sentence.pinyin!.trim(),
+      english: sentence.english!.trim(),
+    })),
+    sourceProvider: "videoask",
+    sourceFormImportId: placement.formImportId,
+  };
+  const lessonType =
+    placement.language === "cantonese" ? "vocal_hack_canto" : "vocal_hack";
+  const sqlClient = getNeonSql();
+  let destinationSnapshot: z.infer<typeof destinationSnapshotSchema>;
+  let rows: Array<{ lessonId: string; targetCourseId: string }>;
+
+  if (placement.targetLessonId) {
+    const [originalLesson] = await db
+      .select({
+        id: courseLibraryLessons.id,
+        moduleId: courseLibraryLessons.moduleId,
+        title: courseLibraryLessons.title,
+        lessonType: courseLibraryLessons.lessonType,
+        content: courseLibraryLessons.content,
+        sortOrder: courseLibraryLessons.sortOrder,
+        updatedAt: courseLibraryLessons.updatedAt,
       })
-      .where(eq(videoaskVocalHackPlacements.id, placement.id));
-    return { lessonId, targetCourseId: placement.targetCourseId };
-  });
+      .from(courseLibraryLessons)
+      .where(
+        and(
+          eq(courseLibraryLessons.id, placement.targetLessonId),
+          eq(courseLibraryLessons.moduleId, placement.targetModuleId),
+          isNull(courseLibraryLessons.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!originalLesson) {
+      throw new Error("The destination lesson no longer exists");
+    }
+    destinationSnapshot = {
+      kind: "replaced",
+      publishedContent: lessonContent,
+      lesson: {
+        id: originalLesson.id,
+        moduleId: originalLesson.moduleId,
+        title: originalLesson.title,
+        lessonType: originalLesson.lessonType,
+        content: originalLesson.content as Record<string, unknown>,
+        sortOrder: originalLesson.sortOrder,
+      },
+    };
+    rows = (await sqlClient.query(
+      `WITH claimed AS MATERIALIZED (
+         SELECT p.id, p.target_course_id, p.target_module_id
+         FROM videoask_vocal_hack_placements AS p
+         WHERE p.id = $1::uuid
+           AND p.status = 'ready_for_review'
+           AND p.published_lesson_id IS NULL
+           AND p.updated_at = $2::timestamp
+           AND EXISTS (
+             SELECT 1
+             FROM course_library_modules AS m
+             JOIN course_library_courses AS c ON c.id = m.course_id
+             WHERE m.id = p.target_module_id
+               AND m.course_id = p.target_course_id
+               AND m.deleted_at IS NULL
+               AND c.deleted_at IS NULL
+           )
+         FOR UPDATE
+       ), updated_lesson AS (
+         UPDATE course_library_lessons AS l
+         SET title = $3,
+             lesson_type = $4::course_library_lesson_type,
+             content = $5::jsonb,
+             updated_at = now()
+         FROM claimed
+         WHERE l.id = $6::uuid
+           AND l.module_id = claimed.target_module_id
+           AND l.deleted_at IS NULL
+           AND l.updated_at = $7::timestamp
+         RETURNING l.id
+       )
+       UPDATE videoask_vocal_hack_placements AS p
+       SET status = 'published',
+           published_lesson_id = updated_lesson.id,
+           approved_by = $8::uuid,
+           approved_at = now(),
+           published_at = now(),
+           destination_snapshot = $9::jsonb,
+           rolled_back_by = NULL,
+           rolled_back_at = NULL,
+           last_error = NULL,
+           updated_at = now()
+       FROM claimed, updated_lesson
+       WHERE p.id = claimed.id
+       RETURNING p.published_lesson_id AS "lessonId",
+                 p.target_course_id AS "targetCourseId"`,
+      [
+        placement.id,
+        placement.updatedAt.toISOString(),
+        placement.targetLessonTitle.trim(),
+        lessonType,
+        JSON.stringify(lessonContent),
+        placement.targetLessonId,
+        originalLesson.updatedAt.toISOString(),
+        adminUserId,
+        JSON.stringify(destinationSnapshot),
+      ],
+    )) as Array<{ lessonId: string; targetCourseId: string }>;
+  } else {
+    destinationSnapshot = {
+      kind: "created",
+      publishedContent: lessonContent,
+    };
+    rows = (await sqlClient.query(
+      `WITH claimed AS MATERIALIZED (
+         SELECT p.id, p.target_course_id, p.target_module_id
+         FROM videoask_vocal_hack_placements AS p
+         WHERE p.id = $1::uuid
+           AND p.status = 'ready_for_review'
+           AND p.published_lesson_id IS NULL
+           AND p.updated_at = $2::timestamp
+           AND EXISTS (
+             SELECT 1
+             FROM course_library_modules AS m
+             JOIN course_library_courses AS c ON c.id = m.course_id
+             WHERE m.id = p.target_module_id
+               AND m.course_id = p.target_course_id
+               AND m.deleted_at IS NULL
+               AND c.deleted_at IS NULL
+           )
+         FOR UPDATE
+       ), inserted_lesson AS (
+         INSERT INTO course_library_lessons (
+           module_id, title, lesson_type, content, sort_order, created_at, updated_at
+         )
+         SELECT claimed.target_module_id,
+                $3,
+                $4::course_library_lesson_type,
+                $5::jsonb,
+                COALESCE((
+                  SELECT MAX(sibling.sort_order)
+                  FROM course_library_lessons AS sibling
+                  WHERE sibling.module_id = claimed.target_module_id
+                    AND sibling.deleted_at IS NULL
+                ), -1) + 1,
+                now(),
+                now()
+         FROM claimed
+         RETURNING id
+       )
+       UPDATE videoask_vocal_hack_placements AS p
+       SET status = 'published',
+           published_lesson_id = inserted_lesson.id,
+           approved_by = $6::uuid,
+           approved_at = now(),
+           published_at = now(),
+           destination_snapshot = $7::jsonb,
+           rolled_back_by = NULL,
+           rolled_back_at = NULL,
+           last_error = NULL,
+           updated_at = now()
+       FROM claimed, inserted_lesson
+       WHERE p.id = claimed.id
+       RETURNING p.published_lesson_id AS "lessonId",
+                 p.target_course_id AS "targetCourseId"`,
+      [
+        placement.id,
+        placement.updatedAt.toISOString(),
+        placement.targetLessonTitle.trim(),
+        lessonType,
+        JSON.stringify(lessonContent),
+        adminUserId,
+        JSON.stringify(destinationSnapshot),
+      ],
+    )) as Array<{ lessonId: string; targetCourseId: string }>;
+  }
+
+  const [published] = rows;
+  if (!published) {
+    throw new Error(
+      "The placement or destination changed while publishing; refresh and review it again",
+    );
+  }
 
   return {
     ...published,
@@ -1257,98 +1328,157 @@ export async function rollbackVocalHackPlacement(
   placementId: string,
   adminUserId: string,
 ) {
-  return db.transaction(async (tx) => {
-    const [placement] = await tx
-      .update(videoaskVocalHackPlacements)
-      .set({ status: "rolling_back", updatedAt: new Date() })
-      .where(
-        and(
-          eq(videoaskVocalHackPlacements.id, placementId),
-          eq(videoaskVocalHackPlacements.status, "published"),
-          sql`${videoaskVocalHackPlacements.publishedLessonId} is not null`,
-        ),
-      )
-      .returning();
-    if (!placement?.publishedLessonId) {
-      throw new Error("This placement is not currently published");
-    }
-    const snapshot = destinationSnapshotSchema.safeParse(
-      placement.destinationSnapshot,
+  const [placement] = await db
+    .select()
+    .from(videoaskVocalHackPlacements)
+    .where(
+      and(
+        eq(videoaskVocalHackPlacements.id, placementId),
+        eq(videoaskVocalHackPlacements.status, "published"),
+        sql`${videoaskVocalHackPlacements.publishedLessonId} is not null`,
+      ),
+    )
+    .limit(1);
+  if (!placement?.publishedLessonId) {
+    throw new Error("This placement is not currently published");
+  }
+  const snapshot = destinationSnapshotSchema.safeParse(
+    placement.destinationSnapshot,
+  );
+  if (!snapshot.success) {
+    throw new Error("The original destination snapshot is unavailable");
+  }
+
+  const [currentLesson] = await db
+    .select({
+      id: courseLibraryLessons.id,
+      content: courseLibraryLessons.content,
+    })
+    .from(courseLibraryLessons)
+    .where(
+      and(
+        eq(courseLibraryLessons.id, placement.publishedLessonId),
+        isNull(courseLibraryLessons.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!currentLesson) throw new Error("The published lesson no longer exists");
+  const currentContent = currentLesson.content as Record<string, unknown>;
+  if (
+    currentContent.sourceProvider !== "videoask" ||
+    currentContent.sourceFormImportId !== placement.formImportId
+  ) {
+    throw new Error(
+      "The lesson has changed since publication; restore it manually to avoid overwriting newer work",
     );
-    if (!snapshot.success) {
-      throw new Error("The original destination snapshot is unavailable");
-    }
+  }
+  if (
+    JSON.stringify(currentContent) !==
+    JSON.stringify(snapshot.data.publishedContent)
+  ) {
+    throw new Error(
+      "The lesson was edited after publication; restore it manually to preserve those edits",
+    );
+  }
 
-    const [currentLesson] = await tx
-      .select({
-        id: courseLibraryLessons.id,
-        content: courseLibraryLessons.content,
-      })
-      .from(courseLibraryLessons)
-      .where(
-        and(
-          eq(courseLibraryLessons.id, placement.publishedLessonId),
-          isNull(courseLibraryLessons.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (!currentLesson) throw new Error("The published lesson no longer exists");
-    const currentContent = currentLesson.content as Record<string, unknown>;
-    if (
-      currentContent.sourceProvider !== "videoask" ||
-      currentContent.sourceFormImportId !== placement.formImportId
-    ) {
-      throw new Error(
-        "The lesson has changed since publication; restore it manually to avoid overwriting newer work",
-      );
-    }
-    if (
-      JSON.stringify(currentContent) !==
-      JSON.stringify(snapshot.data.publishedContent)
-    ) {
-      throw new Error(
-        "The lesson was edited after publication; restore it manually to preserve those edits",
-      );
-    }
+  if (
+    snapshot.data.kind === "replaced" &&
+    snapshot.data.lesson.id !== currentLesson.id
+  ) {
+    throw new Error("The destination snapshot does not match this lesson");
+  }
 
-    if (snapshot.data.kind === "replaced") {
-      if (snapshot.data.lesson.id !== currentLesson.id) {
-        throw new Error("The destination snapshot does not match this lesson");
-      }
-      await tx
-        .update(courseLibraryLessons)
-        .set({
-          moduleId: snapshot.data.lesson.moduleId,
-          title: snapshot.data.lesson.title,
-          lessonType: snapshot.data.lesson.lessonType,
-          content: snapshot.data.lesson.content,
-          sortOrder: snapshot.data.lesson.sortOrder,
-          deletedAt: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(courseLibraryLessons.id, currentLesson.id));
-    } else {
-      await tx
-        .update(courseLibraryLessons)
-        .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(eq(courseLibraryLessons.id, currentLesson.id));
-    }
+  const sqlClient = getNeonSql();
+  const snapshotContent = JSON.stringify(snapshot.data.publishedContent);
+  const rows =
+    snapshot.data.kind === "replaced"
+      ? ((await sqlClient.query(
+          `WITH claimed AS MATERIALIZED (
+             SELECT p.id, p.published_lesson_id
+             FROM videoask_vocal_hack_placements AS p
+             WHERE p.id = $1::uuid
+               AND p.status = 'published'
+               AND p.published_lesson_id = $2::uuid
+             FOR UPDATE
+           ), restored_lesson AS (
+             UPDATE course_library_lessons AS l
+             SET module_id = $3::uuid,
+                 title = $4,
+                 lesson_type = $5::course_library_lesson_type,
+                 content = $6::jsonb,
+                 sort_order = $7::integer,
+                 deleted_at = NULL,
+                 updated_at = now()
+             FROM claimed
+             WHERE l.id = claimed.published_lesson_id
+               AND l.deleted_at IS NULL
+               AND l.content = $8::jsonb
+             RETURNING l.id
+           )
+           UPDATE videoask_vocal_hack_placements AS p
+           SET status = 'rolled_back',
+               published_lesson_id = NULL,
+               rolled_back_by = $9::uuid,
+               rolled_back_at = now(),
+               last_error = NULL,
+               updated_at = now()
+           FROM claimed, restored_lesson
+           WHERE p.id = claimed.id
+           RETURNING p.id`,
+          [
+            placement.id,
+            placement.publishedLessonId,
+            snapshot.data.lesson.moduleId,
+            snapshot.data.lesson.title,
+            snapshot.data.lesson.lessonType,
+            JSON.stringify(snapshot.data.lesson.content),
+            snapshot.data.lesson.sortOrder,
+            snapshotContent,
+            adminUserId,
+          ],
+        )) as Array<{ id: string }>)
+      : ((await sqlClient.query(
+          `WITH claimed AS MATERIALIZED (
+             SELECT p.id, p.published_lesson_id
+             FROM videoask_vocal_hack_placements AS p
+             WHERE p.id = $1::uuid
+               AND p.status = 'published'
+               AND p.published_lesson_id = $2::uuid
+             FOR UPDATE
+           ), withdrawn_lesson AS (
+             UPDATE course_library_lessons AS l
+             SET deleted_at = now(), updated_at = now()
+             FROM claimed
+             WHERE l.id = claimed.published_lesson_id
+               AND l.deleted_at IS NULL
+               AND l.content = $3::jsonb
+             RETURNING l.id
+           )
+           UPDATE videoask_vocal_hack_placements AS p
+           SET status = 'rolled_back',
+               published_lesson_id = NULL,
+               rolled_back_by = $4::uuid,
+               rolled_back_at = now(),
+               last_error = NULL,
+               updated_at = now()
+           FROM claimed, withdrawn_lesson
+           WHERE p.id = claimed.id
+           RETURNING p.id`,
+          [
+            placement.id,
+            placement.publishedLessonId,
+            snapshotContent,
+            adminUserId,
+          ],
+        )) as Array<{ id: string }>);
 
-    const now = new Date();
-    await tx
-      .update(videoaskVocalHackPlacements)
-      .set({
-        status: "rolled_back",
-        publishedLessonId: null,
-        rolledBackBy: adminUserId,
-        rolledBackAt: now,
-        lastError: null,
-        updatedAt: now,
-      })
-      .where(eq(videoaskVocalHackPlacements.id, placement.id));
-    return {
-      restored: snapshot.data.kind === "replaced",
-      withdrawn: snapshot.data.kind === "created",
-    };
-  });
+  if (!rows[0]) {
+    throw new Error(
+      "The lesson changed while rolling back; refresh before trying again",
+    );
+  }
+  return {
+    restored: snapshot.data.kind === "replaced",
+    withdrawn: snapshot.data.kind === "created",
+  };
 }
