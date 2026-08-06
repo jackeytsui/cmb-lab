@@ -299,6 +299,13 @@ export function VideoAskIntegrationClient(props: Props) {
       ),
     );
   }, [destinationFocused, placementPreview, props.destinationFocus]);
+  const strongPlacementForms = useMemo(
+    () =>
+      (placementPreview?.forms ?? []).filter(
+        (form) => form.confidence === "exact" || form.confidence === "high",
+      ),
+    [placementPreview],
+  );
   const displayedWorkflowPlacements = useMemo(() => {
     const allPlacements = workflow?.placements ?? [];
     if (!destinationFocused) return allPlacements;
@@ -495,7 +502,11 @@ export function VideoAskIntegrationClient(props: Props) {
                     (form) => form.formImportId,
                   ),
                 }
-              : {},
+              : {
+                  formImportIds: strongPlacementForms.map(
+                    (form) => form.formImportId,
+                  ),
+                },
           ),
         },
       );
@@ -1013,12 +1024,12 @@ export function VideoAskIntegrationClient(props: Props) {
                     ? displayedPlacementForms.length === 1
                       ? "Prepare this review draft"
                       : `Prepare ${displayedPlacementForms.length} review drafts`
-                    : "Prepare review drafts"}
+                    : `Prepare ${strongPlacementForms.length} strong review drafts`}
               </Button>
               <p className="max-w-2xl text-xs text-muted-foreground">
                 {destinationFocused
                   ? "Only the match shown below will be staged. The selected Course Library lesson remains unchanged until you review and publish it."
-                  : "This creates review records and sentence rows in staging only. Existing CMB Lab course lessons remain unchanged."}
+                  : "Only exact and high-confidence matches are staged. Review and manual matches remain untouched, and existing CMB Lab course lessons remain unchanged."}
               </p>
             </div>
 
