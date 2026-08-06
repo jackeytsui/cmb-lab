@@ -28,6 +28,23 @@ course is used or retained.
 - Source videos already live in private Vercel Blob storage. This workflow does
   not upload them to Mux again.
 
+## Production completion — August 6, 2026
+
+- 118/118 reusable placements are published as native CMB Lab lessons.
+- 938/938 coach-video sentence rows are ready and present in the published
+  lesson content; all 938 videos have distinct private CMB Lab-owned URLs.
+- 78 existing placeholders were replaced and 40 related sibling lessons were
+  created. There are no duplicate or missing destinations.
+- 0 incomplete sentences, 0 invalid native lessons, 0 language/type
+  mismatches, 0 destination mismatches, and 0 placement errors remain.
+- Production student checks passed for Foundations, Intermediate, Advanced,
+  CM School, and Confident Cantonese, including Mandarin pinyin and Cantonese
+  jyutping, private video playback, audio recording, camera-video recording,
+  file upload, re-recording, and disabled submission until all rows are done.
+- The 339 excluded forms remain source inventory only. They are personalized,
+  onboarding, research, or otherwise non-course workflows and were not copied
+  into shared courses.
+
 ## Safety invariants
 
 1. Preparing drafts only writes to `videoask_vocal_hack_*` staging tables.
@@ -149,10 +166,31 @@ The rollout is complete only when:
 - all 118 reusable placements are published and the three Customized artifacts
   remain explicitly documented as excluded;
 - every published placement has all sentence rows reviewed;
-- the six source groups have no unexplained pending/failed sentences;
+- the five source groups have no unexplained pending/failed sentences;
 - the three pilot flows and a final sample from each source group pass the
   student-view checks above;
 - no generated `VideoAsk Migration — …` course remains in the Course Library;
 - the durable VideoAsk source/form/question/media staging records remain
   available for audit and resync;
 - Vercel deployment and Neon migration logs are retained with the rollout audit.
+
+## Team procedure after migration
+
+Do not create a new VideoAsk embed for normal course work. Author the activity
+directly in CMB Lab:
+
+1. Open **Admin → Course Library**, select the course and module, then add a
+   lesson.
+2. Choose **Vocal Hack** for Mandarin or **Vocal Hack (Canto)** for Cantonese.
+3. Open the lesson editor, enter the student instructions, and add sentence
+   rows in teaching order.
+4. Upload one coach video per row and enter the Chinese. CMB Lab generates
+   pinyin or jyutping and English; review and edit them before saving.
+5. Save the Vocal Hack and check its student view. Students complete it inside
+   the course and coaches receive the submission in the native review queue.
+
+If the team creates one last reusable activity in VideoAsk during the transition,
+open **Admin → VideoAsk → native CMB Lab**, run **Scan inventory**, prepare the
+new review draft, generate/review its sentence text, choose its exact course and
+module destination, and publish it once. This path is for source migration only;
+it is not the preferred authoring workflow after VideoAsk is retired.
