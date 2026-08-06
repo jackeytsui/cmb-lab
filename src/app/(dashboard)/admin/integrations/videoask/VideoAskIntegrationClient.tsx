@@ -24,6 +24,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+function formatVideoAskDateTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return `${date.toISOString().slice(0, 19).replace("T", " ")} UTC`;
+}
+
 type FormSummary = {
   id: string;
   title: string;
@@ -609,7 +619,7 @@ export function VideoAskIntegrationClient(props: Props) {
               <dt className="text-muted-foreground">Last API check</dt>
               <dd className="font-medium">
                 {props.lastValidatedAt
-                  ? new Date(props.lastValidatedAt).toLocaleString()
+                  ? formatVideoAskDateTime(props.lastValidatedAt)
                   : "Not checked yet"}
               </dd>
             </div>
@@ -617,7 +627,7 @@ export function VideoAskIntegrationClient(props: Props) {
 
           {props.expiresAt ? (
             <p className="text-xs text-muted-foreground">
-              The current access token expires {new Date(props.expiresAt).toLocaleString()}.
+              The current access token expires {formatVideoAskDateTime(props.expiresAt)}.
               CMB Lab will refresh it automatically.
             </p>
           ) : null}
@@ -689,7 +699,7 @@ export function VideoAskIntegrationClient(props: Props) {
             </dl>
             {status.inventory?.completedAt ? (
               <p className="text-xs text-muted-foreground">
-                Last complete source scan: {new Date(status.inventory.completedAt).toLocaleString()}
+                Last complete source scan: {formatVideoAskDateTime(status.inventory.completedAt)}
               </p>
             ) : null}
             <Button
