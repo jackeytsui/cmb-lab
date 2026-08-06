@@ -7,6 +7,7 @@ import {
   ArrowRight,
   BookOpenCheck,
   CheckCircle2,
+  ChevronLeft,
   Eye,
   Loader2,
   MapPinned,
@@ -23,6 +24,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  courseLibraryReturnHref,
+  matchesVideoAskDestination,
+  type VideoAskDestinationFocus,
+} from "@/lib/videoask/vocal-hack-routing";
 
 function formatVideoAskDateTime(value: string) {
   const date = new Date(value);
@@ -148,7 +154,9 @@ type VocalHackWorkflowStatus = {
     action: string;
     targetCourseId: string | null;
     targetCourseTitle: string | null;
+    targetModuleId: string | null;
     targetModuleTitle: string | null;
+    targetLessonId: string | null;
     targetLessonTitle: string | null;
     publishedLessonId: string | null;
     totalSentences: number;
@@ -184,6 +192,7 @@ type Props = {
   expiresAt: string | null;
   lastValidatedAt: string | null;
   lastError: string | null;
+  destinationFocus: VideoAskDestinationFocus | null;
 };
 
 const EMPTY_PROGRESS: ImportProgress = {
@@ -224,6 +233,12 @@ function confidenceLabel(confidence: string) {
 }
 
 export function VideoAskIntegrationClient(props: Props) {
+  const hasDestinationFocus = props.destinationFocus !== null;
+  const destinationFocusKey = [
+    props.destinationFocus?.courseId,
+    props.destinationFocus?.moduleId,
+    props.destinationFocus?.lessonId,
+  ].join(":");
   const [scanning, setScanning] = useState(false);
   const [forms, setForms] = useState<FormSummary[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -239,6 +254,9 @@ export function VideoAskIntegrationClient(props: Props) {
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [placementPreview, setPlacementPreview] =
     useState<VocalHackPlacementPreview | null>(null);
+  const [showAllPlacements, setShowAllPlacements] = useState(
+    !hasDestinationFocus,
+  );
   const [placementLoading, setPlacementLoading] = useState(false);
   const [workflow, setWorkflow] = useState<VocalHackWorkflowStatus | null>(null);
   const [workflowLoading, setWorkflowLoading] = useState(false);
@@ -266,6 +284,80 @@ export function VideoAskIntegrationClient(props: Props) {
     const failed = status.imports.filter((item) => item.status === "failed").length;
     return { completed, warnings, failed };
   }, [status.imports]);
+  const destinationFocused = hasDestinationFocus && !showAllPlacements;
+  const displayedPlacementForms = useMemo(() => {
+    const allForms = placementPreview?.forms ?? [];
+    if (!destinationFocused) return allForms;
+    return allForms.filter((form) =>
+      matchesVideoAskDestination(
+        {
+          targetCourseId: form.targetCourse?.id ?? null,
+          targetModuleId: form.targetModule?.id ?? null,
+          targetLessonId: form.targetLesson?.id ?? null,
+        },
+        props.destinationFocus,
+      ),
+    );
+  }, [destinationFocused, placementPreview, props.destinationFocus]);
+  const displayedWorkflowPlacements = useMemo(() => {
+    const allPlacements = workflow?.placements ?? [];
+    if (!destinationFocused) return allPlacements;
+    return allPlacements.filter((placement) =>
+      matchesVideoAskDestination(placement, props.destinationFocus),
+    );
+  }, [destinationFocused, props.destinationFocus, workflow]);
+  const displayedWorkflowSummary = useMemo(
+    () => ({
+      placements: displayedWorkflowPlacements.length,
+      awaiting: destinationFocused
+        ? displayedWorkflowPlacements.reduce(
+            (total, placement) =>
+              total +
+              Math.max(placement.totalSentences - placement.readySentences, 0),
+            0,
+          )
+        : (workflow?.sentences.held ?? 0) +
+          (workflow?.sentences.pending ?? 0),
+      ready: destinationFocused
+        ? displayedWorkflowPlacements.reduce(
+            (total, placement) => total + placement.readySentences,
+            0,
+          )
+        : (workflow?.sentences.ready ?? 0),
+      needsAttention: destinationFocused
+        ? displayedWorkflowPlacements.filter((placement) => placement.lastError)
+            .length
+        : (workflow?.sentences.failed ?? 0),
+      published: displayedWorkflowPlacements.filter(
+        (placement) => placement.status === "published",
+      ).length,
+    }),
+    [destinationFocused, displayedWorkflowPlacements, workflow],
+  );
+  const focusedDestination =
+    displayedPlacementForms[0]?.targetCourse &&
+    displayedPlacementForms[0]?.targetModule
+      ? [
+          displayedPlacementForms[0].targetCourse.title,
+          displayedPlacementForms[0].targetModule.title,
+          displayedPlacementForms[0].targetLessonTitle,
+        ]
+          .filter(Boolean)
+          .join(" → ")
+      : displayedWorkflowPlacements[0]?.targetCourseTitle &&
+          displayedWorkflowPlacements[0]?.targetModuleTitle
+        ? [
+            displayedWorkflowPlacements[0].targetCourseTitle,
+            displayedWorkflowPlacements[0].targetModuleTitle,
+            displayedWorkflowPlacements[0].targetLessonTitle,
+          ]
+            .filter(Boolean)
+            .join(" → ")
+        : null;
+
+  useEffect(() => {
+    setShowAllPlacements(!hasDestinationFocus);
+  }, [destinationFocusKey, hasDestinationFocus]);
 
   async function loadImportStatus(silent = false) {
     if (!props.connected) return;
@@ -393,7 +485,19 @@ export function VideoAskIntegrationClient(props: Props) {
     try {
       const response = await fetch(
         "/api/admin/integrations/videoask/vocal-hack/prepare",
-        { method: "POST" },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            destinationFocused
+              ? {
+                  formImportIds: displayedPlacementForms.map(
+                    (form) => form.formImportId,
+                  ),
+                }
+              : {},
+          ),
+        },
       );
       await jsonResponse<{ result: { placements: number; sentences: number } }>(
         response,
@@ -584,6 +688,43 @@ export function VideoAskIntegrationClient(props: Props) {
 
   return (
     <div className="grid gap-6">
+      {props.destinationFocus ? (
+        <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Course Library → VideoAsk migration
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {destinationFocused
+                  ? focusedDestination ||
+                    (placementPreview
+                      ? "No automatic VideoAsk match was found for this destination."
+                      : "Finding the VideoAsk source matched to this destination…")
+                  : "Showing the complete migration workspace."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link href={courseLibraryReturnHref(props.destinationFocus)}>
+                  <ChevronLeft /> Back to Course Library
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowAllPlacements((current) => !current)}
+              >
+                {destinationFocused
+                  ? "Show all migration mappings"
+                  : "Return to selected destination"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -751,13 +892,46 @@ export function VideoAskIntegrationClient(props: Props) {
               </Button>
             </CardTitle>
             <CardDescription>
-              Read-only plan based on the six folders from the team Loom. No
-              published lesson changes until the mapping and AI transcripts are
-              reviewed.
+              {destinationFocused
+                ? "Showing the VideoAsk source matched to the Course Library destination you selected."
+                : "Read-only plan based on the six folders from the team Loom. No published lesson changes until the mapping and AI transcripts are reviewed."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-8">
+            {destinationFocused ? (
+              <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-muted-foreground">Matching forms</dt>
+                  <dd className="text-lg font-semibold">
+                    {displayedPlacementForms.length}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Sentence videos</dt>
+                  <dd className="text-lg font-semibold">
+                    {displayedPlacementForms.reduce(
+                      (total, form) => total + form.stepCount,
+                      0,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Media ready</dt>
+                  <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+                    {displayedPlacementForms.reduce(
+                      (total, form) => total + form.mediaReady,
+                      0,
+                    )}
+                    /
+                    {displayedPlacementForms.reduce(
+                      (total, form) => total + form.stepCount,
+                      0,
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-8">
               <div>
                 <dt className="text-muted-foreground">Course forms</dt>
                 <dd className="text-lg font-semibold">
@@ -807,7 +981,8 @@ export function VideoAskIntegrationClient(props: Props) {
                   {placementPreview.summary.targetSentenceVideos}
                 </dd>
               </div>
-            </dl>
+              </dl>
+            )}
 
             <div className="rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-700 dark:text-blue-300">
               Existing VideoAsk transcripts are English phonetic guesses, so the
@@ -821,7 +996,11 @@ export function VideoAskIntegrationClient(props: Props) {
               <Button
                 type="button"
                 onClick={prepareReviewDrafts}
-                disabled={preparingWorkflow || transcription.running}
+                disabled={
+                  preparingWorkflow ||
+                  transcription.running ||
+                  (destinationFocused && displayedPlacementForms.length === 0)
+                }
               >
                 {preparingWorkflow ? (
                   <Loader2 className="animate-spin" />
@@ -830,11 +1009,16 @@ export function VideoAskIntegrationClient(props: Props) {
                 )}
                 {preparingWorkflow
                   ? "Preparing review drafts…"
-                  : "Prepare review drafts"}
+                  : destinationFocused
+                    ? displayedPlacementForms.length === 1
+                      ? "Prepare this review draft"
+                      : `Prepare ${displayedPlacementForms.length} review drafts`
+                    : "Prepare review drafts"}
               </Button>
               <p className="max-w-2xl text-xs text-muted-foreground">
-                This creates review records and sentence rows in staging only.
-                Existing CMB Lab course lessons remain unchanged.
+                {destinationFocused
+                  ? "Only the match shown below will be staged. The selected Course Library lesson remains unchanged until you review and publish it."
+                  : "This creates review records and sentence rows in staging only. Existing CMB Lab course lessons remain unchanged."}
               </p>
             </div>
 
@@ -852,7 +1036,7 @@ export function VideoAskIntegrationClient(props: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {placementPreview.forms.map((form) => (
+                  {displayedPlacementForms.map((form) => (
                     <tr key={form.formImportId} className="border-t align-top">
                       <td className="px-3 py-3">
                         <p className="font-medium">{form.sourceTitle}</p>
@@ -921,6 +1105,17 @@ export function VideoAskIntegrationClient(props: Props) {
                       </td>
                     </tr>
                   ))}
+                  {displayedPlacementForms.length === 0 ? (
+                    <tr className="border-t">
+                      <td
+                        colSpan={5}
+                        className="px-4 py-10 text-center text-sm text-muted-foreground"
+                      >
+                        No automatic source match was found for this destination.
+                        Show all migration mappings to review the unmatched forms.
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>
@@ -928,7 +1123,7 @@ export function VideoAskIntegrationClient(props: Props) {
         </Card>
       ) : null}
 
-      {workflow && workflow.placements.length > 0 ? (
+      {workflow && displayedWorkflowPlacements.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center justify-between gap-3">
@@ -958,36 +1153,31 @@ export function VideoAskIntegrationClient(props: Props) {
               <div>
                 <dt className="text-muted-foreground">Placements</dt>
                 <dd className="text-lg font-semibold">
-                  {workflow.placements.length}
+                  {displayedWorkflowSummary.placements}
                 </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Awaiting AI</dt>
                 <dd className="text-lg font-semibold">
-                  {(workflow.sentences.held ?? 0) +
-                    (workflow.sentences.pending ?? 0)}
+                  {displayedWorkflowSummary.awaiting}
                 </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Ready sentences</dt>
                 <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
-                  {workflow.sentences.ready ?? 0}
+                  {displayedWorkflowSummary.ready}
                 </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Needs attention</dt>
                 <dd className="text-lg font-semibold text-amber-600 dark:text-amber-400">
-                  {workflow.sentences.failed ?? 0}
+                  {displayedWorkflowSummary.needsAttention}
                 </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Published lessons</dt>
                 <dd className="text-lg font-semibold">
-                  {
-                    workflow.placements.filter(
-                      (placement) => placement.status === "published",
-                    ).length
-                  }
+                  {displayedWorkflowSummary.published}
                 </dd>
               </div>
             </dl>
@@ -1026,7 +1216,7 @@ export function VideoAskIntegrationClient(props: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {workflow.placements.map((placement) => (
+                  {displayedWorkflowPlacements.map((placement) => (
                     <tr key={placement.id} className="border-t align-top">
                       <td className="px-3 py-3">
                         <p className="font-medium">{placement.sourceTitle}</p>

@@ -121,9 +121,17 @@ function placementValues(form: PlacementPreview) {
  * Create review-only staging rows. No Course Library lesson is inserted or
  * modified here, even when its destination course is already published.
  */
-export async function prepareVocalHackPlacements() {
+export async function prepareVocalHackPlacements(input?: {
+  formImportIds?: string[];
+}) {
   const preview = await buildVocalHackPlacementPreview();
-  const formIds = preview.forms.map((form) => form.formImportId);
+  const requestedFormIds = input?.formImportIds
+    ? new Set(input.formImportIds)
+    : null;
+  const forms = requestedFormIds
+    ? preview.forms.filter((form) => requestedFormIds.has(form.formImportId))
+    : preview.forms;
+  const formIds = forms.map((form) => form.formImportId);
   const existing =
     formIds.length > 0
       ? await db
@@ -136,7 +144,7 @@ export async function prepareVocalHackPlacements() {
   );
 
   const placements = await mapWithConcurrency(
-    preview.forms,
+    forms,
     PLACEMENT_WRITE_CONCURRENCY,
     async (form) => {
       const previous = existingByForm.get(form.formImportId);
@@ -248,7 +256,9 @@ export async function prepareVocalHackPlacements() {
     sentences: sentenceValues.length,
     manual: placements.filter((placement) => placement.action === "manual")
       .length,
-    missingMedia: preview.summary.targetSentenceVideos - sentenceValues.length,
+    missingMedia:
+      forms.reduce((total, form) => total + form.stepCount, 0) -
+      sentenceValues.length,
   };
 }
 

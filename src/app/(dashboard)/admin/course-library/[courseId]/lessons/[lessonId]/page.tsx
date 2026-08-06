@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ArrowRight, ChevronLeft, MapPinned } from "lucide-react";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import {
@@ -11,6 +11,7 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import { LessonEditorClient } from "./LessonEditorClient";
 import type { CourseLibraryLesson } from "@/db/schema/course-library";
+import { videoAskMigrationHref } from "@/lib/videoask/vocal-hack-routing";
 
 type LessonEditorLessonType = NonNullable<CourseLibraryLesson["lessonType"]>;
 
@@ -56,6 +57,8 @@ export default async function LessonEditorPage({ params }: PageProps) {
     .limit(1);
 
   if (!row) notFound();
+  const isVocalHack =
+    row.lessonType === "vocal_hack" || row.lessonType === "vocal_hack_canto";
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -70,6 +73,34 @@ export default async function LessonEditorPage({ params }: PageProps) {
       <div className="mb-4 text-xs text-muted-foreground">
         {row.courseTitle} → {row.moduleTitle}
       </div>
+
+      {isVocalHack ? (
+        <div className="mb-6 flex flex-col gap-4 rounded-lg border border-rose-500/30 bg-rose-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-3">
+            <MapPinned className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+            <div>
+              <p className="font-semibold text-foreground">
+                Fill this Vocal Hack from VideoAsk
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Find the matching source form, review its coach videos, and
+                publish them into this existing lesson.
+              </p>
+            </div>
+          </div>
+          <Link
+            href={videoAskMigrationHref({
+              courseId: row.courseId,
+              moduleId: row.moduleId,
+              lessonId: row.lessonId,
+            })}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            Match VideoAsk source
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      ) : null}
 
       <LessonEditorClient
         initialLesson={{

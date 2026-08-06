@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ArrowRight, ChevronLeft, MapPinned } from "lucide-react";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { COURSE_LIBRARY_COURSE_CONTENT_TYPE } from "@/lib/tag-feature-access";
+import { videoAskMigrationHref } from "@/lib/videoask/vocal-hack-routing";
 import { CourseLibraryEditorClient } from "./CourseLibraryEditorClient";
 
 interface PageProps {
@@ -73,6 +74,11 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
     list.push(l);
     lessonsByModule.set(l.moduleId, list);
   }
+  const vocalHackLessonCount = lessons.filter(
+    (lesson) =>
+      lesson.lessonType === "vocal_hack" ||
+      lesson.lessonType === "vocal_hack_canto",
+  ).length;
 
   const [allTags, grantRows] = await Promise.all([
     db
@@ -122,6 +128,31 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
         <ChevronLeft className="w-4 h-4" />
         Back to courses
       </Link>
+
+      {vocalHackLessonCount > 0 ? (
+        <div className="mb-6 flex flex-col gap-4 rounded-lg border border-rose-500/30 bg-rose-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-3">
+            <MapPinned className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+            <div>
+              <p className="font-semibold text-foreground">
+                VideoAsk Vocal Hack migration
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Match this course&apos;s {vocalHackLessonCount} existing Vocal
+                Hack lesson{vocalHackLessonCount === 1 ? "" : "s"} with their
+                VideoAsk coach videos.
+              </p>
+            </div>
+          </div>
+          <Link
+            href={videoAskMigrationHref({ courseId })}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold hover:bg-accent"
+          >
+            Match this course
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      ) : null}
 
       <CourseLibraryEditorClient
         initialCourse={hydrated}

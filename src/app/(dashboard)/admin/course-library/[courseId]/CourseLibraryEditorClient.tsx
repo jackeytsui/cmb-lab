@@ -23,6 +23,7 @@ import {
   ArrowDown,
   Headphones,
   Mic,
+  MapPinned,
   NotebookPen,
   MessagesSquare,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { DragDropProvider, useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { move } from "@dnd-kit/helpers";
 import { CollisionPriority } from "@dnd-kit/abstract";
+import { videoAskMigrationHref } from "@/lib/videoask/vocal-hack-routing";
 
 type LessonType =
   | "video"
@@ -235,6 +237,9 @@ function MoveableLesson({
   });
   const moduleId = group;
   const meta = LESSON_TYPE_META[lesson.lessonType];
+  const isVocalHack =
+    lesson.lessonType === "vocal_hack" ||
+    lesson.lessonType === "vocal_hack_canto";
 
   return (
     <div
@@ -264,6 +269,19 @@ function MoveableLesson({
         {lesson.title}
       </Link>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {isVocalHack ? (
+          <Link
+            href={videoAskMigrationHref({
+              courseId,
+              moduleId,
+              lessonId: lesson.id,
+            })}
+            className="p-1 text-rose-500/70 hover:text-rose-500"
+            title="Match this lesson with VideoAsk"
+          >
+            <MapPinned className="w-3.5 h-3.5" />
+          </Link>
+        ) : null}
         <Link
           href={`/admin/course-library/${courseId}/lessons/${lesson.id}`}
           className="p-1 text-muted-foreground/50 hover:text-foreground"

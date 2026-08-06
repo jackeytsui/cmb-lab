@@ -4,6 +4,7 @@ import {
   getVideoAskConfigurationStatus,
   getVideoAskConnection,
 } from "@/lib/videoask/client";
+import { videoAskDestinationFocusFromSearchParams } from "@/lib/videoask/vocal-hack-routing";
 import { VideoAskIntegrationClient } from "./VideoAskIntegrationClient";
 
 export const metadata = {
@@ -25,11 +26,23 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function VideoAskIntegrationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ connected?: string; error?: string }>;
+  searchParams: Promise<{
+    connected?: string | string[];
+    error?: string | string[];
+    courseId?: string | string[];
+    moduleId?: string | string[];
+    lessonId?: string | string[];
+  }>;
 }) {
   if (!(await hasMinimumRole("admin"))) redirect("/dashboard");
 
   const params = await searchParams;
+  const connected = Array.isArray(params.connected)
+    ? params.connected[0]
+    : params.connected;
+  const error = Array.isArray(params.error) ? params.error[0] : params.error;
+  const destinationFocus =
+    videoAskDestinationFocusFromSearchParams(params);
   const configuration = getVideoAskConfigurationStatus();
   const configured = Object.values(configuration).every(Boolean);
   let connection = null;
@@ -52,14 +65,14 @@ export default async function VideoAskIntegrationPage({
         </p>
       </header>
 
-      {params.connected === "1" ? (
+      {connected === "1" ? (
         <p className="mb-6 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
           VideoAsk is connected. Short-lived access tokens will now refresh automatically.
         </p>
       ) : null}
-      {params.error && ERROR_MESSAGES[params.error] ? (
+      {error && ERROR_MESSAGES[error] ? (
         <p className="mb-6 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          {ERROR_MESSAGES[params.error]}
+          {ERROR_MESSAGES[error]}
         </p>
       ) : null}
       {databaseError ? (
@@ -76,6 +89,7 @@ export default async function VideoAskIntegrationPage({
         expiresAt={connection?.accessTokenExpiresAt.toISOString() ?? null}
         lastValidatedAt={connection?.lastValidatedAt.toISOString() ?? null}
         lastError={connection?.lastError ?? null}
+        destinationFocus={destinationFocus}
       />
     </div>
   );
