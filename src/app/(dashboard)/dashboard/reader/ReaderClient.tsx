@@ -339,8 +339,8 @@ export function ReaderClient({
     if (hideImport) return; // Skip onboarding redirect for curated/accelerator reader
     const done = window.localStorage.getItem(onboardingDoneKey) === "done";
     if (done) return;
-    router.replace("/dashboard/reader/mandarin?onboarding=1");
-  }, [isOnboardingLaunch, onboardingDoneKey, router, user, hideImport]);
+    router.replace(`/dashboard/reader/${language ?? "mandarin"}?onboarding=1`);
+  }, [isOnboardingLaunch, onboardingDoneKey, router, user, hideImport, language]);
 
   const handleReaderStepChange = useCallback(
     (step: WalkthroughStep, _index: number, direction: "start" | "forward" | "back") => {
