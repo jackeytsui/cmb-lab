@@ -12,10 +12,12 @@ function withoutFeedbackPromises(html: string): string {
     /<(p|li)\b[^>]*>[\s\S]*?<\/\1>/gi,
     (block) => {
       const text = block.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
-      const promisesFeedback =
-        /(?:coach|coaching team)[\s\S]{0,100}feedback/i.test(text) ||
-        /feedback[\s\S]{0,100}(?:coach|coaching team)/i.test(text);
-      return promisesFeedback ? "" : block;
+      // Lesson descriptions come from editable rich text and use several
+      // variants ("our coaches will send feedback", "we will send you
+      // feedback", etc.). For tiers without human review, remove the entire
+      // paragraph/list item whenever it mentions feedback so stale marketing
+      // copy cannot promise a service the learner does not have.
+      return /\bfeedback\b/i.test(text) ? "" : block;
     },
   );
 }
