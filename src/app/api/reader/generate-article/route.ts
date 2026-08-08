@@ -12,7 +12,7 @@ const HSK_LEVELS: Record<string, string> = {
   "6": "HSK 6 (near-native). Full range of vocabulary and grammar. Use formal/literary Chinese, classical references, and nuanced expression. Any topic at native level.",
 };
 
-const SYSTEM_PROMPT = `You are a Chinese language content creator. Generate engaging, educational Chinese text articles for language learners.
+const MANDARIN_SYSTEM_PROMPT = `You are a Mandarin Chinese language content creator. Generate engaging, educational Chinese text articles for language learners.
 
 Rules:
 - Write ONLY in Chinese characters (simplified by default unless told otherwise)
@@ -21,6 +21,16 @@ Rules:
 - Structure with clear paragraphs
 - Do NOT include pinyin, English translations, or vocabulary lists
 - Just output the Chinese article text, nothing else`;
+
+const CANTONESE_SYSTEM_PROMPT = `You are a Cantonese language content creator. Generate engaging, educational passages for Cantonese learners.
+
+Rules:
+- Write natural, colloquial Cantonese in Traditional Chinese characters
+- Use authentic Cantonese vocabulary and sentence-final particles where appropriate
+- Do not fall back to formal Standard Written Chinese
+- The passage should be 150-400 characters long with clear paragraphs
+- Do NOT include Jyutping, English translations, or vocabulary lists
+- Just output the Cantonese passage text, nothing else`;
 
 function getGenerationErrorMessage(error: unknown): string {
   const raw =
@@ -50,10 +60,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { topic, level, script } = body as {
+    const { topic, level, script, language } = body as {
       topic: string;
       level: string;
       script?: "simplified" | "traditional";
+      language?: "zh-CN" | "zh-HK";
     };
 
     if (!topic || typeof topic !== "string" || topic.trim().length === 0) {
@@ -78,12 +89,13 @@ export async function POST(request: NextRequest) {
     }
 
     const levelDesc = HSK_LEVELS[level];
+    const isCantonese = language === "zh-HK";
     const scriptNote =
-      script === "traditional"
+      !isCantonese && script === "traditional"
         ? " Write in Traditional Chinese characters (繁體字)."
         : "";
 
-    const prompt = `Write a Chinese article about: ${topic.trim()}
+    const prompt = `Write a ${isCantonese ? "Cantonese passage" : "Mandarin Chinese article"} about: ${topic.trim()}
 
 Difficulty level: ${levelDesc}${scriptNote}
 
@@ -91,7 +103,7 @@ Generate an engaging article at this exact difficulty level.`;
 
     const { text } = await generateText({
       model: openai("gpt-4o-mini"),
-      system: SYSTEM_PROMPT,
+      system: isCantonese ? CANTONESE_SYSTEM_PROMPT : MANDARIN_SYSTEM_PROMPT,
       prompt,
       maxOutputTokens: 2048,
     });
@@ -104,7 +116,12 @@ Generate an engaging article at this exact difficulty level.`;
       );
     }
 
-    return NextResponse.json({ article, topic: topic.trim(), level });
+    return NextResponse.json({
+      article,
+      topic: topic.trim(),
+      level,
+      language: isCantonese ? "zh-HK" : "zh-CN",
+    });
   } catch (error) {
     console.error("Article generation error:", error);
     return NextResponse.json(

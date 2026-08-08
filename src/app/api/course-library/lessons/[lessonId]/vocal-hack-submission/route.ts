@@ -12,7 +12,10 @@ import {
 } from "@/db/schema";
 import { getRealUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
-import { listChallengeReviewers } from "@/lib/assignment-review";
+import {
+  listChallengeReviewers,
+  userCanReceiveAssignmentFeedback,
+} from "@/lib/assignment-review";
 import { isVocalHackLesson } from "@/lib/lesson-language";
 import type { CourseLibraryVocalHackContent } from "@/db/schema/course-library";
 import { studentFacingSourcePrompt } from "@/lib/videoask/vocal-hack-content";
@@ -226,9 +229,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   const now = new Date();
 
   // Auto-assign to a Vocal Hack Reviewer on submit; keep an existing assignee.
-  const reviewers = await listChallengeReviewers("vocal_hack");
-  const assignedReviewerId =
-    existing?.assignedReviewerId ?? reviewers[0]?.id ?? null;
+  const feedbackRequested = await userCanReceiveAssignmentFeedback(user);
+  const reviewers = feedbackRequested
+    ? await listChallengeReviewers("vocal_hack")
+    : [];
+  const assignedReviewerId = feedbackRequested
+    ? existing?.assignedReviewerId ?? reviewers[0]?.id ?? null
+    : null;
   const status = assignedReviewerId ? "assigned" : "submitted";
 
   let submissionId: string;
@@ -239,6 +246,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       .update(assignmentSubmissions)
       .set({
         status,
+        feedbackRequested,
         assignedReviewerId,
         submittedAt: now,
         moduleId: lesson.moduleId,
@@ -258,6 +266,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         studentId: user.id,
         assignmentType: "vocal_hack",
         status,
+        feedbackRequested,
         assignedReviewerId,
         submittedAt: now,
       })

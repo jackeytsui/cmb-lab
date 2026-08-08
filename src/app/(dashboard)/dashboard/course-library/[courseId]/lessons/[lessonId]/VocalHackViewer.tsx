@@ -50,6 +50,7 @@ export function VocalHackViewer({
   initialSubmission,
   maxResponseSeconds = 300,
   lang = "mandarin",
+  feedbackEnabled = true,
 }: {
   lessonId: string;
   /** Server-minted, expiring URL for the private coach-video proxy. */
@@ -58,6 +59,7 @@ export function VocalHackViewer({
   initialSubmission: VocalHackSubmissionDto | null;
   maxResponseSeconds?: number;
   lang?: "mandarin" | "cantonese";
+  feedbackEnabled?: boolean;
 }) {
   const [submission, setSubmission] = useState<VocalHackSubmissionDto | null>(
     initialSubmission,
@@ -140,8 +142,9 @@ export function VocalHackViewer({
       toast.success(
         isResubmit ? "Recordings resubmitted!" : "Recordings submitted!",
         {
-          description:
-            "You'll receive personalised feedback from our coaching team very soon.",
+          description: feedbackEnabled
+            ? "You'll receive personalised feedback from our coaching team very soon."
+            : "Your recording practice has been saved.",
         },
       );
     } catch {
@@ -183,9 +186,9 @@ export function VocalHackViewer({
             ) : (
               <>
                 <span className="font-medium">Submitted!</span>{" "}
-                You&apos;ll receive personalised feedback from our coaching team
-                very soon. You can still re-record and resubmit until it has
-                been reviewed.
+                {feedbackEnabled
+                  ? "You'll receive personalised feedback from our coaching team very soon. You can still re-record and resubmit until it has been reviewed."
+                  : "Your recording practice has been saved. You can still re-record and resubmit it at any time."}
               </>
             )}
           </div>

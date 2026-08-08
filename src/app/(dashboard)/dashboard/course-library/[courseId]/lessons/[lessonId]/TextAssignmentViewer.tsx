@@ -59,11 +59,13 @@ export function TextAssignmentViewer({
   prompts,
   initialSubmission,
   lang = "mandarin",
+  feedbackEnabled = true,
 }: {
   lessonId: string;
   prompts: TextAssignmentPrompt[];
   initialSubmission: TextAssignmentSubmissionDto | null;
   lang?: "mandarin" | "cantonese";
+  feedbackEnabled?: boolean;
 }) {
   const [submission, setSubmission] = useState(initialSubmission);
   const [values, setValues] = useState(() =>
@@ -119,10 +121,10 @@ export function TextAssignmentViewer({
       setSubmission(data.submission);
       toast.success(
         isResubmit ? "Assignment resubmitted!" : "Assignment submitted!",
-        {
+        feedbackEnabled ? {
           description:
             "You'll receive personalised feedback from our coaching team very soon.",
-        },
+        } : { description: "Your practice has been saved." },
       );
     } catch {
       toast.error("Failed to submit assignment");
@@ -167,9 +169,9 @@ export function TextAssignmentViewer({
             ) : (
               <>
                 <span className="font-medium">Submitted!</span>{" "}
-                You&apos;ll receive personalised feedback from our coaching team
-                very soon. You can still edit and resubmit until it has been
-                reviewed.
+                {feedbackEnabled
+                  ? "You'll receive personalised feedback from our coaching team very soon. You can still edit and resubmit until it has been reviewed."
+                  : "Your practice has been saved. You can still edit and resubmit it at any time."}
               </>
             )}
           </div>

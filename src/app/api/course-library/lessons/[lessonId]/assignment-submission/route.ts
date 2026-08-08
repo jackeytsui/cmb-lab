@@ -12,7 +12,10 @@ import {
 } from "@/db/schema";
 import { getRealUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
-import { listChallengeReviewers } from "@/lib/assignment-review";
+import {
+  listChallengeReviewers,
+  userCanReceiveAssignmentFeedback,
+} from "@/lib/assignment-review";
 import { isTextAssignmentLesson } from "@/lib/lesson-language";
 import type { CourseLibraryTextAssignmentContent } from "@/db/schema/course-library";
 
@@ -200,9 +203,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   // "Assigned to Me" queue without manual triage. Keep any existing assignee
   // (e.g. an admin reassigned it) rather than overwriting. Being "assigned"
   // does NOT lock the student — editing is locked only once review starts.
-  const reviewers = await listChallengeReviewers("text_assignment");
-  const assignedReviewerId =
-    existing?.assignedReviewerId ?? reviewers[0]?.id ?? null;
+  const feedbackRequested = await userCanReceiveAssignmentFeedback(user);
+  const reviewers = feedbackRequested
+    ? await listChallengeReviewers("text_assignment")
+    : [];
+  const assignedReviewerId = feedbackRequested
+    ? existing?.assignedReviewerId ?? reviewers[0]?.id ?? null
+    : null;
   const status = assignedReviewerId ? "assigned" : "submitted";
 
   let submissionId: string;
@@ -213,6 +220,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       .update(assignmentSubmissions)
       .set({
         status,
+        feedbackRequested,
         assignedReviewerId,
         submittedAt: now,
         moduleId: lesson.moduleId,
@@ -234,6 +242,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         studentId: user.id,
         assignmentType: "text_assignment",
         status,
+        feedbackRequested,
         assignedReviewerId,
         submittedAt: now,
       })

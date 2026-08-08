@@ -135,7 +135,15 @@ function normalizeSentenceForTranslation(text: string): string {
   return text.replace(/[\uFFFD\u200B\u200C\u200D\uFEFF]/g, "").trim();
 }
 
-export function ReaderClient({ initialText, hideImport }: { initialText?: string; hideImport?: boolean }) {
+export function ReaderClient({
+  initialText,
+  hideImport,
+  language,
+}: {
+  initialText?: string;
+  hideImport?: boolean;
+  language?: "mandarin" | "cantonese";
+}) {
   const { trackAction } = useFeatureEngagement("ai_passage_reader");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -170,7 +178,7 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
     translationMode,
     scriptMode,
     fontSize,
-    ttsLanguage,
+    ttsLanguage: savedTtsLanguage,
     setShowPinyin,
     setShowJyutping,
     setShowEnglish,
@@ -181,6 +189,11 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
     toneColorsEnabled,
     setToneColorsEnabled,
   } = useReaderPreferences(user?.id);
+  const ttsLanguage = language === "cantonese"
+    ? "zh-HK"
+    : language === "mandarin"
+      ? "zh-CN"
+      : savedTtsLanguage;
 
   const walkthroughSteps = useMemo<WalkthroughStep[]>(
     () => [
@@ -326,7 +339,7 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
     if (hideImport) return; // Skip onboarding redirect for curated/accelerator reader
     const done = window.localStorage.getItem(onboardingDoneKey) === "done";
     if (done) return;
-    router.replace("/dashboard/reader?onboarding=1");
+    router.replace("/dashboard/reader/mandarin?onboarding=1");
   }, [isOnboardingLaunch, onboardingDoneKey, router, user, hideImport]);
 
   const handleReaderStepChange = useCallback(
@@ -864,7 +877,13 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
   return (
     <div className="container mx-auto px-4 py-6 flex flex-col min-h-[calc(100vh-3.5rem)]">
       <div className="flex items-center justify-between gap-3" data-tour-id="reader-title">
-        <h1 className="text-2xl font-bold text-foreground">AI Passage Reader</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          {language === "cantonese"
+            ? "Cantonese AI Passage Reader"
+            : language === "mandarin"
+              ? "Mandarin AI Passage Reader"
+              : "AI Passage Reader"}
+        </h1>
       </div>
 
       <div className="mt-3" data-tour-id="reader-toolbar">
@@ -887,6 +906,7 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
           onScriptModeChange={setScriptMode}
           onFontSizeChange={setFontSize}
           onTtsLanguageChange={setTtsLanguage}
+          showLanguageSwitcher={!language}
           toneColorsEnabled={toneColorsEnabled}
           onToneColorsChange={setToneColorsEnabled}
           onImportClick={hideImport ? undefined : () => {
@@ -1006,7 +1026,8 @@ export function ReaderClient({ initialText, hideImport }: { initialText?: string
         }}
         lockDuringOnboarding={isOnboardingLaunch}
         forcedActiveTab={isOnboardingLaunch ? forcedImportTabForTour : undefined}
-        storageScopeKey={user?.id}
+        storageScopeKey={`${user?.id ?? "anonymous"}.${language ?? "shared"}`}
+        language={ttsLanguage}
       />}
 
       <div className="pt-6 mt-auto border-t border-border text-xs text-muted-foreground" data-tour-id="reader-footer">

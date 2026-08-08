@@ -54,10 +54,12 @@ export function DiaryViewer({
   lessonId,
   initialSubmission,
   lang = "mandarin",
+  feedbackEnabled = true,
 }: {
   lessonId: string;
   initialSubmission: DiarySubmissionDto | null;
   lang?: "mandarin" | "cantonese";
+  feedbackEnabled?: boolean;
 }) {
   const [submission, setSubmission] = useState<DiarySubmissionDto | null>(
     initialSubmission,
@@ -171,8 +173,9 @@ export function DiaryViewer({
         hasRecording: true,
       });
       toast.success(isResubmit ? "Diary resubmitted!" : "Diary submitted!", {
-        description:
-          "You'll receive personalised feedback from our coaching team very soon.",
+        description: feedbackEnabled
+          ? "You'll receive personalised feedback from our coaching team very soon."
+          : "Your diary practice has been saved.",
       });
     } catch {
       setError("Network error — please try again.");
@@ -213,9 +216,9 @@ export function DiaryViewer({
             ) : (
               <>
                 <span className="font-medium">Submitted!</span>{" "}
-                You&apos;ll receive personalised feedback from our coaching team
-                very soon. You can still edit and resubmit until it has been
-                reviewed.
+                {feedbackEnabled
+                  ? "You'll receive personalised feedback from our coaching team very soon. You can still edit and resubmit until it has been reviewed."
+                  : "Your diary practice has been saved. You can still edit and resubmit it at any time."}
               </>
             )}
           </div>

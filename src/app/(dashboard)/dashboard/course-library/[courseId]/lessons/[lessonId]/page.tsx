@@ -22,6 +22,7 @@ import { NativeVideoThreadLesson } from "./NativeVideoThreadLesson";
 import { CourseLibraryLessonControls } from "@/components/course-library/CourseLibraryLessonControls";
 import { LessonVideoPlayer } from "@/components/course-library/LessonVideoPlayer";
 import { AssignmentInstructions } from "@/components/course-library/AssignmentInstructions";
+import { VideoTypingWorkspace } from "@/components/course-library/VideoTypingWorkspace";
 import { db } from "@/db";
 import {
   assignmentSubmissions,
@@ -44,6 +45,7 @@ import {
   lessonLanguage,
 } from "@/lib/lesson-language";
 import { studentFacingSourcePrompt } from "@/lib/videoask/vocal-hack-content";
+import { userCanReceiveAssignmentFeedback } from "@/lib/assignment-review";
 
 interface Attachment {
   url: string;
@@ -89,6 +91,9 @@ interface PageProps {
 export default async function CourseLibraryLessonViewerPage({ params }: PageProps) {
   const { courseId, lessonId } = await params;
   const currentUser = await getCurrentUser();
+  const feedbackEnabled = currentUser
+    ? await userCanReceiveAssignmentFeedback(currentUser)
+    : false;
 
   const [row] = await db
     .select({
@@ -376,10 +381,13 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
         {row.lessonType === "video" && (
           <div className="space-y-4">
             {content.videoUrl ? (
-              <div className="rounded-lg overflow-hidden bg-black aspect-video">
-                <LessonVideoPlayer
-                  src={`${signMediaPath(`/api/course-library/stream/${lessonId}`)}#t=0.1`}
-                />
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)] lg:items-stretch">
+                <div className="rounded-lg overflow-hidden bg-black aspect-video lg:self-start">
+                  <LessonVideoPlayer
+                    src={`${signMediaPath(`/api/course-library/stream/${lessonId}`)}#t=0.1`}
+                  />
+                </div>
+                <VideoTypingWorkspace lessonId={lessonId} />
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
@@ -603,7 +611,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
-                <AssignmentInstructions html={content.description as string} />
+                <AssignmentInstructions
+                  html={content.description as string}
+                  feedbackEnabled={feedbackEnabled}
+                />
               )}
             {textAssignmentPrompts.length > 0 ? (
               <TextAssignmentViewer
@@ -611,6 +622,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 prompts={textAssignmentPrompts}
                 initialSubmission={textAssignmentSubmission}
                 lang={lang}
+                feedbackEnabled={feedbackEnabled}
               />
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
@@ -626,12 +638,16 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
-                <AssignmentInstructions html={content.description as string} />
+                <AssignmentInstructions
+                  html={content.description as string}
+                  feedbackEnabled={feedbackEnabled}
+                />
               )}
             <DiaryViewer
               lessonId={lessonId}
               initialSubmission={diarySubmission}
               lang={lang}
+              feedbackEnabled={feedbackEnabled}
             />
           </div>
         )}
@@ -640,7 +656,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           <div className="space-y-5">
             {typeof content.description === "string" &&
               content.description && (
-                <AssignmentInstructions html={content.description as string} />
+                <AssignmentInstructions
+                  html={content.description as string}
+                  feedbackEnabled={feedbackEnabled}
+                />
               )}
             {vocalHackSentences.length > 0 ? (
               <VocalHackViewer
@@ -652,6 +671,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 initialSubmission={vocalHackSubmission}
                 maxResponseSeconds={vocalHackMaxResponseSeconds}
                 lang={lang}
+                feedbackEnabled={feedbackEnabled}
               />
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">

@@ -4,6 +4,10 @@ import { db } from "@/db";
 import { roleFeatures, roles, userRoles, users } from "@/db/schema";
 import { getRealUser } from "@/lib/auth";
 import { resolvePermissions } from "@/lib/permissions";
+import {
+  getUserFeatureTagOverrides,
+  hasFeatureWithTagOverrides,
+} from "@/lib/tag-feature-access";
 
 // ---------------------------------------------------------------------------
 // Assignment review authorization ("Challenge Reviewer").
@@ -24,6 +28,27 @@ export const ASSIGNMENT_REVIEW_FEATURE_KEYS = {
 
 export type ReviewableAssignmentType =
   keyof typeof ASSIGNMENT_REVIEW_FEATURE_KEYS;
+
+/**
+ * Whether this student's package includes human assignment feedback.
+ * Staff always retain access, while student entitlement is resolved through
+ * the same role + tag override model used by the dashboard feature gates.
+ */
+export async function userCanReceiveAssignmentFeedback(user: {
+  id: string;
+  role: string;
+}): Promise<boolean> {
+  if (user.role === "admin" || user.role === "coach") return true;
+  const [permissions, overrides] = await Promise.all([
+    resolvePermissions(user.id),
+    getUserFeatureTagOverrides(user.id),
+  ]);
+  return hasFeatureWithTagOverrides(
+    "assignment_feedback",
+    permissions.canUseFeature("assignment_feedback"),
+    overrides,
+  );
+}
 
 /** All capability keys that grant access to the submissions dashboard. */
 export const ALL_ASSIGNMENT_REVIEW_FEATURE_KEYS = Object.values(

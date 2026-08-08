@@ -97,6 +97,7 @@ export interface ImportDialogProps {
   lockDuringOnboarding?: boolean;
   forcedActiveTab?: "paste" | "file" | "generate";
   storageScopeKey?: string;
+  language?: "zh-CN" | "zh-HK";
 }
 
 export function ImportDialog({
@@ -110,6 +111,7 @@ export function ImportDialog({
   lockDuringOnboarding = false,
   forcedActiveTab,
   storageScopeKey,
+  language = "zh-CN",
 }: ImportDialogProps) {
   const [pasteText, setPasteText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -321,7 +323,7 @@ export function ImportDialog({
       const res = await fetch("/api/reader/generate-article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: topic.trim(), level }),
+        body: JSON.stringify({ topic: topic.trim(), level, language }),
       });
 
       if (!res.ok) {
@@ -340,7 +342,7 @@ export function ImportDialog({
     } finally {
       setIsGenerating(false);
     }
-  }, [topic, level, importAndSave, handleOpenChange, onSourceImported]);
+  }, [topic, level, language, importAndSave, handleOpenChange, onSourceImported]);
 
   /** Load a saved text */
   const handleLoadSaved = useCallback(

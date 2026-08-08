@@ -185,6 +185,33 @@ export const courseLibraryLessonProgress = pgTable(
   ],
 );
 
+/** Persistent scratchpad shown beside Course Library video lessons. */
+export const courseLibraryLessonNotes = pgTable(
+  "course_library_lesson_notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    lessonId: uuid("lesson_id")
+      .notNull()
+      .references(() => courseLibraryLessons.id, { onDelete: "cascade" }),
+    content: text("content").notNull().default(""),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("course_library_lesson_notes_user_lesson_unique").on(
+      table.userId,
+      table.lessonId,
+    ),
+    index("course_library_lesson_notes_lesson_idx").on(table.lessonId),
+  ],
+);
+
 export const flashcardSaves = pgTable(
   "flashcard_saves",
   {
@@ -253,6 +280,7 @@ export const courseLibraryLessonsRelations = relations(
       references: [courseLibraryModules.id],
     }),
     progress: many(courseLibraryLessonProgress),
+    notes: many(courseLibraryLessonNotes),
   }),
 );
 
@@ -265,6 +293,20 @@ export const courseLibraryLessonProgressRelations = relations(
     }),
     lesson: one(courseLibraryLessons, {
       fields: [courseLibraryLessonProgress.lessonId],
+      references: [courseLibraryLessons.id],
+    }),
+  }),
+);
+
+export const courseLibraryLessonNotesRelations = relations(
+  courseLibraryLessonNotes,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [courseLibraryLessonNotes.userId],
+      references: [users.id],
+    }),
+    lesson: one(courseLibraryLessons, {
+      fields: [courseLibraryLessonNotes.lessonId],
       references: [courseLibraryLessons.id],
     }),
   }),
@@ -290,6 +332,8 @@ export type NewCourseLibraryLesson = typeof courseLibraryLessons.$inferInsert;
 
 export type CourseLibraryLessonProgress =
   typeof courseLibraryLessonProgress.$inferSelect;
+export type CourseLibraryLessonNote =
+  typeof courseLibraryLessonNotes.$inferSelect;
 
 export type FlashcardSave = typeof flashcardSaves.$inferSelect;
 export type NewFlashcardSave = typeof flashcardSaves.$inferInsert;

@@ -7,7 +7,27 @@ import { BookOpen } from "lucide-react";
 // (which uses the standard bg-card panels) below it.
 // ---------------------------------------------------------------------------
 
-export function AssignmentInstructions({ html }: { html: string }) {
+function withoutFeedbackPromises(html: string): string {
+  return html.replace(
+    /<(p|li)\b[^>]*>[\s\S]*?<\/\1>/gi,
+    (block) => {
+      const text = block.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+      const promisesFeedback =
+        /(?:coach|coaching team)[\s\S]{0,100}feedback/i.test(text) ||
+        /feedback[\s\S]{0,100}(?:coach|coaching team)/i.test(text);
+      return promisesFeedback ? "" : block;
+    },
+  );
+}
+
+export function AssignmentInstructions({
+  html,
+  feedbackEnabled = true,
+}: {
+  html: string;
+  feedbackEnabled?: boolean;
+}) {
+  const visibleHtml = feedbackEnabled ? html : withoutFeedbackPromises(html);
   return (
     <section className="rounded-lg border border-border bg-muted/40 p-5">
       <div className="mb-2 flex items-center gap-1.5">
@@ -18,7 +38,7 @@ export function AssignmentInstructions({ html }: { html: string }) {
       </div>
       <div
         className="prose prose-invert max-w-none text-foreground prose-p:text-foreground prose-li:text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{ __html: visibleHtml }}
       />
     </section>
   );

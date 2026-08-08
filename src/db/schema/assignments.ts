@@ -67,6 +67,9 @@ export const assignmentSubmissions = pgTable(
       .notNull()
       .default("text_assignment"),
     status: assignmentSubmissionStatusEnum("status").notNull().default("draft"),
+    // False for package tiers that include assignment practice but not human
+    // review. The reviewer dashboard only lists rows where this is true.
+    feedbackRequested: boolean("feedback_requested").notNull().default(true),
     assignedReviewerId: uuid("assigned_reviewer_id").references(
       () => users.id,
       { onDelete: "set null" },
@@ -104,6 +107,9 @@ export const assignmentSubmissions = pgTable(
     ),
     index("assignment_submissions_student_idx").on(table.studentId),
     index("assignment_submissions_status_idx").on(table.status),
+    index("assignment_submissions_feedback_requested_idx").on(
+      table.feedbackRequested,
+    ),
     index("assignment_submissions_assigned_reviewer_idx").on(
       table.assignedReviewerId,
     ),

@@ -35,6 +35,7 @@ const allSections: PortalSection[] = [
       { id: "tone-mastery", title: "Tone Mastery Clips", href: "/admin/accelerator-extra/tone-mastery", description: "Upload and manage video clips for the Advanced Tone Mastery System." },
       { id: "internal-docs", title: "Internal Docs", href: "/admin/internal-docs", description: "Rich-text internal documentation for admin and team reference." },
       { id: "assignment-submissions", title: "Assignment Submissions", href: "/admin/content/assignment-submissions", description: "Review and grade student assignment submissions." },
+      { id: "coaching-schedule", title: "Group Coaching Schedule", href: "/admin/coaching-schedule", description: "Publish live sessions and target them to package tags." },
     ],
   },
   {

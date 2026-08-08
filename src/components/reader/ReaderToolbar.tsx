@@ -30,6 +30,7 @@ export interface ReaderToolbarProps {
   isPlayingAll?: boolean;
   isLoadingTts?: boolean;
   disablePlayAll?: boolean;
+  showLanguageSwitcher?: boolean;
 }
 
 const FONT_SIZE_MIN = 14;
@@ -104,6 +105,7 @@ export function ReaderToolbar({
   isPlayingAll,
   isLoadingTts,
   disablePlayAll = false,
+  showLanguageSwitcher = true,
 }: ReaderToolbarProps) {
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/80 p-2 backdrop-blur">
@@ -238,7 +240,8 @@ export function ReaderToolbar({
 
       <Separator orientation="vertical" className="mx-1 h-6 bg-border" />
 
-      {/* TTS language toggle */}
+      {/* TTS language toggle (hidden on dedicated language subpages). */}
+      {showLanguageSwitcher && <>
       <div className="inline-flex items-center rounded-md bg-muted p-0.5">
         <button
           type="button"
@@ -267,6 +270,7 @@ export function ReaderToolbar({
       </div>
 
       <Separator orientation="vertical" className="mx-1 h-6 bg-border" />
+      </>}
 
       {/* Play All TTS */}
       {onPlayAll && (

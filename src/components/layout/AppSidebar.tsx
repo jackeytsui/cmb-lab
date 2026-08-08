@@ -28,6 +28,7 @@ import {
   Music,
   Ear,
   CalendarCheck,
+  CalendarDays,
   NotebookPen,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
@@ -50,7 +51,10 @@ type FeatureKey =
   | "tone_mastery"
   | "listening_training"
   | "notepad"
-  | "assignment_review_text";
+  | "assignment_feedback"
+  | "assignment_review_text"
+  | "assignment_review_vocal"
+  | "assignment_review_diary";
 
 type NavItemWithFeature = NavSection["items"][number] & {
   featureKey?: FeatureKey;
@@ -83,8 +87,14 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     minRole: "student",
     items: [
       {
-        title: "AI Passage Reader",
-        url: "/dashboard/reader",
+        title: "Mandarin AI Reader",
+        url: "/dashboard/reader/mandarin",
+        icon: BookOpenText,
+        featureKey: "dictionary_reader",
+      },
+      {
+        title: "Cantonese AI Reader",
+        url: "/dashboard/reader/cantonese",
         icon: BookOpenText,
         featureKey: "dictionary_reader",
       },
@@ -119,9 +129,16 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         featureKey: "coaching_material",
       },
       {
+        title: "Group Coaching Schedule",
+        url: "/dashboard/coaching/group-schedule",
+        icon: CalendarDays,
+        featureKey: "coaching_material",
+      },
+      {
         title: "Assignment Feedback",
         url: "/dashboard/assignment-feedback",
         icon: ClipboardList,
+        featureKey: "assignment_feedback",
       },
     ],
   },
@@ -245,7 +262,7 @@ export function AppSidebar({
     .filter(
       (section) => userLevel >= roleHierarchy.indexOf(section.minRole)
     )
-    .map(({ minRole, ...section }) => {
+    .map((section) => {
       const items = section.items
         .filter((item) => !item.featureKey || featureSet.has(item.featureKey))
         .map((item) =>
@@ -253,7 +270,7 @@ export function AppSidebar({
             ? { ...item, badge: assignmentFeedbackUnread }
             : item,
         );
-      return { ...section, items };
+      return { label: section.label, items };
     })
     .filter((section) => section.items.length > 0);
 

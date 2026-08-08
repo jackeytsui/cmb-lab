@@ -35,7 +35,10 @@ export async function GET(request: NextRequest) {
   const student = alias(users, "student");
   const assignedReviewer = alias(users, "assigned_reviewer");
 
-  const conditions: SQL[] = [ne(assignmentSubmissions.status, "draft")];
+  const conditions: SQL[] = [
+    ne(assignmentSubmissions.status, "draft"),
+    eq(assignmentSubmissions.feedbackRequested, true),
+  ];
   if (tab === "assigned") {
     conditions.push(
       eq(assignmentSubmissions.assignedReviewerId, reviewerUser.id),

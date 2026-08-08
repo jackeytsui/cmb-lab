@@ -34,6 +34,7 @@ export * from "./assessment";
 export * from "./prompt-lab";
 export * from "./study";
 export * from "./coaching";
+export * from "./coaching-events";
 export * from "./listening-recommendations";
 export * from "./admin-api-keys";
 export * from "./engagement";

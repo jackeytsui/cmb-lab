@@ -36,6 +36,10 @@ export const FEATURE_KEYS = [
   "tone_mastery",
   "listening_training",
   "notepad",
+  // Human review and personalised feedback for Course Library assignments.
+  // This is intentionally not a default student feature: package/tier tags
+  // grant it only to cohorts that include coach feedback.
+  "assignment_feedback",
   // CMB Lab Assistant support chatbot widget. Staff always see it; students
   // need this feature via a whitelist tag (Tag Management).
   "lab_assistant",
@@ -44,6 +48,8 @@ export const FEATURE_KEYS = [
   // Future reviewer capabilities follow the same pattern, e.g.
   // "assignment_review_audio".
   "assignment_review_text",
+  "assignment_review_vocal",
+  "assignment_review_diary",
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];

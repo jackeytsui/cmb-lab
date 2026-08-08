@@ -177,6 +177,8 @@ export async function getRestrictedContentIds(
 
 /** Content type used in tag_content_grants for Course Library courses. */
 export const COURSE_LIBRARY_COURSE_CONTENT_TYPE = "course_library_course";
+/** Tag-targeted live group coaching sessions. */
+export const GROUP_COACHING_EVENT_CONTENT_TYPE = "group_coaching_event";
 
 /**
  * Whether the Course Library tab/pages are visible to this user.
