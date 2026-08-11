@@ -134,6 +134,36 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
   const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
   if (!canSeeCourse(courseId)) notFound();
 
+  let nextLessonHref: string | null = null;
+  if (isVocalHackLesson(row.lessonType)) {
+    const courseLessons = await db
+      .select({ id: courseLibraryLessons.id })
+      .from(courseLibraryLessons)
+      .innerJoin(
+        courseLibraryModules,
+        eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
+      )
+      .where(
+        and(
+          eq(courseLibraryModules.courseId, courseId),
+          isNull(courseLibraryLessons.deletedAt),
+          isNull(courseLibraryModules.deletedAt),
+        ),
+      )
+      .orderBy(
+        asc(courseLibraryModules.sortOrder),
+        asc(courseLibraryLessons.sortOrder),
+      );
+    const currentLessonIndex = courseLessons.findIndex(
+      (lesson) => lesson.id === lessonId,
+    );
+    const nextLesson =
+      currentLessonIndex >= 0 ? courseLessons[currentLessonIndex + 1] : null;
+    nextLessonHref = nextLesson
+      ? `/dashboard/course-library/${courseId}/lessons/${nextLesson.id}`
+      : null;
+  }
+
   const progress = currentUser
     ? await db.query.courseLibraryLessonProgress.findFirst({
         where: and(
@@ -672,6 +702,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 maxResponseSeconds={vocalHackMaxResponseSeconds}
                 lang={lang}
                 feedbackEnabled={feedbackEnabled}
+                nextLessonHref={nextLessonHref}
               />
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
