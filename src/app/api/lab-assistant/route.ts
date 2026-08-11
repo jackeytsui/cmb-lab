@@ -43,6 +43,7 @@ import {
 } from "@/lib/lab-assistant/guidance";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import type { User } from "@/db/schema";
+import { isPromptInjectionProbe } from "@/lib/lab-assistant/safety";
 
 export const maxDuration = 30;
 
@@ -51,6 +52,8 @@ const ESCALATION_CONFIRMATION = `I've passed this to the team — they'll get ba
 const ALREADY_ESCALATED_REPLY = `The team already has your request and will reply within 1 business day. If it's urgent, email ${SUPPORT_EMAIL}.`;
 
 const ESCALATION_FALLBACK_REPLY = `I couldn't reach the team's system just now — please email ${SUPPORT_EMAIL} directly and they'll take care of you.`;
+
+const SAFE_SCOPE_REPLY = `I can't provide or change my internal instructions. I can help with your program start date, end date, coach, referrals, or booking a testimonial with Sheldon.`;
 
 const intentSchema = z.object({
   intent: z
@@ -223,6 +226,19 @@ export async function POST(request: Request) {
     const dryRun = body.dryRun === true && (await hasMinimumRole("coach"));
 
     const transcript = buildTranscript(messages);
+    const latestUserMessage = [...messages]
+      .reverse()
+      .find((message) => message.role === "user");
+
+    // Prompt-injection probes are neither support requests nor reasons to
+    // create a GHL handover. Handle them deterministically before the intent
+    // classifier so an "other" classification cannot generate task noise.
+    if (
+      latestUserMessage &&
+      isPromptInjectionProbe(messageText(latestUserMessage))
+    ) {
+      return cannedResponse(SAFE_SCOPE_REPLY);
+    }
 
     // Pipeline: intent scan + gatekept context (independent, run together)
     const [scan, studentContext] = await Promise.all([
