@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
-import { aiPrompts, aiPromptVersions } from "@/db/schema";
+import { aiPrompts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { invalidatePromptCache } from "@/lib/prompts";
 import {
@@ -21,6 +21,10 @@ import {
   talkTrackSlug,
   type TalkTrackIntent,
 } from "@/lib/lab-assistant/guidance";
+import {
+  createVersionedChatbotPrompt,
+  savePromptVersion,
+} from "@/lib/prompt-versioning";
 
 interface Target {
   slug: string;
@@ -120,45 +124,22 @@ export async function PUT(request: NextRequest) {
     let version: number;
     if (existing) {
       version = existing.currentVersion + 1;
-      await db.transaction(async (tx) => {
-        await tx.insert(aiPromptVersions).values({
-          promptId: existing.id,
-          version,
-          content,
-          changeNote: "Edited from the Lab Assistant admin block",
-          createdBy: currentUser?.id || null,
-        });
-        await tx
-          .update(aiPrompts)
-          .set({
-            currentContent: content,
-            currentVersion: version,
-            updatedAt: new Date(),
-          })
-          .where(eq(aiPrompts.id, existing.id));
+      await savePromptVersion({
+        promptId: existing.id,
+        version,
+        content,
+        changeNote: "Edited from the Lab Assistant admin block",
+        createdBy: currentUser?.id || null,
       });
     } else {
       // First save: create the prompt row (no seeding step needed).
       version = 1;
-      await db.transaction(async (tx) => {
-        const [created] = await tx
-          .insert(aiPrompts)
-          .values({
-            slug: target.slug,
-            name: target.name,
-            type: "chatbot",
-            description: target.description,
-            currentContent: content,
-            currentVersion: 1,
-          })
-          .returning({ id: aiPrompts.id });
-        await tx.insert(aiPromptVersions).values({
-          promptId: created.id,
-          version: 1,
-          content,
-          changeNote: "Created from the Lab Assistant admin block",
-          createdBy: currentUser?.id || null,
-        });
+      await createVersionedChatbotPrompt({
+        slug: target.slug,
+        name: target.name,
+        description: target.description,
+        content,
+        createdBy: currentUser?.id || null,
       });
     }
 

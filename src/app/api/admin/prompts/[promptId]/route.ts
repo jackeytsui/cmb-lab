@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
-import { aiPrompts, aiPromptVersions } from "@/db/schema";
+import { aiPrompts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { invalidatePromptCache } from "@/lib/prompts";
+import { savePromptVersion } from "@/lib/prompt-versioning";
 
 /**
  * GET /api/admin/prompts/[promptId]
@@ -81,26 +82,12 @@ export async function PUT(
     const currentUser = await getCurrentUser();
     const newVersion = currentPrompt.currentVersion + 1;
 
-    // Transaction: insert version and update prompt
-    await db.transaction(async (tx) => {
-      // Insert new version
-      await tx.insert(aiPromptVersions).values({
-        promptId,
-        version: newVersion,
-        content: content.trim(),
-        changeNote: changeNote?.trim() || null,
-        createdBy: currentUser?.id || null,
-      });
-
-      // Update prompt with new content and version
-      await tx
-        .update(aiPrompts)
-        .set({
-          currentContent: content.trim(),
-          currentVersion: newVersion,
-          updatedAt: new Date(),
-        })
-        .where(eq(aiPrompts.id, promptId));
+    await savePromptVersion({
+      promptId,
+      version: newVersion,
+      content: content.trim(),
+      changeNote: changeNote?.trim() || null,
+      createdBy: currentUser?.id || null,
     });
 
     // Invalidate cache for this prompt

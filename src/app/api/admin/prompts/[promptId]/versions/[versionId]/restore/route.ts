@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { aiPrompts, aiPromptVersions } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { invalidatePromptCache } from "@/lib/prompts";
+import { savePromptVersion } from "@/lib/prompt-versioning";
 
 /**
  * POST /api/admin/prompts/[promptId]/versions/[versionId]/restore
@@ -48,26 +49,12 @@ export async function POST(
     const currentUser = await getCurrentUser();
     const newVersion = currentPrompt.currentVersion + 1;
 
-    // Transaction: insert new version and update prompt
-    await db.transaction(async (tx) => {
-      // Insert new version with restored content
-      await tx.insert(aiPromptVersions).values({
-        promptId,
-        version: newVersion,
-        content: versionToRestore.content,
-        changeNote: `Restored from version ${versionToRestore.version}`,
-        createdBy: currentUser?.id || null,
-      });
-
-      // Update prompt with restored content and new version
-      await tx
-        .update(aiPrompts)
-        .set({
-          currentContent: versionToRestore.content,
-          currentVersion: newVersion,
-          updatedAt: new Date(),
-        })
-        .where(eq(aiPrompts.id, promptId));
+    await savePromptVersion({
+      promptId,
+      version: newVersion,
+      content: versionToRestore.content,
+      changeNote: `Restored from version ${versionToRestore.version}`,
+      createdBy: currentUser?.id || null,
     });
 
     // Invalidate cache for this prompt
