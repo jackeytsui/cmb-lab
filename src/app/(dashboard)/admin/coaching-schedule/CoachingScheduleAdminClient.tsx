@@ -100,6 +100,10 @@ export function CoachingScheduleAdminClient() {
     setSaving(true);
     setError(null);
     try {
+      const startsAt = new Date(form.startsAt);
+      if (!form.startsAt || Number.isNaN(startsAt.getTime())) {
+        throw new Error("Enter a valid session date and time");
+      }
       const response = await fetch(
         editingId
           ? `/api/admin/coaching-events/${editingId}`
@@ -109,7 +113,7 @@ export function CoachingScheduleAdminClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...form,
-            startsAt: new Date(form.startsAt).toISOString(),
+            startsAt: startsAt.toISOString(),
           }),
         },
       );
@@ -196,7 +200,13 @@ export function CoachingScheduleAdminClient() {
               required
               type="datetime-local"
               value={form.startsAt}
-              onChange={(e) => setForm((prev) => ({ ...prev, startsAt: e.target.value }))}
+              // datetime-local is a native segmented control. Synchronize on the
+              // native input event so picker, keyboard, and automated edits all
+              // update React state before another controlled field re-renders.
+              onInput={(event) => {
+                const startsAt = event.currentTarget.value;
+                setForm((prev) => ({ ...prev, startsAt }));
+              }}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
             />
           </label>
