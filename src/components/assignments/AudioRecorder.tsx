@@ -34,6 +34,8 @@ export type RecordingMediaType = "audio" | "video";
 
 interface AudioRecorderProps {
   onUpload: (blobUrl: string, mediaType: RecordingMediaType) => void;
+  /** Clear the saved response before a student chooses another format. */
+  onRemove?: () => void;
   existingUrl?: string | null;
   existingMediaType?: RecordingMediaType;
   maxSeconds?: number; // default 60
@@ -47,6 +49,7 @@ type RecorderState = "idle" | "recording" | "recorded" | "uploading";
 
 export function AudioRecorder({
   onUpload,
+  onRemove,
   existingUrl,
   existingMediaType = "audio",
   maxSeconds = 60,
@@ -200,7 +203,8 @@ export function AudioRecorder({
     setError(null);
     setMediaType(allowedMediaTypes[0] ?? "audio");
     setLiveStream(null);
-  }, [allowedMediaTypes, stopTimer]);
+    onRemove?.();
+  }, [allowedMediaTypes, onRemove, stopTimer]);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -254,8 +258,8 @@ export function AudioRecorder({
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4 space-y-3">
-      {error && <p className="text-xs text-red-400">{error}</p>}
+    <div className="space-y-3 rounded-lg border border-border bg-muted/40 p-4">
+      {error && <p className="text-xs font-medium text-destructive">{error}</p>}
 
       {audioUrl && mediaType === "audio" && (
         <audio
@@ -287,14 +291,14 @@ export function AudioRecorder({
         />
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {state === "idle" && (
           <>
             {allowedMediaTypes.includes("audio") && (
               <button
                 type="button"
                 onClick={() => startRecording("audio")}
-                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               >
                 <Mic className="w-4 h-4" />
                 {allowedMediaTypes.length > 1 ? "Record audio" : "Record"}
@@ -304,14 +308,14 @@ export function AudioRecorder({
               <button
                 type="button"
                 onClick={() => startRecording("video")}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               >
                 <Video className="w-4 h-4" />
                 Record video
               </button>
             )}
             {allowFileUpload && (
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700 transition-colors">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-within:ring-2 focus-within:ring-ring/60">
                 <input
                   type="file"
                   accept={allowedMediaTypes
@@ -329,14 +333,14 @@ export function AudioRecorder({
 
         {state === "recording" && (
           <>
-            <span className="flex items-center gap-2 text-sm text-red-400 font-medium">
-              <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="flex items-center gap-2 text-sm font-medium text-destructive">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-destructive" />
               Recording {fmt(elapsed)} / {fmt(maxSeconds)}
             </span>
             <button
               type="button"
               onClick={stopRecording}
-              className="flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-600 transition-colors"
+              className="inline-flex items-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
             >
               <Square className="w-4 h-4" />
               Stop
@@ -345,7 +349,7 @@ export function AudioRecorder({
         )}
 
         {state === "uploading" && (
-          <span className="flex items-center gap-2 text-sm text-zinc-400">
+          <span className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />
             Uploading…
           </span>
@@ -357,7 +361,7 @@ export function AudioRecorder({
               <button
                 type="button"
                 onClick={togglePlay}
-                className="flex items-center gap-2 rounded-lg bg-zinc-700 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-600 transition-colors"
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               >
                 {isPlaying ? (
                   <Pause className="w-4 h-4" />
@@ -370,10 +374,10 @@ export function AudioRecorder({
             <button
               type="button"
               onClick={reset}
-              className="flex items-center gap-2 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700 transition-colors"
+              className="inline-flex items-center gap-2 rounded-md border border-destructive/40 bg-background px-3 py-2 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
             >
               <RotateCcw className="w-4 h-4" />
-              Re-record
+              Remove response
             </button>
           </>
         )}

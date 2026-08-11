@@ -36,6 +36,11 @@ const recordingSchema = z.object({
 
 const submitSchema = z.object({
   recordings: z.array(recordingSchema).min(1).max(50),
+  /** Questions the student explicitly cleared before choosing a new response. */
+  replacementSentenceIds: z
+    .array(z.string().min(1).max(100))
+    .max(50)
+    .default([]),
 });
 
 /** Recordings must live in our private blob store (uploaded via upload-audio). */
@@ -207,12 +212,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  const existing = await db.query.assignmentSubmissions.findFirst({
-    where: and(
-      eq(assignmentSubmissions.lessonId, lessonId),
-      eq(assignmentSubmissions.studentId, user.id),
-    ),
-  });
+  const existing = await loadSubmissionWithSentences(lessonId, user.id);
 
   if (
     existing &&
@@ -222,6 +222,38 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   ) {
     return NextResponse.json(
       { error: "This submission is being reviewed and can no longer be edited." },
+      { status: 409 },
+    );
+  }
+
+  const replacementSentenceIds = new Set(
+    parsed.data.replacementSentenceIds,
+  );
+  const invalidReplacementId = parsed.data.replacementSentenceIds.find(
+    (id) => !recordingsBySentence.has(id),
+  );
+  if (invalidReplacementId) {
+    return NextResponse.json(
+      { error: "A removed response must be replaced before submitting." },
+      { status: 400 },
+    );
+  }
+
+  const changedWithoutRemoval = existing?.sentences.find((previous) => {
+    const next = recordingsBySentence.get(previous.promptId);
+    if (!next) return false;
+    const mediaType = previous.responseMediaType === "video" ? "video" : "audio";
+    return (
+      (previous.audioUrl !== next.audioUrl || mediaType !== next.mediaType) &&
+      !replacementSentenceIds.has(previous.promptId)
+    );
+  });
+  if (changedWithoutRemoval) {
+    return NextResponse.json(
+      {
+        error:
+          "Remove the saved response for this question before recording or uploading another one.",
+      },
       { status: 409 },
     );
   }

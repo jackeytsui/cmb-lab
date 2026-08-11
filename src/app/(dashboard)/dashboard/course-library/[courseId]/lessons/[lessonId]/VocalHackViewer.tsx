@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Lock, Send } from "lucide-react";
+import { CheckCircle2, Info, Loader2, Lock, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AudioRecorder,
@@ -75,6 +75,9 @@ export function VocalHackViewer({
   const [recordingMediaTypes, setRecordingMediaTypes] = useState<
     Record<string, RecordingMediaType>
   >(() => ({ ...(initialSubmission?.recordingMediaTypes ?? {}) }));
+  const [replacementSentenceIds, setReplacementSentenceIds] = useState<
+    Set<string>
+  >(() => new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,6 +108,7 @@ export function VocalHackViewer({
               audioUrl: recordings[s.id],
               mediaType: recordingMediaTypes[s.id] ?? "audio",
             })),
+            replacementSentenceIds: [...replacementSentenceIds],
           }),
         },
       );
@@ -139,6 +143,7 @@ export function VocalHackViewer({
         playbackUrls: nextPlayback,
         recordingMediaTypes: nextMediaTypes,
       });
+      setReplacementSentenceIds(new Set());
       toast.success(
         isResubmit ? "Recordings resubmitted!" : "Recordings submitted!",
         {
@@ -156,6 +161,25 @@ export function VocalHackViewer({
 
   return (
     <div className="space-y-5">
+      {!locked && (
+        <div
+          role="note"
+          className="flex items-start gap-3 rounded-lg border border-primary/25 bg-primary/8 px-4 py-3.5 text-foreground dark:bg-primary/10"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Info className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div className="space-y-0.5">
+            <p className="text-sm font-semibold">Submit one response per question</p>
+            <p className="text-sm leading-5 text-muted-foreground">
+              Choose audio, video, or one uploaded file. Once it is saved, the
+              other formats stay unavailable. To switch formats, remove the
+              saved response first.
+            </p>
+          </div>
+        </div>
+      )}
+
       {submission?.submittedAt && (
         <div
           className={cn(
@@ -245,6 +269,28 @@ export function VocalHackViewer({
                     allowedMediaTypes={sentence.allowedResponseTypes}
                     allowFileUpload
                     maxSeconds={maxResponseSeconds}
+                    onRemove={() => {
+                      setReplacementSentenceIds((prev) => {
+                        const next = new Set(prev);
+                        next.add(sentence.id);
+                        return next;
+                      });
+                      setRecordings((prev) => {
+                        const next = { ...prev };
+                        delete next[sentence.id];
+                        return next;
+                      });
+                      setPlaybackUrls((prev) => {
+                        const next = { ...prev };
+                        delete next[sentence.id];
+                        return next;
+                      });
+                      setRecordingMediaTypes((prev) => {
+                        const next = { ...prev };
+                        delete next[sentence.id];
+                        return next;
+                      });
+                    }}
                     onUpload={(url, mediaType) => {
                       setRecordings((prev) => ({
                         ...prev,
