@@ -876,6 +876,11 @@ function TestConsole() {
     setInput("");
   }
 
+  function handleSendClick() {
+    send(input);
+    setInput("");
+  }
+
   return (
     <div className="flex min-h-[320px] flex-col rounded-lg border border-border/70 bg-background/50">
       <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
@@ -959,7 +964,8 @@ function TestConsole() {
           className="h-8 flex-1 rounded-md border border-border bg-background px-2.5 text-xs text-foreground outline-none focus:border-primary"
         />
         <button
-          type="submit"
+          type="button"
+          onClick={handleSendClick}
           disabled={!canSend || !input.trim()}
           className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Send test message"
