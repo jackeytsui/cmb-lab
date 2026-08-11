@@ -24,10 +24,6 @@ interface RouteParams {
   params: Promise<{ lessonId: string }>;
 }
 
-// Same lifecycle as text assignments: auto-assigned on submit, but the student
-// may re-record and resubmit until review actually starts.
-const EDITABLE_STATUSES = ["draft", "submitted", "assigned"] as const;
-
 const recordingSchema = z.object({
   sentenceId: z.string().min(1).max(100),
   audioUrl: z.string().url().max(2000),
@@ -129,9 +125,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
 /**
  * PUT /api/course-library/lessons/[lessonId]/vocal-hack-submission
- * Create or replace the student's submission (submit / resubmit).
- * Every configured sentence must have a recording. Rejected once review has
- * started or finished.
+ * Create the student's one final submission. Every configured sentence must
+ * have a recording. A submitted assignment cannot be changed or submitted again.
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   const user = await getRealUser();
@@ -143,6 +138,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   const lesson = await getAccessibleVocalHackLesson(lessonId, user.role);
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
+
+  const existing = await loadSubmissionWithSentences(lessonId, user.id);
+  if (existing?.submittedAt) {
+    return NextResponse.json(
+      {
+        error:
+          "This assignment has already been submitted. Each assignment can only be submitted once.",
+      },
+      { status: 409 },
+    );
   }
 
   let body: unknown;
@@ -209,20 +215,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(
       { error: "That recording type is not enabled for this sentence." },
       { status: 400 },
-    );
-  }
-
-  const existing = await loadSubmissionWithSentences(lessonId, user.id);
-
-  if (
-    existing &&
-    !EDITABLE_STATUSES.includes(
-      existing.status as (typeof EDITABLE_STATUSES)[number],
-    )
-  ) {
-    return NextResponse.json(
-      { error: "This submission is being reviewed and can no longer be edited." },
-      { status: 409 },
     );
   }
 
