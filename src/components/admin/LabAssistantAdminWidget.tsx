@@ -123,9 +123,9 @@ export function LabAssistantAdminWidget() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
         {/* Left: stats + health + recent handovers */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {loadError ? (
             <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-500">
               Couldn&apos;t load overview: {loadError}{" "}
@@ -608,7 +608,7 @@ function FieldMappingSetup({ onSaved }: { onSaved: () => void }) {
                       [concept]: e.target.value,
                     }))
                   }
-                  className="h-7 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary"
+                  className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary"
                 >
                   <option value="">— not mapped —</option>
                   {fields.map((field) => (
@@ -882,7 +882,7 @@ function TestConsole() {
   }
 
   return (
-    <div className="flex min-h-[320px] flex-col rounded-lg border border-border/70 bg-background/50">
+    <div className="flex min-h-[320px] min-w-0 flex-col rounded-lg border border-border/70 bg-background/50">
       <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -961,7 +961,7 @@ function TestConsole() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a test question..."
-          className="h-8 flex-1 rounded-md border border-border bg-background px-2.5 text-xs text-foreground outline-none focus:border-primary"
+          className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 text-xs text-foreground outline-none focus:border-primary"
         />
         <button
           type="button"
