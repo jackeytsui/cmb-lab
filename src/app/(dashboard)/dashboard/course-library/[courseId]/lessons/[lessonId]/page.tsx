@@ -381,8 +381,8 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
         {row.lessonType === "video" && (
           <div className="space-y-4">
             {content.videoUrl ? (
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)] lg:items-stretch">
-                <div className="rounded-lg overflow-hidden bg-black aspect-video lg:self-start">
+              <div className="space-y-4">
+                <div className="rounded-lg overflow-hidden bg-black aspect-video">
                   <LessonVideoPlayer
                     src={`${signMediaPath(`/api/course-library/stream/${lessonId}`)}#t=0.1`}
                   />

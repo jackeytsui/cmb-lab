@@ -67,7 +67,7 @@ export function VideoTypingWorkspace({ lessonId }: { lessonId: string }) {
   }, [content, save]);
 
   return (
-    <section className="flex min-h-[20rem] flex-col rounded-lg border border-border bg-card p-4">
+    <section className="rounded-lg border border-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <NotebookPen className="h-4 w-4 text-primary" />
@@ -104,6 +104,7 @@ export function VideoTypingWorkspace({ lessonId }: { lessonId: string }) {
         </span>
       </div>
       <textarea
+        rows={5}
         value={content}
         onChange={(event) => setContent(event.target.value)}
         onBlur={() => void save(content)}
@@ -112,7 +113,7 @@ export function VideoTypingWorkspace({ lessonId }: { lessonId: string }) {
         data-testid="video-typing-workspace"
         aria-label="Typing practice notes"
         placeholder="Start typing here… Try writing the words and sentences you hear."
-        className="min-h-[16rem] flex-1 resize-y rounded-md border border-border bg-background p-3 text-base leading-7 text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary focus:ring-2 focus:ring-primary/20"
+        className="w-full resize-y rounded-md border border-border bg-background p-3 text-base leading-7 text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary focus:ring-2 focus:ring-primary/20"
       />
     </section>
   );
