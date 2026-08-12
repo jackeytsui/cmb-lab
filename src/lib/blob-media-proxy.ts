@@ -20,8 +20,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-/** Max bytes served per invocation for open-ended range requests. */
-export const CHUNK_BYTES = 10 * 1024 * 1024; // 10MB — seconds per request, even on slow links
+/** Max bytes served per invocation for range requests. Small chunks finish
+ * well inside the function timeout even on slow connections; a timeout would
+ * otherwise deliver a truncated 206 body and Chromium reports that as an
+ * FFmpegDemuxer data-source error. */
+export const CHUNK_BYTES = 4 * 1024 * 1024;
 
 interface ProxyOptions {
   /** Content-Type to use when upstream doesn't send one. */
@@ -33,18 +36,30 @@ interface ProxyOptions {
 }
 
 /**
- * Clamp an open-ended `bytes=N-` range to `bytes=N-(N+CHUNK_BYTES-1)`.
- * Bounded ranges (`bytes=N-M`, Safari's normal pattern) and suffix ranges
- * (`bytes=-N`, used to grab the moov atom at the tail of an MP4) pass through
- * untouched. Anything unparseable passes through untouched too — upstream
- * decides what to do with it.
+ * Clamp both open-ended and large bounded ranges to CHUNK_BYTES. Suffix ranges
+ * (used to locate an MP4 moov atom at the tail) and invalid inputs pass
+ * through for the upstream server to handle.
  */
 export function clampRangeHeader(range: string): string {
-  const match = /^bytes=(\d+)-$/.exec(range.trim());
-  if (!match) return range;
-  const start = Number(match[1]);
-  if (!Number.isFinite(start)) return range;
-  return `bytes=${start}-${start + CHUNK_BYTES - 1}`;
+  const trimmed = range.trim();
+  const open = /^bytes=(\d+)-$/.exec(trimmed);
+  if (open) {
+    const start = Number(open[1]);
+    if (!Number.isFinite(start)) return range;
+    return `bytes=${start}-${start + CHUNK_BYTES - 1}`;
+  }
+
+  const bounded = /^bytes=(\d+)-(\d+)$/.exec(trimmed);
+  if (bounded) {
+    const start = Number(bounded[1]);
+    const end = Number(bounded[2]);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+      return range;
+    }
+    return `bytes=${start}-${Math.min(end, start + CHUNK_BYTES - 1)}`;
+  }
+
+  return range;
 }
 
 /**
@@ -128,10 +143,20 @@ export async function proxyBlobMedia(
   if (etag) responseHeaders.set("ETag", etag);
   const lastModified = blobResponse.headers.get("last-modified");
   if (lastModified) responseHeaders.set("Last-Modified", lastModified);
-  responseHeaders.set("Cache-Control", "private, max-age=3600");
+  // Never cache partial windows. A stale window replayed for another byte
+  // offset corrupts the media stream; complete responses remain cacheable.
+  responseHeaders.set(
+    "Cache-Control",
+    blobResponse.status === 206 ? "no-store" : "private, max-age=3600",
+  );
   for (const [key, value] of Object.entries(options.extraHeaders ?? {})) {
     responseHeaders.set(key, value);
   }
+
+  console.log(
+    `[${options.label}] range=${range ?? "none"} -> ${blobResponse.status}` +
+      ` content-range=${contentRange ?? "none"} content-length=${contentLength ?? "none"}`,
+  );
 
   return new NextResponse(blobResponse.body, {
     status: blobResponse.status,
