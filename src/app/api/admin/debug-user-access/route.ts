@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
-import { users, studentTags, tags, tagFeatureGrants } from "@/db/schema";
-import { and, eq, ilike, inArray } from "drizzle-orm";
+import {
+  users,
+  studentTags,
+  tags,
+  tagFeatureGrants,
+  tagContentGrants,
+  courses,
+} from "@/db/schema";
+import { and, asc, eq, ilike, inArray, isNull } from "drizzle-orm";
 import { resolvePermissions } from "@/lib/permissions";
 import {
   getUserFeatureTagOverrides,
   applyFeatureTagOverrides,
   canViewCourseLibrary,
+  getUserContentGrants,
+  getRestrictedContentIds,
 } from "@/lib/tag-feature-access";
 import { getStudentContext } from "@/lib/lab-assistant/student-context";
 import { DEFAULT_STUDENT_FEATURES } from "@/lib/student-role";
+import { isCustomizedTitle } from "@/lib/customized-content";
 
 /**
  * GET /api/admin/debug-user-access?email=jttohk@gmail.com
@@ -77,6 +88,78 @@ export async function GET(req: NextRequest) {
   // Course Library tab (tag/content-grant driven, independent of features)
   const courseLibraryVisible = await canViewCourseLibrary(user);
 
+  // Audio Courses tab — mirror /api/audio-courses' visibility decision per
+  // series and explain it, so "student sees 'No audio courses available yet'"
+  // is diagnosable in one request.
+  const publishedCourses = await db
+    .select()
+    .from(courses)
+    .where(and(isNull(courses.deletedAt), eq(courses.isPublished, true)))
+    .orderBy(asc(courses.sortOrder), asc(courses.createdAt));
+  const audioSeriesRows = publishedCourses.filter((course) => {
+    try {
+      const meta = JSON.parse(course.description ?? "{}");
+      return meta.audioCourse === true && meta.extraPack !== true;
+    } catch {
+      return false;
+    }
+  });
+  const [audioGrantedIds, audioRestrictedIds] = await Promise.all([
+    getUserContentGrants(user.id, "audio_series"),
+    getRestrictedContentIds("audio_series"),
+  ]);
+  // Which of the user's tags grant which series (names for the report)
+  const seriesGrantRows =
+    tagIds.length > 0
+      ? await db
+          .select({
+            contentId: tagContentGrants.contentId,
+            tagId: tagContentGrants.tagId,
+          })
+          .from(tagContentGrants)
+          .where(
+            and(
+              eq(tagContentGrants.contentType, "audio_series"),
+              inArray(tagContentGrants.tagId, tagIds)
+            )
+          )
+      : [];
+  const audioCoursesReport = audioSeriesRows.map((course) => {
+    let meta: Record<string, unknown> = {};
+    try {
+      meta = JSON.parse(course.description ?? "{}");
+    } catch {
+      /* ignore */
+    }
+    const isCustom = isCustomizedTitle(course.title) || meta.customCourse === true;
+    const restricted = audioRestrictedIds.has(course.id);
+    const grantingTags = seriesGrantRows
+      .filter((g) => g.contentId === course.id)
+      .map((g) => tagNameById.get(g.tagId) ?? g.tagId);
+    const allowedUserIds: string[] = Array.isArray(meta.allowedUserIds)
+      ? (meta.allowedUserIds as string[])
+      : [];
+    const manuallyGranted = allowedUserIds.includes(user.id);
+    const visible =
+      isStaff ||
+      (!isCustom && !restricted) ||
+      audioGrantedIds.has(course.id) ||
+      manuallyGranted;
+    const reason = isStaff
+      ? "staff role — always visible"
+      : !isCustom && !restricted
+        ? "no tag restrictions on this series — visible to all students"
+        : audioGrantedIds.has(course.id)
+          ? `granted via tag: ${grantingTags.join(", ") || "(tag)"}`
+          : manuallyGranted
+            ? "granted manually in the series Visibility editor"
+            : isCustom
+              ? "customized series — hidden unless granted per-student or via tag"
+              : "series is tag-restricted and none of this user's tags grant it";
+    return { id: course.id, title: course.title, isCustom, restricted, visible, reason };
+  });
+  const visibleAudioCount = audioCoursesReport.filter((c) => c.visible).length;
+
   // Lab Assistant data resolution: run the real gatekeeper and report which
   // allowlisted fields resolved and how (values redacted to presence only).
   let labAssistantFields: Record<string, unknown> | null = null;
@@ -98,6 +181,36 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  // Clerk-side identity: which Clerk account(s) this email resolves to, every
+  // email attached to them, lock state, and portal-access metadata. Catches
+  // crossed identities — e.g. a student email attached as a secondary address
+  // on a staff account, which makes student portal-expiry metadata (and the
+  // dashboard's auto-lock) land on the staff member instead.
+  let clerkIdentity: unknown = null;
+  try {
+    const clerk = await clerkClient();
+    const matches = await clerk.users.getUserList({ emailAddress: [email.trim()] });
+    clerkIdentity = matches.data.map((cu) => {
+      const meta = (cu.publicMetadata ?? {}) as Record<string, unknown>;
+      return {
+        clerkId: cu.id,
+        matchesLmsUser: cu.id === user.clerkId,
+        locked: cu.locked ?? false,
+        emailAddresses: cu.emailAddresses.map((e) => e.emailAddress),
+        portalMetadata: {
+          cmbPortalAccessStatus: meta.cmbPortalAccessStatus ?? null,
+          cmbPortalAccessRevoked: meta.cmbPortalAccessRevoked ?? null,
+          cmbPortalAccessRevokedReason: meta.cmbPortalAccessRevokedReason ?? null,
+          cmbCourseEndDate: meta.cmbCourseEndDate ?? null,
+        },
+      };
+    });
+  } catch (error) {
+    clerkIdentity = {
+      error: error instanceof Error ? error.message : "clerk lookup failed",
+    };
+  }
+
   return NextResponse.json({
     user: {
       id: user.id,
@@ -105,6 +218,7 @@ export async function GET(req: NextRequest) {
       role: user.role,
       clerkId: user.clerkId,
     },
+    clerkIdentity,
     tags: userTags,
     defaultStudentFeatures: DEFAULT_STUDENT_FEATURES,
     baseFeatures,
@@ -135,6 +249,17 @@ export async function GET(req: NextRequest) {
       })),
     },
     courseLibrary: { visible: courseLibraryVisible },
+    audioCourses: {
+      visibleCount: visibleAudioCount,
+      totalPublished: audioCoursesReport.length,
+      note:
+        visibleAudioCount === 0
+          ? userTags.length === 0
+            ? "User sees 'No audio courses available yet'. They have NO tags in the LMS — check the GHL contact link/tag sync for this email first."
+            : "User sees 'No audio courses available yet'. Their tags don't grant any restricted series — grant one of their tags in Tag Management, or add them in the series Visibility editor."
+          : undefined,
+      series: audioCoursesReport,
+    },
     labAssistantFields,
   });
 }
