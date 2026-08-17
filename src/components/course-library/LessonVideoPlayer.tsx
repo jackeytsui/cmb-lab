@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface LessonVideoPlayerProps {
   /** Authenticated stream endpoint for this lesson's video. */
   src: string;
+  lessonId: string;
+  nextHref: string | null;
 }
 
 /** How long the first-load overlay waits before admitting something is slow. */
@@ -13,12 +16,10 @@ const SLOW_LOAD_MS = 15000;
 /**
  * Native <video> player for Course Library lessons.
  *
- * Rendered as a client component so autoplay actually works: React does not
- * emit the `muted` attribute into server-rendered HTML (it only sets the
- * `muted` DOM property after hydration), so a server-rendered
- * `<video autoplay muted>` is parsed as unmuted — and browsers block unmuted
- * autoplay. Here we set `muted` on the element imperatively and call play()
- * on mount, which browsers allow. The student unmutes from the controls.
+ * Videos default to unmuted. Browsers may block autoplay with sound until the
+ * user has interacted with the page, so we attempt unmuted playback and leave
+ * the player paused and unmuted if that attempt is rejected. We never fall
+ * back to muted autoplay.
  *
  * While the video buffers for the first time (it streams through an
  * authenticated proxy) we show a short overlay so students know to wait.
@@ -34,7 +35,12 @@ const MEDIA_ERR_LABELS: Record<number, string> = {
   4: "SRC_NOT_SUPPORTED",
 };
 
-export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
+export function LessonVideoPlayer({
+  src,
+  lessonId,
+  nextHref,
+}: LessonVideoPlayerProps) {
+  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
@@ -88,12 +94,10 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
     const raf = requestAnimationFrame(() => {
       if (video.readyState >= 3) setStatus("ready");
     });
-    // Guarantee muted is set before attempting playback so the browser's
-    // autoplay policy permits it.
-    video.muted = true;
+    // Attempt unmuted autoplay. If policy blocks it, the player remains
+    // paused and the student's first press of Play starts with sound.
+    video.muted = false;
     const attempt = video.play();
-    // play() rejects if the browser still blocks it; ignore so it doesn't
-    // throw an unhandled rejection — the student can press play manually.
     if (attempt && typeof attempt.catch === "function") {
       attempt.catch(() => {});
     }
@@ -107,14 +111,30 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
     setDiagnosis(null);
     setStatus("loading");
     // load() re-issues the request from scratch (fresh auth cookies included),
-    // which recovers from transient network/session hiccups.
+    // which recovers from transient network/session hiccups. Retry is a user
+    // gesture, so unmuted playback is permitted by browser autoplay policy.
     video.load();
-    video.muted = true;
+    video.muted = false;
     const attempt = video.play();
     if (attempt && typeof attempt.catch === "function") {
       attempt.catch(() => {});
     }
   }, []);
+
+  const completeAndAdvance = useCallback(async () => {
+    const response = await fetch(
+      `/api/course-library/lessons/${lessonId}/progress`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: true }),
+      },
+    );
+
+    if (response.ok && nextHref) {
+      router.push(nextHref);
+    }
+  }, [lessonId, nextHref, router]);
 
   return (
     <div className="relative h-full w-full">
@@ -123,7 +143,6 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
         src={src}
         controls
         playsInline
-        muted
         autoPlay
         preload="metadata"
         controlsList="nodownload"
@@ -133,6 +152,7 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
         onLoadedMetadata={() => setStatus("ready")}
         onCanPlay={() => setStatus("ready")}
         onPlaying={() => setStatus("ready")}
+        onEnded={() => void completeAndAdvance()}
         onError={() => {
           setStatus("error");
           void diagnose();
@@ -159,7 +179,7 @@ export function LessonVideoPlayer({ src }: LessonVideoPlayerProps) {
           ) : (
             <p className="max-w-xs text-xs text-white/70">
               This can take up to 10 seconds. Please don&apos;t refresh or
-              leave the page — it&apos;ll start playing automatically.
+              leave the page — it&apos;ll be ready to play in a moment.
             </p>
           )}
         </div>

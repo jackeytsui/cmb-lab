@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Download as DownloadIcon, Paperclip, Music, ExternalLink } from "lucide-react";
 import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
@@ -133,6 +132,37 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
   if (!canSeeCourse(courseId)) notFound();
+
+  const orderedLessons = await db
+    .select({
+      lessonId: courseLibraryLessons.id,
+    })
+    .from(courseLibraryLessons)
+    .innerJoin(
+      courseLibraryModules,
+      eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
+    )
+    .where(
+      and(
+        eq(courseLibraryModules.courseId, courseId),
+        isNull(courseLibraryLessons.deletedAt),
+        isNull(courseLibraryModules.deletedAt),
+      ),
+    )
+    .orderBy(
+      asc(courseLibraryModules.sortOrder),
+      asc(courseLibraryLessons.sortOrder),
+    );
+  const currentLessonIndex = orderedLessons.findIndex(
+    (lesson) => lesson.lessonId === lessonId,
+  );
+  const nextLessonId =
+    currentLessonIndex >= 0
+      ? orderedLessons[currentLessonIndex + 1]?.lessonId ?? null
+      : null;
+  const nextHref = nextLessonId
+    ? `/dashboard/course-library/${courseId}/lessons/${nextLessonId}`
+    : null;
 
   const progress = currentUser
     ? await db.query.courseLibraryLessonProgress.findFirst({
@@ -363,13 +393,13 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
   return (
     <CourseLibraryGate>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <Link
+        <a
           href={`/dashboard/course-library/${courseId}/modules/${row.moduleId}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ChevronLeft className="w-4 h-4" />
           Back to {row.moduleTitle}
-        </Link>
+        </a>
 
         <div className="mb-2 text-xs text-muted-foreground">
           {row.courseTitle} → {row.moduleTitle}
@@ -385,6 +415,8 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 <div className="rounded-lg overflow-hidden bg-black aspect-video lg:self-start">
                   <LessonVideoPlayer
                     src={`${signMediaPath(`/api/course-library/stream/${lessonId}`)}#t=0.1`}
+                    lessonId={lessonId}
+                    nextHref={nextHref}
                   />
                 </div>
                 <VideoTypingWorkspace lessonId={lessonId} />
@@ -444,6 +476,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              nextHref={nextHref}
             />
             <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
           </div>
@@ -470,6 +503,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              nextHref={nextHref}
             />
             <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
           </div>
@@ -500,6 +534,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              nextHref={nextHref}
             />
           </div>
         )}
@@ -549,6 +584,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              nextHref={nextHref}
             />
             <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
           </div>
@@ -587,6 +623,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              nextHref={nextHref}
             />
           </div>
         )}
