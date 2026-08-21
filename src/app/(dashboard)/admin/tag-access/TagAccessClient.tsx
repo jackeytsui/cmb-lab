@@ -275,12 +275,12 @@ function TagRow({
         ) : (
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
         )}
-        <TagBadge name={tag.name} color={tag.color} type={tag.type} />
-        {tag.description && (
-          <span className="text-xs text-muted-foreground truncate">
-            {tag.description}
-          </span>
-        )}
+        <TagBadge
+          name={tag.name}
+          color={tag.color}
+          type={tag.type}
+          showSystemIndicator={false}
+        />
         <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
           {featureGrants.length > 0 && expanded
             ? `${featureGrants.length} feature ${featureGrants.length === 1 ? "grant" : "grants"}`
@@ -547,8 +547,6 @@ export function TagAccessClient() {
   const [newTagColor, setNewTagColor] = useState(TAG_COLORS[5]);
   const [creating, setCreating] = useState(false);
   const [deletingTagId, setDeletingTagId] = useState<string | null>(null);
-  const [backfilling, setBackfilling] = useState(false);
-  const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(() => {
     Promise.all([
@@ -644,26 +642,6 @@ export function TagAccessClient() {
     }
   };
 
-  const handleCoachingTagBackfill = async () => {
-    setBackfilling(true);
-    setBackfillMessage(null);
-    try {
-      const res = await fetch("/api/admin/students/backfill-coaching-tags", {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Backfill failed");
-      setBackfillMessage(
-        `${data.activeStudents} active students checked; ${data.assignmentsAdded} new tag assignments added.`,
-      );
-      await fetchData();
-    } catch (error) {
-      setBackfillMessage(error instanceof Error ? error.message : "Backfill failed");
-    } finally {
-      setBackfilling(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -679,33 +657,16 @@ export function TagAccessClient() {
         <p className="text-sm text-muted-foreground">
           {tags.length} tag{tags.length !== 1 ? "s" : ""} configured
         </p>
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={handleCoachingTagBackfill}
-            disabled={backfilling}
-            variant="outline"
-            size="sm"
-          >
-            {backfilling && <Loader2 className="mr-1.5 w-4 h-4 animate-spin" />}
-            Sync student coaching tags
-          </Button>
-          <Button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-          >
-            {showCreateForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {showCreateForm ? "Cancel" : "Create Tag"}
-          </Button>
-        </div>
+        <Button
+          onClick={() => setShowCreateForm(!showCreateForm)}
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+        >
+          {showCreateForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          {showCreateForm ? "Cancel" : "Create Tag"}
+        </Button>
       </div>
-
-      {backfillMessage && (
-        <p className="rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
-          {backfillMessage}
-        </p>
-      )}
 
       {/* Create tag form */}
       {showCreateForm && (
