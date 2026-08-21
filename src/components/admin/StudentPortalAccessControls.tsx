@@ -66,6 +66,7 @@ export function StudentPortalAccessControls({
             type="date"
             value={courseEndDate}
             onChange={(e) => setCourseEndDate(e.target.value)}
+            onInput={(e) => setCourseEndDate(e.currentTarget.value)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             disabled={saving}
           />
