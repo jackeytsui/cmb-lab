@@ -10,8 +10,10 @@ interface LessonVideoPlayerProps {
   nextHref: string | null;
 }
 
-/** How long the first-load overlay waits before admitting something is slow. */
-const SLOW_LOAD_MS = 15000;
+/** Loading stays patient before we expose a manual recovery action. */
+const SLOW_LOAD_MS = 20000;
+const MANUAL_RETRY_MS = 45000;
+const AUTO_RETRY_DELAYS_MS = [3000, 8000] as const;
 
 /**
  * Native <video> player for Course Library lessons.
@@ -21,10 +23,9 @@ const SLOW_LOAD_MS = 15000;
  *
  * While the video buffers for the first time (it streams through an
  * authenticated proxy) we show a short overlay so students know to wait.
- * Unlike the old player, failures are surfaced: a media error swaps the
- * spinner for an explicit error state with a Retry button, and if nothing has
- * loaded after SLOW_LOAD_MS the overlay offers a retry instead of telling the
- * student to keep waiting forever.
+ * Transient media failures are retried quietly. We only surface a manual
+ * recovery action after a patient loading window, so a brief Blob/CDN or
+ * network interruption never flashes an alarming error at the student.
  */
 const MEDIA_ERR_LABELS: Record<number, string> = {
   1: "ABORTED",
@@ -40,10 +41,14 @@ export function LessonVideoPlayer({
 }: LessonVideoPlayerProps) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const loadStartedAtRef = useRef(0);
+  const autoRetryCountRef = useRef(0);
+  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
   const [slow, setSlow] = useState(false);
+  const [showManualRetry, setShowManualRetry] = useState(false);
   const [diagnosis, setDiagnosis] = useState<string | null>(null);
 
   // On error, capture the MediaError and probe the stream endpoint so the
@@ -75,32 +80,69 @@ export function LessonVideoPlayer({
     setDiagnosis(`${errPart}${httpPart}`);
   }, [src]);
 
-  // Slow-load watchdog: if we're still loading after SLOW_LOAD_MS, stop
-  // promising it will start automatically and offer a retry.
+  const clearRecoveryTimer = useCallback(() => {
+    if (recoveryTimerRef.current) clearTimeout(recoveryTimerRef.current);
+    recoveryTimerRef.current = null;
+  }, []);
+
+  // The message changes after 20 seconds, but a reload action is deliberately
+  // withheld until 45 seconds. Slow connections get time to recover normally.
   useEffect(() => {
     if (status !== "loading") return;
-    const timer = setTimeout(() => setSlow(true), SLOW_LOAD_MS);
-    return () => clearTimeout(timer);
+    const elapsed = loadStartedAtRef.current
+      ? Date.now() - loadStartedAtRef.current
+      : 0;
+    const slowTimer = setTimeout(
+      () => setSlow(true),
+      Math.max(0, SLOW_LOAD_MS - elapsed),
+    );
+    const retryTimer = setTimeout(
+      () => setShowManualRetry(true),
+      Math.max(0, MANUAL_RETRY_MS - elapsed),
+    );
+    return () => {
+      clearTimeout(slowTimer);
+      clearTimeout(retryTimer);
+    };
   }, [status, src]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    loadStartedAtRef.current = Date.now();
+    autoRetryCountRef.current = 0;
+    clearRecoveryTimer();
     // If it's already buffered (e.g. cached, or canplay fired before
     // hydration attached our listeners), skip the overlay. Checked in a
     // frame callback so the effect body stays free of synchronous setState.
     const raf = requestAnimationFrame(() => {
-      if (video.readyState >= 3) setStatus("ready");
+      setSlow(false);
+      setShowManualRetry(false);
+      setDiagnosis(null);
+      setStatus(video.readyState >= 3 ? "ready" : "loading");
     });
-    return () => cancelAnimationFrame(raf);
-  }, [src]);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearRecoveryTimer();
+    };
+  }, [clearRecoveryTimer, src]);
+
+  const markReady = useCallback(() => {
+    clearRecoveryTimer();
+    autoRetryCountRef.current = 0;
+    setStatus("ready");
+  }, [clearRecoveryTimer]);
 
   const retry = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     setSlow(false);
+    setShowManualRetry(false);
     setDiagnosis(null);
     setStatus("loading");
+    loadStartedAtRef.current = Date.now();
+    autoRetryCountRef.current = 0;
+    clearRecoveryTimer();
     // load() re-issues the request from scratch (fresh auth cookies included),
     // which recovers from transient network/session hiccups. Retry is a user
     // gesture, so unmuted playback is permitted by browser autoplay policy.
@@ -110,7 +152,40 @@ export function LessonVideoPlayer({
     if (attempt && typeof attempt.catch === "function") {
       attempt.catch(() => {});
     }
-  }, []);
+  }, [clearRecoveryTimer]);
+
+  const recoverFromMediaError = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    clearRecoveryTimer();
+    setStatus("loading");
+    setSlow(Date.now() - loadStartedAtRef.current >= SLOW_LOAD_MS);
+
+    const retryIndex = autoRetryCountRef.current;
+    if (retryIndex < AUTO_RETRY_DELAYS_MS.length) {
+      autoRetryCountRef.current += 1;
+      recoveryTimerRef.current = setTimeout(() => {
+        video.load();
+        video.muted = false;
+        const attempt = video.play();
+        if (attempt && typeof attempt.catch === "function") {
+          attempt.catch(() => {});
+        }
+      }, AUTO_RETRY_DELAYS_MS[retryIndex]);
+      return;
+    }
+
+    const remaining = Math.max(
+      0,
+      MANUAL_RETRY_MS - (Date.now() - loadStartedAtRef.current),
+    );
+    recoveryTimerRef.current = setTimeout(() => {
+      setShowManualRetry(true);
+      setStatus("error");
+      void diagnose();
+    }, remaining);
+  }, [clearRecoveryTimer, diagnose]);
 
   const completeAndAdvance = useCallback(async () => {
     const response = await fetch(
@@ -140,14 +215,10 @@ export function LessonVideoPlayer({
         disablePictureInPicture
         onContextMenu={(e) => e.preventDefault()}
         className="h-full w-full"
-        onLoadedMetadata={() => setStatus("ready")}
-        onCanPlay={() => setStatus("ready")}
-        onPlaying={() => setStatus("ready")}
+        onCanPlay={markReady}
+        onPlaying={markReady}
         onEnded={() => void completeAndAdvance()}
-        onError={() => {
-          setStatus("error");
-          void diagnose();
-        }}
+        onError={recoverFromMediaError}
       />
       {status === "loading" && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 px-6 text-center">
@@ -156,21 +227,23 @@ export function LessonVideoPlayer({
           {slow ? (
             <>
               <p className="max-w-xs text-xs text-white/70">
-                This is taking longer than it should. Your connection may be
-                slow — you can keep waiting, or try reloading the video.
+                This is taking a little longer than usual. Please don&apos;t
+                refresh or leave this page — we&apos;re still loading your video.
               </p>
-              <button
-                type="button"
-                onClick={retry}
-                className="pointer-events-auto rounded-md bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
-              >
-                Reload video
-              </button>
+              {showManualRetry && (
+                <button
+                  type="button"
+                  onClick={retry}
+                  className="pointer-events-auto rounded-md bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20"
+                >
+                  Reload video
+                </button>
+              )}
             </>
           ) : (
             <p className="max-w-xs text-xs text-white/70">
-              This can take up to 10 seconds. Please don&apos;t refresh or
-              leave the page — it&apos;ll be ready to play in a moment.
+              Please don&apos;t refresh or leave this page. It&apos;ll be ready
+              to play in a moment.
             </p>
           )}
         </div>
