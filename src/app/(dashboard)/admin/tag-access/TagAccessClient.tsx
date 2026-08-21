@@ -62,6 +62,7 @@ const FEATURE_CATEGORIES: Array<{
       { key: "inner_circle_group_coaching", label: "Inner Circle Group Coaching" },
       { key: "group_coaching_schedule", label: "Group Coaching Schedule" },
       { key: "coaching_material", label: "Legacy Coaching Material" },
+      { key: "assignment_feedback", label: "Assignment Feedback" },
       { key: "flashcards", label: "Flashcards" },
     ],
   },
