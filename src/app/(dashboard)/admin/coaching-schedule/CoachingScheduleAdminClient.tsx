@@ -208,6 +208,12 @@ export function CoachingScheduleAdminClient() {
               type="datetime-local"
               value={form.startsAt}
               onChange={(e) => setForm((prev) => ({ ...prev, startsAt: e.target.value }))}
+              onInput={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  startsAt: (e.currentTarget as HTMLInputElement).value,
+                }))
+              }
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
             />
           </label>
