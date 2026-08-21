@@ -23,6 +23,7 @@ interface TagBadgeProps {
   color: string;
   type: "coach" | "system";
   onRemove?: () => void;
+  showSystemIndicator?: boolean;
 }
 
 /**
@@ -33,15 +34,21 @@ interface TagBadgeProps {
  * - Background uses tag color at 20% opacity, text in tag color
  * - Optional remove button on hover
  */
-export function TagBadge({ name, color, type, onRemove }: TagBadgeProps) {
-  const isSystem = type === "system";
+export function TagBadge({
+  name,
+  color,
+  type,
+  onRemove,
+  showSystemIndicator = true,
+}: TagBadgeProps) {
+  const showSystemStyle = type === "system" && showSystemIndicator;
 
   return (
     <span
       className={`
         inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
         transition-colors group whitespace-nowrap
-        ${isSystem ? "border border-dashed" : "border border-solid"}
+        ${showSystemStyle ? "border border-dashed" : "border border-solid"}
       `}
       style={{
         backgroundColor: `${color}33`, // 20% opacity
@@ -49,7 +56,7 @@ export function TagBadge({ name, color, type, onRemove }: TagBadgeProps) {
         borderColor: `${color}66`, // 40% opacity
       }}
     >
-      {isSystem && (
+      {showSystemStyle && (
         <span className="text-[10px] font-semibold opacity-70">SYS</span>
       )}
       {name}
