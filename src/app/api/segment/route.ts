@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cut } from "jieba-wasm";
+import { getCurrentUser } from "@/lib/auth";
 
 /**
  * POST /api/segment
@@ -35,7 +36,15 @@ function hasTraditional(text: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+    }
     const { texts } = body as { texts: string[] };
 
     if (!Array.isArray(texts) || texts.length === 0) {
@@ -50,6 +59,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Maximum 1000 texts per request" },
         { status: 400 }
+      );
+    }
+    if (
+      texts.some((text) => typeof text !== "string") ||
+      texts.reduce((total, text) => total + text.length, 0) > 100_000
+    ) {
+      return NextResponse.json(
+        { error: "Texts must be strings totaling at most 100,000 characters" },
+        { status: 400 },
       );
     }
 

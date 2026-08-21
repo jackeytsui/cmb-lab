@@ -242,6 +242,7 @@ export function AudioCourseClient({
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteLoaded, setNoteLoaded] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentLessonId = currentLesson?.id ?? null;
 
 
   useEffect(() => {
@@ -255,7 +256,7 @@ export function AudioCourseClient({
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [apiBaseUrl]);
 
   // Load exercise info for all lessons
   useEffect(() => {
@@ -280,30 +281,43 @@ export function AudioCourseClient({
 
   // Load notes when lesson changes
   useEffect(() => {
-    if (!currentLesson) {
-      setNoteContent("");
+    let cancelled = false;
+
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      if (!currentLessonId) {
+        setNoteContent("");
+        setNoteLoaded(false);
+        return;
+      }
+
       setNoteLoaded(false);
-      return;
-    }
-    setNoteLoaded(false);
-    fetch(`/api/audio-courses/notes/${currentLesson.id}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setNoteContent(d.content ?? "");
-        setNoteLoaded(true);
-      })
-      .catch(() => setNoteLoaded(true));
-  }, [currentLesson?.id]);
+      fetch(`/api/audio-courses/notes/${currentLessonId}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          setNoteContent(d.content ?? "");
+          setNoteLoaded(true);
+        })
+        .catch(() => {
+          if (!cancelled) setNoteLoaded(true);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentLessonId]);
 
   // Auto-save notes (debounced)
   const saveNote = useCallback(
     (content: string) => {
-      if (!currentLesson) return;
+      if (!currentLessonId) return;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(async () => {
         setNoteSaving(true);
         try {
-          await fetch(`/api/audio-courses/notes/${currentLesson.id}`, {
+          await fetch(`/api/audio-courses/notes/${currentLessonId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ content }),
@@ -314,7 +328,7 @@ export function AudioCourseClient({
         setNoteSaving(false);
       }, 800);
     },
-    [currentLesson?.id],
+    [currentLessonId],
   );
 
   const handleNoteChange = useCallback(
@@ -1039,7 +1053,13 @@ function LessonPracticeEmbed({
     );
   }
 
-  return <Player practiceSet={practiceSet} exercises={exercises} userId="" />;
+  return (
+    <Player
+      practiceSet={practiceSet}
+      exercises={exercises}
+      onComplete={onComplete}
+    />
+  );
 }
 
 function ExternalLinkBadge({ href, label }: { href: string; label: string }) {

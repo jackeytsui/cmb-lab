@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { GripVertical } from "lucide-react";
-import { DragDropProvider } from "@dnd-kit/react";
+import { DragDropProvider, type DragDropEvents } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { PhoneticText } from "@/components/phonetic/PhoneticText";
 import type { OrderingDefinition } from "@/types/exercises";
@@ -115,7 +115,7 @@ export function OrderingRenderer({
   // ----------------------------------------------------------
 
   const handleDragOver = useCallback(
-    (event: any) => {
+    (event: Parameters<DragDropEvents["dragover"]>[0]) => {
       const { source, target } = event.operation;
       if (!source || !target) return;
 

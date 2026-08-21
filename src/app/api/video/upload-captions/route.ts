@@ -114,7 +114,12 @@ export async function POST(request: NextRequest) {
       ? ("upload_srt" as const)
       : ("upload_vtt" as const);
 
-    // 9. Delete any existing captions for this session
+    // 9. Mark the transcript incomplete before replacing rows. If insertion
+    // fails, later loads will re-extract instead of trusting stale metadata.
+    await db
+      .update(videoSessions)
+      .set({ captionCount: 0 })
+      .where(eq(videoSessions.id, videoSessionId));
     await db
       .delete(videoCaptions)
       .where(eq(videoCaptions.videoSessionId, videoSessionId));

@@ -1,97 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { getRealUser } from "@/lib/auth";
+import { sendCoachFeedbackNotification } from "@/lib/coach-feedback-notification";
 
-interface NotificationPayload {
-  studentEmail: string;
-  studentName: string;
-  lessonTitle: string;
-  coachName: string;
-  loomUrl?: string;
-  feedbackText?: string;
-}
+const notificationSchema = z.object({
+  studentEmail: z.string().email().max(320),
+  studentName: z.string().trim().min(1).max(200),
+  lessonTitle: z.string().trim().min(1).max(500),
+  coachName: z.string().trim().min(1).max(200),
+  loomUrl: z.string().url().max(2_000).optional(),
+  feedbackText: z.string().max(20_000).optional(),
+}).strict();
 
-/**
- * POST /api/notify/coach-feedback
- * Trigger email notification when coach sends feedback.
- * Internal API - called by feedback route, not exposed to client.
- */
+/** Staff-only compatibility endpoint. Server code calls the shared helper directly. */
 export async function POST(request: NextRequest) {
+  const user = await getRealUser();
+  if (!user || user.deletedAt) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (user.role !== "coach" && user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const parsed = notificationSchema.safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid notification" }, { status: 400 });
+  }
+
   try {
-    const body: NotificationPayload = await request.json();
-    const { studentEmail, studentName, lessonTitle, coachName, loomUrl, feedbackText } = body;
-
-    // Validate required fields
-    if (!studentEmail || !studentName || !lessonTitle || !coachName) {
-      return NextResponse.json(
-        { error: "Missing required fields: studentEmail, studentName, lessonTitle, coachName" },
-        { status: 400 }
-      );
-    }
-
-    // Check if n8n webhook URL is configured
-    const webhookUrl = process.env.N8N_COACH_FEEDBACK_WEBHOOK_URL;
-    if (!webhookUrl) {
-      // Development mode: log and return success
-      console.warn(
-        "N8N_COACH_FEEDBACK_WEBHOOK_URL not configured. Email notification skipped. " +
-          "Configure webhook for email notifications to students."
-      );
-      console.log("Would have sent notification:", {
-        studentEmail,
-        studentName,
-        lessonTitle,
-        coachName,
-        hasLoomUrl: !!loomUrl,
-        hasFeedbackText: !!feedbackText,
-      });
-      return NextResponse.json({ success: true, mock: true });
-    }
-
-    // Call n8n webhook with 15 second timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    const n8nResponse = await fetch(webhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(process.env.N8N_WEBHOOK_AUTH_HEADER && {
-          Authorization: process.env.N8N_WEBHOOK_AUTH_HEADER,
-        }),
-      },
-      body: JSON.stringify({
-        studentEmail,
-        studentName,
-        lessonTitle,
-        coachName,
-        loomUrl,
-        feedbackText,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!n8nResponse.ok) {
-      console.error(`n8n notification webhook failed: ${n8nResponse.status}`);
-      return NextResponse.json(
-        { error: "Notification service unavailable" },
-        { status: 502 }
-      );
-    }
-
-    return NextResponse.json({ success: true });
+    const result = await sendCoachFeedbackNotification(parsed.data);
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      console.error("Notification webhook timed out");
-      return NextResponse.json(
-        { error: "Notification request timed out" },
-        { status: 504 }
-      );
-    }
-    console.error("Notification API error:", error);
+    console.error(
+      "Coach feedback notification failed:",
+      error instanceof Error ? error.message : "Unknown error",
+    );
     return NextResponse.json(
-      { error: "Failed to send notification" },
-      { status: 500 }
+      { error: "Notification service unavailable" },
+      { status: 502 },
     );
   }
 }

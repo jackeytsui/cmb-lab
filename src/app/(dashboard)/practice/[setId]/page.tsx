@@ -7,6 +7,8 @@ import { getCurrentUser, hasMinimumRole } from "@/lib/auth";
 import { PracticePlayer } from "@/components/practice/player/PracticePlayer";
 import { getNextLesson } from "@/lib/unlock";
 import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
+import { canUserAccessPracticeSet } from "@/lib/assignments";
+import { canAccessLesson, resolvePermissions } from "@/lib/permissions";
 
 // ============================================================
 // Types
@@ -20,14 +22,8 @@ interface PageProps {
 // Metadata
 // ============================================================
 
-export async function generateMetadata({ params }: PageProps) {
-  const { setId } = await params;
-  const practiceSet = await db.query.practiceSets.findFirst({
-    where: and(eq(practiceSets.id, setId), isNull(practiceSets.deletedAt)),
-  });
-  return {
-    title: practiceSet?.title ? `${practiceSet.title} - Practice` : "Practice",
-  };
+export function generateMetadata() {
+  return { title: "Practice" };
 }
 
 // ============================================================
@@ -44,29 +40,33 @@ export default async function PracticePage({ params }: PageProps) {
   // 2. Get setId from params
   const { setId } = await params;
 
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    redirect("/sign-in");
+  }
+
   // 2a. Classic LTO students don't get regular practice sets
   const isCoachOrAbove = await hasMinimumRole("coach");
   if (!isCoachOrAbove) {
-    const ltoUser = await getCurrentUser();
-    if (ltoUser && (await userHasLtoStudentTag(ltoUser.id))) {
+    if (await userHasLtoStudentTag(currentUser.id)) {
       redirect("/dashboard/accelerator");
+    }
+    if (!(await canUserAccessPracticeSet(currentUser.id, setId))) {
+      redirect("/dashboard/practice");
     }
   }
 
-  // 3. Fetch practice set with exercises in a single query, plus user in parallel
-  const [practiceSetWithExercises, dbUser] = await Promise.all([
-    db.query.practiceSets.findFirst({
-      where: and(eq(practiceSets.id, setId), isNull(practiceSets.deletedAt)),
-      with: {
-        exercises: {
-          orderBy: (exercises, { asc: asc_ }) => [asc_(exercises.sortOrder)],
-          where: (exercises, { isNull: isNull_ }) =>
-            isNull_(exercises.deletedAt),
-        },
+  // 3. Fetch the practice set with its active exercises in a single query.
+  const practiceSetWithExercises = await db.query.practiceSets.findFirst({
+    where: and(eq(practiceSets.id, setId), isNull(practiceSets.deletedAt)),
+    with: {
+      exercises: {
+        orderBy: (exercises, { asc: asc_ }) => [asc_(exercises.sortOrder)],
+        where: (exercises, { isNull: isNull_ }) =>
+          isNull_(exercises.deletedAt),
       },
-    }),
-    getCurrentUser(),
-  ]);
+    },
+  });
 
   // 4. Verify practice set exists and is published
   if (
@@ -93,14 +93,29 @@ export default async function PracticePage({ params }: PageProps) {
 
   // 6. Determine Next Action (Sequential Navigation)
   let nextAction: { label: string; href: string } | undefined;
+  const permissions = isCoachOrAbove
+    ? null
+    : await resolvePermissions(currentUser.id);
 
-  // Find if this quiz is assigned to a lesson
-  const currentAssignment = await db.query.practiceSetAssignments.findFirst({
+  // Find a lesson assignment the current user can actually access. A set can
+  // be reused across several lessons, including lessons outside preview tiers.
+  const lessonAssignments = await db.query.practiceSetAssignments.findMany({
     where: and(
       eq(practiceSetAssignments.practiceSetId, setId),
       eq(practiceSetAssignments.targetType, "lesson")
     ),
+    orderBy: [asc(practiceSetAssignments.createdAt)],
   });
+  let currentAssignment: (typeof lessonAssignments)[number] | undefined;
+  for (const assignment of lessonAssignments) {
+    if (
+      isCoachOrAbove ||
+      (permissions && await canAccessLesson(permissions, assignment.targetId))
+    ) {
+      currentAssignment = assignment;
+      break;
+    }
+  }
 
   if (currentAssignment) {
     const lessonId = currentAssignment.targetId;
@@ -140,7 +155,11 @@ export default async function PracticePage({ params }: PageProps) {
     } else {
       // No more quizzes in this lesson, go to next lesson
       const nextLesson = await getNextLesson(lessonId);
-      if (nextLesson) {
+      const canOpenNextLesson = nextLesson && (
+        isCoachOrAbove ||
+        (permissions && await canAccessLesson(permissions, nextLesson.id))
+      );
+      if (nextLesson && canOpenNextLesson) {
         nextAction = {
           label: "Next Lesson",
           href: `/lessons/${nextLesson.id}`,
@@ -167,7 +186,6 @@ export default async function PracticePage({ params }: PageProps) {
       <PracticePlayer
         practiceSet={practiceSet}
         exercises={exercises}
-        userId={dbUser?.id ?? ""}
         nextAction={nextAction}
       />
     </div>

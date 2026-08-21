@@ -35,6 +35,12 @@ export interface UseTTSReturn {
   error: string | null;
 }
 
+// A page can render several useTTS consumers at once (for example, one per
+// listening-test question). Keep playback exclusive across hook instances so
+// two answers never talk over each other.
+let stopActiveTts: (() => void) | null = null;
+let settleActiveBrowserSpeech: (() => void) | null = null;
+
 // --- Cache Key Builder ---
 
 /**
@@ -128,6 +134,7 @@ async function browserSpeak(
   if (!voice) {
     throw new Error(`No ${lang} voice available on this device`);
   }
+  settleActiveBrowserSpeech?.();
   return new Promise((resolve, reject) => {
     window.speechSynthesis.cancel();
     // Strip bracketed placeholders like [your name] so they aren't spoken
@@ -138,8 +145,19 @@ async function browserSpeak(
     utterance.rate =
       rate === "x-slow" ? 0.6 : rate === "slow" ? 0.8 : rate === "fast" ? 1.45 : 1;
 
-    utterance.onend = () => resolve();
-    utterance.onerror = (e) => reject(e);
+    let settled = false;
+    const finish = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      utterance.onend = null;
+      utterance.onerror = null;
+      settleActiveBrowserSpeech = null;
+      if (error) reject(error);
+      else resolve();
+    };
+    settleActiveBrowserSpeech = () => finish();
+    utterance.onend = () => finish();
+    utterance.onerror = (e) => finish(e);
     window.speechSynthesis.speak(utterance);
   });
 }
@@ -180,6 +198,7 @@ export function useTTS(): UseTTSReturn {
   // Refs persist across renders within the component lifecycle
   const cacheRef = useRef<Map<string, string>>(new Map());
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playbackResolveRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(true);
 
   const fetchAndCacheAudio = useCallback(
@@ -238,7 +257,9 @@ export function useTTS(): UseTTSReturn {
    * Stop current audio playback immediately.
    * Removes event listeners and resets the audio ref.
    */
-  const stop = useCallback(() => {
+  const stop = useCallback(function stopThisTts() {
+    const resolvePlayback = playbackResolveRef.current;
+    playbackResolveRef.current = null;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -246,12 +267,18 @@ export function useTTS(): UseTTSReturn {
       audioRef.current.onerror = null;
       audioRef.current = null;
     }
+    // Stopping must also settle speak(). Repeated-play flows await that
+    // promise, and previously remained hung forever after the user pressed
+    // Stop because the media event handlers had already been removed.
+    resolvePlayback?.();
     // Also stop browser speechSynthesis if active
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    settleActiveBrowserSpeech?.();
     setIsPlaying(false);
     setIsPaused(false);
+    if (stopActiveTts === stopThisTts) stopActiveTts = null;
   }, []);
 
   /** Pause current playback in place; resume() picks up where it left off. */
@@ -289,8 +316,10 @@ export function useTTS(): UseTTSReturn {
   const speak = useCallback(
     async (text: string, options?: TTSOptions) => {
       try {
-        // 1. Stop any current playback to prevent overlap
+        // 1. Stop playback from this or any other hook instance.
+        if (stopActiveTts && stopActiveTts !== stop) stopActiveTts();
         stop();
+        stopActiveTts = stop;
         setIsPaused(false);
 
         // 2. Reset error state
@@ -362,8 +391,10 @@ export function useTTS(): UseTTSReturn {
         };
 
         const playbackDone = new Promise<void>((resolve) => {
+          playbackResolveRef.current = resolve;
           audio.onended = () => {
             finish();
+            playbackResolveRef.current = null;
             resolve();
           };
 
@@ -372,6 +403,7 @@ export function useTTS(): UseTTSReturn {
               setError("Audio playback failed.");
             }
             finish();
+            playbackResolveRef.current = null;
             resolve();
           };
         });
@@ -408,10 +440,13 @@ export function useTTS(): UseTTSReturn {
 
         if (playStarted === false) {
           finish();
+          playbackResolveRef.current = null;
+          if (stopActiveTts === stop) stopActiveTts = null;
           return;
         }
 
         await playbackDone;
+        if (stopActiveTts === stop) stopActiveTts = null;
       } catch {
         // Unexpected error (network failure, etc.) — try the device voice,
         // but only if a real voice for this language exists.

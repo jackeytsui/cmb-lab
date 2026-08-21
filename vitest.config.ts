@@ -4,6 +4,8 @@ import path from "path";
 export default defineConfig({
   test: {
     globals: true,
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    exclude: ["e2e/**", "node_modules/**"],
   },
   resolve: {
     alias: {

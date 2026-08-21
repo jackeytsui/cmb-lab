@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import { eq, and, or, isNull, inArray, desc, sql } from "drizzle-orm";
 import { extractVideoId } from "@/lib/youtube";
+import { getStudentAssignmentTargets } from "@/lib/student-assignment-targets";
 import {
   type ResolvedVideoAssignment,
   type StudentVideoProgress,
@@ -145,77 +146,7 @@ export async function listCoachVideoAssignments(coachId: string) {
 export async function getStudentVideoAssignments(
   userId: string
 ): Promise<ResolvedVideoAssignment[]> {
-  // Step 1: Collect all valid target entries for this student
-  type TargetEntry = { type: string; id: string };
-  const targetEntries: TargetEntry[] = [];
-
-  // Direct student assignment
-  targetEntries.push({ type: "student", id: userId });
-
-  // Tags and enrollments are independent -- fetch in parallel
-  const [userTags, enrollments] = await Promise.all([
-    db
-      .select({ tagId: studentTags.tagId })
-      .from(studentTags)
-      .where(eq(studentTags.userId, userId)),
-    db
-      .select({ courseId: courseAccess.courseId })
-      .from(courseAccess)
-      .where(
-        and(
-          eq(courseAccess.userId, userId),
-          or(
-            isNull(courseAccess.expiresAt),
-            sql`${courseAccess.expiresAt} > now()`
-          )
-        )
-      ),
-  ]);
-
-  for (const t of userTags) {
-    targetEntries.push({ type: "tag", id: t.tagId });
-  }
-
-  const enrolledCourseIds = enrollments.map((e) => e.courseId);
-  for (const courseId of enrolledCourseIds) {
-    targetEntries.push({ type: "course", id: courseId });
-  }
-
-  // Modules: for enrolled courses, get active modules
-  let enrolledModuleIds: string[] = [];
-  if (enrolledCourseIds.length > 0) {
-    const courseModules = await db
-      .select({ id: modules.id })
-      .from(modules)
-      .where(
-        and(
-          inArray(modules.courseId, enrolledCourseIds),
-          isNull(modules.deletedAt)
-        )
-      );
-
-    enrolledModuleIds = courseModules.map((m) => m.id);
-    for (const moduleId of enrolledModuleIds) {
-      targetEntries.push({ type: "module", id: moduleId });
-    }
-  }
-
-  // Lessons: for enrolled modules, get active lessons
-  if (enrolledModuleIds.length > 0) {
-    const moduleLessons = await db
-      .select({ id: lessons.id })
-      .from(lessons)
-      .where(
-        and(
-          inArray(lessons.moduleId, enrolledModuleIds),
-          isNull(lessons.deletedAt)
-        )
-      );
-
-    for (const lesson of moduleLessons) {
-      targetEntries.push({ type: "lesson", id: lesson.id });
-    }
-  }
+  const targetEntries = await getStudentAssignmentTargets(userId);
 
   // Step 2: Build OR conditions for videoAssignments query
   const grouped: Record<string, string[]> = {};

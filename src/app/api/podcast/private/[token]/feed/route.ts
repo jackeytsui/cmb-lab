@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { courses, lessons, modules, podcastTokens, users } from "@/db/schema";
+import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
 
 /**
  * GET /api/podcast/private/[token]/feed
@@ -33,6 +34,9 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
+  if (!/^[a-f0-9]{64}$/i.test(token)) {
+    return new NextResponse("Invalid or expired feed token", { status: 403 });
+  }
 
   // Validate token
   const tokenRow = await db.query.podcastTokens.findFirst({
@@ -46,8 +50,11 @@ export async function GET(
   // Get the user's name for the feed
   const user = await db.query.users.findFirst({
     where: eq(users.id, tokenRow.userId),
-    columns: { name: true },
+    columns: { id: true, name: true, role: true, deletedAt: true },
   });
+  if (!user || user.deletedAt) {
+    return new NextResponse("Invalid or expired feed token", { status: 403 });
+  }
 
   // Look up the course
   const [course] = await db
@@ -61,7 +68,7 @@ export async function GET(
       ),
     );
 
-  if (!course) {
+  if (!course || !(await userCanAccessAudioCourse(user, course))) {
     return new NextResponse("Course not found or unpublished", { status: 404 });
   }
 

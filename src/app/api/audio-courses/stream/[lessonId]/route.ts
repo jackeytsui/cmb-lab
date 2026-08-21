@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { eq, isNull, and } from "drizzle-orm";
 import { db } from "@/db";
-import { lessons } from "@/db/schema";
+import { courses, lessons, modules } from "@/db/schema";
+import { getRealUser } from "@/lib/auth";
+import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+
+export const maxDuration = 60;
 
 /**
  * GET /api/audio-courses/stream/[lessonId]
@@ -13,8 +18,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getRealUser();
+  if (!user || user.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -22,12 +27,36 @@ export async function GET(
 
   const isDownload = request.nextUrl.searchParams.get("download") === "1";
 
-  const lesson = await db.query.lessons.findFirst({
-    where: and(eq(lessons.id, lessonId), isNull(lessons.deletedAt)),
-    columns: { content: true, title: true },
-  });
+  const [lesson] = await db
+    .select({
+      content: lessons.content,
+      title: lessons.title,
+      courseId: courses.id,
+      courseTitle: courses.title,
+      courseDescription: courses.description,
+    })
+    .from(lessons)
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .innerJoin(courses, eq(modules.courseId, courses.id))
+    .where(
+      and(
+        eq(lessons.id, lessonId),
+        isNull(lessons.deletedAt),
+        isNull(modules.deletedAt),
+        isNull(courses.deletedAt),
+        eq(courses.isPublished, true),
+      ),
+    )
+    .limit(1);
 
-  if (!lesson) {
+  if (
+    !lesson ||
+    !(await userCanAccessAudioCourse(user, {
+      id: lesson.courseId,
+      title: lesson.courseTitle,
+      description: lesson.courseDescription,
+    }))
+  ) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
@@ -39,64 +68,23 @@ export async function GET(
     // no-op
   }
 
-  if (!audioUrl) {
+  if (!isPrivateVercelBlobUrl(audioUrl)) {
     return NextResponse.json({ error: "No audio for this lesson" }, { status: 404 });
   }
 
-  // Fetch from Vercel Blob with the token
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-
-  // Forward Range header for seeking support
-  const range = request.headers.get("range");
-  if (range) {
-    headers["Range"] = range;
-  }
-
-  const blobResponse = await fetch(audioUrl, { headers });
-
-  if (!blobResponse.ok && blobResponse.status !== 206) {
-    return NextResponse.json(
-      { error: "Failed to fetch audio" },
-      { status: blobResponse.status },
-    );
-  }
-
-  // Stream the response back with proper headers
-  const responseHeaders = new Headers();
-  const contentType = blobResponse.headers.get("content-type");
-  if (contentType) responseHeaders.set("Content-Type", contentType);
-
-  const contentLength = blobResponse.headers.get("content-length");
-  if (contentLength) responseHeaders.set("Content-Length", contentLength);
-
-  const contentRange = blobResponse.headers.get("content-range");
-  if (contentRange) responseHeaders.set("Content-Range", contentRange);
-
-  const acceptRanges = blobResponse.headers.get("accept-ranges");
-  if (acceptRanges) responseHeaders.set("Accept-Ranges", acceptRanges);
-  else responseHeaders.set("Accept-Ranges", "bytes");
-
-  responseHeaders.set("Cache-Control", "private, max-age=3600");
-
-  // Download mode: add Content-Disposition for file download
+  const extraHeaders: Record<string, string> = {};
   if (isDownload) {
-    const ext = (contentType || "").includes("mp3") ? "mp3"
-      : (contentType || "").includes("mp4") || (contentType || "").includes("m4a") ? "m4a"
-      : (contentType || "").includes("wav") ? "wav"
-      : (contentType || "").includes("ogg") ? "ogg"
-      : (contentType || "").includes("flac") ? "flac"
+    const pathExtension = new URL(audioUrl).pathname.split(".").pop()?.toLowerCase();
+    const ext = pathExtension && /^(mp3|m4a|mp4|wav|ogg|flac|webm)$/.test(pathExtension)
+      ? pathExtension
       : "mp3";
     const safeName = (lesson.title || "audio").replace(/[^a-zA-Z0-9 _-]/g, "").trim() || "audio";
-    responseHeaders.set(
-      "Content-Disposition",
-      `attachment; filename="${safeName}.${ext}"`,
-    );
+    extraHeaders["Content-Disposition"] = `attachment; filename="${safeName}.${ext}"`;
   }
 
-  return new NextResponse(blobResponse.body, {
-    status: blobResponse.status,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, audioUrl, {
+    fallbackContentType: "audio/mpeg",
+    label: "audio-courses/stream",
+    extraHeaders,
   });
 }

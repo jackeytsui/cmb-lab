@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
 const bodySchema = z.object({
   answers: z.record(z.string(), z.array(z.string())),
@@ -29,12 +30,15 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { lessonId } = await params;
+  if (!(await canUserAccessCourseLibraryLesson(user, lessonId))) {
+    return NextResponse.json({ error: "Quiz lesson not found" }, { status: 404 });
+  }
 
   let body: unknown;
   try {

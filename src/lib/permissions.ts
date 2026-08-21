@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { z } from "zod";
-import { eq, and, or, isNull, gt, inArray } from "drizzle-orm";
+import { eq, and, or, isNull, gt, inArray, asc } from "drizzle-orm";
 import { db } from "@/db";
 import {
   userRoles,
@@ -9,6 +9,7 @@ import {
   roleCourses,
   roleFeatures,
   courseAccess,
+  courses,
   modules,
   lessons,
   users,
@@ -76,8 +77,12 @@ export interface PermissionSet {
   moduleGrants: Set<string>;
   /** Lesson IDs with lesson-level grants */
   lessonGrants: Set<string>;
+  /** Course IDs with an actual course-level grant (not only a child grant) */
+  courseGrants: Set<string>;
   /** SYNC: Check if user can access a specific course */
   canAccessCourse(courseId: string): boolean;
+  /** SYNC: Check if access comes from a course-level or wildcard grant */
+  hasCourseLevelAccess(courseId: string): boolean;
   /** SYNC: Check if user can access a specific module (module-level or lesson-level grant) */
   canAccessModule(moduleId: string): boolean;
   /** SYNC: Check if user can access a specific lesson (lesson-level grant) */
@@ -86,6 +91,8 @@ export interface PermissionSet {
   canUseFeature(featureKey: string): boolean;
   /** SYNC: Get the access tier for a specific course */
   getAccessTier(courseId: string): "preview" | "full" | null;
+  /** SYNC: Get only the course-level tier, excluding child grants */
+  getCourseLevelAccessTier(courseId: string): "preview" | "full" | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -172,8 +179,10 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
   const courseIdSet = new Set<string>();
   const featureSet = new Set<string>();
   const accessTierMap = new Map<string, "preview" | "full">();
+  const courseLevelAccessTierMap = new Map<string, "preview" | "full">();
   const moduleGrants = new Set<string>(); // moduleIds with module-level grants
   const lessonGrants = new Set<string>(); // lessonIds with lesson-level grants
+  const courseGrants = new Set<string>(); // courseIds with course-level grants
 
   // Helper: merge access tier (never downgrade)
   function mergeTier(courseId: string, tier: "preview" | "full") {
@@ -183,20 +192,24 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
       accessTierMap.set(courseId, tier);
     }
   }
+  function mergeCourseLevelTier(courseId: string, tier: "preview" | "full") {
+    const current = courseLevelAccessTierMap.get(courseId);
+    if (!current || (current === "preview" && tier === "full")) {
+      courseLevelAccessTierMap.set(courseId, tier);
+    }
+  }
 
   // Union role-based course grants (categorized by granularity)
   for (const row of roleCourseRows) {
     mergeTier(row.courseId, row.accessTier);
     if (row.moduleId === null && row.lessonId === null) {
-      // Course-level grant: courseIdSet already updated by mergeTier
+      courseGrants.add(row.courseId);
+      mergeCourseLevelTier(row.courseId, row.accessTier);
     } else if (row.moduleId !== null && row.lessonId === null) {
       // Module-level grant
       moduleGrants.add(row.moduleId);
     } else if (row.lessonId !== null) {
       // Lesson-level grant
-      if (row.moduleId !== null) {
-        moduleGrants.add(row.moduleId);
-      }
       lessonGrants.add(row.lessonId);
     }
   }
@@ -214,6 +227,8 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
   // Union direct courseAccess grants
   for (const row of directGrants) {
     mergeTier(row.courseId, row.accessTier);
+    courseGrants.add(row.courseId);
+    mergeCourseLevelTier(row.courseId, row.accessTier);
   }
 
   return {
@@ -223,9 +238,14 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
     hasWildcardAccess,
     moduleGrants,
     lessonGrants,
+    courseGrants,
 
     canAccessCourse(courseId: string): boolean {
       return hasWildcardAccess || courseIdSet.has(courseId);
+    },
+
+    hasCourseLevelAccess(courseId: string): boolean {
+      return hasWildcardAccess || courseGrants.has(courseId);
     },
 
     canAccessModule(moduleId: string): boolean {
@@ -244,6 +264,11 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
       if (hasWildcardAccess) return "full";
       return accessTierMap.get(courseId) ?? null;
     },
+
+    getCourseLevelAccessTier(courseId: string): "preview" | "full" | null {
+      if (hasWildcardAccess) return "full";
+      return courseLevelAccessTierMap.get(courseId) ?? null;
+    },
   };
 }
 
@@ -256,6 +281,29 @@ export const resolvePermissions = cache(_resolvePermissions);
 // ---------------------------------------------------------------------------
 // Async Helper Functions (standalone, not PermissionSet methods)
 // ---------------------------------------------------------------------------
+
+async function getPreviewLessons(courseId: string) {
+  const course = await db.query.courses.findFirst({
+    where: and(eq(courses.id, courseId), isNull(courses.deletedAt)),
+    columns: { previewLessonCount: true },
+  });
+  const previewLessonCount = Math.max(0, course?.previewLessonCount ?? 0);
+  if (previewLessonCount === 0) return [];
+
+  return db
+    .select({ id: lessons.id, moduleId: lessons.moduleId })
+    .from(lessons)
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .where(
+      and(
+        eq(modules.courseId, courseId),
+        isNull(modules.deletedAt),
+        isNull(lessons.deletedAt),
+      ),
+    )
+    .orderBy(asc(modules.sortOrder), asc(lessons.sortOrder))
+    .limit(previewLessonCount);
+}
 
 /**
  * Check if a user can access a specific module.
@@ -275,7 +323,10 @@ export async function canAccessModule(
   });
 
   if (!mod) return false;
-  return permissions.canAccessCourse(mod.courseId);
+  if (!permissions.hasCourseLevelAccess(mod.courseId)) return false;
+  if (permissions.getCourseLevelAccessTier(mod.courseId) !== "preview") return true;
+  const previewLessons = await getPreviewLessons(mod.courseId);
+  return previewLessons.some((lesson) => lesson.moduleId === moduleId);
 }
 
 /**
@@ -299,5 +350,14 @@ export async function canAccessLesson(
   if (!lesson) return false;
   // Check module-level grant, then course-level grant
   if (permissions.canAccessModule(lesson.module.id)) return true;
-  return permissions.canAccessCourse(lesson.module.courseId);
+  const courseId = lesson.module.courseId;
+  if (!permissions.hasCourseLevelAccess(courseId)) return false;
+
+  // Preview course grants expose only the configured number of lessons,
+  // ordered consistently with the course page. Full and wildcard grants keep
+  // their existing unrestricted behavior.
+  if (permissions.getCourseLevelAccessTier(courseId) !== "preview") return true;
+
+  const previewLessons = await getPreviewLessons(courseId);
+  return previewLessons.some((previewLesson) => previewLesson.id === lessonId);
 }

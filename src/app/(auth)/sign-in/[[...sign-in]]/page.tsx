@@ -5,7 +5,7 @@ import { OtpFirstSignIn } from "@/components/auth/OtpFirstSignIn";
 
 export default function SignInPage() {
   return (
-    <div className="auth-lockdown min-h-screen bg-[radial-gradient(circle_at_top_left,#1f2a87_0%,#0f172a_45%,#020617_100%)] px-4 py-8">
+    <div className="auth-lockdown min-h-screen bg-[radial-gradient(circle_at_top_left,#1f2a87_0%,#0f172a_45%,#020617_100%)] px-4 py-4 sm:py-8">
       <div className="mx-auto grid w-full max-w-6xl items-stretch gap-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4 shadow-2xl backdrop-blur md:grid-cols-[1.1fr_1fr] md:p-6">
         <section className="flex flex-col justify-between rounded-xl border border-white/10 bg-slate-900/75 p-6 text-white">
           <div>
@@ -39,7 +39,7 @@ export default function SignInPage() {
           </div>
         </section>
 
-        <section className="flex items-center justify-center rounded-xl border border-white/10 bg-slate-900/75 p-4 md:p-6">
+        <section className="order-first flex items-center justify-center rounded-xl border border-white/10 bg-slate-900/75 p-4 md:order-none md:p-6">
           <div className="w-full max-w-sm rounded-xl border border-slate-700/70 bg-slate-950/80 p-5 shadow-xl">
             <h2 className="mb-4 text-center text-xl font-semibold text-white">
               Welcome back

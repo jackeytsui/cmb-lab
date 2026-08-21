@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type WalkthroughStep = {
@@ -39,7 +39,6 @@ export function ProductWalkthrough({
   onFinish,
   stepOffset = 0,
   totalSteps,
-  actionSignals,
   onStepChange,
 }: {
   steps: WalkthroughStep[];
@@ -61,7 +60,7 @@ export function ProductWalkthrough({
   const [isOpen, setIsOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
-  const [missingTargetAttempts, setMissingTargetAttempts] = useState(0);
+  const [, setMissingTargetAttempts] = useState(0);
   const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
   const bubbleRef = useRef<HTMLDivElement | null>(null);
@@ -72,22 +71,28 @@ export function ProductWalkthrough({
   useEffect(() => {
     if (!enabled || !autoStart || typeof window === "undefined") return;
     const completed = window.localStorage.getItem(storageKey) === "done";
-    if (!completed) {
+    if (completed) return;
+
+    const frame = window.requestAnimationFrame(() => {
       autoAdvancedStepRef.current = {};
       previousIndexRef.current = null;
       setShowSkipConfirm(false);
       setCurrentIndex(0);
       setIsOpen(true);
-    }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [autoStart, enabled, storageKey]);
 
   useEffect(() => {
     if (!enabled || runToken === 0) return;
-    autoAdvancedStepRef.current = {};
-    previousIndexRef.current = null;
-    setShowSkipConfirm(false);
-    setCurrentIndex(0);
-    setIsOpen(true);
+    const frame = window.requestAnimationFrame(() => {
+      autoAdvancedStepRef.current = {};
+      previousIndexRef.current = null;
+      setShowSkipConfirm(false);
+      setCurrentIndex(0);
+      setIsOpen(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [enabled, runToken]);
 
   const currentStep = steps[currentIndex] ?? null;
@@ -111,10 +116,13 @@ export function ProductWalkthrough({
   }, [currentIndex, isOpen, onStepChange, steps]);
 
   useEffect(() => {
-    setTargetRect(null);
-    setMissingTargetAttempts(0);
-    setHasAutoScrolled(false);
-    setShowSkipConfirm(false);
+    const frame = window.requestAnimationFrame(() => {
+      setTargetRect(null);
+      setMissingTargetAttempts(0);
+      setHasAutoScrolled(false);
+      setShowSkipConfirm(false);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [currentIndex]);
 
   useEffect(() => {
@@ -162,13 +170,13 @@ export function ProductWalkthrough({
     return () => window.clearTimeout(timer);
   }, [currentStep, isOpen, targetRect]);
 
-  const closeAndMarkDone = () => {
+  const closeAndMarkDone = useCallback(() => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(storageKey, "done");
     }
     setShowSkipConfirm(false);
     setIsOpen(false);
-  };
+  }, [storageKey]);
 
   const [bubbleHeight, setBubbleHeight] = useState(170);
 
@@ -241,6 +249,7 @@ export function ProductWalkthrough({
   const targetBottom = targetRect ? targetRect.top + targetRect.height : 0;
   const targetRight = targetRect ? targetRect.left + targetRect.width : 0;
   const targetVisible =
+    typeof window !== "undefined" &&
     (targetRect?.top ?? -1) >= 0 &&
     targetBottom <= window.innerHeight &&
     (targetRect?.left ?? -1) >= 0 &&
@@ -265,16 +274,20 @@ export function ProductWalkthrough({
     if (autoAdvancedStepRef.current[key]) return;
     autoAdvancedStepRef.current[key] = true;
 
-    if (currentIndex === steps.length - 1) {
-      if (markDoneOnFinish) {
-        closeAndMarkDone();
-      } else {
-        setIsOpen(false);
+    const timer = window.setTimeout(() => {
+      if (currentIndex === steps.length - 1) {
+        if (markDoneOnFinish) {
+          closeAndMarkDone();
+        } else {
+          setIsOpen(false);
+        }
+        onFinish?.();
+        return;
       }
-      onFinish?.();
-      return;
-    }
-    setCurrentIndex((prev) => prev + 1);
+      setCurrentIndex((prev) => prev + 1);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [
     canProceed,
     currentIndex,
@@ -282,6 +295,7 @@ export function ProductWalkthrough({
     isOpen,
     markDoneOnFinish,
     onFinish,
+    closeAndMarkDone,
     steps.length,
   ]);
 

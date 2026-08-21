@@ -34,6 +34,17 @@ export function GroupCoachingScheduleClient() {
   const [events, setEvents] = useState<CoachingEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timeZone, setTimeZone] = useState("");
+  const [timeZoneConfirmed, setTimeZoneConfirmed] = useState(false);
+  const [savingTimeZone, setSavingTimeZone] = useState(false);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Toronto";
+      setTimeZone(window.localStorage.getItem("cmb-coaching-timezone") || detected);
+      setTimeZoneConfirmed(Boolean(window.localStorage.getItem("cmb-coaching-timezone-confirmed")));
+    });
+  }, []);
 
   useEffect(() => {
     fetch("/api/coaching/events", { cache: "no-store" })
@@ -58,6 +69,24 @@ export function GroupCoachingScheduleClient() {
     [events],
   );
 
+  async function confirmTimeZone() {
+    if (!timeZone) return;
+    setSavingTimeZone(true);
+    const response = await fetch("/api/user/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timezone: timeZone }),
+    });
+    setSavingTimeZone(false);
+    if (!response.ok) {
+      setError("We couldn't save your timezone. Please try again.");
+      return;
+    }
+    window.localStorage.setItem("cmb-coaching-timezone", timeZone);
+    window.localStorage.setItem("cmb-coaching-timezone-confirmed", "true");
+    setTimeZoneConfirmed(true);
+  }
+
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <div className="mb-7">
@@ -72,7 +101,33 @@ export function GroupCoachingScheduleClient() {
         </p>
       </div>
 
-      {loading ? (
+      {!timeZoneConfirmed ? (
+        <section className="mx-auto max-w-xl rounded-xl border border-primary/25 bg-card p-6 shadow-sm">
+          <Clock3 className="mb-3 h-7 w-7 text-primary" />
+          <h2 className="text-lg font-semibold text-foreground">First, choose your timezone</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Events are entered in Toronto time. We’ll convert every session to the timezone you choose.
+          </p>
+          <label className="mt-4 block text-sm font-medium text-foreground" htmlFor="coaching-timezone">Your timezone</label>
+          <select id="coaching-timezone" value={timeZone} onChange={(event) => setTimeZone(event.target.value)} className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm">
+            <option value="America/Toronto">Toronto / Eastern Time</option>
+            <option value="America/Vancouver">Vancouver / Pacific Time</option>
+            <option value="America/Edmonton">Calgary / Mountain Time</option>
+            <option value="America/Winnipeg">Winnipeg / Central Time</option>
+            <option value="America/New_York">New York / Eastern Time</option>
+            <option value="Europe/London">London</option>
+            <option value="Europe/Paris">Central Europe</option>
+            <option value="Asia/Hong_Kong">Hong Kong</option>
+            <option value="Asia/Shanghai">China</option>
+            <option value="Asia/Singapore">Singapore</option>
+            <option value="Asia/Tokyo">Tokyo</option>
+            <option value="Australia/Sydney">Sydney</option>
+          </select>
+          <button type="button" onClick={() => void confirmTimeZone()} disabled={!timeZone || savingTimeZone} className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+            {savingTimeZone ? "Saving…" : "Show my schedule"}
+          </button>
+        </section>
+      ) : loading ? (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading your schedule…
         </div>
@@ -120,6 +175,7 @@ export function GroupCoachingScheduleClient() {
                       <span className="inline-flex items-center gap-1.5">
                         <CalendarDays className="h-4 w-4" />
                         {startsAt.toLocaleDateString(undefined, {
+                          timeZone,
                           weekday: "long",
                           month: "long",
                           day: "numeric",
@@ -129,6 +185,7 @@ export function GroupCoachingScheduleClient() {
                       <span className="inline-flex items-center gap-1.5">
                         <Clock3 className="h-4 w-4" />
                         {startsAt.toLocaleTimeString(undefined, {
+                          timeZone,
                           hour: "numeric",
                           minute: "2-digit",
                           timeZoneName: "short",
@@ -167,11 +224,16 @@ export function GroupCoachingScheduleClient() {
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             {cancelledEvents.map((event) => (
               <li key={event.id} className="line-through">
-                {event.title} — {new Date(event.startsAt).toLocaleString()}
+                {event.title} — {new Date(event.startsAt).toLocaleString(undefined, { timeZone })}
               </li>
             ))}
           </ul>
         </details>
+      )}
+      {timeZoneConfirmed && (
+        <button type="button" onClick={() => setTimeZoneConfirmed(false)} className="mt-6 text-xs text-muted-foreground underline hover:text-foreground">
+          Change timezone ({timeZone})
+        </button>
       )}
     </div>
   );

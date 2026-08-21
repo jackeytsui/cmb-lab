@@ -3,7 +3,7 @@
 import { useState, ReactNode, useEffect, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorAlert } from "@/components/ui/error-alert";
-import { DragDropProvider } from "@dnd-kit/react";
+import { DragDropProvider, type DragDropEvents } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -88,7 +88,7 @@ export function ContentList<T extends ContentListItem>({
     setLocalItems([...items].sort((a, b) => a.sortOrder - b.sortOrder));
   }, [items]);
 
-  const handleDragOver = (event: any) => {
+  const handleDragOver = (event: Parameters<DragDropEvents["dragover"]>[0]) => {
     const { source, target } = event.operation;
     if (!source || !target || source.id === target.id) return;
 
@@ -107,7 +107,7 @@ export function ContentList<T extends ContentListItem>({
     }
   };
 
-  const handleDragEnd = async (event: any) => {
+  const handleDragEnd = async (event: Parameters<DragDropEvents["dragend"]>[0]) => {
     if (event.canceled || !onReorder) return;
 
     // At this point, localItems (and itemsRef) matches the visual order from DragOver.

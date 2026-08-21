@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 interface YouTubePlayerProps {
   videoId: string;
+  startSeconds?: number;
   onReady?: (player: YTPlayer) => void;
   onPlay?: () => void;
   onPause?: () => void;
@@ -14,7 +15,7 @@ interface YouTubePlayerProps {
   children?: React.ReactNode;
 }
 
-export function YouTubePlayer({ videoId, onReady, onPlay, onPause, onEnd, className, children }: YouTubePlayerProps) {
+export function YouTubePlayer({ videoId, startSeconds = 0, onReady, onPlay, onPause, onEnd, className, children }: YouTubePlayerProps) {
   const playerRef = useRef<YTPlayer | null>(null);
 
   const handleReady = useCallback(
@@ -41,6 +42,7 @@ export function YouTubePlayer({ videoId, onReady, onPlay, onPause, onEnd, classN
             modestbranding: 1,
             rel: 0,
             cc_load_policy: 0, // hide built-in captions (we render our own)
+            ...(startSeconds > 0 ? { start: Math.floor(startSeconds) } : {}),
           },
         }}
       />

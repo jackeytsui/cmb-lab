@@ -22,6 +22,7 @@ interface LessonCardProps {
   isCompleted: boolean;
   isCurrent?: boolean;
   previousLessonTitle?: string;
+  lockedReason?: string;
   quizzes?: AssociatedQuiz[];
 }
 
@@ -44,6 +45,7 @@ export function LessonCard({
   isCompleted,
   isCurrent = false,
   previousLessonTitle,
+  lockedReason,
   quizzes = [],
 }: LessonCardProps) {
   // Determine visual state
@@ -119,9 +121,9 @@ export function LessonCard({
             {lesson.description && (
               <p className="text-sm text-zinc-400 truncate">{lesson.description}</p>
             )}
-            {isLocked && previousLessonTitle && (
+            {isLocked && (lockedReason || previousLessonTitle) && (
               <p className="text-xs text-zinc-500 mt-1">
-                Complete &quot;{previousLessonTitle}&quot; first
+                {lockedReason ?? `Complete "${previousLessonTitle}" first`}
               </p>
             )}
           </div>

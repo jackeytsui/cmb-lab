@@ -18,6 +18,7 @@ import {
 } from "@/lib/pinyin-normalize";
 import { isListeningPracticeLesson, lessonLanguage } from "@/lib/lesson-language";
 import { convertScript } from "@/lib/chinese-convert";
+import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 // ---------------------------------------------------------------------------
 // POST /api/course-library/lessons/[lessonId]/listening-check
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     .select({
       content: courseLibraryLessons.content,
       lessonType: courseLibraryLessons.lessonType,
+      courseId: courseLibraryCourses.id,
     })
     .from(courseLibraryLessons)
     .innerJoin(
@@ -112,6 +114,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     .limit(1);
 
   if (!lesson || !isListeningPracticeLesson(lesson.lessonType)) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
+  const canSeeCourse = await getCourseLibraryCourseAccess(user);
+  if (!canSeeCourse(lesson.courseId)) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
@@ -160,8 +166,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     : giveUp
       ? "gaveup"
       : "incorrect";
-  const revealed = correct || giveUp;
-
   // Merge into existing per-sentence results.
   const existing = await db.query.courseLibraryLessonProgress.findFirst({
     where: and(
@@ -218,16 +222,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       set: {
         quizAnswers: nextAnswers,
         quizScore: score,
-        ...(allResolved ? { completedAt: new Date() } : {}),
+        completedAt: allResolved ? new Date() : null,
         updatedAt: new Date(),
       },
     });
 
   return NextResponse.json({
     correct,
-    status,
+    status: nextEntry.status,
     // Revealed model answer only when earned (correct or gave up).
-    pinyin: revealed ? sentence.pinyin : undefined,
+    pinyin:
+      nextEntry.status === "correct" || nextEntry.status === "gaveup"
+        ? sentence.pinyin
+        : undefined,
     score,
     correctCount,
     resolvedCount,

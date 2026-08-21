@@ -7,11 +7,18 @@
  * through without buffering.
  */
 
+import { auth } from "@clerk/nextjs/server";
+
 const VERCEL_BLOB_API = "https://vercel.com/api/blob";
 
 export const runtime = "edge";
 
 async function proxy(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  const { userId } = await auth();
+  if (!userId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { path } = await params;
   const target = `${VERCEL_BLOB_API}/${path.join("/")}`;
 

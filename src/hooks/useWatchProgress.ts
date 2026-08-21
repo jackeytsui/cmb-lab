@@ -29,30 +29,26 @@ export function useWatchProgress({
 }: UseWatchProgressOpts) {
   // Ref to keep currentTimeMs fresh for visibilitychange handler (avoids stale closure)
   const currentTimeRef = useRef(currentTimeMs);
-  currentTimeRef.current = currentTimeMs;
 
   // Ref to keep videoDurationMs fresh
   const durationRef = useRef(videoDurationMs);
-  durationRef.current = videoDurationMs;
 
   // Ref to keep sessionId fresh
   const sessionIdRef = useRef(sessionId);
-  sessionIdRef.current = sessionId;
 
-  // Only send title once
-  const titleSentRef = useRef(false);
-
-  // Reset titleSent when sessionId changes (new video)
   useEffect(() => {
-    titleSentRef.current = false;
-  }, [sessionId]);
+    currentTimeRef.current = currentTimeMs;
+    durationRef.current = videoDurationMs;
+    sessionIdRef.current = sessionId;
+  }, [currentTimeMs, sessionId, videoDurationMs]);
+
+  // Track which session has received its title. A boolean can be corrupted by
+  // a delayed save from the previous video after the user switches sessions.
+  const titleSentSessionRef = useRef<string | null>(null);
 
   // Debounced save function -- fires at most every 10 seconds
   const saveProgress = useDebouncedCallback(
-    (positionMs: number, durationMs: number, title?: string | null) => {
-      const sid = sessionIdRef.current;
-      if (!sid) return;
-
+    (sid: string, positionMs: number, durationMs: number, title?: string | null) => {
       const payload: Record<string, unknown> = {
         sessionId: sid,
         lastPositionMs: positionMs,
@@ -60,9 +56,9 @@ export function useWatchProgress({
       };
 
       // Include title on first save only
-      if (title && !titleSentRef.current) {
+      if (title && titleSentSessionRef.current !== sid) {
         payload.title = title;
-        titleSentRef.current = true;
+        titleSentSessionRef.current = sid;
       }
 
       fetch("/api/video/progress", {
@@ -86,7 +82,7 @@ export function useWatchProgress({
       videoDurationMs !== null &&
       videoDurationMs > 0
     ) {
-      saveProgress(currentTimeMs, videoDurationMs, videoTitle);
+      saveProgress(sessionId, currentTimeMs, videoDurationMs, videoTitle);
     }
   }, [currentTimeMs, isPlaying, sessionId, videoDurationMs, videoTitle, saveProgress]);
 
@@ -126,6 +122,8 @@ export function useWatchProgress({
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      // Client-side navigation may unmount without hiding the document.
+      saveProgress.flush();
       saveProgress.cancel();
     };
   }, [saveProgress, buildBeaconPayload]);

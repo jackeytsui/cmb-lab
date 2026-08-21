@@ -12,7 +12,6 @@ interface VideoRecordingRendererProps {
 }
 
 export function VideoRecordingRenderer({
-  exerciseId,
   definition,
   onAnswer,
   savedAnswer,

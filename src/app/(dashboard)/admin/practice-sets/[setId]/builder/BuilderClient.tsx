@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { DragDropProvider } from "@dnd-kit/react";
+import { DragDropProvider, type DragDropEvents } from "@dnd-kit/react";
 import { useBuilderState } from "@/hooks/useBuilderState";
 import type { BuilderState, BuilderExercise } from "@/hooks/useBuilderState";
 import { BuilderPalette } from "@/components/admin/builder/BuilderPalette";
@@ -236,7 +236,7 @@ export function BuilderClient({
   // ----------------------------------------------------------
   return (
     <DragDropProvider
-      onDragOver={(event: any) => {
+      onDragOver={(event: Parameters<DragDropEvents["dragover"]>[0]) => {
         const { source, target } = event.operation;
         if (!source || !target) return;
         // Don't reorder palette items on the canvas during drag
@@ -260,7 +260,7 @@ export function BuilderClient({
           });
         }
       }}
-      onDragEnd={(event: any) => {
+      onDragEnd={(event: Parameters<DragDropEvents["dragend"]>[0]) => {
         if (event.canceled) return;
         const { source, target } = event.operation;
 

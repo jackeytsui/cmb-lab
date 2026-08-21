@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mic, Video as VideoIcon, Send, RefreshCcw, Play, Pause } from "lucide-react";
+import { Loader2, Mic, Video as VideoIcon, Send, RefreshCcw } from "lucide-react";
 import { SignedMuxPlayer } from "@/components/video/SignedMuxPlayer";
 import { toast } from "sonner";
 
@@ -48,20 +48,21 @@ export function VideoInteraction({
       .catch(err => console.error("Failed to load video prompt", err));
   }, [videoPromptId]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopStream();
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, []);
-
-  const stopStream = () => {
+  const stopStream = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
-  };
+  }, []);
+
+  // Stop any active camera/microphone stream on unmount.
+  useEffect(() => stopStream, [stopStream]);
+
+  // Revoke each local preview when it is replaced or unmounted.
+  useEffect(() => {
+    if (!previewUrl?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   const startRecording = async () => {
     try {
@@ -142,17 +143,7 @@ export function VideoInteraction({
           interactionId,
           lessonId,
           type: recordMode,
-          videoUrl: recordMode === "video" ? url : undefined,
-          audioUrl: recordMode === "audio" ? url : undefined, // Check if submissions table supports audioUrl or just audioData
-          // The schema has `videoUrl` and `audioData`. 
-          // If we upload audio file, we should probably put url in `videoUrl` or add `audioUrl`.
-          // Or just base64 for audio if short? But videoask audio can be long.
-          // Let's store URL in `videoUrl` even if audio, or base64 encode if small.
-          // Given `audioData` is text, let's assume it's base64.
-          // But uploading is better. Let's assume we update schema to allow `audioUrl` or generic `mediaUrl`.
-          // Current schema: `audioData: text` (Base64), `videoUrl: text`.
-          // I will use `videoUrl` for the file URL for now, or just assume the backend handles it.
-          // Actually, I'll update the API to handle file URL for audio too if I can.
+          videoUrl: url,
         }),
       });
 

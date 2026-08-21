@@ -23,7 +23,9 @@ interface VideoThreadStepEditorProps {
 
 export function VideoThreadStepEditor({ initialData, onSave, onCancel }: VideoThreadStepEditorProps) {
   const [promptText, setPromptText] = useState(initialData?.promptText || "");
-  const [responseType, setResponseType] = useState(initialData?.responseType || "video");
+  const [responseType, setResponseType] = useState<VideoThreadStep["responseType"]>(
+    initialData?.responseType || "video",
+  );
   const [videoSource, setVideoSource] = useState<string>(initialData?.uploadId || initialData?.videoUrl || "");
   
   // To populate video options
@@ -98,7 +100,9 @@ export function VideoThreadStepEditor({ initialData, onSave, onCancel }: VideoTh
           <Label className="text-zinc-300">Student Response Type</Label>
           <Select 
             value={responseType} 
-            onValueChange={(val) => setResponseType(val as any)}
+            onValueChange={(val) =>
+              setResponseType(val as VideoThreadStep["responseType"])
+            }
           >
             <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white">
               <SelectValue />

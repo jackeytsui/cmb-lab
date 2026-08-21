@@ -28,7 +28,7 @@ interface SubmissionDetail {
     response: string;
     audioData: string | null;
     videoUrl: string | null;
-    score: number;
+    score: number | null;
     aiFeedback: string;
     transcription: string | null;
     status: "pending_review" | "reviewed" | "archived";
@@ -204,7 +204,7 @@ function formatDate(dateString: string | Date): string {
 
 /**
  * Submission detail page for coach review.
- * Displays full submission information with student context, AI grading, and audio playback.
+ * Displays full submission information with student context, grading status, and media playback.
  */
 export default async function SubmissionDetailPage({ params }: PageProps) {
   const { submissionId } = await params;
@@ -350,12 +350,15 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
                     </video>
                   </div>
                 </div>
-              ) : submission.type === "audio" && submission.audioData ? (
+              ) : submission.type === "audio" && (submission.videoUrl || submission.audioData) ? (
                 <div className="space-y-4">
                   <audio
                     controls
                     className="w-full"
-                    src={`data:audio/webm;base64,${submission.audioData}`}
+                    src={
+                      submission.videoUrl ??
+                      `data:audio/webm;base64,${submission.audioData}`
+                    }
                   >
                     Your browser does not support the audio element.
                   </audio>
@@ -379,46 +382,55 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
               )}
             </div>
 
-            {/* AI grading section */}
+            {/* Automated grading section */}
             <div className="bg-card border border-border rounded-lg p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Bot className="w-5 h-5 text-cyan-400" />
-                <h3 className="font-semibold text-foreground">AI Grading</h3>
+                <h3 className="font-semibold text-foreground">Automated Grading</h3>
               </div>
 
-              {/* Score display */}
-              <div className="flex items-center gap-4 mb-4">
-                <div
-                  className={`px-4 py-2 rounded-lg border ${getScoreBgColor(submission.score)}`}
-                >
-                  <span className="text-xs text-muted-foreground uppercase tracking-wide block">Score</span>
-                  <span className={`text-3xl font-bold ${getScoreColor(submission.score)}`}>
-                    {submission.score}
-                  </span>
+              {submission.score === null ? (
+                <div className="rounded-lg border border-border bg-muted/40 p-4">
+                  <p className="font-medium text-foreground">Coach review required</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This response was not automatically scored. Use the review tools to give the student personalized feedback.
+                  </p>
                 </div>
-                <div className="flex-1">
-                  <div className="h-3 bg-muted rounded-full overflow-hidden">
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 mb-4">
                     <div
-                      className={`h-full transition-all duration-500 ${
-                        submission.score < 70
-                          ? "bg-red-500"
-                          : submission.score <= 85
-                          ? "bg-yellow-500"
-                          : "bg-green-500"
-                      }`}
-                      style={{ width: `${submission.score}%` }}
-                    />
+                      className={`px-4 py-2 rounded-lg border ${getScoreBgColor(submission.score)}`}
+                    >
+                      <span className="text-xs text-muted-foreground uppercase tracking-wide block">Score</span>
+                      <span className={`text-3xl font-bold ${getScoreColor(submission.score)}`}>
+                        {submission.score}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-3 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 ${
+                            submission.score < 70
+                              ? "bg-red-500"
+                              : submission.score <= 85
+                              ? "bg-yellow-500"
+                              : "bg-green-500"
+                          }`}
+                          style={{ width: `${submission.score}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              {/* AI feedback */}
-              <div>
-                <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
-                  AI Feedback
-                </span>
-                <p className="text-foreground">{submission.aiFeedback}</p>
-              </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wide block mb-2">
+                      Automated Feedback
+                    </span>
+                    <p className="text-foreground">{submission.aiFeedback}</p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

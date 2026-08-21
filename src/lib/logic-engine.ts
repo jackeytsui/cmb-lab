@@ -9,7 +9,7 @@ type ContextData = {
         tags?: string[];
         email?: string;
     };
-    session?: Record<string, any>;
+    session?: Record<string, unknown>;
 };
 
 export function evaluateRules(rules: LogicRule[], context: ContextData): string | null {
@@ -41,7 +41,7 @@ function evaluateRule(rule: LogicRule, context: ContextData): boolean {
     }
 }
 
-function getField(obj: any, path: string): any {
+function getField(obj: unknown, path: string): unknown {
     if (!path) return undefined;
 
     // Accept n8n-style expressions like {{$json.answer.content}} in addition to plain paths.
@@ -51,5 +51,8 @@ function getField(obj: any, path: string): any {
     return normalizedPath
         .split(".")
         .filter(Boolean)
-        .reduce((o, key) => (o && o[key] !== undefined) ? o[key] : undefined, obj);
+        .reduce<unknown>((value, key) => {
+            if (typeof value !== "object" || value === null) return undefined;
+            return (value as Record<string, unknown>)[key];
+        }, obj);
 }

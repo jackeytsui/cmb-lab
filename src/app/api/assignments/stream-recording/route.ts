@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { lessonSubmissions, users } from "@/db/schema";
+import { lessonSubmissions } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { z } from "zod";
+import { getRealUser } from "@/lib/auth";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+
+export const maxDuration = 60;
+
+const querySchema = z.object({
+  submissionId: z.string().uuid(),
+  index: z.coerce.number().int().min(0).max(1_000).optional(),
+});
 
 /**
  * GET /api/assignments/stream-recording?submissionId=...&index=0
@@ -12,17 +21,19 @@ import { hasMinimumRole } from "@/lib/auth";
  * index: sentence index for vocal_hack (0-based); omit for diary_challenge.
  */
 export async function GET(request: NextRequest) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const user = await getRealUser();
+  if (!user || user.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const submissionId = request.nextUrl.searchParams.get("submissionId");
-  const indexParam = request.nextUrl.searchParams.get("index");
-
-  if (!submissionId) {
-    return NextResponse.json({ error: "submissionId required" }, { status: 400 });
+  const parsed = querySchema.safeParse({
+    submissionId: request.nextUrl.searchParams.get("submissionId") ?? undefined,
+    index: request.nextUrl.searchParams.get("index") ?? undefined,
+  });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid recording request" }, { status: 400 });
   }
+  const { submissionId, index } = parsed.data;
 
   // Load the submission
   const submission = await db.query.lessonSubmissions.findFirst({
@@ -34,15 +45,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Access check: must be the submitting student or a coach
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) {
-    const dbUser = await db.query.users.findFirst({
-      where: eq(users.clerkId, clerkId),
-      columns: { id: true },
-    });
-    if (!dbUser || dbUser.id !== submission.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  const isStaff = user.role === "coach" || user.role === "admin";
+  if (!isStaff && user.id !== submission.userId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   // Parse submission data to get blob URL
@@ -55,40 +60,29 @@ export async function GET(request: NextRequest) {
 
   let blobUrl: string | null = null;
 
-  if (indexParam !== null) {
+  if (index !== undefined) {
     // Vocal hack: recordings[index].blobUrl
-    const recordings = data.recordings as Array<{ index: number; blobUrl: string }> | undefined;
-    const idx = parseInt(indexParam, 10);
-    blobUrl = recordings?.find((r) => r.index === idx)?.blobUrl ?? null;
+    const recordings = Array.isArray(data.recordings) ? data.recordings : [];
+    const match = recordings.find(
+      (recording): recording is { index: number; blobUrl: string } =>
+        typeof recording === "object" &&
+        recording !== null &&
+        (recording as { index?: unknown }).index === index &&
+        typeof (recording as { blobUrl?: unknown }).blobUrl === "string",
+    );
+    blobUrl = match?.blobUrl ?? null;
   } else {
     // Diary challenge: audioBlobUrl
-    blobUrl = (data.audioBlobUrl as string) ?? null;
+    blobUrl = typeof data.audioBlobUrl === "string" ? data.audioBlobUrl : null;
   }
 
-  if (!blobUrl) {
+  if (!blobUrl || !isPrivateVercelBlobUrl(blobUrl)) {
     return NextResponse.json({ error: "Recording not found" }, { status: 404 });
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-  const range = request.headers.get("range");
-  if (range) headers["Range"] = range;
-
-  const blobRes = await fetch(blobUrl, { headers });
-
-  if (!blobRes.ok && blobRes.status !== 206) {
-    return NextResponse.json({ error: "Failed to stream recording" }, { status: blobRes.status });
-  }
-
-  const responseHeaders = new Headers();
-  responseHeaders.set("Content-Type", blobRes.headers.get("content-type") || "audio/webm");
-  const cl = blobRes.headers.get("content-length");
-  if (cl) responseHeaders.set("Content-Length", cl);
-  const cr = blobRes.headers.get("content-range");
-  if (cr) responseHeaders.set("Content-Range", cr);
-  responseHeaders.set("Accept-Ranges", blobRes.headers.get("accept-ranges") || "bytes");
-  responseHeaders.set("Cache-Control", "private, max-age=300");
-
-  return new NextResponse(blobRes.body, { status: blobRes.status, headers: responseHeaders });
+  return proxyBlobMedia(request, blobUrl, {
+    fallbackContentType: "audio/webm",
+    label: "assignments/stream-recording",
+    extraHeaders: { "Content-Disposition": "inline" },
+  });
 }

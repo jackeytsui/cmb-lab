@@ -3,8 +3,6 @@ import {
   practiceSets,
   practiceSetAssignments,
   practiceAttempts,
-  courseAccess,
-  studentTags,
   courses,
   modules,
   lessons,
@@ -20,6 +18,7 @@ import {
   desc,
   sql,
 } from "drizzle-orm";
+import { getStudentAssignmentTargets } from "@/lib/student-assignment-targets";
 
 // ============================================================
 // Types
@@ -173,86 +172,16 @@ export async function listAssignmentsForSet(practiceSetId: string) {
  * Resolve ALL assigned practice sets for a student through 5 paths:
  * 1. Direct student assignment
  * 2. Tag-based assignment (via studentTags)
- * 3. Course enrollment (via courseAccess)
- * 4. Module assignment (modules within enrolled courses)
- * 5. Lesson assignment (lessons within enrolled course modules)
+ * 3. Full course grants (direct or role-based)
+ * 4. Module grants and modules within full course grants
+ * 5. Lesson grants, lessons within full courses, and preview-eligible lessons
  *
  * Deduplicates by practiceSetId, keeping the most specific assignment path.
  */
 export async function getStudentAssignments(
   userId: string
 ): Promise<ResolvedAssignment[]> {
-  // Step 1: Collect all valid target entries for this student
-  type TargetEntry = { type: string; id: string };
-  const targetEntries: TargetEntry[] = [];
-
-  // Direct student assignment
-  targetEntries.push({ type: "student", id: userId });
-
-  // Tags and enrollments are independent — fetch in parallel
-  const [userTags, enrollments] = await Promise.all([
-    db
-      .select({ tagId: studentTags.tagId })
-      .from(studentTags)
-      .where(eq(studentTags.userId, userId)),
-    db
-      .select({ courseId: courseAccess.courseId })
-      .from(courseAccess)
-      .where(
-        and(
-          eq(courseAccess.userId, userId),
-          or(
-            isNull(courseAccess.expiresAt),
-            sql`${courseAccess.expiresAt} > now()`
-          )
-        )
-      ),
-  ]);
-
-  for (const t of userTags) {
-    targetEntries.push({ type: "tag", id: t.tagId });
-  }
-
-  const enrolledCourseIds = enrollments.map((e) => e.courseId);
-  for (const courseId of enrolledCourseIds) {
-    targetEntries.push({ type: "course", id: courseId });
-  }
-
-  // Modules: for enrolled courses, get active modules
-  let enrolledModuleIds: string[] = [];
-  if (enrolledCourseIds.length > 0) {
-    const courseModules = await db
-      .select({ id: modules.id })
-      .from(modules)
-      .where(
-        and(
-          inArray(modules.courseId, enrolledCourseIds),
-          isNull(modules.deletedAt)
-        )
-      );
-
-    enrolledModuleIds = courseModules.map((m) => m.id);
-    for (const moduleId of enrolledModuleIds) {
-      targetEntries.push({ type: "module", id: moduleId });
-    }
-  }
-
-  // Lessons: for enrolled modules, get active lessons
-  if (enrolledModuleIds.length > 0) {
-    const moduleLessons = await db
-      .select({ id: lessons.id })
-      .from(lessons)
-      .where(
-        and(
-          inArray(lessons.moduleId, enrolledModuleIds),
-          isNull(lessons.deletedAt)
-        )
-      );
-
-    for (const lesson of moduleLessons) {
-      targetEntries.push({ type: "lesson", id: lesson.id });
-    }
-  }
+  const targetEntries = await getStudentAssignmentTargets(userId);
 
   // Step 2: Build OR conditions for practiceSetAssignments query
   // Group by type
@@ -374,6 +303,24 @@ export async function getStudentAssignments(
 
   // Step 6: Return as array
   return Array.from(deduped.values());
+}
+
+/** Whether a user may open and attempt a published practice set. */
+export async function canUserAccessPracticeSet(
+  userId: string,
+  practiceSetId: string,
+): Promise<boolean> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { role: true },
+  });
+  if (!user) return false;
+  if (user.role === "admin" || user.role === "coach") return true;
+
+  const assignments = await getStudentAssignments(userId);
+  return assignments.some(
+    (assignment) => assignment.practiceSetId === practiceSetId,
+  );
 }
 
 // ============================================================

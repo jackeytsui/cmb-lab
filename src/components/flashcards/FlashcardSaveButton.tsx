@@ -23,24 +23,49 @@ export function FlashcardSaveButton({
   variant = "star",
   label,
   onSavedChange,
-  ...item
+  chinese,
+  simplified,
+  pinyin,
+  jyutping,
+  english,
+  sourceLabel,
+  sourceType,
+  sourceId,
+  sourceUrl,
+  language,
 }: FlashcardSaveButtonProps) {
   const [savedId, setSavedId] = useState<string | null>(initialSavedId);
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  const contentKey = useMemo(() => buildFlashcardContentKey(item), [
-    item.chinese,
-    item.simplified,
-    item.pinyin,
-    item.jyutping,
-    item.english,
-    item.sourceLabel,
-    item.sourceType,
-    item.sourceId,
-    item.sourceUrl,
-    item.language,
-  ]);
+  const item = useMemo<FlashcardSaveInput>(
+    () => ({
+      chinese,
+      simplified,
+      pinyin,
+      jyutping,
+      english,
+      sourceLabel,
+      sourceType,
+      sourceId,
+      sourceUrl,
+      language,
+    }),
+    [
+      chinese,
+      simplified,
+      pinyin,
+      jyutping,
+      english,
+      sourceLabel,
+      sourceType,
+      sourceId,
+      sourceUrl,
+      language,
+    ],
+  );
+
+  const contentKey = useMemo(() => buildFlashcardContentKey(item), [item]);
 
   useEffect(() => {
     if (!hasFlashcardText(item)) return;
@@ -69,20 +94,7 @@ export function FlashcardSaveButton({
     return () => {
       cancelled = true;
     };
-  }, [
-    contentKey,
-    initialSavedId,
-    item.chinese,
-    item.simplified,
-    item.pinyin,
-    item.jyutping,
-    item.english,
-    item.sourceLabel,
-    item.sourceType,
-    item.sourceId,
-    item.sourceUrl,
-    item.language,
-  ]);
+  }, [contentKey, initialSavedId, item]);
 
   useEffect(() => {
     setSavedId(initialSavedId);

@@ -478,7 +478,13 @@ export function FlashcardsClient() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [studyMode, handleStudyNext, handleStudyPrev, handleStudySpeak]);
+  }, [
+    studyMode,
+    handleStudyNext,
+    handleStudyPrev,
+    handleStudySpeak,
+    stopTTS,
+  ]);
 
   if (loading) {
     return (

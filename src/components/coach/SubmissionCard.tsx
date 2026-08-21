@@ -8,7 +8,7 @@ interface SubmissionCardProps {
   submission: {
     id: string;
     type: "text" | "audio" | "video";
-    score: number;
+    score: number | null;
     status: "pending_review" | "reviewed" | "archived";
     createdAt: string;
     studentName: string | null;
@@ -54,7 +54,7 @@ function getScoreColor(score: number): string {
 
 /**
  * SubmissionCard component - displays a single submission in the queue.
- * Shows student name, lesson title, submission type, AI score, and time since submission.
+ * Shows student name, lesson title, submission type, grading status, and time since submission.
  */
 export function SubmissionCard({ submission }: SubmissionCardProps) {
   const TypeIcon = submission.type === "video" ? Video : (submission.type === "audio" ? Mic : MessageSquare);
@@ -99,12 +99,18 @@ export function SubmissionCard({ submission }: SubmissionCardProps) {
 
           {/* Bottom row: Score + Status + Time */}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-            {/* AI Score */}
+            {/* Grading status */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">AI Score:</span>
-              <span className={`text-sm font-semibold ${getScoreColor(submission.score)}`}>
-                {submission.score}
+              <span className="text-xs text-muted-foreground">
+                {submission.score === null ? "Score:" : "Auto score:"}
               </span>
+              {submission.score === null ? (
+                <span className="text-sm font-medium text-muted-foreground">Awaiting review</span>
+              ) : (
+                <span className={`text-sm font-semibold ${getScoreColor(submission.score)}`}>
+                  {submission.score}
+                </span>
+              )}
             </div>
 
             {/* Status badge + Time */}

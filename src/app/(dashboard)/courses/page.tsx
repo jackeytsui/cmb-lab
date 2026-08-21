@@ -162,7 +162,10 @@ export default async function MyCoursesPage() {
                   thumbnailUrl: course.thumbnailUrl,
                   accessTier: isCoachOrAbove
                     ? "full"
-                    : permissions?.getAccessTier(course.id) ?? "preview",
+                    : permissions?.hasCourseLevelAccess(course.id) &&
+                        permissions.getCourseLevelAccessTier(course.id) === "full"
+                      ? "full"
+                      : "preview",
                 }}
                 progress={{
                   completedLessons: course.completedLessons ?? 0,

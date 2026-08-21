@@ -2,6 +2,9 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { TZDate } from "@date-fns/tz";
+
+const SOURCE_TIME_ZONE = "America/Toronto";
 
 type Tag = { id: string; name: string; color: string };
 type EventRecord = {
@@ -18,9 +21,17 @@ type EventRecord = {
 type EventForm = Omit<EventRecord, "id" | "startsAt"> & { startsAt: string };
 
 function localInputValue(value: Date | string): string {
-  const date = value instanceof Date ? value : new Date(value);
+  const source = value instanceof Date ? value : new Date(value);
+  const date = new TZDate(source, SOURCE_TIME_ZONE);
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function torontoInputToIso(value: string): string {
+  const [datePart, timePart] = value.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = timePart.split(":").map(Number);
+  return new TZDate(year, month - 1, day, hour, minute, SOURCE_TIME_ZONE).toISOString();
 }
 
 function emptyForm(): EventForm {
@@ -109,7 +120,7 @@ export function CoachingScheduleAdminClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...form,
-            startsAt: new Date(form.startsAt).toISOString(),
+            startsAt: torontoInputToIso(form.startsAt),
           }),
         },
       );
@@ -191,7 +202,7 @@ export function CoachingScheduleAdminClient() {
         </label>
         <div className="grid grid-cols-[1fr_7rem] gap-3">
           <label className="block space-y-1.5 text-sm">
-            <span className="font-medium text-foreground">Date and time</span>
+            <span className="font-medium text-foreground">Date and time (Toronto)</span>
             <input
               required
               type="datetime-local"
@@ -300,7 +311,7 @@ export function CoachingScheduleAdminClient() {
                   </div>
                   <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                     <CalendarDays className="h-3.5 w-3.5" />
-                    {new Date(event.startsAt).toLocaleString()} · {event.durationMinutes} min
+                    {new Date(event.startsAt).toLocaleString(undefined, { timeZone: SOURCE_TIME_ZONE, timeZoneName: "short" })} · {event.durationMinutes} min
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     Audience: {event.tagIds.length === 0

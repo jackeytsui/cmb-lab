@@ -13,6 +13,7 @@ import {
   isYouTubeCaptionAccessBlocked,
 } from "@/lib/captions";
 import { getTranscriptLimitSettings, getPeriodStart } from "@/lib/usage-limits";
+import { extractVideoId } from "@/lib/youtube";
 
 /**
  * POST /api/video/extract-captions
@@ -45,9 +46,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!url) {
+    if (!url || extractVideoId(url) !== videoId) {
       return NextResponse.json(
-        { error: "Missing url field." },
+        { error: "URL must be a valid YouTube URL for the supplied videoId." },
         { status: 400 }
       );
     }
@@ -76,17 +77,25 @@ export async function POST(request: NextRequest) {
         orderBy: [asc(videoCaptions.sequence)],
       });
 
-      return NextResponse.json({
-        session: existingSession,
-        captions: cachedCaptions.map((c) => ({
-          text: c.text,
-          startMs: c.startMs,
-          endMs: c.endMs,
-          sequence: c.sequence,
-        })),
-        englishCaptions: null,
-        cached: true,
-      });
+      if (cachedCaptions.length > 0) {
+        return NextResponse.json({
+          session: existingSession,
+          captions: cachedCaptions.map((c) => ({
+            text: c.text,
+            startMs: c.startMs,
+            endMs: c.endMs,
+            sequence: c.sequence,
+          })),
+          englishCaptions: null,
+          cached: true,
+        });
+      }
+      // Recover from a prior interrupted write instead of returning a false
+      // cache hit with zero transcript rows.
+      await db
+        .update(videoSessions)
+        .set({ captionCount: 0 })
+        .where(eq(videoSessions.id, existingSession.id));
     }
 
     // 4b. Usage limit check for students (cached results above are free)
@@ -173,7 +182,7 @@ export async function POST(request: NextRequest) {
         youtubeUrl: url,
         captionSource: "youtube_auto",
         captionLang: result.lang,
-        captionCount: result.captions.length,
+        captionCount: 0,
       })
       .onConflictDoUpdate({
         target: [videoSessions.userId, videoSessions.youtubeVideoId],
@@ -181,12 +190,16 @@ export async function POST(request: NextRequest) {
           youtubeUrl: url,
           captionSource: "youtube_auto" as const,
           captionLang: result.lang,
-          captionCount: result.captions.length,
+          captionCount: 0,
         },
       })
       .returning();
 
-    // 7. Bulk insert captions
+    // 7. Replace captions. Keep metadata at zero until every row has been
+    // written, so an interrupted request can never produce a false cache hit.
+    await db
+      .delete(videoCaptions)
+      .where(eq(videoCaptions.videoSessionId, session.id));
     if (result.captions.length > 0) {
       await db.insert(videoCaptions).values(
         result.captions.map((c) => ({
@@ -199,8 +212,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const [completedSession] = await db
+      .update(videoSessions)
+      .set({ captionCount: result.captions.length })
+      .where(eq(videoSessions.id, session.id))
+      .returning();
+
     return NextResponse.json({
-      session,
+      session: completedSession,
       captions: result.captions,
       englishCaptions: englishCaptions ?? null,
       cached: false,

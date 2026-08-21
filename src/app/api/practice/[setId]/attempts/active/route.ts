@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { practiceAttempts, users } from "@/db/schema";
 import { eq, and, isNull, desc } from "drizzle-orm";
+import { canUserAccessPracticeSet } from "@/lib/assignments";
 
 // GET /api/practice/[setId]/attempts/active
 // Check for an incomplete attempt for this practice set
@@ -24,6 +25,10 @@ export async function GET(
   }
 
   const { setId } = await params;
+
+  if (!(await canUserAccessPracticeSet(currentUser.id, setId))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   try {
     const activeAttempt = await db.query.practiceAttempts.findFirst({

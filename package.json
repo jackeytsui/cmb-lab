@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:unit": "vitest run",
+    "launch:validate-csv": "tsx scripts/cmb-launch-validate-csv.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:apply": "node scripts/apply-migrations.mjs --force",

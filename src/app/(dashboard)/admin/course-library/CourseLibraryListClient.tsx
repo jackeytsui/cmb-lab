@@ -25,6 +25,13 @@ const STATUS_BADGE: Record<CourseStatus, { label: string; className: string }> =
   published: { label: "Published", className: "bg-emerald-500/90 text-white" },
 };
 
+const COURSE_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
 export function CourseLibraryListClient({
   initialCourses,
 }: {
@@ -88,9 +95,9 @@ export function CourseLibraryListClient({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-medium text-muted-foreground">
           {courses.length} course{courses.length === 1 ? "" : "s"}
         </p>
         <button
@@ -99,7 +106,7 @@ export function CourseLibraryListClient({
             setShowCreate(!showCreate);
             setError(null);
           }}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:w-auto"
         >
           {showCreate ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           {showCreate ? "Cancel" : "New Course"}
@@ -107,12 +114,17 @@ export function CourseLibraryListClient({
       </div>
 
       {showCreate && (
-        <div className="rounded-lg border border-dashed border-border bg-card p-4 space-y-3">
+        <div className="space-y-4 rounded-2xl border border-dashed border-primary/30 bg-card p-5 shadow-sm">
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
+            <label
+              htmlFor="new-course-title"
+              className="block text-xs font-medium text-muted-foreground mb-1"
+            >
               Title
             </label>
             <input
+              id="new-course-title"
+              name="title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -123,10 +135,15 @@ export function CourseLibraryListClient({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
+            <label
+              htmlFor="new-course-summary"
+              className="block text-xs font-medium text-muted-foreground mb-1"
+            >
               Summary (optional)
             </label>
             <textarea
+              id="new-course-summary"
+              name="summary"
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="Short description of the course"
@@ -136,7 +153,7 @@ export function CourseLibraryListClient({
             />
           </div>
           {error && (
-            <p className="text-xs text-red-500">{error}</p>
+            <p role="alert" className="text-xs text-red-500">{error}</p>
           )}
           <div className="flex justify-end">
             <button
@@ -160,11 +177,11 @@ export function CourseLibraryListClient({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {courses.map((course) => (
             <div
               key={course.id}
-              className="group rounded-lg border border-border bg-card overflow-hidden hover:border-primary/40 transition-colors"
+              className="group overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md"
             >
               <Link
                 href={`/admin/course-library/${course.id}`}
@@ -192,20 +209,20 @@ export function CourseLibraryListClient({
                     {STATUS_BADGE[course.status].label}
                   </span>
                 </div>
-                <div className="p-3">
-                  <h3 className="text-sm font-semibold text-foreground line-clamp-1">
+                <div className="p-4">
+                  <h3 className="line-clamp-1 text-base font-semibold text-foreground">
                     {course.title}
                   </h3>
                   {course.summary && (
-                    <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                    <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
                       {course.summary}
                     </p>
                   )}
                 </div>
               </Link>
-              <div className="border-t border-border px-3 py-2 flex items-center justify-between">
+              <div className="flex items-center justify-between border-t border-border/70 px-4 py-2.5">
                 <span className="text-[10px] text-muted-foreground">
-                  {new Date(course.createdAt).toLocaleDateString()}
+                  {COURSE_DATE_FORMATTER.format(new Date(course.createdAt))}
                 </span>
                 <button
                   type="button"

@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { submissions, coachFeedback } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { createNotification } from "@/lib/notifications";
 import { dispatchWebhook } from "@/lib/ghl/webhooks";
+import { sendCoachFeedbackNotification } from "@/lib/coach-feedback-notification";
+import { z } from "zod";
+
+const feedbackSchema = z.object({
+  loomUrl: z.string().trim().max(2_000).optional(),
+  feedbackText: z.string().trim().max(20_000).optional(),
+}).strict().refine(
+  (value) => Boolean(value.loomUrl || value.feedbackText),
+  "At least one feedback field is required",
+);
 
 /**
  * Validate Loom URL format
@@ -31,32 +41,31 @@ export async function POST(
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
   // 1. Verify user has coach role minimum
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) {
+  const currentUser = await getRealUser();
+  if (!currentUser || currentUser.deletedAt) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
     );
   }
 
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 401 });
+  const { submissionId } = await params;
+  if (!z.string().uuid().safeParse(submissionId).success) {
+    return NextResponse.json({ error: "Submission not found" }, { status: 404 });
   }
 
-  const { submissionId } = await params;
-
   try {
-    const body = await request.json();
-    const { loomUrl, feedbackText } = body;
-
-    // 2. Validate: At least one of loomUrl or feedbackText required
-    if (!loomUrl && !feedbackText) {
+    const parsed = feedbackSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
       return NextResponse.json(
         { error: "At least one of loomUrl or feedbackText is required" },
         { status: 400 }
       );
     }
+    const { loomUrl, feedbackText } = parsed.data;
 
     // 3. Validate Loom URL format if provided
     if (loomUrl && !isValidLoomUrl(loomUrl)) {
@@ -126,18 +135,13 @@ export async function POST(
 
     // 7. Trigger email notification (fire and forget)
     try {
-      const baseUrl = request.nextUrl.origin;
-      await fetch(`${baseUrl}/api/notify/coach-feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentEmail: submission.user.email,
-          studentName: submission.user.name || "Student",
-          lessonTitle: submission.lesson.title,
-          coachName: currentUser.name || "Your Coach",
-          loomUrl: loomUrl || undefined,
-          feedbackText: feedbackText || undefined,
-        }),
+      await sendCoachFeedbackNotification({
+        studentEmail: submission.user.email,
+        studentName: submission.user.name || "Student",
+        lessonTitle: submission.lesson.title,
+        coachName: currentUser.name || "Your Coach",
+        loomUrl: loomUrl || undefined,
+        feedbackText: feedbackText || undefined,
       });
     } catch (notifyError) {
       // Log but don't fail the request
@@ -198,12 +202,15 @@ export async function POST(
  * Get existing coach feedback for a submission
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
   // 1. Verify user has coach role minimum
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) {
+  const currentUser = await getRealUser();
+  if (!currentUser || currentUser.deletedAt) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
@@ -211,6 +218,9 @@ export async function GET(
   }
 
   const { submissionId } = await params;
+  if (!z.string().uuid().safeParse(submissionId).success) {
+    return NextResponse.json({ error: "No feedback found for this submission" }, { status: 404 });
+  }
 
   try {
     // 2. Get feedback with coach info

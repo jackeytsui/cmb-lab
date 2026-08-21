@@ -1,15 +1,17 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { GitFork } from 'lucide-react';
 import { PlayerStep } from '@/types/video-thread-player';
 
-interface LogicNodeData {
+interface LogicNodeData extends Record<string, unknown> {
     step: PlayerStep;
     isSelected: boolean;
     label: string;
 }
 
-const LogicNode = ({ data }: NodeProps<any>) => {
+type LogicNodeType = Node<LogicNodeData, 'logicStep'>;
+
+const LogicNode = ({ data }: NodeProps<LogicNodeType>) => {
     const { step } = data as LogicNodeData;
     const rules = step.logicRules || [];
     const hasRules = rules.length > 0;

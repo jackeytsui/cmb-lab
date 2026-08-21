@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, isNull, and } from "drizzle-orm";
 import { db } from "@/db";
-import { lessons } from "@/db/schema";
+import { courses, lessons, modules } from "@/db/schema";
+import { isPublicAudioCourse } from "@/lib/audio-course-access";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+
+export const maxDuration = 60;
 
 /**
  * GET /api/podcast/audio/[lessonId]
@@ -14,12 +19,35 @@ export async function GET(
 ) {
   const { lessonId } = await params;
 
-  const lesson = await db.query.lessons.findFirst({
-    where: and(eq(lessons.id, lessonId), isNull(lessons.deletedAt)),
-    columns: { content: true },
-  });
+  const [lesson] = await db
+    .select({
+      content: lessons.content,
+      courseId: courses.id,
+      courseTitle: courses.title,
+      courseDescription: courses.description,
+    })
+    .from(lessons)
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .innerJoin(courses, eq(modules.courseId, courses.id))
+    .where(
+      and(
+        eq(lessons.id, lessonId),
+        isNull(lessons.deletedAt),
+        isNull(modules.deletedAt),
+        isNull(courses.deletedAt),
+        eq(courses.isPublished, true),
+      ),
+    )
+    .limit(1);
 
-  if (!lesson) {
+  if (
+    !lesson ||
+    !(await isPublicAudioCourse({
+      id: lesson.courseId,
+      title: lesson.courseTitle,
+      description: lesson.courseDescription,
+    }))
+  ) {
     return new NextResponse("Not found", { status: 404 });
   }
 
@@ -31,43 +59,13 @@ export async function GET(
     // no-op
   }
 
-  if (!audioUrl) {
+  if (!isPrivateVercelBlobUrl(audioUrl)) {
     return new NextResponse("No audio", { status: 404 });
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-
-  const range = request.headers.get("range");
-  if (range) {
-    headers["Range"] = range;
-  }
-
-  const blobResponse = await fetch(audioUrl, { headers });
-
-  if (!blobResponse.ok && blobResponse.status !== 206) {
-    return new NextResponse("Failed to fetch audio", { status: blobResponse.status });
-  }
-
-  const responseHeaders = new Headers();
-  const contentType = blobResponse.headers.get("content-type");
-  if (contentType) responseHeaders.set("Content-Type", contentType);
-
-  const contentLength = blobResponse.headers.get("content-length");
-  if (contentLength) responseHeaders.set("Content-Length", contentLength);
-
-  const contentRange = blobResponse.headers.get("content-range");
-  if (contentRange) responseHeaders.set("Content-Range", contentRange);
-
-  const acceptRanges = blobResponse.headers.get("accept-ranges");
-  if (acceptRanges) responseHeaders.set("Accept-Ranges", acceptRanges);
-  else responseHeaders.set("Accept-Ranges", "bytes");
-
-  responseHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=86400");
-
-  return new NextResponse(blobResponse.body, {
-    status: blobResponse.status,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, audioUrl, {
+    fallbackContentType: "audio/mpeg",
+    label: "podcast/audio",
+    extraHeaders: { "Content-Disposition": "inline" },
   });
 }

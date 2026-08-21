@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { lessons, podcastTokens } from "@/db/schema";
+import { courses, lessons, modules, podcastTokens, users } from "@/db/schema";
+import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+
+export const maxDuration = 60;
 
 /**
  * GET /api/podcast/private/[token]/audio/[lessonId]
@@ -12,70 +17,68 @@ export async function GET(
   { params }: { params: Promise<{ token: string; lessonId: string }> },
 ) {
   const { token, lessonId } = await params;
-
-  // Validate token
-  const tokenRow = await db.query.podcastTokens.findFirst({
-    where: eq(podcastTokens.token, token),
-  });
-
-  if (!tokenRow) {
+  if (!/^[a-f0-9]{64}$/i.test(token)) {
     return new NextResponse("Unauthorized", { status: 403 });
   }
 
-  // Get the lesson
-  const [lesson] = await db
-    .select()
-    .from(lessons)
-    .where(and(eq(lessons.id, lessonId), isNull(lessons.deletedAt)));
+  // Bind the token to its user, series, and requested lesson in one query.
+  const [record] = await db
+    .select({
+      userId: users.id,
+      userRole: users.role,
+      lessonContent: lessons.content,
+      courseId: courses.id,
+      courseTitle: courses.title,
+      courseDescription: courses.description,
+    })
+    .from(podcastTokens)
+    .innerJoin(users, eq(podcastTokens.userId, users.id))
+    .innerJoin(courses, eq(podcastTokens.seriesId, courses.id))
+    .innerJoin(modules, eq(modules.courseId, courses.id))
+    .innerJoin(lessons, eq(lessons.moduleId, modules.id))
+    .where(
+      and(
+        eq(podcastTokens.token, token),
+        eq(lessons.id, lessonId),
+        isNull(users.deletedAt),
+        isNull(courses.deletedAt),
+        eq(courses.isPublished, true),
+        isNull(modules.deletedAt),
+        isNull(lessons.deletedAt),
+      ),
+    )
+    .limit(1);
 
-  if (!lesson) {
+  if (
+    !record ||
+    !(await userCanAccessAudioCourse(
+      { id: record.userId, role: record.userRole },
+      {
+        id: record.courseId,
+        title: record.courseTitle,
+        description: record.courseDescription,
+      },
+    ))
+  ) {
     return new NextResponse("Lesson not found", { status: 404 });
   }
 
   // Parse audio URL from lesson content JSON
   let audioUrl = "";
   try {
-    const content = JSON.parse(lesson.content ?? "{}");
+    const content = JSON.parse(record.lessonContent ?? "{}");
     audioUrl = typeof content.audioUrl === "string" ? content.audioUrl : "";
   } catch {
     // no-op
   }
 
-  if (!audioUrl) {
+  if (!isPrivateVercelBlobUrl(audioUrl)) {
     return new NextResponse("No audio available", { status: 404 });
   }
 
-  // Proxy the audio from Vercel Blob with auth
-  const headers: Record<string, string> = {};
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
-    headers["Authorization"] = `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`;
-  }
-
-  // Support range requests for seeking
-  const range = request.headers.get("range");
-  if (range) {
-    headers["Range"] = range;
-  }
-
-  const response = await fetch(audioUrl, { headers });
-
-  if (!response.ok && response.status !== 206) {
-    return new NextResponse("Audio stream error", { status: 502 });
-  }
-
-  const responseHeaders = new Headers();
-  responseHeaders.set("Content-Type", response.headers.get("Content-Type") || "audio/mpeg");
-  if (response.headers.get("Content-Length")) {
-    responseHeaders.set("Content-Length", response.headers.get("Content-Length")!);
-  }
-  if (response.headers.get("Content-Range")) {
-    responseHeaders.set("Content-Range", response.headers.get("Content-Range")!);
-  }
-  responseHeaders.set("Accept-Ranges", "bytes");
-  responseHeaders.set("Cache-Control", "private, max-age=3600");
-
-  return new NextResponse(response.body, {
-    status: response.status,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, audioUrl, {
+    fallbackContentType: "audio/mpeg",
+    label: "podcast/private/audio",
+    extraHeaders: { "Content-Disposition": "inline" },
   });
 }

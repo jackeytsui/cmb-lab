@@ -76,14 +76,20 @@ export function ListeningAudioPlayer({
 
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 15_000);
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({ text: chinese, language: ttsLanguage, rate: "medium" }),
       });
       if (!res.ok) throw new Error(`TTS failed (${res.status})`);
       const blob = await res.blob();
+      if (blob.size === 0 || !blob.type.startsWith("audio/")) {
+        throw new Error("TTS returned invalid audio");
+      }
       const url = URL.createObjectURL(blob);
       blobUrlRef.current = url;
       audio.src = url;
@@ -93,6 +99,7 @@ export function ListeningAudioPlayer({
       setError("Audio unavailable. Try again.");
       return false;
     } finally {
+      window.clearTimeout(timeoutId);
       setLoading(false);
     }
   }, [chinese, hasOverride, overrideSrc, ttsLanguage]);
@@ -149,6 +156,17 @@ export function ListeningAudioPlayer({
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
+        onError={() => {
+          setPlaying(false);
+          setLoading(false);
+          if (!hasOverride) {
+            if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+            blobUrlRef.current = null;
+            if (audioRef.current) audioRef.current.removeAttribute("src");
+            setSrcReady(false);
+          }
+          setError("Audio unavailable. Try again.");
+        }}
       />
 
       <div className="flex items-center gap-3">

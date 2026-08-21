@@ -41,9 +41,17 @@ export async function POST(request: NextRequest) {
 
     const { sessionId, lastPositionMs, videoDurationMs, title } = body;
 
-    if (!sessionId || typeof lastPositionMs !== "number") {
+    if (
+      !sessionId ||
+      typeof lastPositionMs !== "number" ||
+      !Number.isFinite(lastPositionMs) ||
+      lastPositionMs < 0 ||
+      typeof videoDurationMs !== "number" ||
+      !Number.isFinite(videoDurationMs) ||
+      videoDurationMs <= 0
+    ) {
       return NextResponse.json(
-        { error: "Missing required fields: sessionId, lastPositionMs" },
+        { error: "Invalid progress values" },
         { status: 400 }
       );
     }
@@ -73,17 +81,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Compute completion percentage (monotonic via GREATEST in SQL)
-    const newPercent =
-      videoDurationMs > 0
-        ? Math.min(
-            100,
-            Math.round((lastPositionMs / videoDurationMs) * 100)
-          )
-        : 0;
+    const safePositionMs = Math.min(lastPositionMs, videoDurationMs);
+    const newPercent = Math.max(
+      0,
+      Math.min(100, Math.round((safePositionMs / videoDurationMs) * 100)),
+    );
 
     // 6. Build update object
     const updateData: Record<string, unknown> = {
-      lastPositionMs,
+      lastPositionMs: safePositionMs,
       videoDurationMs: videoDurationMs ?? session.videoDurationMs,
       completionPercent: sql`GREATEST(${videoSessions.completionPercent}, ${newPercent})`,
       updatedAt: new Date(),

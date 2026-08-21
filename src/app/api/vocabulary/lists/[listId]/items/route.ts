@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import {
   vocabularyLists,
@@ -8,9 +7,10 @@ import {
 } from "@/db/schema/vocabulary";
 import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
 
 const itemsSchema = z.object({
-  savedVocabularyIds: z.array(z.string().uuid()).min(1),
+  savedVocabularyIds: z.array(z.string().uuid()).min(1).max(500),
 });
 
 // Add items to list
@@ -18,8 +18,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ listId: string }> }
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -33,7 +33,7 @@ export async function POST(
     const list = await db.query.vocabularyLists.findFirst({
       where: and(
         eq(vocabularyLists.id, listId),
-        eq(vocabularyLists.userId, userId)
+        eq(vocabularyLists.userId, user.id)
       ),
     });
 
@@ -47,7 +47,7 @@ export async function POST(
       .from(savedVocabulary)
       .where(
         and(
-          eq(savedVocabulary.userId, userId),
+          eq(savedVocabulary.userId, user.id),
           inArray(savedVocabulary.id, savedVocabularyIds)
         )
       );
@@ -97,8 +97,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ listId: string }> }
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -112,7 +112,7 @@ export async function DELETE(
     const list = await db.query.vocabularyLists.findFirst({
       where: and(
         eq(vocabularyLists.id, listId),
-        eq(vocabularyLists.userId, userId)
+        eq(vocabularyLists.userId, user.id)
       ),
     });
 

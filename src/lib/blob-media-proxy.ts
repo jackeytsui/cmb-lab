@@ -62,6 +62,54 @@ export function clampRangeHeader(range: string): string {
   return range;
 }
 
+export interface NormalizedContentRange {
+  value: string;
+  contentLength: number;
+}
+
+/**
+ * Vercel Blob can occasionally describe a tail response relative to the
+ * requested offset (for example `bytes 193069056-797056/797057`). That is not
+ * a valid HTTP Content-Range and Chromium discards it, then retries the same
+ * metadata probe several seconds later. Convert that specific relative form
+ * back to absolute byte positions before forwarding it to the browser.
+ */
+export function normalizeContentRange(
+  contentRange: string | null,
+): NormalizedContentRange | null {
+  if (!contentRange) return null;
+  const match = /^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i.exec(
+    contentRange.trim(),
+  );
+  if (!match) return null;
+
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  const total = match[3] === "*" ? null : Number(match[3]);
+  if (![start, end].every(Number.isSafeInteger)) return null;
+
+  if (
+    total !== null &&
+    Number.isSafeInteger(total) &&
+    start > 0 &&
+    end < start &&
+    end + 1 === total
+  ) {
+    const absoluteEnd = start + end;
+    const absoluteTotal = start + total;
+    return {
+      value: `bytes ${start}-${absoluteEnd}/${absoluteTotal}`,
+      contentLength: total,
+    };
+  }
+
+  if (end < start) return null;
+  return {
+    value: `bytes ${start}-${end}/${total ?? "*"}`,
+    contentLength: end - start + 1,
+  };
+}
+
 /**
  * Stream a private Vercel Blob through an authenticated, chunk-bounded proxy
  * response. Callers are responsible for auth/authorization checks — this
@@ -72,8 +120,8 @@ export async function proxyBlobMedia(
   blobUrl: string,
   options: ProxyOptions,
 ): Promise<NextResponse> {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
+  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  if (!token || /\s/.test(token)) {
     console.error(
       `[${options.label}] BLOB_READ_WRITE_TOKEN is not set — cannot fetch private blobs`,
     );
@@ -93,7 +141,12 @@ export async function proxyBlobMedia(
   try {
     blobResponse = await fetch(blobUrl, { headers });
   } catch (err) {
-    console.error(`[${options.label}] Blob fetch failed:`, err);
+    // Fetch can include an invalid Authorization value verbatim in its error.
+    // Log the error class only so storage credentials never reach telemetry.
+    console.error(
+      `[${options.label}] Blob fetch failed:`,
+      err instanceof Error ? err.name : "UnknownError",
+    );
     return NextResponse.json(
       { error: "Failed to reach media storage" },
       { status: 502, headers: { "Cache-Control": "no-store" } },
@@ -131,9 +184,15 @@ export async function proxyBlobMedia(
     "Content-Type",
     blobResponse.headers.get("content-type") ?? options.fallbackContentType,
   );
-  const contentLength = blobResponse.headers.get("content-length");
+  const rawContentRange = blobResponse.headers.get("content-range");
+  const normalizedContentRange = normalizeContentRange(rawContentRange);
+  const contentRange = normalizedContentRange?.value ?? rawContentRange;
+  const contentLength =
+    blobResponse.headers.get("content-length") ??
+    (blobResponse.status === 206 && normalizedContentRange
+      ? String(normalizedContentRange.contentLength)
+      : null);
   if (contentLength) responseHeaders.set("Content-Length", contentLength);
-  const contentRange = blobResponse.headers.get("content-range");
   if (contentRange) responseHeaders.set("Content-Range", contentRange);
   responseHeaders.set(
     "Accept-Ranges",

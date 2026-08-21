@@ -4,10 +4,25 @@ import { mux } from "@/lib/mux";
 import { db } from "@/db";
 import { videoUploads, videoThreads } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { canUserAccessVideoThread } from "@/lib/video-thread-access";
+import { z } from "zod";
 
 interface RouteParams {
   params: Promise<{ threadId: string }>;
 }
+
+const uploadRequestSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("get-upload-url"),
+    filename: z.string().trim().min(1).max(255),
+    courseLessonId: z.string().uuid().nullish(),
+  }),
+  z.object({
+    action: z.literal("check-status"),
+    uploadId: z.string().trim().min(1).max(255),
+    courseLessonId: z.string().uuid().nullish(),
+  }),
+]);
 
 function getMuxCorsOrigin(request: NextRequest): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -35,14 +50,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const { threadId } = await params;
-    const body = await request.json();
-    const { action } = body;
-
-    if (!action || !["get-upload-url", "check-status"].includes(action)) {
+    const parsedBody = uploadRequestSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!parsedBody.success) {
       return NextResponse.json(
-        { error: "action must be 'get-upload-url' or 'check-status'" },
+        { error: "Invalid upload request" },
         { status: 400 }
       );
+    }
+    const body = parsedBody.data;
+    const { action } = body;
+
+    if (
+      !(await canUserAccessVideoThread(
+        user,
+        threadId,
+        body.courseLessonId,
+      ))
+    ) {
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 });
     }
 
     // Verify thread exists

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 
 // Match the 60s used by the other blob-proxy routes for consistency.
 export const maxDuration = 60;
@@ -12,15 +15,18 @@ export const maxDuration = 60;
  * Authenticated proxy for lesson thumbnail images stored in private Blob.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { lessonId } = await params;
+  if (!(await canUserAccessCourseLibraryLesson(user, lessonId))) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
 
   const [lesson] = await db
     .select({ content: courseLibraryLessons.content })
@@ -39,29 +45,12 @@ export async function GET(
 
   const content = lesson.content as Record<string, unknown>;
   const thumbnailUrl = content.thumbnailUrl as string | undefined;
-  if (!thumbnailUrl) {
+  if (!thumbnailUrl || !isPrivateVercelBlobUrl(thumbnailUrl)) {
     return NextResponse.json({ error: "No thumbnail" }, { status: 404 });
   }
 
-  const blobResponse = await fetch(thumbnailUrl, {
-    headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
-  });
-  if (!blobResponse.ok) {
-    return NextResponse.json(
-      { error: "Failed to fetch image" },
-      { status: blobResponse.status },
-    );
-  }
-
-  const responseHeaders = new Headers();
-  responseHeaders.set(
-    "Content-Type",
-    blobResponse.headers.get("content-type") ?? "image/jpeg",
-  );
-  responseHeaders.set("Cache-Control", "private, max-age=3600");
-
-  return new NextResponse(blobResponse.body, {
-    status: 200,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, thumbnailUrl, {
+    fallbackContentType: "image/jpeg",
+    label: "course-library/image",
   });
 }

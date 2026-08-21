@@ -9,21 +9,22 @@ import { createNotification } from "@/lib/notifications";
 import { z } from "zod";
 import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
+import { webhookSecretsMatch } from "@/lib/webhook-secret";
 
 const enrollmentSchema = z.object({
   email: z.string().email(),
-  name: z.string().optional(),
+  name: z.string().trim().max(200).optional(),
   // Legacy course enrollment (WEBHOOK-05)
   courseId: z.string().uuid().optional(),
   accessTier: z.enum(["preview", "full"]).default("full"),
-  expiresAt: z.string().optional(),
+  expiresAt: z.string().datetime().optional(),
   // RBAC role assignment (WEBHOOK-01, WEBHOOK-02)
   roleId: z.string().uuid().optional(),
-  roleName: z.string().optional(),
-  roleExpiresAt: z.string().optional(), // WEBHOOK-03
+  roleName: z.string().trim().max(200).optional(),
+  roleExpiresAt: z.string().datetime().optional(), // WEBHOOK-03
   // Idempotency (WEBHOOK-04)
-  idempotencyKey: z.string().optional(),
-}).refine(
+  idempotencyKey: z.string().max(500).optional(),
+}).strict().refine(
   (d) => d.courseId || d.roleId || d.roleName,
   { message: "At least one of courseId, roleId, or roleName is required" }
 );
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   try {
     // Verify webhook secret
     const secret = req.headers.get("x-webhook-secret");
-    if (secret !== process.env.ENROLLMENT_WEBHOOK_SECRET) {
+    if (!webhookSecretsMatch(secret, process.env.ENROLLMENT_WEBHOOK_SECRET)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -159,7 +160,10 @@ export async function POST(req: NextRequest) {
         await ensureDefaultStudentRoleAssignment(dbUser.id);
       }
     } else {
-      const role = resolveRoleFromEmail(data.email);
+      const resolvedRole = resolveRoleFromEmail(data.email);
+      const role = dbUser.role === "admin" || dbUser.role === "coach"
+        ? dbUser.role
+        : resolvedRole;
       if (dbUser.role !== role) {
         await db
           .update(users)

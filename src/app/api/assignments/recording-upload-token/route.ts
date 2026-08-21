@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { auth } from "@clerk/nextjs/server";
+import { getRealUser } from "@/lib/auth";
 
 export const maxDuration = 60;
 
@@ -49,9 +49,12 @@ export async function POST(request: NextRequest) {
       request,
       token: process.env.BLOB_READ_WRITE_TOKEN,
       onBeforeGenerateToken: async (pathname) => {
-        const { userId } = await auth();
-        if (!userId) throw new Error("Forbidden");
-        if (!pathname.startsWith(PATHNAME_PREFIX) || pathname.includes("..")) {
+        const user = await getRealUser();
+        if (!user || user.deletedAt) throw new Error("Forbidden");
+        if (
+          !pathname.startsWith(PATHNAME_PREFIX) ||
+          !/^assignment-recordings\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,180}$/.test(pathname)
+        ) {
           throw new Error("Invalid upload path");
         }
         return {

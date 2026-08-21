@@ -139,6 +139,8 @@ export async function GET(request: NextRequest) {
 
     // Add submissions (source: "submission")
     for (const submission of submissionsData) {
+      // Coach-review-only submissions are not AI grading events.
+      if (submission.score === null) continue;
       // Apply filters
       if (studentId && submission.studentId !== studentId) continue;
       if (type !== "all" && submission.type !== type) continue;

@@ -1,17 +1,36 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { coachingNotes, users } from "@/db/schema";
+import { coachingNotes, coachingSessions } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
+import { z } from "zod";
 
-async function getCurrentDbUser() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
-  return db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+const updateNoteSchema = z
+  .object({
+    textOverride: z.string().max(20_000).nullable().optional(),
+    romanizationOverride: z.string().max(20_000).nullable().optional(),
+    translationOverride: z.string().max(20_000).nullable().optional(),
+    explanation: z.string().max(20_000).nullable().optional(),
+    order: z.number().int().min(0).max(100_000).optional(),
+  })
+  .strict();
+
+async function canManageNote(
+  noteId: string,
+  user: { id: string; role: string },
+): Promise<boolean> {
+  const [note] = await db
+    .select({ createdBy: coachingSessions.createdBy })
+    .from(coachingNotes)
+    .innerJoin(
+      coachingSessions,
+      eq(coachingNotes.sessionId, coachingSessions.id),
+    )
+    .where(eq(coachingNotes.id, noteId))
+    .limit(1);
+  return Boolean(
+    note && (user.role === "admin" || note.createdBy === user.id),
+  );
 }
 
 export async function PATCH(
@@ -19,29 +38,31 @@ export async function PATCH(
   { params }: { params: Promise<{ noteId: string }> },
 ) {
   const { noteId } = await params;
-  const dbUser = await getCurrentDbUser();
+  const dbUser = await getRealUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const isCoachOrAdmin = await hasMinimumRole("coach");
-  if (!isCoachOrAdmin) {
+  if (dbUser.role !== "coach" && dbUser.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  if (!(await canManageNote(noteId, dbUser))) {
+    return NextResponse.json({ error: "Note not found" }, { status: 404 });
+  }
 
-  const body = await request.json();
+  const parsed = updateNoteSchema.safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid note update" }, { status: 400 });
+  }
+  const body = parsed.data;
   const {
     textOverride,
     romanizationOverride,
     translationOverride,
     explanation,
     order,
-  } = body as {
-    textOverride?: string | null;
-    romanizationOverride?: string | null;
-    translationOverride?: string | null;
-    explanation?: string | null;
-    order?: number;
-  };
+  } = body;
 
   // Build update payload — only include fields that were explicitly provided
   const updatePayload: Record<string, unknown> = {};
@@ -50,6 +71,10 @@ export async function PATCH(
   if ("translationOverride" in body) updatePayload.translationOverride = translationOverride ?? null;
   if ("explanation" in body) updatePayload.explanation = explanation ?? null;
   if (typeof order === "number") updatePayload.order = order;
+
+  if (Object.keys(updatePayload).length === 0) {
+    return NextResponse.json({ error: "No updates provided" }, { status: 400 });
+  }
 
   const [updated] = await db
     .update(coachingNotes)
@@ -65,13 +90,15 @@ export async function DELETE(
   { params }: { params: Promise<{ noteId: string }> },
 ) {
   const { noteId } = await params;
-  const dbUser = await getCurrentDbUser();
+  const dbUser = await getRealUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const isCoachOrAdmin = await hasMinimumRole("coach");
-  if (!isCoachOrAdmin) {
+  if (dbUser.role !== "coach" && dbUser.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (!(await canManageNote(noteId, dbUser))) {
+    return NextResponse.json({ error: "Note not found" }, { status: 404 });
   }
 
   const [deleted] = await db

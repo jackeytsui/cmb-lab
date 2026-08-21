@@ -1,18 +1,21 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { vocabularyLists, users, vocabularyListAssignments } from "@/db/schema";
+import { vocabularyLists, vocabularyListAssignments } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
+import { getRealUser } from "@/lib/auth";
+import { z } from "zod";
+
+const createListSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  description: z.string().trim().max(2_000).optional(),
+});
 
 export async function GET() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return new NextResponse("Unauthorized", { status: 401 });
-
-  const currentUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-  });
-
-  if (!currentUser) return new NextResponse("User not found", { status: 404 });
+  const currentUser = await getRealUser();
+  if (!currentUser) return new NextResponse("Unauthorized", { status: 401 });
+  if (currentUser.role !== "admin" && currentUser.role !== "coach") {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
 
   // Get lists created by this coach + count of assignments
   const lists = await db
@@ -37,16 +40,17 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return new NextResponse("Unauthorized", { status: 401 });
+  const currentUser = await getRealUser();
+  if (!currentUser) return new NextResponse("Unauthorized", { status: 401 });
+  if (currentUser.role !== "admin" && currentUser.role !== "coach") {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
 
-  const currentUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-  });
-  if (!currentUser) return new NextResponse("User not found", { status: 404 });
-
-  const { name, description } = await req.json();
-  if (!name) return new NextResponse("Name is required", { status: 400 });
+  const parsed = createListSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid list" }, { status: 400 });
+  }
+  const { name, description } = parsed.data;
 
   const [newList] = await db
     .insert(vocabularyLists)

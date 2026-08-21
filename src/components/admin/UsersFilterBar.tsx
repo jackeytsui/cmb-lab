@@ -60,14 +60,24 @@ export function UsersFilterBar({
   const [tagSearch, setTagSearch] = useState("");
 
   // Currently applied filter values (derived from URL initial props)
-  const applied = {
-    search: initialSearch,
-    coachId: initialCoachId,
-    createdFrom: initialCreatedFrom,
-    createdTo: initialCreatedTo,
-    tagIds: initialTagIds,
-    portalAccess: initialPortalAccess,
-  };
+  const applied = useMemo(
+    () => ({
+      search: initialSearch,
+      coachId: initialCoachId,
+      createdFrom: initialCreatedFrom,
+      createdTo: initialCreatedTo,
+      tagIds: initialTagIds,
+      portalAccess: initialPortalAccess,
+    }),
+    [
+      initialSearch,
+      initialCoachId,
+      initialCreatedFrom,
+      initialCreatedTo,
+      initialTagIds,
+      initialPortalAccess,
+    ],
+  );
 
   const activeFilterCount = useMemo(() => {
     let n = 0;

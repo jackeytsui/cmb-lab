@@ -120,30 +120,34 @@ export function useProcessedChineseText({
   const [speakingText, setSpeakingText] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!committedText) {
-      setDisplayText("");
-      return;
-    }
-
-    if (scriptMode === "traditional") {
-      setDisplayText(committedText);
-      return;
-    }
-
     let cancelled = false;
-    setIsConverting(true);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!committedText) {
+        setDisplayText("");
+        setIsConverting(false);
+        return;
+      }
 
-    convertScript(committedText, "traditional", "simplified")
-      .then((converted) => {
-        if (!cancelled) setDisplayText(converted);
-      })
-      .catch((err) => {
-        console.error("T/S conversion failed:", err);
-        if (!cancelled) setDisplayText(committedText);
-      })
-      .finally(() => {
-        if (!cancelled) setIsConverting(false);
-      });
+      if (scriptMode === "traditional") {
+        setDisplayText(committedText);
+        setIsConverting(false);
+        return;
+      }
+
+      setIsConverting(true);
+      convertScript(committedText, "traditional", "simplified")
+        .then((converted) => {
+          if (!cancelled) setDisplayText(converted);
+        })
+        .catch((err) => {
+          console.error("T/S conversion failed:", err);
+          if (!cancelled) setDisplayText(committedText);
+        })
+        .finally(() => {
+          if (!cancelled) setIsConverting(false);
+        });
+    });
 
     return () => {
       cancelled = true;
@@ -156,38 +160,42 @@ export function useProcessedChineseText({
   );
 
   useEffect(() => {
-    if (!displayText) {
-      setJiebaSegments(null);
-      return;
-    }
-
-    setJiebaSegments(null);
     let cancelled = false;
-    setIsSegmenting(true);
-
-    const clientSegs = segmentText(displayText);
-    const sentenceRanges = detectSentences(clientSegs);
-    const sentenceTexts =
-      sentenceRanges.length > 0
-        ? sentenceRanges.map((s) => s.text)
-        : [displayText];
-
-    fetchJiebaSegments(sentenceTexts).then((result) => {
+    queueMicrotask(() => {
       if (cancelled) return;
-      setIsSegmenting(false);
-      if (result) {
-        const flat: WordSegment[] = [];
-        let offset = 0;
-        for (const sentSegs of result) {
-          for (const seg of sentSegs) {
-            flat.push({ ...seg, index: offset });
-            offset += seg.text.length;
-          }
-        }
-        setJiebaSegments(flat);
-      } else {
+      if (!displayText) {
         setJiebaSegments(null);
+        setIsSegmenting(false);
+        return;
       }
+
+      setJiebaSegments(null);
+      setIsSegmenting(true);
+
+      const clientSegs = segmentText(displayText);
+      const sentenceRanges = detectSentences(clientSegs);
+      const sentenceTexts =
+        sentenceRanges.length > 0
+          ? sentenceRanges.map((s) => s.text)
+          : [displayText];
+
+      fetchJiebaSegments(sentenceTexts).then((result) => {
+        if (cancelled) return;
+        setIsSegmenting(false);
+        if (result) {
+          const flat: WordSegment[] = [];
+          let offset = 0;
+          for (const sentSegs of result) {
+            for (const seg of sentSegs) {
+              flat.push({ ...seg, index: offset });
+              offset += seg.text.length;
+            }
+          }
+          setJiebaSegments(flat);
+        } else {
+          setJiebaSegments(null);
+        }
+      });
     });
 
     return () => {
@@ -203,39 +211,48 @@ export function useProcessedChineseText({
   );
 
   useEffect(() => {
-    if (!displayText || sentences.length === 0) {
-      setBatchTranslations(new Map());
-      setTranslationCache(new Map());
-      translatedKeyRef.current = "";
-      return;
-    }
-
-    if (sentenceKey === translatedKeyRef.current) return;
-    translatedKeyRef.current = sentenceKey;
-    setIsTranslating(true);
-
-    const sentenceTexts = sentences.map((s) => s.text);
-    fetchProperTranslations(sentenceTexts, language)
-      .then((translations) => {
-        if (!translations) return;
-        const map = new Map<number, string>();
-        translations.forEach((t, idx) => {
-          if (t) map.set(idx, t);
-        });
-        setBatchTranslations(map);
-
-        setTranslationCache((prev) => {
-          const next = new Map(prev);
-          sentences.forEach((s, idx) => {
-            const t = map.get(idx);
-            if (t) next.set(s.text, t);
-          });
-          return next;
-        });
-      })
-      .finally(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!displayText || sentences.length === 0) {
+        setBatchTranslations(new Map());
+        setTranslationCache(new Map());
+        translatedKeyRef.current = "";
         setIsTranslating(false);
-      });
+        return;
+      }
+
+      if (sentenceKey === translatedKeyRef.current) return;
+      translatedKeyRef.current = sentenceKey;
+      setIsTranslating(true);
+
+      const sentenceTexts = sentences.map((s) => s.text);
+      fetchProperTranslations(sentenceTexts, language)
+        .then((translations) => {
+          if (cancelled || !translations) return;
+          const map = new Map<number, string>();
+          translations.forEach((t, idx) => {
+            if (t) map.set(idx, t);
+          });
+          setBatchTranslations(map);
+
+          setTranslationCache((prev) => {
+            const next = new Map(prev);
+            sentences.forEach((s, idx) => {
+              const t = map.get(idx);
+              if (t) next.set(s.text, t);
+            });
+            return next;
+          });
+        })
+        .finally(() => {
+          if (!cancelled) setIsTranslating(false);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [displayText, language, sentenceKey, sentences]);
 
   const handleSpeakSentence = useCallback(

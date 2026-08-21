@@ -33,10 +33,7 @@ function AnimatedCount({ value, suffix }: { value: number; suffix?: string }) {
   const isInView = useInView(ref, { once: true });
 
   useEffect(() => {
-    if (!isInView || value === 0) {
-      setDisplay(0);
-      return;
-    }
+    if (!isInView || value === 0) return;
 
     const controls = animate(0, value, {
       duration: 1.2,
@@ -49,9 +46,11 @@ function AnimatedCount({ value, suffix }: { value: number; suffix?: string }) {
     return () => controls.stop();
   }, [isInView, value]);
 
+  const visibleDisplay = isInView && value !== 0 ? display : 0;
+
   return (
     <span ref={ref}>
-      {display}
+      {visibleDisplay}
       {suffix}
     </span>
   );

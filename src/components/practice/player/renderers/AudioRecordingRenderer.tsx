@@ -62,6 +62,11 @@ export function AudioRecordingRenderer({
     setIsSubmitted(true);
   }
 
+  function handleReset() {
+    setIsSubmitted(false);
+    reset();
+  }
+
   return (
     <div className="space-y-6">
       {/* Target phrase */}
@@ -126,7 +131,7 @@ export function AudioRecordingRenderer({
               <button
                 type="button"
                 disabled={disabled}
-                onClick={reset}
+                onClick={handleReset}
                 className="inline-flex items-center gap-2 rounded-lg border border-zinc-600 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -134,11 +139,11 @@ export function AudioRecordingRenderer({
               </button>
               <button
                 type="button"
-                disabled={disabled}
+                disabled={disabled || isSubmitted}
                 onClick={handleSubmit}
                 className="rounded-lg bg-blue-600 px-6 py-2.5 text-white font-medium transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Submit Recording
+                {isSubmitted ? "Submitted" : "Submit Recording"}
               </button>
             </div>
           </>

@@ -33,24 +33,33 @@ export function VideoLibraryPicker({ open, onOpenChange, onSelect }: VideoLibrar
   useEffect(() => {
     if (!open) return;
 
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
 
-    fetch("/api/admin/uploads?status=ready")
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch uploads");
-        return res.json();
-      })
-      .then((data) => {
-        setUploads(data.uploads || []);
-      })
-      .catch((err) => {
-        console.error("Failed to load video library:", err);
-        setError("Failed to load videos. Please try again.");
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+      fetch("/api/admin/uploads?status=ready")
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch uploads");
+          return res.json();
+        })
+        .then((data) => {
+          if (!cancelled) setUploads(data.uploads || []);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error("Failed to load video library:", err);
+          setError("Failed to load videos. Please try again.");
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   const handleSelect = (upload: VideoUpload) => {

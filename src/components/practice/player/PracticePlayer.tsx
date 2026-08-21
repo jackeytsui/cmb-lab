@@ -26,8 +26,8 @@ import { Progress } from "@/components/ui/progress";
 interface PracticePlayerProps {
   practiceSet: PracticeSet;
   exercises: PracticeExercise[];
-  userId: string;
   nextAction?: { label: string; href: string };
+  onComplete?: (score: number) => void;
 }
 
 // ============================================================
@@ -64,8 +64,8 @@ function LanguageBadge({ language }: { language: string }) {
 export function PracticePlayer({
   practiceSet,
   exercises,
-  userId: _userId,
   nextAction,
+  onComplete,
 }: PracticePlayerProps) {
   const player = usePracticePlayer(exercises);
 
@@ -148,6 +148,7 @@ export function PracticePlayer({
   }, [player, practiceSet.id, exercises.length]);
 
   const handleComplete = useCallback(async () => {
+    const finalScore = player.totalScore;
     player.complete();
 
     // Persist final results
@@ -168,7 +169,8 @@ export function PracticePlayer({
         console.error("Failed to save practice results");
       }
     }
-  }, [player, practiceSet.id]);
+    onComplete?.(finalScore);
+  }, [onComplete, player, practiceSet.id]);
 
   const handleRetryAll = useCallback(async () => {
     // Reset celebration state so it fires again on next completion

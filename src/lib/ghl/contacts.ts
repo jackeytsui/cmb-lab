@@ -311,7 +311,6 @@ export async function updateGhlContactEmail(
 
       await client.put(`/contacts/${link.ghlContactId}`, {
         email: newEmail,
-        locationId: link.ghlLocationId,
       });
 
       // Update local record
@@ -331,6 +330,45 @@ export async function updateGhlContactEmail(
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
+
+      // A deleted/moved GHL contact leaves a stale local mapping. Disconnect
+      // it once so future Clerk webhook deliveries do not retry the same
+      // impossible update indefinitely.
+      const contactNoLongerExists =
+        errorMessage.includes("GHL API error 400") &&
+        errorMessage.toLowerCase().includes("contact not found");
+      if (contactNoLongerExists) {
+        try {
+          await db
+            .update(ghlContacts)
+            .set({ syncStatus: "disconnected" })
+            .where(
+              and(
+                eq(ghlContacts.ghlContactId, link.ghlContactId),
+                eq(ghlContacts.ghlLocationId, link.ghlLocationId),
+              ),
+            );
+
+          console.warn(
+            "[GHL] Disconnected a stale contact mapping after GHL reported the contact missing",
+          );
+          await logSyncEvent({
+            eventType: "contact.unlinked",
+            direction: "outbound",
+            entityType: "contact",
+            entityId: userId,
+            ghlContactId: link.ghlContactId,
+            payload: {
+              locationId: link.ghlLocationId,
+              reason: "contact_not_found",
+            },
+          });
+        } catch {
+          console.error("[GHL] Failed to disconnect or log a stale contact mapping");
+        }
+        continue;
+      }
+
       console.error(
         `[GHL] Failed to update email for contact ${link.ghlContactId}:`,
         errorMessage

@@ -122,6 +122,8 @@ export default async function AdminAILogsPage() {
     }
 
     for (const submission of submissionsData) {
+      // Coach-review-only submissions are not AI grading events.
+      if (submission.score === null) continue;
       const passed = submission.score >= 80;
       logs.push({
         id: submission.id,

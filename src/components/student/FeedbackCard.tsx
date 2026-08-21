@@ -17,7 +17,7 @@ interface FeedbackCardProps {
     feedbackText: string | null;
     sharedNotes: Array<{ content: string; createdAt: string }>;
     submissionType: "text" | "audio" | "video";
-    score: number;
+    score: number | null;
   };
 }
 
@@ -79,12 +79,18 @@ export function FeedbackCard({ feedback }: FeedbackCardProps) {
           </div>
 
           {/* Score badge */}
-          <div className="flex items-center gap-2">
-            <Trophy className={`w-5 h-5 ${getScoreColor(feedback.score)}`} />
-            <span className={`text-xl font-bold ${getScoreColor(feedback.score)}`}>
-              {feedback.score}
-            </span>
-          </div>
+          {feedback.score === null ? (
+            <div className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-medium text-zinc-400">
+              Coach reviewed
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Trophy className={`w-5 h-5 ${getScoreColor(feedback.score)}`} />
+              <span className={`text-xl font-bold ${getScoreColor(feedback.score)}`}>
+                {feedback.score}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

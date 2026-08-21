@@ -65,6 +65,7 @@ export function SearchBar() {
         )}
         <input
           ref={inputRef}
+          aria-label="Search CMB Lab"
           type="text"
           placeholder="Search"
           className="bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none w-48 lg:w-64"

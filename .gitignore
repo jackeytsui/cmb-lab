@@ -63,4 +63,12 @@ venv/
 
 # GHL course scraper output (contains course content and blob URLs)
 /scripts/scraped-ghl/
+
+# Production launch data (student PII and generated reconciliation artifacts)
+/private-data/
+/launch-data/
+/outputs/
+/Export_Contacts_*.csv
+/TEAM-CREDENTIALS.txt
+/.codex-tmp/
 .env*.local

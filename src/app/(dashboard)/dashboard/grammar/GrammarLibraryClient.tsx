@@ -23,20 +23,36 @@ export default function GrammarLibraryClient() {
   const [hsk, setHsk] = useState("all");
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    const qs = new URLSearchParams();
-    if (query.trim()) qs.set("q", query.trim());
-    if (hsk !== "all") qs.set("hsk", hsk);
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      const qs = new URLSearchParams();
+      if (query.trim()) qs.set("q", query.trim());
+      if (hsk !== "all") qs.set("hsk", hsk);
 
-    fetch(`/api/grammar/patterns?${qs.toString()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load grammar patterns");
-        return res.json();
+      fetch(`/api/grammar/patterns?${qs.toString()}`, {
+        signal: controller.signal,
       })
-      .then((data) => setPatterns(data.patterns ?? []))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to load grammar patterns");
+          return res.json();
+        })
+        .then((data) => setPatterns(data.patterns ?? []))
+        .catch((err) => {
+          if (err instanceof Error && err.name !== "AbortError") {
+            setError(err.message);
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 150);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [query, hsk]);
 
   const grouped = useMemo(() => {

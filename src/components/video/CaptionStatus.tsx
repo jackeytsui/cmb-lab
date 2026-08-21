@@ -131,13 +131,16 @@ export function CaptionStatus({
       {status === "error" && (
         <div className="flex items-start gap-3">
           <XCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="text-sm text-red-500">
               Failed to extract captions
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               You can upload an SRT or VTT file instead
             </p>
+            {transcribeError && (
+              <p className="mt-1.5 text-xs text-red-400">{transcribeError}</p>
+            )}
           </div>
         </div>
       )}
