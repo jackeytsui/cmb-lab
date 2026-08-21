@@ -7,7 +7,7 @@ export default async function GroupCoachingSchedulePage() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
   return (
-    <FeatureGate feature="coaching_material">
+    <FeatureGate feature="group_coaching_schedule">
       <GroupCoachingScheduleClient />
     </FeatureGate>
   );

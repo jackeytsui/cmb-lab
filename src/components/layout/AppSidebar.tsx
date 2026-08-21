@@ -41,6 +41,9 @@ type FeatureKey =
   | "audio_courses"
   | "listening_lab"
   | "coaching_material"
+  | "one_on_one_coaching"
+  | "inner_circle_group_coaching"
+  | "group_coaching_schedule"
   | "flashcards"
   | "course_library"
   | "video_threads"
@@ -120,19 +123,19 @@ const navSections: NavSectionWithRoleAndFeature[] = [
         title: "1:1 Coaching",
         url: "/dashboard/coaching/one-on-one",
         icon: FileText,
-        featureKey: "coaching_material",
+        featureKey: "one_on_one_coaching",
       },
       {
         title: "Inner Circle Group Coaching",
         url: "/dashboard/coaching/inner-circle",
         icon: UsersRound,
-        featureKey: "coaching_material",
+        featureKey: "inner_circle_group_coaching",
       },
       {
         title: "Group Coaching Schedule",
         url: "/dashboard/coaching/group-schedule",
         icon: CalendarDays,
-        featureKey: "coaching_material",
+        featureKey: "group_coaching_schedule",
       },
       {
         title: "Assignment Feedback",

@@ -12,7 +12,7 @@ export default async function InnerCircleCoachingPage() {
   const currentUser = await getRealUser();
 
   return (
-    <FeatureGate feature="coaching_material">
+    <FeatureGate feature="inner_circle_group_coaching">
       <CoachingMaterialClient
         title="Inner Circle Group Coaching"
         subtitle="Shared materials for group coaching sessions."
