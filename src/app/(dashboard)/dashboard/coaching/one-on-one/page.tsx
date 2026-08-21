@@ -18,7 +18,7 @@ export default async function OneOnOneCoachingPage({
   const initialStudentEmail = (params.student as string) || undefined;
 
   return (
-    <FeatureGate feature="coaching_material">
+    <FeatureGate feature="one_on_one_coaching">
       <CoachingMaterialClient
         title="1:1 Coaching"
         subtitle="Personalized materials for 1:1 coaching sessions."

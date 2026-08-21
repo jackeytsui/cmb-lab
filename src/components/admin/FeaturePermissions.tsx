@@ -46,6 +46,21 @@ const FEATURES: FeatureInfo[] = [
     description: "YouTube-based listening practice",
   },
   {
+    key: "one_on_one_coaching",
+    label: "1:1 Coaching",
+    description: "Student's private coaching materials",
+  },
+  {
+    key: "inner_circle_group_coaching",
+    label: "Inner Circle Group Coaching",
+    description: "Inner Circle group coaching materials",
+  },
+  {
+    key: "group_coaching_schedule",
+    label: "Group Coaching Schedule",
+    description: "Group coaching calendar and schedule",
+  },
+  {
     key: "video_threads",
     label: "Video Threads",
     description: "Interactive video response activities",
