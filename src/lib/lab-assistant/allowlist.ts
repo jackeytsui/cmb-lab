@@ -26,7 +26,7 @@ export type AllowlistedFieldConcept = (typeof ALLOWLISTED_FIELD_CONCEPTS)[number
 export const SUPPORT_EMAIL = "contact@thecmblueprint.com";
 
 /**
- * Launch-scope intents (5) plus the classifier's non-actionable buckets.
+ * Supported intents plus the classifier's non-actionable buckets.
  * - smalltalk: greetings/thanks — answered directly, never escalated
  * - other: off-scope or unclear — never guessed, always escalated
  */
@@ -36,6 +36,7 @@ export const LAB_ASSISTANT_INTENTS = [
   "my_coach",
   "referral",
   "testimonial_sheldon",
+  "faq_navigation",
   "smalltalk",
   "other",
 ] as const;

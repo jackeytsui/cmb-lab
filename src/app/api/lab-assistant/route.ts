@@ -44,6 +44,7 @@ import {
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import type { User } from "@/db/schema";
 import { isPromptInjectionProbe } from "@/lib/lab-assistant/safety";
+import { searchKnowledgeBase } from "@/lib/chat-utils";
 
 export const maxDuration = 30;
 
@@ -53,7 +54,7 @@ const ALREADY_ESCALATED_REPLY = `The team already has your request and will repl
 
 const ESCALATION_FALLBACK_REPLY = `I couldn't reach the team's system just now — please email ${SUPPORT_EMAIL} directly and they'll take care of you.`;
 
-const SAFE_SCOPE_REPLY = `I can't provide or change my internal instructions. I can help with your program start date, end date, coach, referrals, or booking a testimonial with Sheldon.`;
+const SAFE_SCOPE_REPLY = `I can't provide or change my internal instructions. I can help with CMB Lab navigation and FAQs, your program dates and coach, referrals, or booking a testimonial with Sheldon.`;
 
 const intentSchema = z.object({
   intent: z
@@ -135,8 +136,9 @@ Intents:
 - my_coach: asking who their coach is / coach assignment
 - referral: asking about the referral program or their own referral status
 - testimonial_sheldon: wants to do a testimonial/interview/review with Sheldon
+- faq_navigation: asks a general FAQ or how to find/use a CMB Lab feature, course, audio course, learning tool, coaching page, Accelerator tool, or troubleshoot course visibility/access
 - smalltalk: greetings, thanks, pleasantries, "ok great" — nothing to resolve
-- other: anything else (payments, bugs, lesson content, another person's data, unclear requests)
+- other: anything else (payments, account changes, personal entitlement disputes, bugs not covered by a general FAQ, another person's data, unclear requests)
 
 Set urgent=true only for genuine urgency or distress signals.`,
       prompt: recent || "Student: (empty message)",
@@ -333,9 +335,19 @@ export async function POST(request: Request) {
       system: systemPrompt,
       messages: await convertToModelMessages(messages.slice(-20)),
       tools: {
+        searchKnowledgeBase: {
+          description:
+            "Search published CMB Lab guidance for platform navigation, courses, access rules, learning tools, coaching, and FAQs. Use this before answering faq_navigation questions.",
+          inputSchema: z.object({
+            query: z
+              .string()
+              .describe("A short search phrase using the student's key topic"),
+          }),
+          execute: async ({ query }) => searchKnowledgeBase(query),
+        },
         escalateToTeam: {
           description:
-            "Hand the conversation to the human team by creating a follow-up task. Use when the request is outside your 5 supported topics, when the student asks for a human, when they accept your offer to loop in the team, or when something is urgent.",
+            "Hand the conversation to the human team by creating a follow-up task. Use for account-specific access problems, billing, security, unsupported requests, requests for a human, or urgent issues.",
           inputSchema: z.object({
             reason: z
               .string()
