@@ -31,6 +31,7 @@ interface Reviewer {
   name: string | null;
   email: string;
   role: string;
+  reviewableTypes: string[];
 }
 
 const STATUS_META: Record<
@@ -334,13 +335,17 @@ export function AssignmentSubmissionsClient({
                           className={cn(selectClass, "max-w-[160px]")}
                         >
                           <option value="">Unassigned</option>
-                          {reviewers.map((r) => (
+                          {reviewers
+                            .filter((reviewer) =>
+                              reviewer.reviewableTypes.includes(row.assignmentType),
+                            )
+                            .map((r) => (
                             <option key={r.id} value={r.id}>
                               {r.id === currentUserId
                                 ? "Me"
                                 : reviewerLabel(r.name, r.email)}
                             </option>
-                          ))}
+                            ))}
                         </select>
                       )}
                     </td>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { auth } from "@clerk/nextjs/server";
+import { getRealUser } from "@/lib/auth";
 
 export const maxDuration = 60;
 
@@ -28,8 +28,8 @@ const ALLOWED_TYPES = new Set([
  * prefix must be 'assignment-recordings/' or 'listening-practice/'
  */
 export async function POST(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getRealUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -55,8 +55,14 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: "File exceeds 50 MB" }, { status: 413 });
+  if (prefix === "listening-practice/" && user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (file.size <= 0 || file.size > MAX_BYTES) {
+    return NextResponse.json(
+      { error: "File must be between 1 byte and 50 MB" },
+      { status: file.size > MAX_BYTES ? 413 : 400 },
+    );
   }
 
   // MediaRecorder reports the codec too (e.g. "audio/webm;codecs=opus"), so
@@ -74,7 +80,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const blob = await put(`${prefix}${file.name}`, buffer, {
+    const extension = file.name.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || "webm";
+    const blob = await put(`${prefix}${user.id}/${crypto.randomUUID()}.${extension}`, buffer, {
       access: "private",
       contentType,
       token: process.env.BLOB_READ_WRITE_TOKEN,

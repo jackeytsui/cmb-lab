@@ -20,11 +20,22 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import { lessons, modules, courses, interactions } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import {
+  canAccessLesson,
+  resolvePermissions,
+} from "@/lib/permissions";
 
 export const maxDuration = 30;
 
 const DEFAULT_SYSTEM_PROMPT =
   "You are a helpful learning assistant for Canto to Mando Blueprint, an LMS teaching Mandarin and Cantonese simultaneously. Always search the knowledge base before answering factual questions about the platform, courses, or Chinese language. Be encouraging and supportive.";
+
+const chatBodySchema = z.object({
+  messages: z.array(z.unknown()).min(1).max(50),
+  languagePreference: z.enum(["mandarin", "cantonese", "both"]).optional(),
+  chatId: z.string().uuid().optional(),
+  lessonId: z.string().uuid().optional(),
+});
 
 /**
  * Build lesson-specific context for the chatbot system prompt.
@@ -114,11 +125,32 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
-    const messages: UIMessage[] = body.messages;
-    const languagePreference: string | undefined = body.languagePreference;
-    const chatId: string | undefined = body.chatId;
-    const lessonId: string | undefined = body.lessonId;
+    const rawBody = await request.json().catch(() => null);
+    if (JSON.stringify(rawBody).length > 1_000_000) {
+      return new Response(JSON.stringify({ error: "Request is too large" }), {
+        status: 413,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const parsedBody = chatBodySchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return new Response(JSON.stringify({ error: "Invalid chat request" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const messages = parsedBody.data.messages as UIMessage[];
+    const { languagePreference, chatId, lessonId } = parsedBody.data;
+
+    if (lessonId && user.role !== "admin" && user.role !== "coach") {
+      const permissions = await resolvePermissions(user.id);
+      if (!(await canAccessLesson(permissions, lessonId))) {
+        return new Response(JSON.stringify({ error: "Lesson not found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
 
     // Load system prompt from database with fallback
     const basePrompt = await getPrompt(
@@ -232,9 +264,9 @@ Student language preference: ${languagePreference || "both"}. Respond in the lan
 
     const response = result.toUIMessageStreamResponse({
       originalMessages: messages,
-      onFinish: ({ messages: allMessages }) => {
+      onFinish: async ({ messages: allMessages }) => {
         if (chatId) {
-          saveChat({
+          await saveChat({
             chatId,
             messages: allMessages.map((m) => ({
               id: m.id,

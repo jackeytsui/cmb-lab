@@ -17,6 +17,7 @@ import {
   userCanReceiveAssignmentFeedback,
 } from "@/lib/assignment-review";
 import { isDiaryLesson } from "@/lib/lesson-language";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
 interface RouteParams {
   params: Promise<{ lessonId: string }>;
@@ -49,7 +50,10 @@ function isOwnBlobUrl(url: string): boolean {
   }
 }
 
-async function getAccessibleDiaryLesson(lessonId: string, role: string) {
+async function getAccessibleDiaryLesson(
+  lessonId: string,
+  user: { id: string; role: string },
+) {
   const [row] = await db
     .select({
       lessonId: courseLibraryLessons.id,
@@ -72,12 +76,16 @@ async function getAccessibleDiaryLesson(lessonId: string, role: string) {
         isNull(courseLibraryLessons.deletedAt),
         isNull(courseLibraryModules.deletedAt),
         isNull(courseLibraryCourses.deletedAt),
-        inArray(courseLibraryCourses.status, visibleCourseStatuses(role)),
+        inArray(courseLibraryCourses.status, visibleCourseStatuses(user.role)),
       ),
     )
     .limit(1);
 
-  if (!row || !isDiaryLesson(row.lessonType)) return null;
+  if (
+    !row ||
+    !isDiaryLesson(row.lessonType) ||
+    !(await canUserAccessCourseLibraryLesson(user, lessonId))
+  ) return null;
   return row;
 }
 
@@ -103,7 +111,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { lessonId } = await params;
-  const lesson = await getAccessibleDiaryLesson(lessonId, user.role);
+  const lesson = await getAccessibleDiaryLesson(lessonId, user);
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
@@ -123,7 +131,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { lessonId } = await params;
-  const lesson = await getAccessibleDiaryLesson(lessonId, user.role);
+  const lesson = await getAccessibleDiaryLesson(lessonId, user);
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }

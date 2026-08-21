@@ -12,6 +12,9 @@ import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import { db } from "@/db";
 import { ghlLocations } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { webhookSecretsMatch } from "@/lib/webhook-secret";
+
+const MAX_WEBHOOK_BYTES = 256 * 1024;
 
 // GHL Custom Webhook actions send tags as a comma-separated string;
 // native GHL webhook triggers send tags as a JSON array. Accept both.
@@ -56,14 +59,17 @@ export async function POST(req: NextRequest) {
   const rl = await webhookLimiter.limit(ip);
   if (!rl.success) return rateLimitResponse(rl);
 
+  const contentLength = Number(req.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_WEBHOOK_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
+
   try {
     const body = await parseBody(req);
     if (!body) {
       console.error("[GHL Webhook] Could not parse body");
       return NextResponse.json({ received: true, error: "invalid_payload" });
     }
-
-    console.log("[GHL Webhook] Received body:", JSON.stringify(body));
 
     // Extract fields — support both snake_case and camelCase locationId
     const eventType = typeof body.type === "string" ? body.type : "ContactTagUpdate";
@@ -89,19 +95,19 @@ export async function POST(req: NextRequest) {
           direction: "inbound",
           entityType: "webhook",
           entityId: typeof contactId === "string" ? contactId : "unknown",
-          payload: { locationId, type: eventType, body },
+          payload: { locationId, type: eventType },
         });
         return NextResponse.json({ received: true, error: "unknown_location" });
       }
 
       if (locationRows[0].webhookSecret) {
-        verified = secret === locationRows[0].webhookSecret;
+        verified = webhookSecretsMatch(secret, locationRows[0].webhookSecret);
       } else {
-        verified = secret === process.env.GHL_INBOUND_WEBHOOK_SECRET;
+        verified = webhookSecretsMatch(secret, process.env.GHL_INBOUND_WEBHOOK_SECRET);
       }
     } else {
       // No locationId — fall back to global secret
-      verified = secret === process.env.GHL_INBOUND_WEBHOOK_SECRET;
+      verified = webhookSecretsMatch(secret, process.env.GHL_INBOUND_WEBHOOK_SECRET);
     }
 
     if (!verified) {
@@ -118,7 +124,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (!parsed.success) {
-        console.error("[GHL Webhook] Invalid tag update payload:", parsed.error.issues, "body:", body);
+        console.error("[GHL Webhook] Invalid tag update payload:", parsed.error.issues);
         return NextResponse.json({ received: true, error: "invalid_tag_update" });
       }
 

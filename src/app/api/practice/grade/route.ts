@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "@/db";
+import { practiceExercises, users } from "@/db/schema";
 import type { GradingResponse, AudioGradingResponse } from "@/lib/grading";
 import { getPrompt } from "@/lib/prompts";
 import {
@@ -13,6 +16,33 @@ import {
   assessPronunciation,
   generatePronunciationFeedback,
 } from "@/lib/pronunciation";
+import { canUserAccessPracticeSet } from "@/lib/assignments";
+
+const MAX_TEXT_RESPONSE_LENGTH = 20_000;
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+
+async function getAuthorizedExercise(userId: string, exerciseId: string) {
+  const exercise = await db.query.practiceExercises.findFirst({
+    where: and(
+      eq(practiceExercises.id, exerciseId),
+      isNull(practiceExercises.deletedAt),
+    ),
+    with: {
+      practiceSet: {
+        columns: { id: true, status: true, deletedAt: true },
+      },
+    },
+  });
+  if (
+    !exercise ||
+    exercise.practiceSet.status !== "published" ||
+    exercise.practiceSet.deletedAt ||
+    !(await canUserAccessPracticeSet(userId, exercise.practiceSetId))
+  ) {
+    return null;
+  }
+  return exercise;
+}
 
 // Default text grading prompt for practice exercises
 const DEFAULT_TEXT_GRADING_PROMPT = `You are grading a student's Chinese language response in a practice exercise.
@@ -83,15 +113,23 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse(rl);
   }
 
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.clerkId, userId),
+    columns: { id: true },
+  });
+  if (!dbUser) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
   // 2. Determine grading path based on Content-Type
   const contentType = request.headers.get("content-type") || "";
 
   if (contentType.includes("multipart/form-data")) {
-    return handleAudioGrading(request, userId);
+    return handleAudioGrading(request, userId, dbUser.id);
   }
 
   // Default to JSON/text grading
-  return handleTextGrading(request, userId);
+  return handleTextGrading(request, userId, dbUser.id);
 }
 
 /**
@@ -100,34 +138,60 @@ export async function POST(request: NextRequest) {
  */
 async function handleTextGrading(
   request: NextRequest,
-  userId: string
+  clerkUserId: string,
+  dbUserId: string,
 ): Promise<NextResponse> {
   try {
     const body = await request.json();
-    const { exerciseId, studentResponse, definition } = body;
+    const { exerciseId, studentResponse } = body;
 
     // Validate required fields
-    if (!exerciseId || !studentResponse) {
+    if (
+      typeof exerciseId !== "string" ||
+      typeof studentResponse !== "string" ||
+      !studentResponse.trim()
+    ) {
       return NextResponse.json(
         { error: "Missing required fields: exerciseId, studentResponse" },
         { status: 400 }
+      );
+    }
+    if (studentResponse.length > MAX_TEXT_RESPONSE_LENGTH) {
+      return NextResponse.json(
+        { error: "Student response is too long" },
+        { status: 413 },
+      );
+    }
+
+    const exercise = await getAuthorizedExercise(dbUserId, exerciseId);
+    if (!exercise) {
+      return NextResponse.json({ error: "Exercise not found" }, { status: 404 });
+    }
+    if (exercise.type !== "free_text" || exercise.definition.type !== "free_text") {
+      return NextResponse.json(
+        { error: "Exercise does not support text grading" },
+        { status: 400 },
+      );
+    }
+    const definition = exercise.definition;
+    if (
+      (definition.minLength && studentResponse.length < definition.minLength) ||
+      (definition.maxLength && studentResponse.length > definition.maxLength)
+    ) {
+      return NextResponse.json(
+        { error: "Student response does not meet the required length" },
+        { status: 400 },
       );
     }
 
     // Check if n8n webhook URL is configured
     const webhookUrl = process.env.N8N_GRADING_WEBHOOK_URL;
     if (!webhookUrl) {
-      console.warn(
-        "N8N_GRADING_WEBHOOK_URL not configured. Returning mock response. " +
-          "Configure webhook for real AI grading of practice responses."
+      console.error("N8N_GRADING_WEBHOOK_URL is not configured");
+      return NextResponse.json(
+        { error: "Grading service is not configured" },
+        { status: 503 },
       );
-      const mockResult: GradeResult = {
-        isCorrect: true,
-        score: 85,
-        feedback:
-          "Mock: Configure N8N_GRADING_WEBHOOK_URL for real AI grading.",
-      };
-      return NextResponse.json(mockResult);
     }
 
     // Load grading prompt from database
@@ -137,23 +201,25 @@ async function handleTextGrading(
     );
 
     // Extract expected answer from exercise definition
-    const expectedAnswer = definition?.sampleAnswer || "";
+    const expectedAnswer = definition.sampleAnswer || "";
+    const language = exercise.language;
 
     // Replace template placeholders
     const gradingPrompt = gradingPromptTemplate
       .replace("{{expectedAnswer}}", expectedAnswer || "(any valid response)")
       .replace("{{studentResponse}}", studentResponse)
-      .replace("{{language}}", body.language || "both");
+      .replace("{{language}}", language)
+      .concat(definition.rubric ? `\n\nGrading rubric: ${definition.rubric}` : "");
 
     // Build n8n payload
     // NOTE: Reuse interactionId field name — the n8n workflow uses it for
     // logging, not LMS lookups. This avoids modifying the n8n workflow.
     const n8nPayload = {
       interactionId: exerciseId,
-      userId,
+      userId: clerkUserId,
       studentResponse,
       expectedAnswer,
-      language: body.language || "both",
+      language,
       prompt: gradingPrompt,
     };
 
@@ -185,6 +251,18 @@ async function handleTextGrading(
 
     // Parse n8n response and map to GradeResult shape
     const gradingResult: GradingResponse = await n8nResponse.json();
+    if (
+      typeof gradingResult.isCorrect !== "boolean" ||
+      !Number.isFinite(gradingResult.score) ||
+      gradingResult.score < 0 ||
+      gradingResult.score > 100 ||
+      typeof gradingResult.feedback !== "string"
+    ) {
+      return NextResponse.json(
+        { error: "Grading service returned an invalid response" },
+        { status: 502 },
+      );
+    }
     const result: GradeResult = {
       isCorrect: gradingResult.isCorrect,
       score: gradingResult.score,
@@ -214,20 +292,25 @@ async function handleTextGrading(
  */
 async function handleAudioGrading(
   request: NextRequest,
-  userId: string
+  clerkUserId: string,
+  dbUserId: string,
 ): Promise<NextResponse> {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio") as File | null;
     const exerciseId = formData.get("exerciseId") as string;
-    const targetPhrase = formData.get("targetPhrase") as string | null;
-    const language = (formData.get("language") as string) || "both";
 
     // Validate audio file
     if (!audioFile || audioFile.size === 0) {
       return NextResponse.json(
         { error: "Missing or empty audio file" },
         { status: 400 }
+      );
+    }
+    if (audioFile.size > MAX_AUDIO_BYTES) {
+      return NextResponse.json(
+        { error: "Audio recording is too large" },
+        { status: 413 },
       );
     }
 
@@ -238,11 +321,27 @@ async function handleAudioGrading(
       );
     }
 
+    const exercise = await getAuthorizedExercise(dbUserId, exerciseId);
+    if (!exercise) {
+      return NextResponse.json({ error: "Exercise not found" }, { status: 404 });
+    }
+    if (
+      exercise.type !== "audio_recording" ||
+      exercise.definition.type !== "audio_recording"
+    ) {
+      return NextResponse.json(
+        { error: "Exercise does not support audio grading" },
+        { status: 400 },
+      );
+    }
+    const targetPhrase = exercise.definition.targetPhrase;
+    const language = exercise.language;
+
     // Map exercise language to Azure locale
     const azureLocale =
       language === "cantonese" ? ("zh-HK" as const) : ("zh-CN" as const);
 
-    // Try Azure pronunciation assessment first (when configured and targetPhrase exists)
+    // Try Azure pronunciation assessment first (when configured).
     if (
       process.env.AZURE_SPEECH_KEY &&
       process.env.AZURE_SPEECH_REGION &&
@@ -277,18 +376,11 @@ async function handleAudioGrading(
     // Check if n8n audio webhook URL is configured
     const webhookUrl = process.env.N8N_AUDIO_GRADING_WEBHOOK_URL;
     if (!webhookUrl) {
-      console.warn(
-        "N8N_AUDIO_GRADING_WEBHOOK_URL not configured. Returning mock response. " +
-          "Configure webhook for real AI audio grading of practice responses."
+      console.error("N8N_AUDIO_GRADING_WEBHOOK_URL is not configured");
+      return NextResponse.json(
+        { error: "Audio grading service is not configured" },
+        { status: 503 },
       );
-      const mockResult = {
-        isCorrect: true,
-        score: 85,
-        feedback:
-          "Mock: Configure N8N_AUDIO_GRADING_WEBHOOK_URL for real AI audio grading.",
-        transcription: "(mock transcription)",
-      };
-      return NextResponse.json(mockResult);
     }
 
     // Load grading prompt from database
@@ -307,7 +399,7 @@ async function handleAudioGrading(
     const n8nFormData = new FormData();
     n8nFormData.append("audio", audioFile);
     n8nFormData.append("interactionId", exerciseId);
-    n8nFormData.append("userId", userId);
+    n8nFormData.append("userId", clerkUserId);
     n8nFormData.append("expectedAnswer", targetPhrase || "");
     n8nFormData.append("language", language);
     n8nFormData.append("prompt", gradingPrompt);
@@ -342,6 +434,18 @@ async function handleAudioGrading(
 
     // Parse n8n response and map to GradeResult shape
     const gradingResult: AudioGradingResponse = await n8nResponse.json();
+    if (
+      typeof gradingResult.isCorrect !== "boolean" ||
+      !Number.isFinite(gradingResult.score) ||
+      gradingResult.score < 0 ||
+      gradingResult.score > 100 ||
+      typeof gradingResult.feedback !== "string"
+    ) {
+      return NextResponse.json(
+        { error: "Audio grading service returned an invalid response" },
+        { status: 502 },
+      );
+    }
     const result = {
       isCorrect: gradingResult.isCorrect,
       score: gradingResult.score,

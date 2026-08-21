@@ -38,7 +38,7 @@ export const submissions = pgTable("submissions", {
   response: text("response").notNull(), // Student's text response
   audioData: text("audio_data"), // Base64-encoded audio data (for audio submissions)
   videoUrl: text("video_url"), // URL for video submissions
-  score: integer("score").notNull(), // AI grading score 0-100
+  score: integer("score"), // AI grading score 0-100; null when coach-only review
   aiFeedback: text("ai_feedback").notNull(), // AI feedback text
   transcription: text("transcription"), // AI transcription for audio submissions
   status: submissionStatusEnum("status").notNull().default("pending_review"),

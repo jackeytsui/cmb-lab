@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { lessons } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
+import { z } from "zod";
 import type { ListeningPracticeConfig } from "@/lib/assignment-types";
+import { getRealUser } from "@/lib/auth";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { canAccessLesson, resolvePermissions } from "@/lib/permissions";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+
+export const maxDuration = 60;
 
 /**
  * GET /api/assignments/[lessonId]/listening-audio
@@ -13,12 +19,22 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getRealUser();
+  if (!user || user.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { lessonId } = await params;
+  if (!z.string().uuid().safeParse(lessonId).success) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  if (user.role !== "admin" && user.role !== "coach") {
+    const permissions = await resolvePermissions(user.id);
+    if (!(await canAccessLesson(permissions, lessonId))) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+  }
 
   const lesson = await db.query.lessons.findFirst({
     where: and(eq(lessons.id, lessonId), isNull(lessons.deletedAt)),
@@ -36,29 +52,13 @@ export async function GET(
     return NextResponse.json({ error: "Invalid config" }, { status: 500 });
   }
 
-  if (!config?.audioBlobUrl) {
+  if (!config?.audioBlobUrl || !isPrivateVercelBlobUrl(config.audioBlobUrl)) {
     return NextResponse.json({ error: "No audio uploaded for this lesson" }, { status: 404 });
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-  const range = request.headers.get("range");
-  if (range) headers["Range"] = range;
-
-  const blobRes = await fetch(config.audioBlobUrl, { headers });
-  if (!blobRes.ok && blobRes.status !== 206) {
-    return NextResponse.json({ error: "Failed to stream audio" }, { status: blobRes.status });
-  }
-
-  const responseHeaders = new Headers();
-  responseHeaders.set("Content-Type", blobRes.headers.get("content-type") || "audio/mpeg");
-  const cl = blobRes.headers.get("content-length");
-  if (cl) responseHeaders.set("Content-Length", cl);
-  const cr = blobRes.headers.get("content-range");
-  if (cr) responseHeaders.set("Content-Range", cr);
-  responseHeaders.set("Accept-Ranges", blobRes.headers.get("accept-ranges") || "bytes");
-  responseHeaders.set("Cache-Control", "private, max-age=600");
-
-  return new NextResponse(blobRes.body, { status: blobRes.status, headers: responseHeaders });
+  return proxyBlobMedia(request, config.audioBlobUrl, {
+    fallbackContentType: "audio/mpeg",
+    label: "assignments/listening-audio",
+    extraHeaders: { "Content-Disposition": "inline" },
+  });
 }

@@ -71,6 +71,24 @@ export async function userCanReviewAssignments(
   );
 }
 
+/** Exact assignment types a reviewer may access. */
+export async function getReviewableAssignmentTypes(user: {
+  id: string;
+  role: string;
+}): Promise<ReviewableAssignmentType[]> {
+  const assignmentTypes = Object.keys(
+    ASSIGNMENT_REVIEW_FEATURE_KEYS,
+  ) as ReviewableAssignmentType[];
+  if (user.role === "admin") return assignmentTypes;
+
+  const permissions = await resolvePermissions(user.id);
+  return assignmentTypes.filter((assignmentType) =>
+    permissions.canUseFeature(
+      ASSIGNMENT_REVIEW_FEATURE_KEYS[assignmentType],
+    ),
+  );
+}
+
 /**
  * Resolve the real authenticated user if they are an authorized assignment
  * reviewer (admin or capability holder); otherwise null.
@@ -106,6 +124,7 @@ export interface EligibleReviewer {
   name: string | null;
   email: string;
   role: string;
+  reviewableTypes: ReviewableAssignmentType[];
 }
 
 /**
@@ -143,7 +162,12 @@ export async function listChallengeReviewers(
     );
 
   const byId = new Map<string, EligibleReviewer>();
-  for (const reviewer of rows) byId.set(reviewer.id, reviewer);
+  for (const reviewer of rows) {
+    byId.set(reviewer.id, {
+      ...reviewer,
+      reviewableTypes: [assignmentType],
+    });
+  }
   return Array.from(byId.values()).sort((a, b) =>
     (a.name ?? a.email).localeCompare(b.name ?? b.email),
   );
@@ -172,6 +196,7 @@ export async function listEligibleReviewers(): Promise<EligibleReviewer[]> {
         name: users.name,
         email: users.email,
         role: users.role,
+        featureKey: roleFeatures.featureKey,
       })
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
@@ -188,8 +213,30 @@ export async function listEligibleReviewers(): Promise<EligibleReviewer[]> {
   ]);
 
   const byId = new Map<string, EligibleReviewer>();
-  for (const reviewer of [...admins, ...capabilityHolders]) {
-    byId.set(reviewer.id, reviewer);
+  const allTypes = Object.keys(
+    ASSIGNMENT_REVIEW_FEATURE_KEYS,
+  ) as ReviewableAssignmentType[];
+  for (const admin of admins) {
+    byId.set(admin.id, { ...admin, reviewableTypes: allTypes });
+  }
+  for (const reviewer of capabilityHolders) {
+    const assignmentType = allTypes.find(
+      (type) =>
+        ASSIGNMENT_REVIEW_FEATURE_KEYS[type] === reviewer.featureKey,
+    );
+    if (!assignmentType) continue;
+    const existing = byId.get(reviewer.id);
+    if (existing) {
+      if (!existing.reviewableTypes.includes(assignmentType)) {
+        existing.reviewableTypes.push(assignmentType);
+      }
+    } else {
+      const { featureKey: _featureKey, ...reviewerDetails } = reviewer;
+      byId.set(reviewer.id, {
+        ...reviewerDetails,
+        reviewableTypes: [assignmentType],
+      });
+    }
   }
   return Array.from(byId.values()).sort((a, b) =>
     (a.name ?? a.email).localeCompare(b.name ?? b.email),

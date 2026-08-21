@@ -139,9 +139,9 @@ export default async function CourseLibraryStudentPage() {
                     )}
                   </div>
                   <div className="p-3">
-                    <h3 className="text-sm font-semibold text-foreground line-clamp-1">
+                    <h2 className="text-sm font-semibold text-foreground line-clamp-1">
                       {course.title}
-                    </h3>
+                    </h2>
                     {course.summary && (
                       <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                         {course.summary}

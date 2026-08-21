@@ -68,10 +68,15 @@ export function TranscriptLimitsWidget() {
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-muted-foreground">
+          <label
+            htmlFor="transcript-limit-count"
+            className="block text-xs font-medium text-muted-foreground"
+          >
             Max transcriptions
           </label>
           <input
+            id="transcript-limit-count"
+            name="limitCount"
             type="number"
             min={1}
             max={999}
@@ -82,10 +87,15 @@ export function TranscriptLimitsWidget() {
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-muted-foreground">
+          <label
+            htmlFor="transcript-limit-period"
+            className="block text-xs font-medium text-muted-foreground"
+          >
             Per
           </label>
           <select
+            id="transcript-limit-period"
+            name="period"
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
             className="block h-9 w-28 rounded-md border border-border bg-background px-2 pr-8 text-sm text-foreground outline-none focus:border-primary"

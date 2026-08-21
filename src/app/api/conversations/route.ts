@@ -4,6 +4,15 @@ import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import { conversations, lessons, modules, courses } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
+import { z } from "zod";
+import {
+  canAccessLesson,
+  resolvePermissions,
+} from "@/lib/permissions";
+
+const createConversationSchema = z.object({
+  lessonId: z.string().uuid(),
+});
 
 /**
  * GET /api/conversations
@@ -28,8 +37,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get("studentId");
     const lessonId = searchParams.get("lessonId");
-    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
-    const offset = parseInt(searchParams.get("offset") || "0");
+    const parsedLimit = Number.parseInt(searchParams.get("limit") || "20", 10);
+    const parsedOffset = Number.parseInt(searchParams.get("offset") || "0", 10);
+    const limit = Number.isFinite(parsedLimit)
+      ? Math.min(Math.max(parsedLimit, 1), 100)
+      : 20;
+    const offset = Number.isFinite(parsedOffset)
+      ? Math.min(Math.max(parsedOffset, 0), 10_000)
+      : 0;
 
     // 4. Determine which user's conversations to query
     let targetUserId = currentUser.id;
@@ -105,15 +120,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Parse body
-    const body = await request.json();
-    const { lessonId } = body;
-
-    if (!lessonId) {
+    const parsedBody = createConversationSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!parsedBody.success) {
       return NextResponse.json(
-        { error: "lessonId is required" },
+        { error: "Invalid lesson" },
         { status: 400 }
       );
     }
+    const { lessonId } = parsedBody.data;
 
     // 4. Verify lesson exists
     const lesson = await db.query.lessons.findFirst({
@@ -125,6 +141,15 @@ export async function POST(request: NextRequest) {
         { error: "Lesson not found" },
         { status: 404 }
       );
+    }
+    if (currentUser.role !== "admin" && currentUser.role !== "coach") {
+      const permissions = await resolvePermissions(currentUser.id);
+      if (!(await canAccessLesson(permissions, lessonId))) {
+        return NextResponse.json(
+          { error: "Lesson not found" },
+          { status: 404 },
+        );
+      }
     }
 
     // 5. Create conversation record

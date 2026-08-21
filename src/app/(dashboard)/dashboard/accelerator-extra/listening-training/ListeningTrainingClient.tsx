@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, Pause, Play, RotateCcw, Volume2, X } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Pause, Play, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTTS } from "@/hooks/useTTS";
 import { pinyin } from "pinyin-pro";
-import { getToneColorClass, extractToneFromPinyin } from "@/lib/tone-colors";
+import { getToneColorClass } from "@/lib/tone-colors";
 
 type Question = {
   id: string;
@@ -103,11 +103,19 @@ function QuestionCard({
 }: {
   question: Question;
   isCompleted: boolean;
-  onComplete: (questionId: string) => void;
+  onComplete: (questionId: string) => Promise<boolean>;
 }) {
-  const { speak, stop, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
+  const {
+    speak,
+    stop,
+    isLoading: ttsLoading,
+    isPlaying: ttsPlaying,
+    error: ttsError,
+  } = useTTS();
   const [wrongPicks, setWrongPicks] = useState<Set<string>>(new Set());
   const [solved, setSolved] = useState(isCompleted);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [rate, setRate] = useState<"x-slow" | "medium" | "fast">("medium");
   const [replayCount, setReplayCount] = useState(1);
   const replayAbortRef = useRef(false);
@@ -131,16 +139,23 @@ function QuestionCard({
   }, [speak, stop, ttsPlaying, question.chineseText, rate, replayCount]);
 
   const handlePick = useCallback(
-    (option: string) => {
-      if (solved) return;
+    async (option: string) => {
+      if (solved || saving) return;
       if (option === question.correctPinyin) {
         setSolved(true);
-        onComplete(question.id);
+        setSaving(true);
+        setSaveError(null);
+        const saved = await onComplete(question.id);
+        setSaving(false);
+        if (!saved) {
+          setSolved(false);
+          setSaveError("Your answer was correct, but progress could not be saved. Please try again.");
+        }
       } else {
         setWrongPicks((prev) => new Set(prev).add(option));
       }
     },
-    [solved, question.correctPinyin, question.id, onComplete],
+    [onComplete, question.correctPinyin, question.id, saving, solved],
   );
 
   const labels = ["A", "B", "C", "D"];
@@ -233,6 +248,7 @@ function QuestionCard({
               </div>
             </div>
           </div>
+          {ttsError && <p className="text-xs text-red-500">{ttsError}</p>}
         </div>
 
         {/* Completed badge */}
@@ -249,7 +265,7 @@ function QuestionCard({
           const isCorrect = option === question.correctPinyin;
           const isWrong = wrongPicks.has(option);
           const showCorrect = solved && isCorrect;
-          const disabled = solved || isWrong;
+          const disabled = solved || isWrong || saving;
 
           return (
             <button
@@ -292,6 +308,12 @@ function QuestionCard({
         })}
       </div>
 
+      {saveError && (
+        <p role="alert" className="pl-7 text-xs text-red-500">
+          {saveError}
+        </p>
+      )}
+
       {/* Reveal Chinese characters with pinyin + tone colors + English */}
       {solved && (
         <RevealSection
@@ -307,31 +329,73 @@ export function ListeningTrainingClient() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/accelerator-extra/listening-training")
-      .then((r) => r.json())
-      .then((data) => {
+  const loadQuestions = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const response = await fetch("/api/accelerator-extra/listening-training", { signal });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) {
+        throw new Error(data?.error || "Unable to load listening questions");
+      }
+      if (!signal?.aborted) {
         setQuestions(data.questions ?? []);
         setCompletedIds(new Set(data.completedIds ?? []));
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      }
+    } catch (error) {
+      if (!signal?.aborted) {
+        setLoadError(error instanceof Error ? error.message : "Unable to load listening questions");
+      }
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
   }, []);
 
-  const handleComplete = useCallback((questionId: string) => {
-    setCompletedIds((prev) => new Set(prev).add(questionId));
-    fetch("/api/accelerator-extra/listening-training/progress", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ questionId }),
-    }).catch(() => {});
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadQuestions(controller.signal);
+    return () => controller.abort();
+  }, [loadQuestions]);
+
+  const handleComplete = useCallback(async (questionId: string) => {
+    try {
+      const response = await fetch("/api/accelerator-extra/listening-training/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId }),
+      });
+      if (!response.ok) return false;
+      setCompletedIds((prev) => new Set(prev).add(questionId));
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 text-center">
+        <AlertTriangle className="mx-auto h-6 w-6 text-amber-500" />
+        <p className="mt-2 text-sm font-medium text-foreground">Listening training could not load</p>
+        <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => void loadQuestions()}
+          className="mt-4 inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Try again
+        </button>
       </div>
     );
   }

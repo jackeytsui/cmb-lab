@@ -1,24 +1,31 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { and, eq, isNull } from "drizzle-orm";
+import { getRealUser } from "@/lib/auth";
+import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
 
 export async function GET() {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getRealUser();
+  if (!user) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
   // Verify coach role
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) {
+  if (user.role !== "admin" && user.role !== "coach") {
     return new NextResponse("Forbidden", { status: 403 });
   }
 
   try {
-    // Return all students. In a more complex LMS, we might filter by assigned students.
+    const conditions = [
+      eq(users.role, "student"),
+      isNull(users.deletedAt),
+      excludeWhitelistedUsersSql(users.id),
+    ];
+    if (user.role !== "admin") {
+      conditions.push(eq(users.assignedCoachId, user.id));
+    }
+
     const studentList = await db
       .select({
         id: users.id,
@@ -27,7 +34,7 @@ export async function GET() {
         imageUrl: users.imageUrl,
       })
       .from(users)
-      .where(eq(users.role, "student"));
+      .where(and(...conditions));
 
     return NextResponse.json({ students: studentList });
   } catch (error) {

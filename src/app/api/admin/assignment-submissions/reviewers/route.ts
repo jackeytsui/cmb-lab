@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getAnyAssignmentReviewer,
+  getReviewableAssignmentTypes,
   listEligibleReviewers,
 } from "@/lib/assignment-review";
 
@@ -15,6 +16,9 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const reviewers = await listEligibleReviewers();
+  const allowedTypes = await getReviewableAssignmentTypes(reviewerUser);
+  const reviewers = (await listEligibleReviewers()).filter((reviewer) =>
+    reviewer.reviewableTypes.some((type) => allowedTypes.includes(type)),
+  );
   return NextResponse.json({ reviewers });
 }

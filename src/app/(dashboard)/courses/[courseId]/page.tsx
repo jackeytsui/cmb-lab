@@ -20,9 +20,10 @@ import { LessonCard } from "@/components/course/LessonCard";
 
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { PracticeSetCard } from "@/components/practice/assignments/PracticeSetCard";
-import { resolvePermissions } from "@/lib/permissions";
+import { resolvePermissions, type PermissionSet } from "@/lib/permissions";
 import { hasMinimumRole } from "@/lib/auth";
 import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
+import { canAccessLessonByPolicy } from "@/lib/course-access-policy";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
@@ -51,18 +52,19 @@ export default async function CourseDetailPage({ params }: PageProps) {
 
   // 3. Verify user has valid access to this course (via resolver or coach bypass)
   const isCoachOrAbove = await hasMinimumRole("coach");
-  let accessTier: "preview" | "full" = "full";
+  let accessTier: "preview" | "full" | null = "full";
+  let permissions: PermissionSet | null = null;
 
   if (!isCoachOrAbove) {
     // Classic LTO students don't get regular courses — send them to Accelerator
     if (await userHasLtoStudentTag(user.id)) {
       redirect("/dashboard/accelerator");
     }
-    const permissions = await resolvePermissions(user.id);
+    permissions = await resolvePermissions(user.id);
     if (!permissions.canAccessCourse(courseId)) {
       redirect("/courses");
     }
-    accessTier = permissions.getAccessTier(courseId) ?? "preview";
+    accessTier = permissions.getCourseLevelAccessTier(courseId);
   }
 
   try {
@@ -86,6 +88,10 @@ export default async function CourseDetailPage({ params }: PageProps) {
     if (!course) {
       notFound();
     }
+    const hasCourseLevelAccess =
+      isCoachOrAbove || Boolean(permissions?.hasCourseLevelAccess(courseId));
+    const hasFullCourseAccess =
+      isCoachOrAbove || (hasCourseLevelAccess && accessTier === "full");
 
     // 5. Batch fetch progress for all lessons (avoid N+1)
     const allLessonIds = course.modules.flatMap((m) =>
@@ -186,25 +192,46 @@ export default async function CourseDetailPage({ params }: PageProps) {
     // 6. Compute unlock status for each lesson
     const lessonStatuses = new Map<
       string,
-      { isUnlocked: boolean; isCompleted: boolean; previousTitle?: string }
+      {
+        isUnlocked: boolean;
+        isCompleted: boolean;
+        isTierAccessible: boolean;
+        previousTitle?: string;
+        lockedReason?: string;
+      }
     >();
     const orderedLessons: Array<{
       lesson: (typeof course.modules)[number]["lessons"][number];
       isUnlocked: boolean;
       isCompleted: boolean;
+      isTierAccessible: boolean;
       previousTitle?: string;
     }> = [];
+    let lessonOrdinal = 0;
 
     for (const mod of course.modules) {
       for (let i = 0; i < mod.lessons.length; i++) {
         const lesson = mod.lessons[i];
         const progress = progressMap.get(lesson.id);
         const isCompleted = progress?.completedAt != null;
+        const isTierAccessible = canAccessLessonByPolicy({
+          accessTier,
+          hasCourseLevelAccess,
+          hasModuleGrant:
+            hasFullCourseAccess || Boolean(permissions?.moduleGrants.has(mod.id)),
+          hasLessonGrant: Boolean(permissions?.lessonGrants.has(lesson.id)),
+          lessonIndex: lessonOrdinal,
+          previewLessonCount: course.previewLessonCount,
+        });
+        lessonOrdinal += 1;
 
-        let isUnlocked = true;
+        let isUnlocked = isTierAccessible;
         let previousTitle: string | undefined;
+        const lockedReason = isTierAccessible
+          ? undefined
+          : "Available with full course access";
 
-        if (i > 0) {
+        if (isTierAccessible && i > 0) {
           const prevLesson = mod.lessons[i - 1];
           const prevProgress = progressMap.get(prevLesson.id);
           isUnlocked = prevProgress?.completedAt != null;
@@ -213,15 +240,30 @@ export default async function CourseDetailPage({ params }: PageProps) {
           }
         }
 
-        lessonStatuses.set(lesson.id, { isUnlocked, isCompleted, previousTitle });
-        orderedLessons.push({ lesson, isUnlocked, isCompleted, previousTitle });
+        lessonStatuses.set(lesson.id, {
+          isUnlocked,
+          isCompleted,
+          isTierAccessible,
+          previousTitle,
+          lockedReason,
+        });
+        orderedLessons.push({
+          lesson,
+          isUnlocked,
+          isCompleted,
+          isTierAccessible,
+          previousTitle,
+        });
       }
     }
 
-    const completedLessonsCount = orderedLessons.filter(
+    const accessibleLessons = orderedLessons.filter(
+      ({ isTierAccessible }) => isTierAccessible,
+    );
+    const completedLessonsCount = accessibleLessons.filter(
       ({ isCompleted }) => isCompleted
     ).length;
-    const totalLessonsCount = orderedLessons.length;
+    const totalLessonsCount = accessibleLessons.length;
     const currentLesson =
       orderedLessons.find(
         ({ isUnlocked, isCompleted }) => isUnlocked && !isCompleted
@@ -306,6 +348,11 @@ export default async function CourseDetailPage({ params }: PageProps) {
             <h1 className="text-3xl font-bold text-white mb-2">{course.title}</h1>
             {course.description && (
               <p className="text-zinc-400">{course.description}</p>
+            )}
+            {!hasFullCourseAccess && (
+              <p className="mt-3 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300">
+                Limited access · {totalLessonsCount} lesson{totalLessonsCount === 1 ? "" : "s"}
+              </p>
             )}
           </header>
 
@@ -397,6 +444,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
                               isCompleted={status.isCompleted}
                               isCurrent={isCurrent}
                               previousLessonTitle={status.previousTitle}
+                              lockedReason={status.lockedReason}
                               quizzes={lessonQuizzesMap.get(lesson.id) || []}
                             />
                           </div>
@@ -410,7 +458,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
           )}
 
           {/* Practice Sets assigned to this course */}
-          {coursePracticeSets.length > 0 && (
+          {hasFullCourseAccess && coursePracticeSets.length > 0 && (
             <div className="mt-8 pt-8 border-t border-zinc-800">
               <h3 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
                 <ClipboardList className="h-5 w-5 text-emerald-400" />

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { getCurrentUser } from "@/lib/auth";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
 // Each invocation serves at most one bounded chunk (see blob-media-proxy), so
 // 60s is ample headroom even for long-form audio.
@@ -17,12 +18,15 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { lessonId } = await params;
+  if (!(await canUserAccessCourseLibraryLesson(user, lessonId))) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
 
   const [lesson] = await db
     .select({

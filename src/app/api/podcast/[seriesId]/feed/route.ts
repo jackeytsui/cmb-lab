@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { courses, lessons, modules } from "@/db/schema";
+import { isPublicAudioCourse } from "@/lib/audio-course-access";
 
 /**
  * GET /api/podcast/[seriesId]/feed
@@ -59,14 +60,11 @@ export async function GET(
       ),
     );
 
-  if (!course) {
+  if (!course || !(await isPublicAudioCourse(course))) {
     return new NextResponse("Podcast feed not found", { status: 404 });
   }
 
   const meta = parseMeta(course.description);
-  if (!meta.audioCourse) {
-    return new NextResponse("Not an audio course", { status: 404 });
-  }
 
   // Get modules and lessons
   const moduleRows = await db

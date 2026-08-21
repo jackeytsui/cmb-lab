@@ -9,7 +9,7 @@ import {
   courseLibraryModules,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
-import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
 interface RouteParams {
   params: Promise<{ lessonId: string }>;
@@ -49,8 +49,9 @@ async function getAccessibleVideoLesson(
     .limit(1);
 
   if (!lesson || lesson.type !== "video") return null;
-  const canSeeCourse = await getCourseLibraryCourseAccess(user);
-  return canSeeCourse(lesson.courseId) ? lesson : null;
+  return (await canUserAccessCourseLibraryLesson(user, lessonId))
+    ? lesson
+    : null;
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {

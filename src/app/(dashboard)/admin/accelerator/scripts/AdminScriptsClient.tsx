@@ -920,8 +920,11 @@ function AudioUploadButton({
   // If the stored URL changes (e.g. after regenerate or replace), stop any
   // in-flight playback so the next click fetches the fresh file.
   useEffect(() => {
-    stopPlayback();
-  }, [audioUrl, stopPlayback]);
+    if (handleRef.current) {
+      handleRef.current.stop();
+      handleRef.current = null;
+    }
+  }, [audioUrl]);
 
   return (
     <div className="flex items-center gap-2">

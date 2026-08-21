@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { vocabularyLists } from "@/db/schema/vocabulary";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
 
 const updateListSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  description: z.string().optional(),
+  description: z.string().max(2_000).optional(),
 });
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ listId: string }> }
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -27,7 +27,7 @@ export async function DELETE(
       .where(
         and(
           eq(vocabularyLists.id, listId),
-          eq(vocabularyLists.userId, userId)
+          eq(vocabularyLists.userId, user.id)
         )
       )
       .returning();
@@ -50,8 +50,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ listId: string }> }
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -71,7 +71,7 @@ export async function PATCH(
       .where(
         and(
           eq(vocabularyLists.id, listId),
-          eq(vocabularyLists.userId, userId)
+          eq(vocabularyLists.userId, user.id)
         )
       )
       .returning();

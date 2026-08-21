@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { users, lessonSubmissions, lessonReviews } from "@/db/schema";
+import { lessonSubmissions } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { z } from "zod";
+import { getRealUser } from "@/lib/auth";
 
 /**
  * GET /api/assignments/[lessonId]/submission
@@ -13,19 +14,14 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const dbUser = await getRealUser();
+  if (!dbUser || dbUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { lessonId } = await params;
-
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
-  if (!dbUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 401 });
+  if (!z.string().uuid().safeParse(lessonId).success) {
+    return NextResponse.json({ submission: null });
   }
 
   const submission = await db.query.lessonSubmissions.findFirst({

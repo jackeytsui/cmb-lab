@@ -1,8 +1,9 @@
 import "server-only";
 
-import { and, asc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { courseAccess, interactions, lessons, users } from "@/db/schema";
+import { interactions, lessons, users } from "@/db/schema";
+import { canAccessLesson, resolvePermissions } from "@/lib/permissions";
 
 /** Load lesson prompts into the reader only when the signed-in user has access. */
 export async function getReaderInitialText(
@@ -13,24 +14,20 @@ export async function getReaderInitialText(
   try {
     const user = await db.query.users.findFirst({
       where: eq(users.clerkId, clerkUserId),
-      columns: { id: true },
+      columns: { id: true, role: true },
     });
     if (!user) return "";
 
     const lesson = await db.query.lessons.findFirst({
       where: and(eq(lessons.id, lessonId), isNull(lessons.deletedAt)),
-      with: { module: { with: { course: true } } },
+      columns: { id: true },
     });
     if (!lesson) return "";
 
-    const access = await db.query.courseAccess.findFirst({
-      where: and(
-        eq(courseAccess.userId, user.id),
-        eq(courseAccess.courseId, lesson.module.course.id),
-        or(isNull(courseAccess.expiresAt), gt(courseAccess.expiresAt, new Date())),
-      ),
-    });
-    if (!access) return "";
+    if (user.role !== "admin" && user.role !== "coach") {
+      const permissions = await resolvePermissions(user.id);
+      if (!(await canAccessLesson(permissions, lessonId))) return "";
+    }
 
     const rows = await db.query.interactions.findMany({
       where: and(

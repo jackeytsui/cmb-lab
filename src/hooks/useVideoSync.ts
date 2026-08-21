@@ -37,9 +37,11 @@ export function findActiveCaptionIndex(
     }
   }
 
-  // Verify the found caption actually covers this time
-  if (result >= 0 && currentMs < captions[result].endMs) {
-    return result;
+  // Usually the most recently started caption covers the time. If caption
+  // tracks overlap and that shorter line has already ended, walk backwards to
+  // find an earlier line that is still active instead of showing a false gap.
+  for (let index = result; index >= 0; index--) {
+    if (currentMs < captions[index].endMs) return index;
   }
 
   return -1; // In a gap between captions
@@ -162,6 +164,26 @@ export function useVideoSync(captions: CaptionLine[]) {
       setCurrentTimeMs((prev) => (Math.abs(prev - timeMs) > 200 ? timeMs : prev));
     }, 250);
   }, [captions]);
+
+  // A new video or a caption replacement keeps this hook mounted. Reset all
+  // transcript-bound state and replace any live polling callback so it cannot
+  // keep reading the previous caption array.
+  useEffect(() => {
+    const wasPlaying = isPlayingRef.current;
+    stopPolling();
+    activeCaptionIndexRef.current = -1;
+    loopRangeRef.current = null;
+    seekCooldownRef.current = 0;
+    lastAutoPausedRef.current = -1;
+    isAutoPausedRef.current = false;
+    queueMicrotask(() => {
+      setActiveCaptionIndex(-1);
+      setCurrentTimeMs(0);
+      setLoopRangeState(null);
+      setIsAutoPaused(false);
+    });
+    if (wasPlaying) startPolling();
+  }, [captions, startPolling, stopPolling]);
 
   // Cleanup on unmount
   useEffect(() => stopPolling, [stopPolling]);

@@ -10,7 +10,7 @@ const bodySchema = z.object({
   email: z.string().email(),
   firstName: z.string().trim().max(120).optional(),
   lastName: z.string().trim().max(120).optional(),
-});
+}).strict();
 
 export async function POST(req: NextRequest) {
   const apiKey = await validateBearerApiKey(req);
@@ -43,8 +43,7 @@ export async function POST(req: NextRequest) {
   const lookup = await clerk.users.getUserList({ emailAddress: [normalizedEmail], limit: 1 });
   const clerkUser = lookup.data[0] ?? null;
 
-  const accessMetadata = {
-    role: "student",
+  const enrollmentMetadata = {
     cmbPortalAccessStatus: "active",
     cmbPortalAccessRevoked: false,
     cmbInviteFirstName: firstName ?? null,
@@ -54,11 +53,32 @@ export async function POST(req: NextRequest) {
   };
 
   if (clerkUser) {
+    const existingByClerk = await db.query.users.findFirst({
+      where: eq(users.clerkId, clerkUser.id),
+      columns: { id: true, role: true },
+    });
+    const existingByEmail = existingByClerk
+      ? null
+      : await db.query.users.findFirst({
+          where: eq(users.email, normalizedEmail),
+          columns: { id: true, role: true },
+        });
+    const metadataRole = clerkUser.publicMetadata?.role;
+    const role =
+      existingByClerk?.role === "admin" || existingByClerk?.role === "coach"
+        ? existingByClerk.role
+        : existingByEmail?.role === "admin" || existingByEmail?.role === "coach"
+          ? existingByEmail.role
+          : metadataRole === "admin" || metadataRole === "coach"
+            ? metadataRole
+            : "student";
+
     // Existing Clerk user — grant/restore access
     await clerk.users.updateUserMetadata(clerkUser.id, {
       publicMetadata: {
         ...(clerkUser.publicMetadata ?? {}),
-        ...accessMetadata,
+        ...enrollmentMetadata,
+        role,
       },
     });
     // Unlock in case they were previously locked/banned
@@ -66,25 +86,26 @@ export async function POST(req: NextRequest) {
     await clerk.users.unlockUser(clerkUser.id).catch(() => {});
 
     // Upsert DB record
-    const existingByClerk = await db.query.users.findFirst({
-      where: eq(users.clerkId, clerkUser.id),
-      columns: { id: true },
-    });
-
     if (existingByClerk) {
       await db
         .update(users)
-        .set({ email: normalizedEmail, name, role: "student", deletedAt: null })
+        .set({
+          email: normalizedEmail,
+          ...(name ? { name } : {}),
+          role,
+          deletedAt: null,
+        })
         .where(eq(users.id, existingByClerk.id));
     } else {
-      const existingByEmail = await db.query.users.findFirst({
-        where: eq(users.email, normalizedEmail),
-        columns: { id: true },
-      });
       if (existingByEmail) {
         await db
           .update(users)
-          .set({ clerkId: clerkUser.id, name, role: "student", deletedAt: null })
+          .set({
+            clerkId: clerkUser.id,
+            ...(name ? { name } : {}),
+            role,
+            deletedAt: null,
+          })
           .where(eq(users.id, existingByEmail.id));
       } else {
         await db
@@ -105,7 +126,7 @@ export async function POST(req: NextRequest) {
     await clerk.invitations.createInvitation({
       emailAddress: normalizedEmail,
       redirectUrl: `${appUrl}/sign-in`,
-      publicMetadata: accessMetadata,
+      publicMetadata: { ...enrollmentMetadata, role: "student" },
       notify: true,
     });
   } catch (err: unknown) {

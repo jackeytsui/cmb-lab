@@ -2,12 +2,9 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { resolvePermissions, type FeatureKey } from "@/lib/permissions";
+import type { FeatureKey } from "@/lib/permissions";
 import { Lock } from "lucide-react";
-import {
-  getUserFeatureTagOverrides,
-  hasFeatureWithTagOverrides,
-} from "@/lib/tag-feature-access";
+import { userCanUseFeature } from "@/lib/feature-access";
 
 // ---------------------------------------------------------------------------
 // Human-readable labels for feature keys
@@ -91,33 +88,7 @@ export async function FeatureGate({
     return fallback ? <>{fallback}</> : null;
   }
 
-  // Coaches and admins always bypass feature gating (based on REAL user role,
-  // not impersonated). This ensures admin tools like coaching remain accessible
-  // even when "View As" is active.
-  if (realUser.role === "coach" || realUser.role === "admin") {
-    return <>{children}</>;
-  }
-
-  // For students: check permissions with tag overrides
-  const featureTagOverrides = await getUserFeatureTagOverrides(realUser.id);
-  const forcedStudent = process.env.FORCE_STUDENT_MODE === "true";
-  let baseAllowed = false;
-
-  if (
-    forcedStudent &&
-    (feature === "dictionary_reader" ||
-      feature === "listening_lab" ||
-      feature === "coaching_material")
-  ) {
-    baseAllowed = true;
-  }
-
-  if (!baseAllowed) {
-    const permissions = await resolvePermissions(realUser.id);
-    baseAllowed = permissions.canUseFeature(feature);
-  }
-
-  if (hasFeatureWithTagOverrides(feature, baseAllowed, featureTagOverrides)) {
+  if (await userCanUseFeature(realUser, feature)) {
     return <>{children}</>;
   }
 

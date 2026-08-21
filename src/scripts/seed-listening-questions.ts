@@ -4,6 +4,7 @@
  */
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
+import { eq } from "drizzle-orm";
 import { listeningQuestions } from "../db/schema/accelerator-extra";
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -48,14 +49,57 @@ const questions = [
   { sortOrder: 30, chineseText: "请问你想刷卡还是付现金？", correctPinyin: "qǐng wèn nǐ xiǎng shuā kǎ hái shì fù xiàn jīn", wrongPinyin1: "qǐng wèn nǐ xiǎng yòng shén me fù qián", wrongPinyin2: "qǐng wèn nǐ yǒu méi yǒu kǎ", wrongPinyin3: "qǐng wèn nǐ xiǎng mǎi shén me" },
 ];
 
+const englishTranslations = [
+  "Where are you from?",
+  "I just moved to New York.",
+  "Why did you decide to move here?",
+  "Do you like living here?",
+  "Everyone is very friendly.",
+  "Do you need help?",
+  "What can I help you with?",
+  "Excuse me, where is the soy sauce?",
+  "How much is this bag of rice?",
+  "I would like one pound of chicken breast.",
+  "Chicken breast is eight dollars per pound.",
+  "Would you like anything else?",
+  "How do I get to the nearest subway station?",
+  "Keep walking straight ahead.",
+  "Turn right at the second intersection.",
+  "The subway station is directly across from the library.",
+  "Do you know how long the walk takes?",
+  "It takes about five minutes.",
+  "Long time no see.",
+  "How have you been lately?",
+  "I still work at the same company.",
+  "Do you have any travel plans?",
+  "Next week I will go home to visit my parents.",
+  "Send me a text message.",
+  "Excuse me, do you have a reservation?",
+  "Zhajiang noodles are our signature dish.",
+  "I am allergic to peanuts.",
+  "Would you like a drink?",
+  "Please bring me a takeout box.",
+  "Would you like to pay by card or cash?",
+];
+
 async function main() {
   console.log("Seeding listening questions...");
 
-  for (const q of questions) {
-    await db
-      .insert(listeningQuestions)
-      .values(q)
-      .onConflictDoNothing();
+  for (const [index, q] of questions.entries()) {
+    const values = { ...q, englishText: englishTranslations[index] };
+    const existing = await db
+      .select({ id: listeningQuestions.id })
+      .from(listeningQuestions)
+      .where(eq(listeningQuestions.sortOrder, q.sortOrder));
+
+    if (existing.length > 0) {
+      await db
+        .update(listeningQuestions)
+        .set(values)
+        .where(eq(listeningQuestions.sortOrder, q.sortOrder));
+    } else {
+      await db.insert(listeningQuestions).values(values);
+    }
   }
 
   console.log(`Seeded ${questions.length} listening questions.`);

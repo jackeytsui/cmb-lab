@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const STORAGE_KEY = "reader-prefs";
 
@@ -46,44 +46,56 @@ export function useReaderPreferences(scopeKey?: string): UseReaderPreferencesRet
     useState<ReaderPreferences>(DEFAULT_PREFERENCES);
   const [isHydrated, setIsHydrated] = useState(false);
   const storageKey = getStorageKey(scopeKey);
+  const loadedStorageKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Record<string, unknown>;
+    let cancelled = false;
+    loadedStorageKeyRef.current = null;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          const parsed = JSON.parse(stored) as Record<string, unknown>;
 
-        // Migration: old format had annotationMode string
-        if ("annotationMode" in parsed && !("showPinyin" in parsed)) {
-          const oldMode = parsed.annotationMode as string;
-          parsed.showPinyin = oldMode === "pinyin";
-          parsed.showJyutping = oldMode === "jyutping";
-          parsed.showEnglish = false;
-          delete parsed.annotationMode;
+          // Migration: old format had annotationMode string
+          if ("annotationMode" in parsed && !("showPinyin" in parsed)) {
+            const oldMode = parsed.annotationMode as string;
+            parsed.showPinyin = oldMode === "pinyin";
+            parsed.showJyutping = oldMode === "jyutping";
+            parsed.showEnglish = false;
+            delete parsed.annotationMode;
+          }
+
+          setPreferences({
+            showPinyin: typeof parsed.showPinyin === "boolean" ? parsed.showPinyin : DEFAULT_PREFERENCES.showPinyin,
+            showJyutping: typeof parsed.showJyutping === "boolean" ? parsed.showJyutping : DEFAULT_PREFERENCES.showJyutping,
+            showEnglish: typeof parsed.showEnglish === "boolean" ? parsed.showEnglish : DEFAULT_PREFERENCES.showEnglish,
+            translationMode: parsed.translationMode === "direct" ? "direct" : "proper",
+            scriptMode: (parsed.scriptMode as string) === "simplified" || (parsed.scriptMode as string) === "traditional"
+              ? (parsed.scriptMode as ReaderPreferences["scriptMode"])
+              : DEFAULT_PREFERENCES.scriptMode,
+            fontSize: typeof parsed.fontSize === "number" ? parsed.fontSize : DEFAULT_PREFERENCES.fontSize,
+            ttsLanguage: parsed.ttsLanguage === "zh-HK" ? "zh-HK" : "zh-CN",
+            toneColorsEnabled: typeof parsed.toneColorsEnabled === "boolean" ? parsed.toneColorsEnabled : DEFAULT_PREFERENCES.toneColorsEnabled,
+          });
+        } else {
+          setPreferences(DEFAULT_PREFERENCES);
         }
-
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setPreferences({
-          showPinyin: typeof parsed.showPinyin === "boolean" ? parsed.showPinyin : DEFAULT_PREFERENCES.showPinyin,
-          showJyutping: typeof parsed.showJyutping === "boolean" ? parsed.showJyutping : DEFAULT_PREFERENCES.showJyutping,
-          showEnglish: typeof parsed.showEnglish === "boolean" ? parsed.showEnglish : DEFAULT_PREFERENCES.showEnglish,
-          translationMode: parsed.translationMode === "direct" ? "direct" : "proper",
-          scriptMode: (parsed.scriptMode as string) === "simplified" || (parsed.scriptMode as string) === "traditional"
-            ? (parsed.scriptMode as ReaderPreferences["scriptMode"])
-            : DEFAULT_PREFERENCES.scriptMode,
-          fontSize: typeof parsed.fontSize === "number" ? parsed.fontSize : DEFAULT_PREFERENCES.fontSize,
-          ttsLanguage: parsed.ttsLanguage === "zh-HK" ? "zh-HK" : "zh-CN",
-          toneColorsEnabled: typeof parsed.toneColorsEnabled === "boolean" ? parsed.toneColorsEnabled : DEFAULT_PREFERENCES.toneColorsEnabled,
-        });
+      } catch {
+        console.warn("Failed to load reader preferences from localStorage");
       }
-    } catch {
-      console.warn("Failed to load reader preferences from localStorage");
-    }
-    setIsHydrated(true);
-  }, []);
+      loadedStorageKeyRef.current = storageKey;
+      setIsHydrated(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || loadedStorageKeyRef.current !== storageKey) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(preferences));
     } catch {

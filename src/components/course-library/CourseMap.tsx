@@ -166,7 +166,7 @@ function StopNode({
   stop: CourseMapStop;
   courseId: string;
   state: StopState;
-  onLockedTap: (stop: CourseMapStop) => void;
+  onLockedTap: (stop: CourseMapStop, trigger: HTMLButtonElement) => void;
 }) {
   const meta = STYLE_META[stop.mapStyle];
   const locked = state === "locked";
@@ -243,7 +243,7 @@ function StopNode({
   return locked ? (
     <button
       type="button"
-      onClick={() => onLockedTap(stop)}
+      onClick={(event) => onLockedTap(stop, event.currentTarget)}
       aria-label={`${stop.title} (ahead of your progress)`}
       className={commonClass}
     >
@@ -269,7 +269,7 @@ function BandGrid({
   width: number;
   courseId: string;
   stateFor: (index: number) => StopState;
-  onLockedTap: (stop: CourseMapStop) => void;
+  onLockedTap: (stop: CourseMapStop, trigger: HTMLButtonElement) => void;
 }) {
   const n = band.items.length;
   const rows = Math.max(1, Math.ceil(n / columns));
@@ -350,6 +350,7 @@ function BandGrid({
 export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
   const router = useRouter();
   const [jumpTarget, setJumpTarget] = useState<CourseMapStop | null>(null);
+  const jumpTriggerRef = useRef<HTMLButtonElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
@@ -404,7 +405,10 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
             width={width}
             courseId={courseId}
             stateFor={stateFor}
-            onLockedTap={setJumpTarget}
+            onLockedTap={(stop, trigger) => {
+              jumpTriggerRef.current = trigger;
+              setJumpTarget(stop);
+            }}
           />
         </section>
       ))}
@@ -445,7 +449,12 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
         open={jumpTarget !== null}
         onOpenChange={(open) => !open && setJumpTarget(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            jumpTriggerRef.current?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Jumping ahead?</AlertDialogTitle>
             <AlertDialogDescription>

@@ -189,6 +189,7 @@ export function VideoThreadPlayer({
         body: JSON.stringify({
           stepId: currentStep.id,
           sessionId: state.sessionId,
+          courseLessonId,
           response: {
             type,
             content: value,
@@ -481,6 +482,7 @@ export function VideoThreadPlayer({
                 <StudentMediaRecorder
                   mode="audio"
                   threadId={thread.id}
+                  courseLessonId={courseLessonId}
                   onUploadComplete={handleMediaUploadComplete}
                   onCancel={handleRecordingCancel}
                   disabled={state.isSubmitting}
@@ -501,6 +503,7 @@ export function VideoThreadPlayer({
                 <StudentMediaRecorder
                   mode="video"
                   threadId={thread.id}
+                  courseLessonId={courseLessonId}
                   onUploadComplete={handleMediaUploadComplete}
                   onCancel={handleRecordingCancel}
                   disabled={state.isSubmitting}

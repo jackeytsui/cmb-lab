@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import {
   submissions,
@@ -11,6 +10,7 @@ import {
   coachNotes,
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { z } from "zod";
 
 interface RouteParams {
   params: Promise<{ submissionId: string }>;
@@ -21,26 +21,20 @@ interface RouteParams {
  * Get single submission with full details for coach review.
  * Requires coach or admin role.
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  // 1. Verify user is authenticated
-  const { userId } = await auth();
-  if (!userId) {
+export async function GET(_request: NextRequest, { params }: RouteParams) {
+  const currentUser = await getRealUser();
+  if (!currentUser || currentUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 2. Verify user has coach role or higher
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     const { submissionId } = await params;
-
-    // 3. Get current user for notes filtering
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!z.string().uuid().safeParse(submissionId).success) {
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
 
     // 4. Fetch submission with all related data
@@ -51,6 +45,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         type: submissions.type,
         response: submissions.response,
         audioData: submissions.audioData,
+        videoUrl: submissions.videoUrl,
         score: submissions.score,
         aiFeedback: submissions.aiFeedback,
         transcription: submissions.transcription,
@@ -114,6 +109,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         type: submission.type,
         response: submission.response,
         audioData: submission.audioData,
+        videoUrl: submission.videoUrl,
         score: submission.score,
         aiFeedback: submission.aiFeedback,
         transcription: submission.transcription,

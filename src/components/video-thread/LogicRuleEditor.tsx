@@ -226,7 +226,7 @@ function StepSelector({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function LogicRuleEditor({ step, allSteps, onUpdate }: LogicRuleEditorProps) {
-  const rules = step.logicRules || [];
+  const rules = useMemo(() => step.logicRules || [], [step.logicRules]);
   const fallbackStepId = step.fallbackStepId;
   const rulesContainerRef = useRef<HTMLDivElement | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("guided");
@@ -238,15 +238,15 @@ export function LogicRuleEditor({ step, allSteps, onUpdate }: LogicRuleEditorPro
 
   const [sourceStepId, setSourceStepId] = useState<string>(sourceCandidates[0]?.id || "");
   const [focusedInput, setFocusedInput] = useState<{ ruleId: string; target: FocusTarget } | null>(null);
-  const [pendingFocusRuleId, setPendingFocusRuleId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (sourceCandidates.length === 0) { setSourceStepId(""); return; }
-    const stillValid = sourceCandidates.some((c) => c.id === sourceStepId);
-    if (!stillValid) setSourceStepId(sourceCandidates[0].id);
-  }, [sourceCandidates, sourceStepId]);
-
-  const sourceStep = sourceCandidates.find((c) => c.id === sourceStepId);
+  const pendingFocusRuleIdRef = useRef<string | null>(null);
+  const selectedSourceStepId = sourceCandidates.some(
+    (candidate) => candidate.id === sourceStepId,
+  )
+    ? sourceStepId
+    : sourceCandidates[0]?.id ?? "";
+  const sourceStep = sourceCandidates.find(
+    (candidate) => candidate.id === selectedSourceStepId,
+  );
   const sourceAllowedTypes = useMemo(() => getAllowedResponseTypes(sourceStep), [sourceStep]);
   const sourceOptions = useMemo(() => sourceStep?.responseOptions?.options || [], [sourceStep]);
   const sourceTokens = useMemo(() => buildSourceTokens(sourceStep), [sourceStep]);
@@ -266,17 +266,18 @@ export function LogicRuleEditor({ step, allSteps, onUpdate }: LogicRuleEditorPro
   }, [rules]);
 
   useEffect(() => {
+    const pendingFocusRuleId = pendingFocusRuleIdRef.current;
     if (!pendingFocusRuleId) return;
     const target = document.getElementById(`logic-rule-field-${pendingFocusRuleId}`) as HTMLInputElement | null;
     if (target) { target.focus(); target.scrollIntoView({ behavior: "smooth", block: "center" }); }
-    setPendingFocusRuleId(null);
-  }, [pendingFocusRuleId, rules]);
+    pendingFocusRuleIdRef.current = null;
+  }, [rules]);
 
   // ─── Rule Handlers ──────────────────────────────────────────────────────
   const handleAddRule = () => {
     const newRule = buildDefaultRule(sourceTokens);
     onUpdate(step.id, { logicRules: [...rules, newRule] });
-    setPendingFocusRuleId(newRule.id);
+    pendingFocusRuleIdRef.current = newRule.id;
     setFocusedInput({ ruleId: newRule.id, target: "field" });
   };
 
@@ -353,7 +354,7 @@ export function LogicRuleEditor({ step, allSteps, onUpdate }: LogicRuleEditorPro
       const bootstrapRule = buildDefaultRule(sourceTokens);
       bootstrapRule.field = expression;
       onUpdate(step.id, { logicRules: [bootstrapRule] });
-      setPendingFocusRuleId(bootstrapRule.id);
+      pendingFocusRuleIdRef.current = bootstrapRule.id;
       setFocusedInput({ ruleId: bootstrapRule.id, target: "value" });
       return;
     }
@@ -402,7 +403,7 @@ export function LogicRuleEditor({ step, allSteps, onUpdate }: LogicRuleEditorPro
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-300">
             Source Node
           </p>
-          <Select value={sourceStepId || "none"} onValueChange={(value) => setSourceStepId(value === "none" ? "" : value)}>
+          <Select value={selectedSourceStepId || "none"} onValueChange={(value) => setSourceStepId(value === "none" ? "" : value)}>
             <SelectTrigger className="h-9 border-zinc-600 bg-zinc-800 text-sm text-zinc-100">
               <SelectValue placeholder="Select connected node" />
             </SelectTrigger>

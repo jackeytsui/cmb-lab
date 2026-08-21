@@ -13,9 +13,9 @@ export default function TermsAndConditionsPage() {
 
       <div className="space-y-4 text-sm leading-6 text-foreground">
         <p>
-          These Terms and Conditions ("Terms") govern access to and use of the Canto to Mando Lab
-          platform (the "Platform"), operated by Canto to Mando Media LTD. ("Company", "we", "us",
-          or "our"). By using the Platform, you agree to these Terms.
+          These Terms and Conditions (&quot;Terms&quot;) govern access to and use of the Canto to Mando Lab
+          platform (the &quot;Platform&quot;), operated by Canto to Mando Media LTD. (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;,
+          or &quot;our&quot;). By using the Platform, you agree to these Terms.
         </p>
 
         <section className="space-y-2">

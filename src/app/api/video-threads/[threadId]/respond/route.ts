@@ -8,10 +8,22 @@ import {
   VIDEO_THREAD_COMPLETE_TARGET,
 } from "@/types/video-thread-player";
 import { getCurrentUser } from "@/lib/auth";
+import { canUserAccessVideoThread } from "@/lib/video-thread-access";
+import { z } from "zod";
 
 interface RouteParams {
   params: Promise<{ threadId: string }>;
 }
+
+const responseBodySchema = z.object({
+  stepId: z.string().uuid(),
+  sessionId: z.string().uuid().nullish(),
+  courseLessonId: z.string().uuid().nullish(),
+  response: z.object({
+    type: z.enum(["video", "audio", "text", "multiple_choice", "button"]),
+    content: z.string().max(20_000).default(""),
+  }),
+});
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
@@ -22,15 +34,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const { threadId } = await params;
-    const body = await request.json();
-    const { stepId, sessionId, response, studentContext } = body;
-
-    if (!stepId) {
-      return NextResponse.json({ error: "stepId required" }, { status: 400 });
+    const parsedBody = responseBodySchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid response" }, { status: 400 });
     }
+    const { stepId, sessionId, response, courseLessonId } = parsedBody.data;
 
-    if (!response || !response.type) {
-      return NextResponse.json({ error: "response with type required" }, { status: 400 });
+    if (
+      !(await canUserAccessVideoThread(
+        user,
+        threadId,
+        courseLessonId,
+      ))
+    ) {
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 });
     }
 
     // Resolve and validate the step before creating a session or storing a
@@ -44,6 +63,52 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!currentStep) {
       return NextResponse.json({ error: "Step not found" }, { status: 404 });
+    }
+
+    const configuredTypes = Array.isArray(currentStep.allowedResponseTypes)
+      ? currentStep.allowedResponseTypes.filter(
+          (type): type is typeof response.type =>
+            typeof type === "string" &&
+            ["video", "audio", "text", "multiple_choice", "button"].includes(type),
+        )
+      : [];
+    const allowedTypes =
+      configuredTypes.length > 0
+        ? configuredTypes
+        : [currentStep.responseType];
+    if (!allowedTypes.includes(response.type)) {
+      return NextResponse.json(
+        { error: "Response type is not allowed for this step" },
+        { status: 400 },
+      );
+    }
+
+    if (
+      (response.type === "button" || response.type === "multiple_choice") &&
+      Array.isArray(
+        (currentStep.responseOptions as { options?: unknown } | null)?.options,
+      )
+    ) {
+      const optionValues = (
+        currentStep.responseOptions as {
+          options: Array<{ value?: unknown }>;
+        }
+      ).options
+        .map((option) => option.value)
+        .filter((value): value is string => typeof value === "string");
+      if (!optionValues.includes(response.content)) {
+        return NextResponse.json(
+          { error: "Response option is not valid for this step" },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (!response.content.trim()) {
+      return NextResponse.json(
+        { error: "Response content is required" },
+        { status: 400 },
+      );
     }
 
     // --- Session Handling ---
@@ -61,6 +126,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       if (!existingSession) {
         return NextResponse.json({ error: "Session not found or does not belong to user" }, { status: 404 });
+      }
+      if (existingSession.status === "completed") {
+        return NextResponse.json(
+          { error: "This thread session is already complete" },
+          { status: 409 },
+        );
       }
 
       activeSessionId = existingSession.id;
@@ -88,7 +159,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       stepId,
       responseType: response.type,
       content: response.content || null,
-      metadata: response.metadata || null,
+      metadata:
+        response.type === "audio" || response.type === "video"
+          ? { muxPlaybackId: response.content }
+          : null,
     });
 
     // --- Next Step Resolution (preserved logic engine) ---
@@ -154,7 +228,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // It IS a Logic Node. Evaluate rules to find WHERE to go next.
         const context = {
           answer: response,
-          student: studentContext,
+          student: { email: user.email },
         };
 
         const evaluatedNextId = evaluateRules(rules, context);

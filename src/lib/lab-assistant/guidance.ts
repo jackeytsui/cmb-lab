@@ -53,10 +53,11 @@ export const DEFAULT_TALK_TRACKS: Record<TalkTrackIntent, string> = {
   my_coach: `- Tell them their coach's name warmly ("You're working with Jane!").
 - If they ask follow-ups about scheduling or contacting the coach, point them to their 1:1 Coaching section in CMB Lab, and offer to loop in the team for anything you can't see.
 - If no coach is on record yet, reassure them: coach matching is part of onboarding and the team is on it. Offer to pass it to the team for a status update (escalateToTeam if they accept).`,
-  referral: `- Explain the program simply: when they refer a friend, the friend gets a special offer on joining, and the student earns a reward when that friend signs up.
-- Point them to the "Refer a Friend" link in their CMB Lab sidebar for their personal referral link.
+  referral: `- Explain the verified live referral offer plainly: their friend receives CAD $200 off enrollment, and the referring student receives a reward when the friend joins.
+- Point them to the "Refer a Friend" link in their CMB Lab sidebar. It opens the official GHL gift-card form at https://go.thecmblueprint.com/student-referral.
+- If helpful, explain the form: enter the referrer's first name, last name, and email; then the friend's first name, last name, and email (phone is optional), plus an optional personal gift-card message. GHL handles the confirmation and follow-up after submission.
 - Share their own referral status only if it's on record; never mention other students or names of people they referred.
-- For reward specifics, payout timing, or a missing referral credit, offer to pass it to the team (escalateToTeam if they accept) — never promise amounts you don't have.`,
+- The live page does not state the student's reward amount or payout timing. For those specifics or a missing referral credit, offer to pass it to the team (escalateToTeam if they accept) — never invent a reward amount or timing.`,
   testimonial_sheldon: `- Thank them genuinely — wanting to share their story means a lot to Sheldon and the whole team.
 - Confirm the request has been passed along and the team will reach out to schedule the interview.
 - If they ask what to expect: a relaxed conversation with Sheldon about their learning journey — no preparation needed.`,

@@ -8,18 +8,20 @@ import { featureKeySchema } from "@/lib/permissions";
 import { assignRole, removeRole } from "@/lib/user-roles";
 import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
+import { webhookSecretsMatch } from "@/lib/webhook-secret";
 
 const discordWebhookSchema = z
   .object({
     email: z.string().email(),
-    name: z.string().optional(),
+    name: z.string().trim().max(200).optional(),
     featureKey: featureKeySchema.optional(),
     roleId: z.string().uuid().optional(),
-    roleName: z.string().optional(),
+    roleName: z.string().trim().max(200).optional(),
     action: z.enum(["assign", "remove"]).default("assign"),
     roleExpiresAt: z.string().datetime().optional(),
-    idempotencyKey: z.string().optional(),
+    idempotencyKey: z.string().max(500).optional(),
   })
+  .strict()
   .refine(
     (d) => d.featureKey || d.roleId || d.roleName,
     { message: "At least one of featureKey, roleId, or roleName is required" }
@@ -75,7 +77,7 @@ export async function POST(req: NextRequest) {
       process.env.DISCORD_WEBHOOK_SECRET ||
       process.env.ENROLLMENT_WEBHOOK_SECRET;
 
-    if (!expectedSecret || secret !== expectedSecret) {
+    if (!webhookSecretsMatch(secret, expectedSecret)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -156,7 +158,10 @@ export async function POST(req: NextRequest) {
         await ensureDefaultStudentRoleAssignment(dbUser.id);
       }
     } else {
-      const role = resolveRoleFromEmail(data.email);
+      const resolvedRole = resolveRoleFromEmail(data.email);
+      const role = dbUser.role === "admin" || dbUser.role === "coach"
+        ? dbUser.role
+        : resolvedRole;
       if (dbUser.role !== role) {
         await db
           .update(users)

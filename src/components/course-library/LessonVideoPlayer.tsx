@@ -18,10 +18,8 @@ const AUTO_RETRY_DELAYS_MS = [3000, 8000] as const;
 /**
  * Native <video> player for Course Library lessons.
  *
- * Videos default to unmuted. Browsers may block autoplay with sound until the
- * user has interacted with the page, so we attempt unmuted playback and leave
- * the player paused and unmuted if that attempt is rejected. We never fall
- * back to muted autoplay.
+ * Playback is always user-initiated. This prevents a lesson from unexpectedly
+ * starting audio (or completing itself) just because a student opened it.
  *
  * While the video buffers for the first time (it streams through an
  * authenticated proxy) we show a short overlay so students know to wait.
@@ -123,13 +121,6 @@ export function LessonVideoPlayer({
       setDiagnosis(null);
       setStatus(video.readyState >= 3 ? "ready" : "loading");
     });
-    // Attempt unmuted autoplay. If policy blocks it, the player remains
-    // paused and the student's first press of Play starts with sound.
-    video.muted = false;
-    const attempt = video.play();
-    if (attempt && typeof attempt.catch === "function") {
-      attempt.catch(() => {});
-    }
     return () => {
       cancelAnimationFrame(raf);
       clearRecoveryTimer();
@@ -215,10 +206,10 @@ export function LessonVideoPlayer({
     <div className="relative h-full w-full">
       <video
         ref={videoRef}
+        aria-label="Lesson video"
         src={src}
         controls
         playsInline
-        autoPlay
         preload="metadata"
         controlsList="nodownload"
         disablePictureInPicture

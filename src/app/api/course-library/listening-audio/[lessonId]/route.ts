@@ -11,6 +11,9 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { CourseLibraryListeningPracticeSentence } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { isListeningPracticeLesson } from "@/lib/lesson-language";
+import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 
 // Match the 60s used by the other blob-proxy routes so long audio isn't cut
 // off mid-transfer by the default function timeout.
@@ -35,8 +38,11 @@ export async function GET(
   }
   const viewer = await db.query.users.findFirst({
     where: eq(users.clerkId, clerkId),
-    columns: { role: true },
+    columns: { id: true, role: true },
   });
+  if (!viewer) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { lessonId } = await params;
   const sentenceId = request.nextUrl.searchParams.get("sentence");
@@ -48,6 +54,7 @@ export async function GET(
     .select({
       content: courseLibraryLessons.content,
       lessonType: courseLibraryLessons.lessonType,
+      courseId: courseLibraryCourses.id,
     })
     .from(courseLibraryLessons)
     .innerJoin(
@@ -75,6 +82,10 @@ export async function GET(
   if (!lesson || !isListeningPracticeLesson(lesson.lessonType)) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
+  const canSeeCourse = await getCourseLibraryCourseAccess(viewer);
+  if (!canSeeCourse(lesson.courseId)) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
 
   const content = (lesson.content ?? {}) as Record<string, unknown>;
   const sentences = Array.isArray(content.sentences)
@@ -82,43 +93,16 @@ export async function GET(
     : [];
   const sentence = sentences.find((s) => s.id === sentenceId);
   const audioUrl = sentence?.audioUrl;
-  if (!audioUrl) {
+  if (!audioUrl || !isPrivateVercelBlobUrl(audioUrl)) {
     return NextResponse.json({ error: "No audio for sentence" }, { status: 404 });
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-  const range = request.headers.get("range");
-  if (range) headers["Range"] = range;
-
-  const blobResponse = await fetch(audioUrl, { headers });
-  if (!blobResponse.ok && blobResponse.status !== 206) {
-    return NextResponse.json(
-      { error: "Failed to fetch audio" },
-      { status: blobResponse.status },
-    );
-  }
-
-  const responseHeaders = new Headers();
-  responseHeaders.set(
-    "Content-Type",
-    blobResponse.headers.get("content-type") ?? "audio/mpeg",
-  );
-  const contentLength = blobResponse.headers.get("content-length");
-  if (contentLength) responseHeaders.set("Content-Length", contentLength);
-  const contentRange = blobResponse.headers.get("content-range");
-  if (contentRange) responseHeaders.set("Content-Range", contentRange);
-  responseHeaders.set(
-    "Accept-Ranges",
-    blobResponse.headers.get("accept-ranges") ?? "bytes",
-  );
-  // Discourage saving/caching of the media.
-  responseHeaders.set("Cache-Control", "private, no-store");
-  responseHeaders.set("Content-Disposition", "inline");
-
-  return new NextResponse(blobResponse.body, {
-    status: blobResponse.status,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, audioUrl, {
+    fallbackContentType: "audio/mpeg",
+    label: "course-library/listening-audio",
+    extraHeaders: {
+      "Cache-Control": "private, no-store",
+      "Content-Disposition": "inline",
+    },
   });
 }

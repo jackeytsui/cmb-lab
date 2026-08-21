@@ -272,9 +272,9 @@ export default async function DashboardLayout({
             <NotificationBellClient />
           </div>
         </header>
-        <main className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto">
           <RouteThemeScope>{children}</RouteThemeScope>
-        </main>
+        </div>
         </SidebarInset>
         {showLabAssistant && <LabAssistantWidget />}
       </SidebarProvider>

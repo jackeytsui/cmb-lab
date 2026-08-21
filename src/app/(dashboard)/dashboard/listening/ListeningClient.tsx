@@ -25,6 +25,7 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
+import { extractYouTubeStartSeconds } from "@/lib/youtube";
 
 type CaptionLine = {
   text: string;
@@ -79,6 +80,7 @@ export function ListeningClient() {
   const [transcriptLineClickSignal, setTranscriptLineClickSignal] = useState(0);
   const [firstLineAudioClickSignal, setFirstLineAudioClickSignal] = useState(0);
   const [videoId, setVideoId] = useState<string | null>(null);
+  const [videoStartSeconds, setVideoStartSeconds] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [captions, setCaptions] = useState<CaptionLine[] | null>(null);
   const [captionStatus, setCaptionStatus] =
@@ -100,8 +102,18 @@ export function ListeningClient() {
   const [videoDurationMs, setVideoDurationMs] = useState<number | null>(null);
   const [videoTitle, setVideoTitle] = useState<string | null>(null);
   const playerLocalRef = useRef<YTPlayer | null>(null);
-  const durationCapturedRef = useRef(false);
   const resumePositionRef = useRef<number | null>(null);
+
+  const queueOrApplyResumePosition = useCallback((positionMs: number) => {
+    if (!Number.isFinite(positionMs) || positionMs <= 0) return;
+    const player = playerLocalRef.current;
+    if (player) {
+      player.seekTo(positionMs / 1000, true);
+      resumePositionRef.current = null;
+    } else {
+      resumePositionRef.current = positionMs;
+    }
+  }, []);
 
   // Recent video sessions (max 5 saved)
   type RecentSession = {
@@ -132,6 +144,7 @@ export function ListeningClient() {
   const [canManageRecommendations, setCanManageRecommendations] = useState(false);
   const [draggingRecommendationId, setDraggingRecommendationId] = useState<string | null>(null);
   const autoTranscribeAttemptedKeyRef = useRef<string | null>(null);
+  const captionLoadSequenceRef = useRef(0);
 
   // Usage limit state
   const [usageInfo, setUsageInfo] = useState<{
@@ -270,12 +283,15 @@ export function ListeningClient() {
 
   const handleLoadSession = useCallback(
     (session: RecentSession) => {
+      const loadSequence = ++captionLoadSequenceRef.current;
       trackAction("load_recent_video", { sessionId: session.id });
       // Trigger the same flow as URL submit
       const url = session.youtubeUrl || `https://www.youtube.com/watch?v=${session.youtubeVideoId}`;
       setVideoId(session.youtubeVideoId);
+      setVideoStartSeconds(extractYouTubeStartSeconds(url));
       setIsLoadingVideo(true);
       setCaptionStatus("loading");
+      setTranscribeError(null);
       setCaptions(null);
       setSessionId(null);
       setEnglishCaptions(null);
@@ -286,7 +302,6 @@ export function ListeningClient() {
       autoTranscribeAttemptedKeyRef.current = null;
       setVideoDurationMs(null);
       setVideoTitle(null);
-      durationCapturedRef.current = false;
       resumePositionRef.current = null;
 
       fetch("/api/video/extract-captions", {
@@ -295,7 +310,11 @@ export function ListeningClient() {
         body: JSON.stringify({ videoId: session.youtubeVideoId, url }),
       })
         .then(async (res) => {
-          const data = await res.json();
+          if (captionLoadSequenceRef.current !== loadSequence) return null;
+          const data = await res.json().catch(() => null);
+          if (!data) {
+            throw new Error("Invalid caption response");
+          }
           if (res.status === 429 && data.error === "usage_limit_reached") {
             setCaptionStatus("error");
             setTranscribeError(
@@ -304,9 +323,15 @@ export function ListeningClient() {
             fetchUsage();
             return;
           }
+          if (!res.ok) {
+            setCaptionStatus("error");
+            setTranscribeError(data.error || "Failed to extract captions");
+            return;
+          }
           return data;
         })
         .then((data) => {
+          if (captionLoadSequenceRef.current !== loadSequence) return;
           if (!data) return;
           if (data.error === "youtube_access_blocked") {
             setCaptionStatus("provider_blocked");
@@ -336,17 +361,21 @@ export function ListeningClient() {
             data.captions && data.captions.length > 0 ? "success" : "no_captions"
           );
           if (data.session?.lastPositionMs && data.session.lastPositionMs > 0) {
-            resumePositionRef.current = data.session.lastPositionMs;
+            queueOrApplyResumePosition(data.session.lastPositionMs);
           }
         })
         .catch(() => {
+          if (captionLoadSequenceRef.current !== loadSequence) return;
           setCaptionStatus("error");
+          setTranscribeError("Failed to load captions. Please try again.");
         })
         .finally(() => {
-          setIsLoadingVideo(false);
+          if (captionLoadSequenceRef.current === loadSequence) {
+            setIsLoadingVideo(false);
+          }
         });
     },
-    [isMandarinOrCantonese, trackAction, fetchUsage]
+    [isMandarinOrCantonese, trackAction, fetchUsage, queueOrApplyResumePosition]
   );
 
   // Vocabulary encounter tracking -- batched client-side, flushed periodically
@@ -450,16 +479,15 @@ export function ListeningClient() {
 
   // Capture video duration and title on first play event
   const handleFirstPlay = useCallback(() => {
-    if (durationCapturedRef.current || !playerLocalRef.current) return;
-    durationCapturedRef.current = true;
+    if (!playerLocalRef.current) return;
 
     const player = playerLocalRef.current;
     const durationSec = player.getDuration() as unknown as number;
-    if (durationSec > 0) {
+    if (Number.isFinite(durationSec) && durationSec > 0) {
       setVideoDurationMs(Math.round(durationSec * 1000));
     }
 
-    try {
+    if (!videoTitle) try {
       const videoData = (player as unknown as { getVideoData: () => { title?: string } }).getVideoData();
       if (videoData?.title) {
         setVideoTitle(videoData.title);
@@ -467,7 +495,7 @@ export function ListeningClient() {
     } catch {
       // getVideoData may not be available in all contexts
     }
-  }, []);
+  }, [videoTitle]);
 
   // Wrap handlePlay to track isPlaying state and capture duration
   const wrappedHandlePlay = useCallback(() => {
@@ -489,7 +517,7 @@ export function ListeningClient() {
   }, [handleEnd]);
 
   // TTS state
-  const { speak, stop: stopTts, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
+  const { speak, isLoading: ttsLoading, isPlaying: ttsPlaying } = useTTS();
   const [ttsLineIndex, setTtsLineIndex] = useState(-1);
 
   // Character popup state
@@ -506,7 +534,6 @@ export function ListeningClient() {
     hidePopup,
     cancelHide,
     isSaved,
-    getSavedId,
     toggleSave,
     ensureSaved,
     savedVocabMap,
@@ -864,10 +891,13 @@ export function ListeningClient() {
 
   const handleUrlSubmit = useCallback(
     async (extractedVideoId: string, url: string) => {
+      const loadSequence = ++captionLoadSequenceRef.current;
       trackAction("load_video", { youtubeVideoId: extractedVideoId });
       setVideoId(extractedVideoId);
+      setVideoStartSeconds(extractYouTubeStartSeconds(url));
       setIsLoadingVideo(true);
       setCaptionStatus("loading");
+      setTranscribeError(null);
       setCaptions(null);
       setSessionId(null);
       setEnglishCaptions(null);
@@ -879,7 +909,6 @@ export function ListeningClient() {
       // Reset progress state for new video load
       setVideoDurationMs(null);
       setVideoTitle(null);
-      durationCapturedRef.current = false;
       resumePositionRef.current = null;
 
       try {
@@ -890,6 +919,7 @@ export function ListeningClient() {
         });
 
         const data = await res.json();
+        if (captionLoadSequenceRef.current !== loadSequence) return;
 
         if (res.status === 429 && data.error === "usage_limit_reached") {
           setCaptionStatus("error");
@@ -902,6 +932,7 @@ export function ListeningClient() {
 
         if (!res.ok) {
           setCaptionStatus("error");
+          setTranscribeError(data.error || "Failed to extract captions");
           return;
         }
 
@@ -940,17 +971,21 @@ export function ListeningClient() {
 
         // Store resume position if session has previous progress
         if (data.session?.lastPositionMs && data.session.lastPositionMs > 0) {
-          resumePositionRef.current = data.session.lastPositionMs;
+          queueOrApplyResumePosition(data.session.lastPositionMs);
         }
       } catch {
+        if (captionLoadSequenceRef.current !== loadSequence) return;
         if (applyOnboardingFallbackCaptions()) return;
         setCaptionStatus("error");
+        setTranscribeError("Failed to load captions. Please try again.");
       } finally {
-        setIsLoadingVideo(false);
-        fetchUsage();
+        if (captionLoadSequenceRef.current === loadSequence) {
+          setIsLoadingVideo(false);
+          fetchUsage();
+        }
       }
     },
-    [applyOnboardingFallbackCaptions, isMandarinOrCantonese, trackAction, fetchUsage]
+    [applyOnboardingFallbackCaptions, isMandarinOrCantonese, trackAction, fetchUsage, queueOrApplyResumePosition]
   );
 
   const handleUploadComplete = useCallback(
@@ -1043,9 +1078,7 @@ export function ListeningClient() {
     ];
   }, [
     captions,
-    firstLineAudioClickSignal,
     hasClickedLoadForTour,
-    transcriptLineClickSignal,
   ]);
 
   const handleListeningStepChange = useCallback(
@@ -1211,7 +1244,9 @@ export function ListeningClient() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
           <div className="lg:col-span-2 flex flex-col gap-4">
             <YouTubePlayer
+              key={`${videoId}:${videoStartSeconds}`}
               videoId={videoId}
+              startSeconds={videoStartSeconds}
               onReady={wrappedHandlePlayerReady}
               onPlay={wrappedHandlePlay}
               onPause={wrappedHandlePause}
@@ -1303,7 +1338,9 @@ export function ListeningClient() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <YouTubePlayer
+              key={`${videoId}:${videoStartSeconds}`}
               videoId={videoId}
+              startSeconds={videoStartSeconds}
               onReady={wrappedHandlePlayerReady}
               onPlay={wrappedHandlePlay}
               onPause={wrappedHandlePause}

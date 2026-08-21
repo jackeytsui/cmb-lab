@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mic, Video as VideoIcon, RefreshCcw, Trash2, Play, Pause } from "lucide-react";
+import { Loader2, Mic, RefreshCcw } from "lucide-react";
 import { SignedMuxPlayer } from "@/components/video/SignedMuxPlayer";
 import { toast } from "sonner";
 
@@ -26,7 +26,6 @@ export function VideoRecorder({
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(initialUrl || null);
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -47,23 +46,21 @@ export function VideoRecorder({
     }
   }, [videoPromptId]);
 
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      stopStream();
-      // Only revoke if it's a blob URL we created, not if it's a server URL (initialUrl)
-      if (previewUrl && previewUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, []);
-
-  const stopStream = () => {
+  const stopStream = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
-  };
+  }, []);
+
+  // Stop any active camera/microphone stream on unmount.
+  useEffect(() => stopStream, [stopStream]);
+
+  // Revoke each locally-created preview when it is replaced or unmounted.
+  useEffect(() => {
+    if (!previewUrl?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   const startRecording = async () => {
     try {
@@ -93,7 +90,6 @@ export function VideoRecorder({
 
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        setRecordedBlob(blob);
         const url = URL.createObjectURL(blob);
         setPreviewUrl(url);
         stopStream();
@@ -144,11 +140,7 @@ export function VideoRecorder({
   };
 
   const handleRetake = () => {
-    if (previewUrl && previewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(previewUrl);
-    }
     setPreviewUrl(null);
-    setRecordedBlob(null);
   };
 
   // Render Coach Prompt Video
@@ -168,16 +160,17 @@ export function VideoRecorder({
 
   // Render Playback (Review)
   if (previewUrl) {
-    const isVideo = previewUrl.endsWith(".webm") || previewUrl.endsWith(".mp4") || recordMode === "video"; // Basic guess
-    // Ideally we store metadata about type, but for simple playback:
-    
     return (
       <div className="space-y-4">
         {renderCoachVideo()}
         <div className="bg-zinc-950 rounded-lg p-4 border border-zinc-800 text-center">
             <h4 className="text-sm font-medium text-zinc-400 mb-2">Your Answer</h4>
-            <div className="aspect-video bg-black rounded-lg overflow-hidden border border-zinc-800 mx-auto max-w-md">
+            <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-zinc-800 bg-black mx-auto max-w-md">
+              {recordMode === "video" ? (
                 <video src={previewUrl} controls className="w-full h-full" />
+              ) : (
+                <audio src={previewUrl} controls className="w-full px-4" />
+              )}
             </div>
             {!readOnly && (
                 <div className="mt-4">

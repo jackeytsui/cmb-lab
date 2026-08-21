@@ -33,8 +33,6 @@ export interface SentenceControlsProps {
   isPlaying: boolean;
   /** Whether TTS audio is loading for this sentence */
   isLoading: boolean;
-  /** TTS error from useTTS hook (e.g. network failure) */
-  ttsError?: string | null;
   /** Parent-level translation cache (sentence text -> English) */
   translationCache: Map<string, string>;
   /** Called when a translation is successfully fetched */
@@ -56,7 +54,6 @@ export function SentenceControls({
   onSpeak,
   isPlaying,
   isLoading,
-  ttsError,
   translationCache,
   onTranslationFetched,
   onPlayClick,
@@ -65,10 +62,6 @@ export function SentenceControls({
   flashcardSourceLabel = "AI Passage Reader",
   flashcardSourceType = "sentence",
 }: SentenceControlsProps) {
-  // Suppress unused variable warning - language is part of the public API
-  // and used by parent to determine which TTS voice to pass to onSpeak
-  void language;
-
   const [rate, setRate] = useState<"slow" | "medium" | "fast">("medium");
   const [showTranslation, setShowTranslation] = useState(false);
   const [translationLoading, setTranslationLoading] = useState(false);
@@ -114,7 +107,7 @@ export function SentenceControls({
     } finally {
       setTranslationLoading(false);
     }
-  }, [cachedTranslation, sentenceText, onTranslationFetched]);
+  }, [cachedTranslation, sentenceText, language, onTranslationFetched]);
 
   const handleRetryTranslation = useCallback(() => {
     setTranslationError(null);
@@ -192,8 +185,6 @@ export function SentenceControls({
           variant="bookmark"
         />
       </span>
-
-      {/* TTS errors hidden — fallback happens silently */}
 
       {/* Translation display */}
       {showTranslation && displayTranslation && (

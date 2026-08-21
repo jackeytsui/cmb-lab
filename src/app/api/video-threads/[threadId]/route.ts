@@ -3,6 +3,9 @@ import { db } from "@/db";
 import { videoThreads, videoThreadSteps, videoThreadSessions } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { eq, asc, and, desc } from "drizzle-orm";
+import { canUserAccessVideoThread } from "@/lib/video-thread-access";
+import { signMediaPath } from "@/lib/signed-media-url";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 
 interface RouteParams {
   params: Promise<{ threadId: string }>;
@@ -22,6 +25,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const { threadId } = await params;
 
   try {
+    if (!(await canUserAccessVideoThread(user, threadId))) {
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+    }
+
     const thread = await db.query.videoThreads.findFirst({
       where: eq(videoThreads.id, threadId),
       with: {
@@ -39,7 +46,13 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 
     // Flatten steps out of thread for easier client consumption
-    const { steps, ...threadData } = thread;
+    const { steps: rawSteps, ...threadData } = thread;
+    const steps = rawSteps.map((step) => ({
+      ...step,
+      playbackUrl: isPrivateVercelBlobUrl(step.videoUrl)
+        ? signMediaPath(`/api/video-threads/${threadId}/media/${step.id}`)
+        : step.videoUrl,
+    }));
 
     // Look up the most recent in_progress session for this user + thread
     const existingSessionRow = await db.query.videoThreadSessions.findFirst({

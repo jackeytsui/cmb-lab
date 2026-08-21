@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 
 // Downloadable files can be large; match the 60s used by the other blob-proxy
 // routes so the transfer isn't cut off by the default function timeout.
@@ -14,15 +17,18 @@ export const maxDuration = 60;
  * the browser prompts the user to save the file.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { lessonId } = await params;
+  if (!(await canUserAccessCourseLibraryLesson(user, lessonId))) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
 
   const [lesson] = await db
     .select({
@@ -51,33 +57,16 @@ export async function GET(
   const content = lesson.content as Record<string, unknown>;
   const fileUrl = content.fileUrl as string | undefined;
   const fileName = (content.fileName as string | undefined) ?? "download";
-  if (!fileUrl) {
+  if (!fileUrl || !isPrivateVercelBlobUrl(fileUrl)) {
     return NextResponse.json({ error: "No file uploaded" }, { status: 404 });
   }
 
-  const blobResponse = await fetch(fileUrl, {
-    headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
-  });
-  if (!blobResponse.ok) {
-    return NextResponse.json(
-      { error: "Failed to fetch file" },
-      { status: blobResponse.status },
-    );
-  }
-
-  const responseHeaders = new Headers();
-  const contentType =
-    blobResponse.headers.get("content-type") ?? "application/octet-stream";
-  responseHeaders.set("Content-Type", contentType);
   const safeName = fileName.replace(/[^a-zA-Z0-9 ._-]/g, "");
-  responseHeaders.set(
-    "Content-Disposition",
-    `attachment; filename="${safeName}"`,
-  );
-  responseHeaders.set("Cache-Control", "private, max-age=3600");
-
-  return new NextResponse(blobResponse.body, {
-    status: 200,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, fileUrl, {
+    fallbackContentType: "application/octet-stream",
+    label: "course-library/download",
+    extraHeaders: {
+      "Content-Disposition": `attachment; filename="${safeName || "download"}"`,
+    },
   });
 }

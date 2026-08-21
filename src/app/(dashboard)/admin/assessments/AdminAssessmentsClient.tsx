@@ -26,7 +26,23 @@ export default function AdminAssessmentsClient() {
   }
 
   useEffect(() => {
-    load();
+    fetch("/api/assessments")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setItems(
+          (data.assessments ?? []).map(
+            (assessment: { id: string; title: string; type: string }) => ({
+              id: assessment.id,
+              title: assessment.title,
+              type: assessment.type,
+            }),
+          ),
+        );
+      })
+      .catch(() => {
+        // Non-critical: list may show empty.
+      });
   }, []);
 
   async function createAssessment() {

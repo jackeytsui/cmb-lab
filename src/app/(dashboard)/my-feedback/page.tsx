@@ -25,7 +25,7 @@ interface FeedbackItem {
   feedbackText: string | null;
   sharedNotes: Array<{ content: string; createdAt: string }>;
   submissionType: "text" | "audio" | "video";
-  score: number;
+  score: number | null;
 }
 
 /**

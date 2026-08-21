@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, ne, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
@@ -9,7 +9,10 @@ import {
   courseLibraryModules,
   users,
 } from "@/db/schema";
-import { getAnyAssignmentReviewer } from "@/lib/assignment-review";
+import {
+  getAnyAssignmentReviewer,
+  getReviewableAssignmentTypes,
+} from "@/lib/assignment-review";
 
 const STATUSES = ["submitted", "assigned", "in_review", "reviewed"] as const;
 const TYPES = ["text_assignment", "vocal_hack", "diary"] as const;
@@ -22,6 +25,10 @@ const TYPES = ["text_assignment", "vocal_hack", "diary"] as const;
 export async function GET(request: NextRequest) {
   const reviewerUser = await getAnyAssignmentReviewer();
   if (!reviewerUser) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const allowedTypes = await getReviewableAssignmentTypes(reviewerUser);
+  if (allowedTypes.length === 0) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -38,6 +45,7 @@ export async function GET(request: NextRequest) {
   const conditions: SQL[] = [
     ne(assignmentSubmissions.status, "draft"),
     eq(assignmentSubmissions.feedbackRequested, true),
+    inArray(assignmentSubmissions.assignmentType, allowedTypes),
   ];
   if (tab === "assigned") {
     conditions.push(
@@ -52,7 +60,11 @@ export async function GET(request: NextRequest) {
       ),
     );
   }
-  if (type && (TYPES as readonly string[]).includes(type)) {
+  if (
+    type &&
+    (TYPES as readonly string[]).includes(type) &&
+    allowedTypes.includes(type as (typeof TYPES)[number])
+  ) {
     conditions.push(
       eq(
         assignmentSubmissions.assignmentType,
@@ -111,5 +123,5 @@ export async function GET(request: NextRequest) {
     .orderBy(desc(assignmentSubmissions.submittedAt))
     .limit(500);
 
-  return NextResponse.json({ submissions: rows });
+  return NextResponse.json({ submissions: rows, allowedTypes });
 }

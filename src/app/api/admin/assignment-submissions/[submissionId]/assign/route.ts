@@ -6,6 +6,8 @@ import { assignmentSubmissions } from "@/db/schema";
 import {
   getAnyAssignmentReviewer,
   listEligibleReviewers,
+  userCanReviewAssignments,
+  type ReviewableAssignmentType,
 } from "@/lib/assignment-review";
 
 interface RouteParams {
@@ -49,6 +51,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (!submission) {
     return NextResponse.json({ error: "Submission not found" }, { status: 404 });
   }
+  const assignmentType =
+    submission.assignmentType as ReviewableAssignmentType;
+  if (!(await userCanReviewAssignments(reviewerUser, assignmentType))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   if (submission.status === "reviewed") {
     return NextResponse.json(
       { error: "This submission has already been reviewed." },
@@ -65,7 +72,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const { reviewerId } = parsed.data;
   if (reviewerId) {
     const eligible = await listEligibleReviewers();
-    if (!eligible.some((r) => r.id === reviewerId)) {
+    if (
+      !eligible.some(
+        (reviewer) =>
+          reviewer.id === reviewerId &&
+          reviewer.reviewableTypes.includes(assignmentType),
+      )
+    ) {
       return NextResponse.json(
         { error: "Selected user is not an eligible reviewer." },
         { status: 400 },

@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { users, videoSessions, videoCaptions } from "@/db/schema";
+import type { VideoSession } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import ytdl from "@distube/ytdl-core";
 import { getYoutubeYtdlAgent } from "@/lib/youtube-access";
+
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 /**
  * POST /api/video/transcribe
@@ -89,9 +92,19 @@ export async function POST(request: NextRequest) {
     }
 
     const chunks: Buffer[] = [];
+    let audioBytes = 0;
     try {
       for await (const chunk of audioStream) {
-        chunks.push(Buffer.from(chunk));
+        const buffer = Buffer.from(chunk);
+        audioBytes += buffer.length;
+        if (audioBytes > MAX_AUDIO_BYTES) {
+          audioStream.destroy();
+          return NextResponse.json(
+            { error: "Audio too large for transcription (>25MB). Try a shorter video." },
+            { status: 400 },
+          );
+        }
+        chunks.push(buffer);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -118,7 +131,7 @@ export async function POST(request: NextRequest) {
     const audioBuffer = Buffer.concat(chunks);
 
     // Whisper API limit: 25MB
-    if (audioBuffer.length > 25 * 1024 * 1024) {
+    if (audioBuffer.length > MAX_AUDIO_BYTES) {
       return NextResponse.json(
         { error: "Audio too large for transcription (>25MB). Try a shorter video." },
         { status: 400 }
@@ -173,32 +186,28 @@ export async function POST(request: NextRequest) {
     );
 
     // Save to database
-    let session;
+    let session: VideoSession | undefined;
     if (sessionId) {
       // Update existing session (created during extract-captions with 0 captions)
       const existing = await db.query.videoSessions.findFirst({
         where: and(
           eq(videoSessions.id, sessionId),
-          eq(videoSessions.userId, user.id)
+          eq(videoSessions.userId, user.id),
+          eq(videoSessions.youtubeVideoId, videoId),
         ),
       });
 
       if (existing) {
-        // Clear any old captions
+        // Mark incomplete before replacing rows. A failed insert must not look
+        // like a valid cached transcript on the next request.
+        await db
+          .update(videoSessions)
+          .set({ captionCount: 0 })
+          .where(eq(videoSessions.id, existing.id));
         await db
           .delete(videoCaptions)
           .where(eq(videoCaptions.videoSessionId, existing.id));
-
-        const [updated] = await db
-          .update(videoSessions)
-          .set({
-            captionSource: "whisper_auto",
-            captionLang: "zh",
-            captionCount: captions.length,
-          })
-          .where(eq(videoSessions.id, existing.id))
-          .returning();
-        session = updated;
+        session = existing;
       }
     }
 
@@ -212,14 +221,14 @@ export async function POST(request: NextRequest) {
           youtubeUrl: url,
           captionSource: "whisper_auto",
           captionLang: "zh",
-          captionCount: captions.length,
+          captionCount: 0,
         })
         .onConflictDoUpdate({
           target: [videoSessions.userId, videoSessions.youtubeVideoId],
           set: {
             captionSource: "whisper_auto" as const,
             captionLang: "zh",
-            captionCount: captions.length,
+            captionCount: 0,
           },
         })
         .returning();
@@ -228,6 +237,7 @@ export async function POST(request: NextRequest) {
 
     // Insert transcribed captions
     if (session && captions.length > 0) {
+      const targetSessionId = session.id;
       await db.insert(videoCaptions).values(
         captions.map(
           (c: {
@@ -236,7 +246,7 @@ export async function POST(request: NextRequest) {
             endMs: number;
             sequence: number;
           }) => ({
-            videoSessionId: session.id,
+            videoSessionId: targetSessionId,
             sequence: c.sequence,
             startMs: c.startMs,
             endMs: c.endMs,
@@ -244,6 +254,19 @@ export async function POST(request: NextRequest) {
           })
         )
       );
+    }
+
+    if (session) {
+      const [completed] = await db
+        .update(videoSessions)
+        .set({
+          captionSource: "whisper_auto",
+          captionLang: "zh",
+          captionCount: captions.length,
+        })
+        .where(eq(videoSessions.id, session.id))
+        .returning();
+      session = completed;
     }
 
     return NextResponse.json({

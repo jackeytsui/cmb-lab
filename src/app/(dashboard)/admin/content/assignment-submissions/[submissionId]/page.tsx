@@ -12,7 +12,11 @@ import {
   courseLibraryModules,
   users,
 } from "@/db/schema";
-import { getAnyAssignmentReviewer } from "@/lib/assignment-review";
+import {
+  getAnyAssignmentReviewer,
+  userCanReviewAssignments,
+  type ReviewableAssignmentType,
+} from "@/lib/assignment-review";
 import { lessonLanguage } from "@/lib/lesson-language";
 import { ReviewClient, type ReviewSubmissionDto } from "./ReviewClient";
 import {
@@ -59,6 +63,14 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
     .limit(1);
 
   if (!row || row.submission.status === "draft") notFound();
+  if (
+    !(await userCanReviewAssignments(
+      reviewer,
+      row.submission.assignmentType as ReviewableAssignmentType,
+    ))
+  ) {
+    notFound();
+  }
 
   // Cantonese variants store jyutping + zh-HK English; the reviewer UI mirrors
   // the student display/generation via this language.

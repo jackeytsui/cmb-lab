@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, MapPinned } from "lucide-react";
+import { ArrowLeft, ArrowRight, MapPinned } from "lucide-react";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import { courseLibraryCourses } from "@/db/schema";
@@ -28,10 +28,22 @@ export default async function CourseLibraryAdminPage() {
     );
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground">Course Library</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+    <div className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <Link
+        href="/admin/manage"
+        className="mb-5 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="size-3.5" />
+        Admin workspace
+      </Link>
+      <header className="mb-8 border-b border-border/70 pb-6">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+          Content
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+          Course Library
+        </h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
           Host and manage video, text, quiz, and downloadable course content.
           Students see the Course Library only when one of their tags grants a
           course (Tag Management) or they&apos;re added to a course&apos;s
@@ -39,7 +51,7 @@ export default async function CourseLibraryAdminPage() {
         </p>
       </header>
 
-      <div className="mb-6 flex flex-col gap-4 rounded-lg border border-rose-500/30 bg-rose-500/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-7 flex flex-col gap-4 rounded-2xl border border-rose-500/25 bg-rose-500/[0.04] p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex gap-3">
           <MapPinned className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
           <div>

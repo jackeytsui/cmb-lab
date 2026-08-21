@@ -14,6 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BetaFeedbackQueue } from "@/components/admin/BetaFeedbackQueue";
 
 interface Overview {
   windowDays: number;
@@ -299,6 +300,7 @@ export function LabAssistantAdminWidget() {
 
       {/* Guidance editor (full width) */}
       <GuidanceEditor onSaved={load} />
+      <BetaFeedbackQueue />
     </div>
   );
 }

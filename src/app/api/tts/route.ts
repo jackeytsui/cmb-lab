@@ -44,6 +44,17 @@ const OPENAI_TTS_MODEL = "gpt-4o-mini-tts";
 const OPENAI_TTS_VOICE = "alloy";
 const TTS_PROVIDER = (process.env.TTS_PROVIDER || "").toLowerCase();
 
+/**
+ * Header credentials must be a single non-whitespace token. Treat malformed
+ * values as unconfigured so fetch never echoes a secret inside a header
+ * validation error (and therefore into production logs).
+ */
+function getHeaderCredential(value: string | undefined): string | null {
+  const credential = value?.trim();
+  if (!credential || /\s/.test(credential)) return null;
+  return credential;
+}
+
 function mapOpenAiSpeed(rate: TTSRate): number {
   switch (rate) {
     case "x-slow":
@@ -74,7 +85,7 @@ async function synthesizeSpeechOpenAI(
   language: TTSLanguage,
   rate: TTSRate,
 ): Promise<Buffer> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getHeaderCredential(process.env.OPENAI_API_KEY);
   if (!apiKey) {
     throw new Error("OpenAI credentials not configured");
   }
@@ -158,7 +169,9 @@ export async function POST(request: NextRequest) {
       rate = "medium";
     }
 
-    const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
+    const hasOpenAI = Boolean(
+      getHeaderCredential(process.env.OPENAI_API_KEY),
+    );
     const hasAzure = Boolean(
       process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION,
     );
@@ -295,7 +308,12 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("TTS API error:", error);
+    // Do not log arbitrary fetch error messages here. Node includes invalid
+    // header values verbatim, which can expose provider credentials.
+    console.error(
+      "TTS API error:",
+      error instanceof Error ? error.name : "UnknownError",
+    );
 
     if (error instanceof Error) {
       if (error.message === "OpenAI credentials not configured") {

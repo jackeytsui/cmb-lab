@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { vocabularyListItems } from "@/db/schema/vocabulary";
-import { eq } from "drizzle-orm";
+import {
+  savedVocabulary,
+  vocabularyListItems,
+  vocabularyLists,
+} from "@/db/schema/vocabulary";
+import { and, eq } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ itemId: string }> }
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -19,7 +23,21 @@ export async function GET(
     const items = await db
       .select({ listId: vocabularyListItems.listId })
       .from(vocabularyListItems)
-      .where(eq(vocabularyListItems.savedVocabularyId, itemId));
+      .innerJoin(
+        vocabularyLists,
+        eq(vocabularyListItems.listId, vocabularyLists.id),
+      )
+      .innerJoin(
+        savedVocabulary,
+        eq(vocabularyListItems.savedVocabularyId, savedVocabulary.id),
+      )
+      .where(
+        and(
+          eq(vocabularyListItems.savedVocabularyId, itemId),
+          eq(vocabularyLists.userId, user.id),
+          eq(savedVocabulary.userId, user.id),
+        ),
+      );
 
     return NextResponse.json({ listIds: items.map((i) => i.listId) });
   } catch (error) {

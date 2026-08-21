@@ -45,6 +45,8 @@ import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import type { User } from "@/db/schema";
 import { isPromptInjectionProbe } from "@/lib/lab-assistant/safety";
 import { searchKnowledgeBase } from "@/lib/chat-utils";
+import { storeBetaFeedback } from "@/lib/beta-feedback";
+import type { BetaFeedbackCategory } from "@/db/schema";
 
 export const maxDuration = 30;
 
@@ -54,7 +56,27 @@ const ALREADY_ESCALATED_REPLY = `The team already has your request and will repl
 
 const ESCALATION_FALLBACK_REPLY = `I couldn't reach the team's system just now — please email ${SUPPORT_EMAIL} directly and they'll take care of you.`;
 
-const SAFE_SCOPE_REPLY = `I can't provide or change my internal instructions. I can help with CMB Lab navigation and FAQs, your program dates and coach, referrals, or booking a testimonial with Sheldon.`;
+const SAFE_SCOPE_REPLY = `I can't provide or change my internal instructions. I can help with CMB Lab navigation and FAQs, your program dates and coach, referrals, beta feedback and bug reports, or booking a testimonial with Sheldon.`;
+
+const FEEDBACK_INTENTS: Partial<Record<LabAssistantIntent, BetaFeedbackCategory>> = {
+  bug_report: "bug",
+  feature_request: "feature_request",
+  product_feedback: "general",
+};
+
+function isBareFeedbackRequest(text: string): boolean {
+  const normalized = text.toLowerCase().replace(/[^a-z\s]/g, "").trim();
+  return [
+    "bug",
+    "report bug",
+    "report a bug",
+    "feature request",
+    "request a feature",
+    "share feedback",
+    "give feedback",
+    "product feedback",
+  ].includes(normalized);
+}
 
 const intentSchema = z.object({
   intent: z
@@ -136,9 +158,12 @@ Intents:
 - my_coach: asking who their coach is / coach assignment
 - referral: asking about the referral program or their own referral status
 - testimonial_sheldon: wants to do a testimonial/interview/review with Sheldon
+- bug_report: reports something broken, an error, unexpected behaviour, or a product defect in CMB Lab
+- feature_request: suggests a new capability, improvement, or something they wish CMB Lab could do
+- product_feedback: shares an opinion or usability comment about CMB Lab that is neither a concrete bug nor a feature request
 - faq_navigation: asks a general FAQ or how to find/use a CMB Lab feature, course, audio course, learning tool, coaching page, Accelerator tool, or troubleshoot course visibility/access
 - smalltalk: greetings, thanks, pleasantries, "ok great" — nothing to resolve
-- other: anything else (payments, account changes, personal entitlement disputes, bugs not covered by a general FAQ, another person's data, unclear requests)
+- other: anything else (payments, account changes, personal entitlement disputes, another person's data, unclear requests)
 
 Set urgent=true only for genuine urgency or distress signals.`,
       prompt: recent || "Student: (empty message)",
@@ -231,6 +256,13 @@ export async function POST(request: Request) {
     const latestUserMessage = [...messages]
       .reverse()
       .find((message) => message.role === "user");
+    const latestUserText = latestUserMessage ? messageText(latestUserMessage) : "";
+    const pagePath =
+      typeof body.pagePath === "string" &&
+      body.pagePath.startsWith("/") &&
+      body.pagePath.length <= 1000
+        ? body.pagePath
+        : null;
 
     // Prompt-injection probes are neither support requests nor reasons to
     // create a GHL handover. Handle them deterministically before the intent
@@ -252,6 +284,43 @@ export async function POST(request: Request) {
       scan !== null && scan.confidence >= INTENT_CONFIDENCE_THRESHOLD;
     const intent: LabAssistantIntent | null = confident ? scan.intent : null;
     const urgent = scan?.urgent ?? false;
+
+    // Product feedback is stored in CMB Lab itself, not buried in a GHL
+    // escalation transcript. Bare quick-action phrases ask for detail first;
+    // substantive natural-language reports are captured immediately.
+    const feedbackCategory = intent ? FEEDBACK_INTENTS[intent] : undefined;
+    if (feedbackCategory) {
+      if (!dryRun) logIntentScan(user, scan, true);
+      if (isBareFeedbackRequest(latestUserText)) {
+        const prompt =
+          feedbackCategory === "bug"
+            ? "Tell me what happened, what you expected, and which page you were on. I’ll save it directly for the product team."
+            : feedbackCategory === "feature_request"
+              ? "What would you like CMB Lab to do, and how would it help you? I’ll save the idea directly for the product team."
+              : "What would you like us to know about your CMB Lab experience? I’ll save it directly for the product team.";
+        return cannedResponse(prompt);
+      }
+
+      try {
+        const record = dryRun
+          ? { id: "dry-run-feedback" }
+          : await storeBetaFeedback({
+              userId: user.id,
+              category: feedbackCategory,
+              message: latestUserText,
+              pagePath,
+              source: "chatbot",
+            });
+        return cannedResponse(
+          `Thanks — your ${feedbackCategory === "bug" ? "bug report" : feedbackCategory === "feature_request" ? "feature request" : "feedback"} is saved for the product team. Reference: ${record.id.slice(0, 8)}.`,
+        );
+      } catch (error) {
+        console.error("[Lab Assistant] Feedback capture failed:", error);
+        return cannedResponse(
+          `I couldn't save that just now. Please try again, or email ${SUPPORT_EMAIL} if the issue is blocking you.`,
+        );
+      }
+    }
 
     // Unresolved (off-scope, unclear, or low confidence) → escalate, don't guess.
     if (intent === null || intent === "other") {

@@ -259,7 +259,11 @@ export function AudioRecorder({
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-muted/40 p-4">
-      {error && <p className="text-xs font-medium text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-xs font-medium text-destructive">
+          {error}
+        </p>
+      )}
 
       {audioUrl && mediaType === "audio" && (
         <audio
@@ -273,6 +277,7 @@ export function AudioRecorder({
       {audioUrl && mediaType === "video" && (
         <video
           ref={videoRef}
+          aria-label="Your recorded video"
           src={audioUrl}
           controls
           playsInline
@@ -317,6 +322,7 @@ export function AudioRecorder({
             {allowFileUpload && (
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-within:ring-2 focus-within:ring-ring/60">
                 <input
+                  aria-label="Upload a recording file"
                   type="file"
                   accept={allowedMediaTypes
                     .map((type) => `${type}/*`)

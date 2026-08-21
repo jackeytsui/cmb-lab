@@ -8,9 +8,9 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 // Submission type matching API response
 interface SubmissionListItem {
   id: string;
-  type: "text" | "audio";
+  type: "text" | "audio" | "video";
   response: string;
-  score: number;
+  score: number | null;
   aiFeedback: string;
   transcription: string | null;
   status: "pending_review" | "reviewed" | "archived";

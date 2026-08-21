@@ -29,7 +29,9 @@ export async function saveChat({
   userId: string;
   lessonId?: string | null;
 }): Promise<void> {
-  // 1. Upsert the conversation
+  // 1. Create the conversation if this is a new client-generated UUID.
+  // Never update on conflict until ownership has been verified: otherwise a
+  // caller who supplies another user's chat ID could replace its messages.
   await db
     .insert(chatConversations)
     .values({
@@ -38,19 +40,34 @@ export async function saveChat({
       lessonId: lessonId ?? null,
       title: null,
     })
-    .onConflictDoUpdate({
-      target: chatConversations.id,
-      set: { updatedAt: new Date() },
-    });
+    .onConflictDoNothing({ target: chatConversations.id });
 
-  // 2. Auto-generate title if not set
+  // 2. Verify ownership before any update/delete touching this chat.
   const [existing] = await db
-    .select({ title: chatConversations.title })
+    .select({
+      title: chatConversations.title,
+      userId: chatConversations.userId,
+    })
     .from(chatConversations)
     .where(eq(chatConversations.id, chatId))
     .limit(1);
 
-  if (!existing?.title) {
+  if (!existing || existing.userId !== userId) {
+    throw new Error("Chat not found");
+  }
+
+  await db
+    .update(chatConversations)
+    .set({ updatedAt: new Date() })
+    .where(
+      and(
+        eq(chatConversations.id, chatId),
+        eq(chatConversations.userId, userId),
+      ),
+    );
+
+  // 3. Auto-generate title if not set
+  if (!existing.title) {
     let title: string | null = null;
 
     // Try to derive from lesson title if lessonId provided
@@ -80,16 +97,21 @@ export async function saveChat({
       await db
         .update(chatConversations)
         .set({ title })
-        .where(eq(chatConversations.id, chatId));
+        .where(
+          and(
+            eq(chatConversations.id, chatId),
+            eq(chatConversations.userId, userId),
+          ),
+        );
     }
   }
 
-  // 3. Delete existing messages for this conversation
+  // 4. Replace messages only after the parent ownership check succeeds.
   await db
     .delete(chatMessages)
     .where(eq(chatMessages.conversationId, chatId));
 
-  // 4. Insert all messages (only if there are any)
+  // 5. Insert all messages (only if there are any)
   if (messages.length > 0) {
     await db.insert(chatMessages).values(
       messages.map((m) => ({

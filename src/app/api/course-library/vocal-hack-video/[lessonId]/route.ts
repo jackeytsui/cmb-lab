@@ -13,6 +13,8 @@ import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { isVocalHackLesson } from "@/lib/lesson-language";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { verifySignedMediaPath } from "@/lib/signed-media-url";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 
 // Video blobs are large; the default function timeout can cut the stream off
 // mid-transfer (perpetual loading spinner). Match the 60s used by the other
@@ -104,42 +106,16 @@ export async function GET(
     ? content.sentences.find((s) => s.id === sentenceId)
     : undefined;
   const videoUrl = sentence?.videoUrl;
-  if (!videoUrl) {
+  if (!videoUrl || !isPrivateVercelBlobUrl(videoUrl)) {
     return NextResponse.json({ error: "No video for sentence" }, { status: 404 });
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-  const range = request.headers.get("range");
-  if (range) headers["Range"] = range;
-
-  const blobResponse = await fetch(videoUrl, { headers });
-  if (!blobResponse.ok && blobResponse.status !== 206) {
-    return NextResponse.json(
-      { error: "Failed to fetch video" },
-      { status: blobResponse.status },
-    );
-  }
-
-  const responseHeaders = new Headers();
-  responseHeaders.set(
-    "Content-Type",
-    blobResponse.headers.get("content-type") ?? "video/mp4",
-  );
-  const contentLength = blobResponse.headers.get("content-length");
-  if (contentLength) responseHeaders.set("Content-Length", contentLength);
-  const contentRange = blobResponse.headers.get("content-range");
-  if (contentRange) responseHeaders.set("Content-Range", contentRange);
-  responseHeaders.set(
-    "Accept-Ranges",
-    blobResponse.headers.get("accept-ranges") ?? "bytes",
-  );
-  responseHeaders.set("Cache-Control", "private, no-store");
-  responseHeaders.set("Content-Disposition", "inline");
-
-  return new NextResponse(blobResponse.body, {
-    status: blobResponse.status,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, videoUrl, {
+    fallbackContentType: "video/mp4",
+    label: "course-library/vocal-hack-video",
+    extraHeaders: {
+      "Cache-Control": "private, no-store",
+      "Content-Disposition": "inline",
+    },
   });
 }

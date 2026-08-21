@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { submissions, coachNotes } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { z } from "zod";
+
+const noteSchema = z.object({
+  content: z.string().trim().min(1).max(20_000),
+  visibility: z.enum(["internal", "shared"]),
+}).strict();
 
 /**
  * POST /api/submissions/[submissionId]/notes
@@ -13,39 +19,31 @@ export async function POST(
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
   // 1. Verify user has coach role minimum
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) {
+  const currentUser = await getRealUser();
+  if (!currentUser || currentUser.deletedAt) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
     );
   }
 
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 401 });
+  const { submissionId } = await params;
+  if (!z.string().uuid().safeParse(submissionId).success) {
+    return NextResponse.json({ error: "Submission not found" }, { status: 404 });
   }
 
-  const { submissionId } = await params;
-
   try {
-    const body = await request.json();
-    const { content, visibility } = body;
-
-    // 2. Validate request body
-    if (!content || typeof content !== "string") {
+    const parsed = noteSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Content is required" },
+        { error: "Invalid note" },
         { status: 400 }
       );
     }
-
-    if (!visibility || !["internal", "shared"].includes(visibility)) {
-      return NextResponse.json(
-        { error: "Visibility must be 'internal' or 'shared'" },
-        { status: 400 }
-      );
-    }
+    const { content, visibility } = parsed.data;
 
     // 3. Verify submission exists and get student ID
     const submission = await db.query.submissions.findFirst({
@@ -101,8 +99,11 @@ export async function GET(
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
   // 1. Verify user has coach role minimum
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) {
+  const currentUser = await getRealUser();
+  if (!currentUser || currentUser.deletedAt) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
@@ -110,6 +111,9 @@ export async function GET(
   }
 
   const { submissionId } = await params;
+  if (!z.string().uuid().safeParse(submissionId).success) {
+    return NextResponse.json([]);
+  }
 
   try {
     // 2. Get all notes for this submission
@@ -142,23 +146,23 @@ export async function DELETE(
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
   // 1. Verify user has coach role minimum
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) {
+  const currentUser = await getRealUser();
+  if (!currentUser || currentUser.deletedAt) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
     );
   }
 
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 401 });
-  }
-
   const { submissionId } = await params;
   const noteId = request.nextUrl.searchParams.get("noteId");
+  const submissionIdResult = z.string().uuid().safeParse(submissionId);
+  const noteIdResult = z.string().uuid().safeParse(noteId);
 
-  if (!noteId) {
+  if (!submissionIdResult.success || !noteIdResult.success) {
     return NextResponse.json(
       { error: "noteId query parameter is required" },
       { status: 400 }
@@ -169,8 +173,8 @@ export async function DELETE(
     // 2. Find the note and verify ownership
     const note = await db.query.coachNotes.findFirst({
       where: and(
-        eq(coachNotes.id, noteId),
-        eq(coachNotes.submissionId, submissionId)
+        eq(coachNotes.id, noteIdResult.data),
+        eq(coachNotes.submissionId, submissionIdResult.data)
       ),
     });
 
@@ -187,7 +191,7 @@ export async function DELETE(
     }
 
     // 4. Delete the note
-    await db.delete(coachNotes).where(eq(coachNotes.id, noteId));
+    await db.delete(coachNotes).where(eq(coachNotes.id, noteIdResult.data));
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

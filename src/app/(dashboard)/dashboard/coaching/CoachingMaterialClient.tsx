@@ -16,6 +16,7 @@ import { smartRomanise } from "@/lib/romanise";
 import { fetchProperTranslations } from "@/lib/mandarin-generation";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
 import { exportCoachingNotes } from "@/lib/coaching-export";
+import { sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import { FlashcardStarButton } from "@/components/flashcards/FlashcardStarButton";
 import { notifyFlashcardsChanged } from "@/lib/flashcards";
@@ -24,7 +25,6 @@ import {
   extractToneFromJyutping,
   getToneColorClass,
   getToneColorStyle,
-  getToneColorHex,
   getToneDataAttr,
 } from "@/lib/tone-colors";
 
@@ -90,6 +90,18 @@ async function fetchJiebaSegments(
   } catch {
     return null;
   }
+}
+
+async function getResponseError(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  const data = (await response.json().catch(() => null)) as {
+    error?: unknown;
+  } | null;
+  return typeof data?.error === "string" && data.error.trim()
+    ? data.error
+    : fallback;
 }
 
 
@@ -165,30 +177,34 @@ function useProcessedText({
   const [speakingText, setSpeakingText] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!committedText) {
-      setDisplayText("");
-      return;
-    }
-
-    if (scriptMode === "traditional") {
-      setDisplayText(committedText);
-      return;
-    }
-
     let cancelled = false;
-    setIsConverting(true);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!committedText) {
+        setDisplayText("");
+        setIsConverting(false);
+        return;
+      }
 
-    convertScript(committedText, "traditional", "simplified")
-      .then((converted) => {
-        if (!cancelled) setDisplayText(converted);
-      })
-      .catch((err) => {
-        console.error("T/S conversion failed:", err);
-        if (!cancelled) setDisplayText(committedText);
-      })
-      .finally(() => {
-        if (!cancelled) setIsConverting(false);
-      });
+      if (scriptMode === "traditional") {
+        setDisplayText(committedText);
+        setIsConverting(false);
+        return;
+      }
+
+      setIsConverting(true);
+      convertScript(committedText, "traditional", "simplified")
+        .then((converted) => {
+          if (!cancelled) setDisplayText(converted);
+        })
+        .catch((err) => {
+          console.error("T/S conversion failed:", err);
+          if (!cancelled) setDisplayText(committedText);
+        })
+        .finally(() => {
+          if (!cancelled) setIsConverting(false);
+        });
+    });
 
     return () => {
       cancelled = true;
@@ -201,38 +217,42 @@ function useProcessedText({
   );
 
   useEffect(() => {
-    if (!displayText) {
-      setJiebaSegments(null);
-      return;
-    }
-
-    setJiebaSegments(null);
     let cancelled = false;
-    setIsSegmenting(true);
-
-    const clientSegs = segmentText(displayText);
-    const sentenceRanges = detectSentences(clientSegs);
-    const sentenceTexts =
-      sentenceRanges.length > 0
-        ? sentenceRanges.map((s) => s.text)
-        : [displayText];
-
-    fetchJiebaSegments(sentenceTexts).then((result) => {
+    queueMicrotask(() => {
       if (cancelled) return;
-      setIsSegmenting(false);
-      if (result) {
-        const flat: WordSegment[] = [];
-        let offset = 0;
-        for (const sentSegs of result) {
-          for (const seg of sentSegs) {
-            flat.push({ ...seg, index: offset });
-            offset += seg.text.length;
-          }
-        }
-        setJiebaSegments(flat);
-      } else {
+      if (!displayText) {
         setJiebaSegments(null);
+        setIsSegmenting(false);
+        return;
       }
+
+      setJiebaSegments(null);
+      setIsSegmenting(true);
+
+      const clientSegs = segmentText(displayText);
+      const sentenceRanges = detectSentences(clientSegs);
+      const sentenceTexts =
+        sentenceRanges.length > 0
+          ? sentenceRanges.map((s) => s.text)
+          : [displayText];
+
+      fetchJiebaSegments(sentenceTexts).then((result) => {
+        if (cancelled) return;
+        setIsSegmenting(false);
+        if (result) {
+          const flat: WordSegment[] = [];
+          let offset = 0;
+          for (const sentSegs of result) {
+            for (const seg of sentSegs) {
+              flat.push({ ...seg, index: offset });
+              offset += seg.text.length;
+            }
+          }
+          setJiebaSegments(flat);
+        } else {
+          setJiebaSegments(null);
+        }
+      });
     });
 
     return () => {
@@ -248,39 +268,48 @@ function useProcessedText({
   );
 
   useEffect(() => {
-    if (!displayText || sentences.length === 0) {
-      setBatchTranslations(new Map());
-      setTranslationCache(new Map());
-      translatedKeyRef.current = "";
-      return;
-    }
-
-    if (sentenceKey === translatedKeyRef.current) return;
-    translatedKeyRef.current = sentenceKey;
-    setIsTranslating(true);
-
-    const sentenceTexts = sentences.map((s) => s.text);
-    fetchProperTranslations(sentenceTexts, language)
-      .then((translations) => {
-        if (!translations) return;
-        const map = new Map<number, string>();
-        translations.forEach((t, idx) => {
-          if (t) map.set(idx, t);
-        });
-        setBatchTranslations(map);
-
-        setTranslationCache((prev) => {
-          const next = new Map(prev);
-          sentences.forEach((s, idx) => {
-            const t = map.get(idx);
-            if (t) next.set(s.text, t);
-          });
-          return next;
-        });
-      })
-      .finally(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!displayText || sentences.length === 0) {
+        setBatchTranslations(new Map());
+        setTranslationCache(new Map());
+        translatedKeyRef.current = "";
         setIsTranslating(false);
-      });
+        return;
+      }
+
+      if (sentenceKey === translatedKeyRef.current) return;
+      translatedKeyRef.current = sentenceKey;
+      setIsTranslating(true);
+
+      const sentenceTexts = sentences.map((s) => s.text);
+      fetchProperTranslations(sentenceTexts, language)
+        .then((translations) => {
+          if (cancelled || !translations) return;
+          const map = new Map<number, string>();
+          translations.forEach((t, idx) => {
+            if (t) map.set(idx, t);
+          });
+          setBatchTranslations(map);
+
+          setTranslationCache((prev) => {
+            const next = new Map(prev);
+            sentences.forEach((s, idx) => {
+              const t = map.get(idx);
+              if (t) next.set(s.text, t);
+            });
+            return next;
+          });
+        })
+        .finally(() => {
+          if (!cancelled) setIsTranslating(false);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [displayText, language, sentenceKey, sentences]);
 
   const handleSpeakSentence = useCallback(
@@ -1164,6 +1193,7 @@ function CoachingPanel({
   const [sessions, setSessions] = useState<CoachingSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [notesAscending, setNotesAscending] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -1215,11 +1245,13 @@ function CoachingPanel({
   const [recordingUrlDraft, setRecordingUrlDraft] = useState("");
   const [isEditingRecordingUrl, setIsEditingRecordingUrl] = useState(false);
   const [isSavingRecordingUrl, setIsSavingRecordingUrl] = useState(false);
+  const [recordingUrlError, setRecordingUrlError] = useState<string | null>(null);
 
   // Fathom link state
   const [fathomLinkDraft, setFathomLinkDraft] = useState("");
   const [isEditingFathomLink, setIsEditingFathomLink] = useState(false);
   const [isSavingFathomLink, setIsSavingFathomLink] = useState(false);
+  const [fathomLinkError, setFathomLinkError] = useState<string | null>(null);
 
   // Goals state — student-level (not session-level)
   const [studentGoals, setStudentGoals] = useState<string | null>(null);
@@ -1239,14 +1271,6 @@ function CoachingPanel({
   const [endDateLinked, setEndDateLinked] = useState(true);
   const [endDateLoading, setEndDateLoading] = useState(false);
   const [endDateRefreshing, setEndDateRefreshing] = useState(false);
-
-  // Sync recording URL and fathom link when active session changes
-  useEffect(() => {
-    setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
-    setIsEditingRecordingUrl(false);
-    setFathomLinkDraft(activeSession?.fathomLink ?? "");
-    setIsEditingFathomLink(false);
-  }, [activeSessionId]);
 
   // Fetch student goals when student changes (by email)
   const goalsStudentEmail = canWrite
@@ -1336,25 +1360,39 @@ function CoachingPanel({
 
   const handleSaveRecordingUrl = useCallback(async () => {
     if (!activeSessionId) return;
+    const rawUrl = recordingUrlDraft.trim();
+    const normalizedUrl = rawUrl ? sanitizeRecordingUrl(rawUrl) : null;
+    if (rawUrl && !normalizedUrl) {
+      setRecordingUrlError("Enter a full link beginning with http:// or https://.");
+      return;
+    }
+
     setIsSavingRecordingUrl(true);
+    setRecordingUrlError(null);
     try {
       const res = await fetch(`/api/coaching/sessions/${activeSessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recordingUrl: recordingUrlDraft.trim() || null }),
+        body: JSON.stringify({ recordingUrl: normalizedUrl }),
       });
-      if (res.ok) {
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === activeSessionId
-              ? { ...s, recordingUrl: recordingUrlDraft.trim() || null }
-              : s,
-          ),
+      if (!res.ok) {
+        setRecordingUrlError(
+          await getResponseError(res, "Could not save the recording link."),
         );
-        setIsEditingRecordingUrl(false);
+        return;
       }
+
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? { ...s, recordingUrl: normalizedUrl }
+            : s,
+        ),
+      );
+      setRecordingUrlDraft(normalizedUrl ?? "");
+      setIsEditingRecordingUrl(false);
     } catch {
-      // ignore
+      setRecordingUrlError("Could not save the recording link. Please try again.");
     } finally {
       setIsSavingRecordingUrl(false);
     }
@@ -1362,25 +1400,39 @@ function CoachingPanel({
 
   const handleSaveFathomLink = useCallback(async () => {
     if (!activeSessionId) return;
+    const rawUrl = fathomLinkDraft.trim();
+    const normalizedUrl = rawUrl ? sanitizeRecordingUrl(rawUrl) : null;
+    if (rawUrl && !normalizedUrl) {
+      setFathomLinkError("Enter a full link beginning with http:// or https://.");
+      return;
+    }
+
     setIsSavingFathomLink(true);
+    setFathomLinkError(null);
     try {
       const res = await fetch(`/api/coaching/sessions/${activeSessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fathomLink: fathomLinkDraft.trim() || null }),
+        body: JSON.stringify({ fathomLink: normalizedUrl }),
       });
-      if (res.ok) {
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === activeSessionId
-              ? { ...s, fathomLink: fathomLinkDraft.trim() || null }
-              : s,
-          ),
+      if (!res.ok) {
+        setFathomLinkError(
+          await getResponseError(res, "Could not save the Fathom link."),
         );
-        setIsEditingFathomLink(false);
+        return;
       }
+
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? { ...s, fathomLink: normalizedUrl }
+            : s,
+        ),
+      );
+      setFathomLinkDraft(normalizedUrl ?? "");
+      setIsEditingFathomLink(false);
     } catch {
-      // ignore
+      setFathomLinkError("Could not save the Fathom link. Please try again.");
     } finally {
       setIsSavingFathomLink(false);
     }
@@ -1500,6 +1552,26 @@ function CoachingPanel({
     () => sessions.find((s) => s.id === activeSessionId) ?? null,
     [sessions, activeSessionId],
   );
+  const safeRecordingUrl = activeSession?.recordingUrl
+    ? sanitizeRecordingUrl(activeSession.recordingUrl)
+    : null;
+  const safeFathomLink = activeSession?.fathomLink
+    ? sanitizeRecordingUrl(activeSession.fathomLink)
+    : null;
+
+  // Sync link editors when the active session or its persisted links change.
+  useEffect(() => {
+    setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
+    setIsEditingRecordingUrl(false);
+    setRecordingUrlError(null);
+    setFathomLinkDraft(activeSession?.fathomLink ?? "");
+    setIsEditingFathomLink(false);
+    setFathomLinkError(null);
+  }, [
+    activeSession?.id,
+    activeSession?.recordingUrl,
+    activeSession?.fathomLink,
+  ]);
   const mandarinNotes = useMemo(() => {
     const notes = (activeSession?.notes ?? []).filter((n) => n.pane === "mandarin");
     return [...notes].sort((a, b) =>
@@ -1556,27 +1628,26 @@ function CoachingPanel({
   }, [assignedStudents, studentDropdownSearch]);
 
   // Handle selecting a student from the dropdown
-  const handleSelectAssignedStudent = useCallback(
-    (student: { id: string; name: string | null; email: string }) => {
-      // Check for duplicate names
-      if (student.name) {
-        const sameName = assignedStudents.filter(
-          (s) => s.name?.toLowerCase() === student.name?.toLowerCase() && s.id !== student.id,
-        );
-        if (sameName.length > 0) {
-          setShowDuplicateConfirm({
-            student,
-            duplicateCount: sameName.length + 1,
-          });
-          setStudentDropdownOpen(false);
-          return;
-        }
+  const handleSelectAssignedStudent = (
+    student: { id: string; name: string | null; email: string },
+  ) => {
+    // Check for duplicate names
+    if (student.name) {
+      const sameName = assignedStudents.filter(
+        (s) => s.name?.toLowerCase() === student.name?.toLowerCase() && s.id !== student.id,
+      );
+      if (sameName.length > 0) {
+        setShowDuplicateConfirm({
+          student,
+          duplicateCount: sameName.length + 1,
+        });
+        setStudentDropdownOpen(false);
+        return;
       }
-      // No duplicates — open directly
-      confirmSelectStudent(student.email);
-    },
-    [assignedStudents],
-  );
+    }
+    // No duplicates — open directly
+    confirmSelectStudent(student.email);
+  };
 
   const confirmSelectStudent = useCallback(
     (email: string) => {
@@ -1587,7 +1658,11 @@ function CoachingPanel({
       setStudentEmailFilter(email);
       // Trigger the same flow as clicking "Open"
       setIsLinkingStudent(true);
+      setIsLoaded(false);
+      setSessions([]);
+      setActiveSessionId(null);
       setOpenStudentError(null);
+      setSessionLoadError(null);
       const typeParam = "one_on_one";
       const params = new URLSearchParams({ type: typeParam, studentEmail: email });
       fetchWithTimeout(`/api/coaching/sessions?${params.toString()}`)
@@ -1624,6 +1699,7 @@ function CoachingPanel({
           setOpenStudentError("Could not open this student's sessions.");
         })
         .finally(() => {
+          setIsLoaded(true);
           setIsLinkingStudent(false);
         });
     },
@@ -1651,38 +1727,45 @@ function CoachingPanel({
     if (typeParam === "one_on_one" && canWrite && !studentEmailFilter.trim()) {
       setSessions([]);
       setActiveSessionId(null);
+      setSessionLoadError(null);
       setIsLoaded(true);
       return;
     }
 
-    const params = new URLSearchParams({ type: typeParam });
-    if (typeParam === "one_on_one" && studentEmailFilter) {
-      params.set("studentEmail", studentEmailFilter);
+    try {
+      const params = new URLSearchParams({ type: typeParam });
+      if (typeParam === "one_on_one" && studentEmailFilter) {
+        params.set("studentEmail", studentEmailFilter);
+      }
+      const res = await fetch(`/api/coaching/sessions?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error(`Session request failed with status ${res.status}`);
+      }
+      const data = await res.json();
+      const normalized = normalizeSessions(data.sessions ?? []);
+      setSessions((prev) =>
+        normalized.map((s) => {
+          const existing = prev.find((p) => p.id === s.id);
+          if (!existing) return s;
+          // Preserve purely-local UI state that is not persisted to the DB
+          return {
+            ...s,
+            mandarin: { ...s.mandarin, scriptMode: existing.mandarin.scriptMode },
+            cantonese: { ...s.cantonese, scriptMode: existing.cantonese.scriptMode },
+          };
+        }),
+      );
+      setActiveSessionId((prev) => {
+        // Preserve current session if it still exists, otherwise default to first
+        if (prev && normalized.some((s) => s.id === prev)) return prev;
+        return normalized[0]?.id ?? null;
+      });
+      setSessionLoadError(null);
+    } catch {
+      setSessionLoadError("Could not load sessions. Please try again.");
+    } finally {
+      setIsLoaded(true);
     }
-    const res = await fetch(`/api/coaching/sessions?${params.toString()}`);
-    if (!res.ok) {
-      return;
-    }
-    const data = await res.json();
-    const normalized = normalizeSessions(data.sessions ?? []);
-    setSessions((prev) =>
-      normalized.map((s) => {
-        const existing = prev.find((p) => p.id === s.id);
-        if (!existing) return s;
-        // Preserve purely-local UI state that is not persisted to the DB
-        return {
-          ...s,
-          mandarin: { ...s.mandarin, scriptMode: existing.mandarin.scriptMode },
-          cantonese: { ...s.cantonese, scriptMode: existing.cantonese.scriptMode },
-        };
-      }),
-    );
-    setActiveSessionId((prev) => {
-      // Preserve current session if it still exists, otherwise default to first
-      if (prev && normalized.some((s) => s.id === prev)) return prev;
-      return normalized[0]?.id ?? null;
-    });
-    setIsLoaded(true);
   }, [canWrite, normalizeSessions, sessionType, studentEmailFilter]);
 
   useEffect(() => {
@@ -1736,6 +1819,8 @@ function CoachingPanel({
       setStudentEmailInput("");
       setSessions([]);
       setActiveSessionId(null);
+      setIsLoaded(true);
+      setSessionLoadError(null);
       return;
     }
 
@@ -1755,7 +1840,11 @@ function CoachingPanel({
     }
 
     setIsLinkingStudent(true);
+    setIsLoaded(false);
+    setSessions([]);
+    setActiveSessionId(null);
     setOpenStudentError(null);
+    setSessionLoadError(null);
     setStudentEmailInput(email);
     setStudentEmailFilter(email);
 
@@ -1810,6 +1899,7 @@ function CoachingPanel({
           : "Could not open this 1:1 session.";
       alert(message);
     } finally {
+      setIsLoaded(true);
       setIsLinkingStudent(false);
     }
   }, [canWrite, fetchWithTimeout, lockedStudentEmail, normalizeSessions, sessionType, studentEmailInput, trackAction]);
@@ -1825,7 +1915,7 @@ function CoachingPanel({
       if (!res.ok) return;
       await fetchSessions();
     },
-    [canWrite, fetchSessions, updateSession],
+    [canWrite, fetchSessions],
   );
 
   const handleActivateSession = useCallback((sessionId: string) => {
@@ -1960,12 +2050,24 @@ function CoachingPanel({
   useEffect(() => {
     setMandarinDraft(activeSession?.mandarin.draftText ?? "");
     setCantoneseDraft(activeSession?.cantonese.draftText ?? "");
-  }, [activeSessionId]);
+  }, [
+    activeSessionId,
+    activeSession?.mandarin.draftText,
+    activeSession?.cantonese.draftText,
+  ]);
 
+  const stopMandarinPane = mandarinPane.handleStopAll;
+  const stopCantonesePane = cantonesePane.handleStopAll;
   const handleStopAll = useCallback(() => {
-    mandarinPane.handleStopAll();
-    cantonesePane.handleStopAll();
-  }, [mandarinPane.handleStopAll, cantonesePane.handleStopAll]);
+    stopMandarinPane();
+    stopCantonesePane();
+  }, [stopMandarinPane, stopCantonesePane]);
+
+  // Audio from one coaching session must not continue after switching sessions
+  // or navigating away from the page.
+  useEffect(() => {
+    return () => handleStopAll();
+  }, [activeSessionId, handleStopAll]);
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -2041,7 +2143,7 @@ function CoachingPanel({
         setIsExporting(false);
       }
     },
-    [sessionType, activeSessionId, activeSession, studentEmailFilter, fetchWithTimeout],
+    [sessionType, activeSessionId, activeSession, studentEmailFilter],
   );
 
   // Panel resize drag handlers
@@ -2438,12 +2540,18 @@ function CoachingPanel({
             <div
               className={cn(
                 "text-xs",
-                openStudentError ? "text-red-500" : "text-muted-foreground",
+                openStudentError || sessionLoadError
+                  ? "text-red-500"
+                  : "text-muted-foreground",
               )}
             >
-              {openStudentError
+              {!isLoaded
+                ? "Loading sessions..."
+                : openStudentError
                 ? openStudentError
-                : sessionType === "one-on-one" && canWrite && !studentEmailFilter.trim()
+                : sessionLoadError
+                ? sessionLoadError
+                : isOneOnOneSignedOut
                 ? "Please type in the student email to access student's 1:1 coaching note."
                 : "No sessions yet. Add a new session to begin."}
             </div>
@@ -2581,75 +2689,190 @@ function CoachingPanel({
         )}
       </div>
 
-      {/* Recording Link Section */}
+      {/* Session links */}
       {activeSession && (
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold text-foreground">Recording Link</h3>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <LinkIcon className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-foreground">Recording Link</h3>
+              </div>
+              {canWrite && !isEditingRecordingUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecordingUrlDraft(activeSession.recordingUrl ?? "");
+                    setRecordingUrlError(null);
+                    setIsEditingRecordingUrl(true);
+                  }}
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                >
+                  <Pencil className="size-3 mr-1" />
+                  {activeSession.recordingUrl ? "Edit" : "Add Link"}
+                </button>
+              )}
             </div>
-            {canWrite && !isEditingRecordingUrl && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRecordingUrlDraft(activeSession.recordingUrl ?? "");
-                  setIsEditingRecordingUrl(true);
-                }}
-                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+            {isEditingRecordingUrl ? (
+              <div className="mt-2 space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    type="url"
+                    inputMode="url"
+                    value={recordingUrlDraft}
+                    onChange={(e) => {
+                      setRecordingUrlDraft(e.target.value);
+                      setRecordingUrlError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleSaveRecordingUrl();
+                      }
+                    }}
+                    aria-invalid={Boolean(recordingUrlError)}
+                    aria-describedby={recordingUrlError ? "recording-url-error" : undefined}
+                    placeholder="https://..."
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveRecordingUrl}
+                      disabled={isSavingRecordingUrl}
+                      className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
+                    >
+                      {isSavingRecordingUrl ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecordingUrlError(null);
+                        setIsEditingRecordingUrl(false);
+                      }}
+                      className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+                {recordingUrlError && (
+                  <p id="recording-url-error" className="text-xs text-red-500" role="alert">
+                    {recordingUrlError}
+                  </p>
+                )}
+              </div>
+            ) : safeRecordingUrl ? (
+              <a
+                href={safeRecordingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1.5 break-all text-sm text-primary hover:underline"
               >
-                <Pencil className="size-3 mr-1" />
-                {activeSession.recordingUrl ? "Edit" : "Add Link"}
-              </button>
+                <ExternalLink className="size-3.5 shrink-0" />
+                {safeRecordingUrl}
+              </a>
+            ) : activeSession.recordingUrl ? (
+              <p className="mt-2 text-xs text-red-500">
+                This saved link is invalid. Edit it before opening.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                No recording link added yet.
+              </p>
             )}
           </div>
-          {isEditingRecordingUrl ? (
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
-                value={recordingUrlDraft}
-                onChange={(e) => setRecordingUrlDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSaveRecordingUrl();
-                  }
-                }}
-                placeholder="https://..."
-                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
-              />
+
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveRecordingUrl}
-                  disabled={isSavingRecordingUrl}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
-                >
-                  {isSavingRecordingUrl ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingRecordingUrl(false)}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Cancel
-                </button>
+                <LinkIcon className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-foreground">Fathom Link</h3>
               </div>
+              {canWrite && !isEditingFathomLink && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFathomLinkDraft(activeSession.fathomLink ?? "");
+                    setFathomLinkError(null);
+                    setIsEditingFathomLink(true);
+                  }}
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                >
+                  <Pencil className="size-3 mr-1" />
+                  {activeSession.fathomLink ? "Edit" : "Add Link"}
+                </button>
+              )}
             </div>
-          ) : activeSession.recordingUrl ? (
-            <a
-              href={activeSession.recordingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
-            >
-              <ExternalLink className="size-3.5 shrink-0" />
-              {activeSession.recordingUrl}
-            </a>
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground">
-              No recording link added yet.
-            </p>
-          )}
+            {isEditingFathomLink ? (
+              <div className="mt-2 space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    type="url"
+                    inputMode="url"
+                    value={fathomLinkDraft}
+                    onChange={(e) => {
+                      setFathomLinkDraft(e.target.value);
+                      setFathomLinkError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleSaveFathomLink();
+                      }
+                    }}
+                    aria-invalid={Boolean(fathomLinkError)}
+                    aria-describedby={fathomLinkError ? "fathom-link-error" : undefined}
+                    placeholder="https://fathom.video/..."
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveFathomLink}
+                      disabled={isSavingFathomLink}
+                      className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
+                    >
+                      {isSavingFathomLink ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFathomLinkError(null);
+                        setIsEditingFathomLink(false);
+                      }}
+                      className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+                {fathomLinkError && (
+                  <p id="fathom-link-error" className="text-xs text-red-500" role="alert">
+                    {fathomLinkError}
+                  </p>
+                )}
+              </div>
+            ) : safeFathomLink ? (
+              <a
+                href={safeFathomLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1.5 break-all text-sm text-primary hover:underline"
+              >
+                <ExternalLink className="size-3.5 shrink-0" />
+                {safeFathomLink}
+              </a>
+            ) : activeSession.fathomLink ? (
+              <p className="mt-2 text-xs text-red-500">
+                This saved link is invalid. Edit it before opening.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                No Fathom link added yet.
+              </p>
+            )}
+          </div>
         </div>
       )}
 

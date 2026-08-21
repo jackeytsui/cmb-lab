@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { users, podcastTokens } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { courses, podcastTokens } from "@/db/schema";
+import { eq, and, isNull } from "drizzle-orm";
 import { randomBytes } from "crypto";
+import { z } from "zod";
+import { getRealUser } from "@/lib/auth";
+import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
+
+const requestSchema = z.object({ seriesId: z.string().uuid() }).strict();
 
 /**
  * POST /api/audio-courses/podcast-token
@@ -11,22 +15,27 @@ import { randomBytes } from "crypto";
  * Body: { seriesId: string }
  */
 export async function POST(request: NextRequest) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const dbUser = await getRealUser();
+  if (!dbUser || dbUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
-  if (!dbUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid series" }, { status: 400 });
   }
+  const { seriesId } = parsed.data;
 
-  const { seriesId } = await request.json();
-  if (!seriesId) {
-    return NextResponse.json({ error: "seriesId required" }, { status: 400 });
+  const course = await db.query.courses.findFirst({
+    where: and(
+      eq(courses.id, seriesId),
+      isNull(courses.deletedAt),
+      eq(courses.isPublished, true),
+    ),
+    columns: { id: true, title: true, description: true },
+  });
+  if (!course || !(await userCanAccessAudioCourse(dbUser, course))) {
+    return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
   // Check if token already exists for this user+series

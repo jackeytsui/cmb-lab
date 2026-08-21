@@ -6,16 +6,32 @@ import { Mic, Video, StopCircle, RotateCcw, Upload, Loader2, AlertCircle } from 
 interface StudentMediaRecorderProps {
   mode: "audio" | "video";
   threadId: string;
+  courseLessonId?: string;
   onUploadComplete: (result: { muxPlaybackId: string; uploadId: string }) => void;
   onCancel: () => void;
   disabled?: boolean;
 }
 
 type RecorderState = "idle" | "recording" | "recorded" | "uploading" | "error";
+const MAX_RECORDING_SECONDS = 5 * 60;
+const MAX_RECORDING_BYTES = 250 * 1024 * 1024;
+
+function selectRecorderMimeType(mode: "audio" | "video"): string | undefined {
+  const candidates =
+    mode === "video"
+      ? ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm"]
+      : ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type));
+}
+
+function extensionForMimeType(type: string): string {
+  return type.includes("mp4") ? "mp4" : "webm";
+}
 
 export function StudentMediaRecorder({
   mode,
   threadId,
+  courseLessonId,
   onUploadComplete,
   onCancel,
   disabled = false,
@@ -26,6 +42,7 @@ export function StudentMediaRecorder({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordedUrlRef = useRef<string | null>(null);
 
   const [recorderState, setRecorderState] = useState<RecorderState>("idle");
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
@@ -76,7 +93,10 @@ export function StudentMediaRecorder({
 
   useEffect(() => {
     startStream();
-    return () => stopStream();
+    return () => {
+      stopStream();
+      if (recordedUrlRef.current) URL.revokeObjectURL(recordedUrlRef.current);
+    };
   }, [startStream, stopStream]);
 
   // ─── Recording ───────────────────────────────────────────────────────────
@@ -84,10 +104,11 @@ export function StudentMediaRecorder({
   const startRecording = () => {
     if (!streamRef.current) return;
 
-    const mimeType = mode === "video" ? "video/webm" : "audio/webm";
-    const recorder = new MediaRecorder(streamRef.current, {
-      mimeType: MediaRecorder.isTypeSupported(mimeType) ? mimeType : undefined,
-    });
+    const selectedMimeType = selectRecorderMimeType(mode);
+    const recorder = new MediaRecorder(
+      streamRef.current,
+      selectedMimeType ? { mimeType: selectedMimeType } : undefined,
+    );
     const chunks: BlobPart[] = [];
 
     recorder.ondataavailable = (e) => {
@@ -95,8 +116,12 @@ export function StudentMediaRecorder({
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: mimeType });
+      const blob = new Blob(chunks, {
+        type: recorder.mimeType || selectedMimeType || undefined,
+      });
       const url = URL.createObjectURL(blob);
+      if (recordedUrlRef.current) URL.revokeObjectURL(recordedUrlRef.current);
+      recordedUrlRef.current = url;
       setRecordedBlob(blob);
       setRecordedUrl(url);
       setRecorderState("recorded");
@@ -108,7 +133,14 @@ export function StudentMediaRecorder({
     setElapsed(0);
 
     timerRef.current = setInterval(() => {
-      setElapsed((prev) => prev + 1);
+      setElapsed((prev) => {
+        const next = prev + 1;
+        if (next >= MAX_RECORDING_SECONDS) {
+          mediaRecorderRef.current?.stop();
+          stopStream();
+        }
+        return next;
+      });
     }, 1000);
   };
 
@@ -129,6 +161,7 @@ export function StudentMediaRecorder({
   const handleRetake = () => {
     if (recordedUrl) {
       URL.revokeObjectURL(recordedUrl);
+      recordedUrlRef.current = null;
     }
     setRecordedBlob(null);
     setRecordedUrl(null);
@@ -141,6 +174,11 @@ export function StudentMediaRecorder({
 
   const handleUpload = async () => {
     if (!recordedBlob) return;
+    if (recordedBlob.size > MAX_RECORDING_BYTES) {
+      setErrorMessage("Recording is too large. Keep it under 250 MB and try again.");
+      setRecorderState("error");
+      return;
+    }
 
     setRecorderState("uploading");
     setUploadProgress("Getting upload URL...");
@@ -148,7 +186,9 @@ export function StudentMediaRecorder({
 
     try {
       // Step 1: Get Mux direct upload URL
-      const ext = mode === "video" ? "webm" : "webm";
+      const contentType =
+        recordedBlob.type || (mode === "video" ? "video/webm" : "audio/webm");
+      const ext = extensionForMimeType(contentType);
       const urlRes = await fetch(
         `/api/video-threads/${threadId}/upload-response`,
         {
@@ -157,6 +197,7 @@ export function StudentMediaRecorder({
           body: JSON.stringify({
             action: "get-upload-url",
             filename: `response-${Date.now()}.${ext}`,
+            courseLessonId,
           }),
         }
       );
@@ -170,7 +211,6 @@ export function StudentMediaRecorder({
 
       // Step 2: PUT blob to Mux
       setUploadProgress("Uploading...");
-      const contentType = mode === "video" ? "video/webm" : "audio/webm";
       const putRes = await fetch(uploadUrl, {
         method: "PUT",
         body: recordedBlob,
@@ -194,7 +234,7 @@ export function StudentMediaRecorder({
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "check-status", uploadId }),
+            body: JSON.stringify({ action: "check-status", uploadId, courseLessonId }),
           }
         );
 

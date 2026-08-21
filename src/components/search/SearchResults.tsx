@@ -9,6 +9,7 @@ export interface SearchResult {
   type: "course" | "lesson";
   courseId?: string;
   courseTitle?: string;
+  href?: string;
   relevance: number;
 }
 
@@ -31,10 +32,11 @@ export function SearchResults({ results, onSelect }: SearchResultsProps) {
             type="button"
             className="w-full text-left px-3 py-2.5 hover:bg-zinc-700 transition-colors cursor-pointer"
             onClick={() => {
-              const path =
+              const path = result.href ?? (
                 result.type === "course"
                   ? `/courses/${result.id}`
-                  : `/courses/${result.courseId}`;
+                  : `/courses/${result.courseId}`
+              );
               router.push(path);
               onSelect();
             }}

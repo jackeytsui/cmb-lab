@@ -1,40 +1,45 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { coachingNotes, coachingSessions, users } from "@/db/schema";
+import { coachingNotes, coachingSessions } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
+import { z } from "zod";
 
-async function getCurrentDbUser() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
-  return db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
-}
+const createNoteSchema = z.object({
+  text: z.string().trim().min(1).max(20_000),
+  pane: z.enum(["mandarin", "cantonese"]),
+});
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
-  const dbUser = await getCurrentDbUser();
+  const dbUser = await getRealUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const isCoachOrAdmin = await hasMinimumRole("coach");
-  if (!isCoachOrAdmin) {
+  if (dbUser.role !== "coach" && dbUser.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = await request.json();
-  const { text, pane } = body as { text?: string; pane?: "mandarin" | "cantonese" };
-  if (!text || !text.trim()) {
-    return NextResponse.json({ error: "Text required" }, { status: 400 });
+  const parsed = createNoteSchema.safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid note" }, { status: 400 });
   }
-  if (pane !== "mandarin" && pane !== "cantonese") {
-    return NextResponse.json({ error: "Invalid pane" }, { status: 400 });
+  const { text, pane } = parsed.data;
+
+  const session = await db.query.coachingSessions.findFirst({
+    where: eq(coachingSessions.id, sessionId),
+    columns: { id: true, createdBy: true },
+  });
+  if (
+    !session ||
+    (dbUser.role !== "admin" && session.createdBy !== dbUser.id)
+  ) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
   const latest = await db
@@ -52,7 +57,7 @@ export async function POST(
       sessionId,
       pane,
       order: nextOrder,
-      text: text.trim(),
+      text,
     })
     .returning();
 

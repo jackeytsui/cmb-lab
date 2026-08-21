@@ -3,6 +3,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   clampRangeHeader,
   CHUNK_BYTES,
+  normalizeContentRange,
   proxyBlobMedia,
 } from "@/lib/blob-media-proxy";
 
@@ -41,6 +42,29 @@ describe("clampRangeHeader", () => {
   it("leaves unparseable values for upstream to handle", () => {
     expect(clampRangeHeader("bytes=abc")).toBe("bytes=abc");
     expect(clampRangeHeader("items=0-10")).toBe("items=0-10");
+  });
+});
+
+describe("normalizeContentRange", () => {
+  it("repairs Vercel Blob tail ranges reported relative to the offset", () => {
+    expect(
+      normalizeContentRange("bytes 193069056-797056/797057"),
+    ).toEqual({
+      value: "bytes 193069056-193866112/193866113",
+      contentLength: 797057,
+    });
+  });
+
+  it("preserves valid absolute ranges", () => {
+    expect(normalizeContentRange("bytes 32768-4227071/193866113")).toEqual({
+      value: "bytes 32768-4227071/193866113",
+      contentLength: CHUNK_BYTES,
+    });
+  });
+
+  it("rejects malformed ranges it cannot safely repair", () => {
+    expect(normalizeContentRange("bytes 100-50/500")).toBeNull();
+    expect(normalizeContentRange("not-a-range")).toBeNull();
   });
 });
 
@@ -104,5 +128,33 @@ describe("proxyBlobMedia", () => {
     expect(response.headers.get("cache-control")).toBe(
       "private, max-age=3600",
     );
+  });
+
+  it("repairs a relative tail Content-Range before returning it", async () => {
+    process.env.BLOB_READ_WRITE_TOKEN = "test-token";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("tail", {
+        status: 206,
+        headers: {
+          "Content-Type": "video/mp4",
+          "Content-Range": "bytes 193069056-797056/797057",
+        },
+      }),
+    );
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const response = await proxyBlobMedia(
+      new NextRequest("https://app.test/media", {
+        headers: { Range: "bytes=193069056-" },
+      }),
+      "https://store.private.blob.vercel-storage.com/video.mp4",
+      { fallbackContentType: "video/mp4", label: "test" },
+    );
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-range")).toBe(
+      "bytes 193069056-193866112/193866113",
+    );
+    expect(response.headers.get("content-length")).toBe("797057");
   });
 });

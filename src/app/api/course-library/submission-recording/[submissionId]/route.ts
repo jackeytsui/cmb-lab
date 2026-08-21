@@ -5,6 +5,8 @@ import { assignmentSubmissions } from "@/db/schema";
 import { getRealUser } from "@/lib/auth";
 import { userCanReviewAssignments } from "@/lib/assignment-review";
 import type { ReviewableAssignmentType } from "@/lib/assignment-review";
+import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 
 // Recordings (video/audio) can be large; the default function timeout can cut
 // the stream off mid-transfer. Match the 60s used by the other blob-proxy
@@ -49,38 +51,16 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
-  };
-  const range = request.headers.get("range");
-  if (range) headers["Range"] = range;
-
-  const blobResponse = await fetch(submission.studentAudioUrl, { headers });
-  if (!blobResponse.ok && blobResponse.status !== 206) {
-    return NextResponse.json(
-      { error: "Failed to fetch recording" },
-      { status: blobResponse.status },
-    );
+  if (!isPrivateVercelBlobUrl(submission.studentAudioUrl)) {
+    return NextResponse.json({ error: "Recording not found" }, { status: 404 });
   }
 
-  const responseHeaders = new Headers();
-  responseHeaders.set(
-    "Content-Type",
-    blobResponse.headers.get("content-type") ?? "audio/webm",
-  );
-  const contentLength = blobResponse.headers.get("content-length");
-  if (contentLength) responseHeaders.set("Content-Length", contentLength);
-  const contentRange = blobResponse.headers.get("content-range");
-  if (contentRange) responseHeaders.set("Content-Range", contentRange);
-  responseHeaders.set(
-    "Accept-Ranges",
-    blobResponse.headers.get("accept-ranges") ?? "bytes",
-  );
-  responseHeaders.set("Cache-Control", "private, no-store");
-  responseHeaders.set("Content-Disposition", "inline");
-
-  return new NextResponse(blobResponse.body, {
-    status: blobResponse.status,
-    headers: responseHeaders,
+  return proxyBlobMedia(request, submission.studentAudioUrl, {
+    fallbackContentType: "audio/webm",
+    label: "course-library/submission-recording",
+    extraHeaders: {
+      "Cache-Control": "private, no-store",
+      "Content-Disposition": "inline",
+    },
   });
 }

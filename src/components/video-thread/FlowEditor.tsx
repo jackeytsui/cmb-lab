@@ -296,7 +296,7 @@ function FlowEditorInner({ steps, onUpdateStep, onEditStep, onEditLogic, onAddSt
                     onUpdateStep(sourceStepId, { logicRules: newRules });
                 }
             } else if (sourceHandle === 'false-output') {
-                onUpdateStep(sourceStepId, { fallbackStepId: null } as any);
+                onUpdateStep(sourceStepId, { fallbackStepId: null });
             }
             return;
         }

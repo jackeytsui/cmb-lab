@@ -47,4 +47,6 @@ export * from "./course-library";
 export * from "./internal-docs";
 export * from "./lesson-assignments";
 export * from "./assignments";
+export * from "./beta-feedback";
+export * from "./student-media-uploads";
 export * from "./videoask";

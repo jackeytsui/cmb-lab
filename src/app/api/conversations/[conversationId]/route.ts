@@ -9,12 +9,32 @@ import {
   modules,
   courses,
 } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { awardXP } from "@/lib/xp-service";
+import { z } from "zod";
 
 interface RouteParams {
   params: Promise<{ conversationId: string }>;
 }
+
+const updateConversationSchema = z
+  .object({
+    endedAt: z.literal(true).optional(),
+    turns: z
+      .array(
+        z.object({
+          role: z.enum(["user", "assistant"]),
+          content: z.string().trim().min(1).max(20_000),
+          timestamp: z.number().int().min(0).max(24 * 60 * 60),
+        }),
+      )
+      .max(500)
+      .optional(),
+  })
+  .refine(
+    (body) => body.endedAt === true || Boolean(body.turns?.length),
+    "No conversation update provided",
+  );
 
 /**
  * GET /api/conversations/[conversationId]
@@ -148,50 +168,81 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     // 5. Parse body
-    const body = await request.json();
-    const { endedAt, turns } = body;
-
-    // 6. Handle ending conversation
-    if (endedAt === true) {
-      const now = new Date();
-      const durationSeconds = Math.floor(
-        (now.getTime() - conversation.startedAt.getTime()) / 1000
+    const parsedBody = updateConversationSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: "Invalid conversation update" },
+        { status: 400 },
       );
+    }
+    const { endedAt, turns } = parsedBody.data;
 
-      await db
-        .update(conversations)
-        .set({
-          endedAt: now,
-          durationSeconds,
-        })
-        .where(eq(conversations.id, conversationId));
-
-      // Fire-and-forget: award XP for conversations lasting at least 30 seconds
-      if (durationSeconds >= 30) {
-        awardXP({
-          userId: currentUser.id,
-          source: "voice_conversation",
-          amount: 15,
-          entityId: conversationId,
-          entityType: "conversation",
-        }).catch((err) =>
-          console.error("[XP] Conversation XP award failed:", err)
-        );
-      }
+    if (conversation.endedAt) {
+      return NextResponse.json(
+        { error: "Conversation is already complete" },
+        { status: 409 },
+      );
     }
 
-    // 7. Handle batch inserting turns
-    if (turns && Array.isArray(turns) && turns.length > 0) {
-      const turnRecords = turns.map(
-        (turn: { role: "user" | "assistant"; content: string; timestamp: number }) => ({
-          conversationId,
-          role: turn.role,
-          content: turn.content,
-          timestamp: turn.timestamp,
-        })
-      );
+    const durationSeconds = endedAt
+      ? Math.max(
+          0,
+          Math.floor(
+            (Date.now() - conversation.startedAt.getTime()) / 1000,
+          ),
+        )
+      : null;
 
-      await db.insert(conversationTurns).values(turnRecords);
+    // Persist transcript and completion atomically. The guarded completion
+    // update prevents concurrent disconnect requests from duplicating turns.
+    const completed = await db.transaction(async (tx) => {
+      if (endedAt) {
+        const [updated] = await tx
+          .update(conversations)
+          .set({ endedAt: new Date(), durationSeconds })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.userId, currentUser.id),
+              isNull(conversations.endedAt),
+            ),
+          )
+          .returning({ id: conversations.id });
+        if (!updated) return false;
+      }
+
+      if (turns && turns.length > 0) {
+        await tx.insert(conversationTurns).values(
+          turns.map((turn) => ({
+            conversationId,
+            role: turn.role,
+            content: turn.content,
+            timestamp: turn.timestamp,
+          })),
+        );
+      }
+      return true;
+    });
+
+    if (!completed) {
+      return NextResponse.json(
+        { error: "Conversation is already complete" },
+        { status: 409 },
+      );
+    }
+
+    if (durationSeconds !== null && durationSeconds >= 30) {
+      await awardXP({
+        userId: currentUser.id,
+        source: "voice_conversation",
+        amount: 15,
+        entityId: conversationId,
+        entityType: "conversation",
+      }).catch((err) => {
+        console.error("[XP] Conversation XP award failed:", err);
+      });
     }
 
     // 8. Fetch updated conversation

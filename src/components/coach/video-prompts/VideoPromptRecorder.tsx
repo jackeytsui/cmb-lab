@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Video, Upload, Mic, Trash2, Play, Pause } from "lucide-react";
+import { Loader2, Video, Upload, Trash2 } from "lucide-react";
 import * as UpChunk from "@mux/upchunk";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -25,6 +25,20 @@ declare global {
 
 interface VideoPromptRecorderProps {
   onSuccess: () => void;
+}
+
+const VIDEO_MIME_TYPES = [
+  "video/webm;codecs=vp9,opus",
+  "video/webm;codecs=vp8,opus",
+  "video/mp4;codecs=h264,aac",
+  "video/webm",
+  "video/mp4",
+];
+
+function getSupportedVideoMimeType(): string | undefined {
+  return VIDEO_MIME_TYPES.find((mimeType) =>
+    MediaRecorder.isTypeSupported(mimeType),
+  );
 }
 
 export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
@@ -43,6 +57,26 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
   const chunksRef = useRef<Blob[]>([]);
   const router = useRouter();
 
+  const stopStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.onstop = null;
+        mediaRecorderRef.current.stop();
+      }
+      stopStream();
+    };
+  }, [stopStream]);
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -54,10 +88,14 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.muted = true; // Mute local preview to avoid feedback
-        videoRef.current.play();
+        await videoRef.current.play();
       }
 
-      const mediaRecorder = new MediaRecorder(stream);
+      const mimeType = getSupportedVideoMimeType();
+      const mediaRecorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined,
+      );
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -68,13 +106,13 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const blob = new Blob(chunksRef.current, {
+          type: mediaRecorder.mimeType || mimeType || "video/webm",
+        });
         setRecordedBlob(blob);
         const url = URL.createObjectURL(blob);
         setPreviewUrl(url);
-        
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
+        stopStream();
         if (videoRef.current) {
           videoRef.current.srcObject = null;
           videoRef.current.src = url;
@@ -87,6 +125,7 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
       mediaRecorder.start();
       setIsRecording(true);
     } catch (err) {
+      stopStream();
       console.error("Error accessing camera:", err);
       toast.error("Could not access camera. Please check permissions.");
     }
@@ -100,9 +139,14 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
   };
 
   const resetRecording = () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
     }
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+    stopStream();
+    setIsRecording(false);
     setRecordedBlob(null);
     setPreviewUrl(null);
     setUploadProgress(null);
@@ -118,12 +162,13 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
 
     setIsSubmitting(true);
     try {
+      const extension = recordedBlob.type.includes("mp4") ? "mp4" : "webm";
       // 1. Get upload URL
       const uploadRes = await fetch("/api/admin/mux/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          filename: `prompt-${Date.now()}.webm`,
+          filename: `prompt-${Date.now()}.${extension}`,
           category: "prompt",
           tags: ["coach-recorder"],
         }),
@@ -136,7 +181,9 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
       // 2. Upload file to Mux
       const upload = UpChunk.createUpload({
         endpoint: uploadUrl,
-        file: new File([recordedBlob], "video-prompt.webm", { type: "video/webm" }),
+        file: new File([recordedBlob], `video-prompt.${extension}`, {
+          type: recordedBlob.type || `video/${extension}`,
+        }),
         chunkSize: 5120, // 5MB
       });
 
@@ -149,60 +196,34 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
         upload.on("error", (err) => reject(err.detail));
       });
 
-      // 3. Save prompt to DB
-      // Note: We use a placeholder URL or the playback ID. 
-      // Typically Mux gives us an asset ID later via webhook.
-      // But for now, we'll assume we can construct a playback URL or just store the upload ID
-      // and let a webhook update the status.
-      // HOWEVER, `video_prompts` table expects a `video_url`.
-      // We might need to wait for asset readiness or just store `mux://<uploadId>` 
-      // and have the player handle it, OR poll for the asset ID.
-      // Let's check how `video_uploads` works. It seems to rely on webhooks.
-      
-      // Ideally, we wait for Mux asset to be ready, but that takes time.
-      // We can create the prompt record with a "processing" status or similar.
-      // But `video_prompts` doesn't have a status column.
-      // Let's just store the Mux Asset URL if we can get it, or wait a bit.
-      
-      // Actually, Mux Direct Upload doesn't give the Asset ID immediately.
-      // We need to poll or wait for webhook.
-      // Let's simplify: 
-      // We will create the record. For `videoUrl`, we might need a temporary placeholder 
-      // or we update the schema to support `muxUploadId`.
-      // Given the schema `videoUrl` is `text NOT NULL`, let's check `video_uploads` table usage.
-      
-      // Workaround: We'll create the record with a special URL format `mux-upload://<uploadId>`
-      // and let the frontend poll/resolve it? No that's complex.
-      
-      // Let's polling for the asset to be ready.
-      let assetId: string | null = null;
+      // Mux assets and playback IDs are different identifiers. Wait for the
+      // signed playback ID that SignedMuxPlayer expects.
+      let muxPlaybackId: string | null = null;
       let attempts = 0;
-      while (!assetId && attempts < 20) {
-         await new Promise(r => setTimeout(r, 2000));
-         const statusRes = await fetch("/api/admin/mux/check-status", {
-             method: "POST",
-             body: JSON.stringify({ uploadId }),
-         });
-         const statusData = await statusRes.json();
-         if (statusData.assetId) {
-             assetId = statusData.assetId;
-         }
-         attempts++;
+      while (!muxPlaybackId && attempts < 30) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const statusRes = await fetch("/api/admin/mux/check-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uploadId }),
+        });
+        if (!statusRes.ok) {
+          throw new Error("Could not check video processing status");
+        }
+        const statusData = await statusRes.json();
+        if (statusData.status === "errored") {
+          throw new Error(statusData.errorMessage || "Mux could not process the video");
+        }
+        if (statusData.status === "ready" && statusData.muxPlaybackId) {
+          muxPlaybackId = statusData.muxPlaybackId;
+        }
+        attempts++;
       }
-      
-      if (!assetId) {
-          throw new Error("Video processing timed out. Please try again.");
+
+      if (!muxPlaybackId) {
+        throw new Error("Video processing timed out. Please try again.");
       }
-      
-      const playbackUrl = `https://stream.mux.com/${assetId}.m3u8`; // Approximate, actually need Playback ID
-      // Usually Asset ID != Playback ID, but Mux often makes them 1:1 or we need to fetch Playback ID.
-      // `check-status` endpoint in context suggests it returns `muxPlaybackId`.
-      
-      // Re-read `check-status` implementation:
-      // It returns `status`, `assetId`, `playbackId`, `errorMessage`.
-      
-      // Let's do the polling properly in a minute.
-      
+
       // 3. Save prompt
       const saveRes = await fetch("/api/coach/video-prompts", {
         method: "POST",
@@ -210,7 +231,7 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
         body: JSON.stringify({
           title,
           description,
-          videoUrl: `https://stream.mux.com/${assetId}.m3u8`, // We assume standard public playback
+          videoUrl: `https://stream.mux.com/${muxPlaybackId}.m3u8`,
           uploadId: dbUploadId,
           transcript: "", // Optional
         }),
@@ -234,12 +255,6 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
       setUploadProgress(null);
     }
   };
-  
-  // Custom polling logic since `check-status` might not return exactly what we need immediately
-  const pollForAsset = async (uploadId: string) => {
-      // ... implemented inside handleUpload
-  };
-
   return (
     <Dialog open={open} onOpenChange={(val) => {
       if (!val) resetRecording();
@@ -277,7 +292,7 @@ export function VideoPromptRecorder({ onSuccess }: VideoPromptRecorderProps) {
             />
           </div>
 
-          <div className="border-2 border-dashed border-zinc-800 rounded-lg p-4 bg-zinc-950/50 flex flex-col items-center justify-center min-h-[300px]">
+          <div className="relative border-2 border-dashed border-zinc-800 rounded-lg p-4 bg-zinc-950/50 flex flex-col items-center justify-center min-h-[300px]">
             <video
               ref={videoRef}
               className={`w-full max-h-[400px] rounded-md ${!previewUrl && !isRecording && "hidden"}`}

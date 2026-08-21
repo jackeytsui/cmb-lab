@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { courseLibraryCourses } from "@/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
+import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 // Match the 60s used by the other blob-proxy routes for consistency.
 export const maxDuration = 60;
@@ -18,12 +20,16 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ courseId: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { courseId } = await params;
+  const canSeeCourse = await getCourseLibraryCourseAccess(user);
+  if (!canSeeCourse(courseId)) {
+    return NextResponse.json({ error: "No cover image" }, { status: 404 });
+  }
 
   const [course] = await db
     .select({ coverImageUrl: courseLibraryCourses.coverImageUrl })
@@ -32,6 +38,10 @@ export async function GET(
       and(
         eq(courseLibraryCourses.id, courseId),
         isNull(courseLibraryCourses.deletedAt),
+        inArray(
+          courseLibraryCourses.status,
+          visibleCourseStatuses(user.role),
+        ),
       ),
     )
     .limit(1);

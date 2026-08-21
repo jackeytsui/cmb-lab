@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Downloaded/generated player bundles are third-party artifacts, not
+    // maintained application source.
+    "177*-player-script.js",
+    ".codex-tmp/**",
   ]),
 ]);
 

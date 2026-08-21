@@ -4,7 +4,11 @@ import { courses, lessons, modules } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getUserContentGrants, getRestrictedContentIds } from "@/lib/tag-feature-access";
 import { getCurrentUser } from "@/lib/auth";
-import { isCustomizedTitle } from "@/lib/customized-content";
+import {
+  audioCourseAllowedUserIds,
+  isRestrictedAudioCourse,
+  isStandardAudioCourse,
+} from "@/lib/audio-course-access";
 
 /**
  * GET /api/audio-courses
@@ -27,14 +31,7 @@ export async function GET() {
   // Filter to audio courses only — exclude extraPack courses because they have
   // their own dedicated page (/dashboard/accelerator-extra/audio) gated by the
   // `audio_accelerator_edition` feature.
-  const audioCourses = courseRows.filter((course) => {
-    try {
-      const meta = JSON.parse(course.description ?? "{}");
-      return meta.audioCourse === true && meta.extraPack !== true;
-    } catch {
-      return false;
-    }
-  });
+  const audioCourses = courseRows.filter(isStandardAudioCourse);
 
   // Filter by visibility using tag_content_grants
   const isStaff = dbUser.role === "admin" || dbUser.role === "coach";
@@ -48,26 +45,11 @@ export async function GET() {
     ]);
 
     visibleCourses = audioCourses.filter((course) => {
-      let meta: Record<string, unknown> = {};
-      try {
-        meta = JSON.parse(course.description ?? "{}");
-      } catch { /* ignore */ }
-
-      // Customized (per-student) series are ALWAYS restricted, even with no
-      // grants configured — default deny; access is granted manually in the
-      // audio course editor's Visibility section (or via a tag grant).
-      const isCustom =
-        isCustomizedTitle(course.title) || meta.customCourse === true;
-
-      // Non-custom course with no tag restrictions → visible to all
-      if (!isCustom && !restrictedIds.has(course.id)) return true;
+      if (!isRestrictedAudioCourse(course, restrictedIds)) return true;
       // Tag grant
       if (grantedIds.has(course.id)) return true;
       // Per-student manual grant (allowedUserIds from the Visibility editor)
-      const userIds: string[] = Array.isArray(meta.allowedUserIds)
-        ? (meta.allowedUserIds as string[])
-        : [];
-      return userIds.includes(dbUser.id);
+      return audioCourseAllowedUserIds(course).includes(dbUser.id);
     });
   }
 

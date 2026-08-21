@@ -18,6 +18,7 @@ import {
 } from "@/lib/assignment-review";
 import { isTextAssignmentLesson } from "@/lib/lesson-language";
 import type { CourseLibraryTextAssignmentContent } from "@/db/schema/course-library";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
 interface RouteParams {
   params: Promise<{ lessonId: string }>;
@@ -42,7 +43,7 @@ const submitSchema = z.object({
 
 async function getAccessibleTextAssignmentLesson(
   lessonId: string,
-  role: string,
+  user: { id: string; role: string },
 ) {
   const [row] = await db
     .select({
@@ -67,12 +68,16 @@ async function getAccessibleTextAssignmentLesson(
         isNull(courseLibraryLessons.deletedAt),
         isNull(courseLibraryModules.deletedAt),
         isNull(courseLibraryCourses.deletedAt),
-        inArray(courseLibraryCourses.status, visibleCourseStatuses(role)),
+        inArray(courseLibraryCourses.status, visibleCourseStatuses(user.role)),
       ),
     )
     .limit(1);
 
-  if (!row || !isTextAssignmentLesson(row.lessonType)) return null;
+  if (
+    !row ||
+    !isTextAssignmentLesson(row.lessonType) ||
+    !(await canUserAccessCourseLibraryLesson(user, lessonId))
+  ) return null;
   return row;
 }
 
@@ -104,7 +109,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   }
 
   const { lessonId } = await params;
-  const lesson = await getAccessibleTextAssignmentLesson(lessonId, user.role);
+  const lesson = await getAccessibleTextAssignmentLesson(lessonId, user);
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
@@ -125,7 +130,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 
   const { lessonId } = await params;
-  const lesson = await getAccessibleTextAssignmentLesson(lessonId, user.role);
+  const lesson = await getAccessibleTextAssignmentLesson(lessonId, user);
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }

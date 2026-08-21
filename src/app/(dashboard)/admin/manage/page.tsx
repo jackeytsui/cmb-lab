@@ -28,6 +28,7 @@ const allSections: PortalSection[] = [
     title: "Content",
     items: [
       { id: "courses", title: "Courses", href: "/admin/courses", description: "Manage courses, modules, lessons, and publication." },
+      { id: "course-library", title: "Course Library", href: "/admin/course-library", description: "Build the student-facing course roadmap, modules, and lessons." },
       { id: "exercises", title: "Exercises", href: "/admin/exercises", description: "Practice bank and assignment flows." },
       { id: "audio-course", title: "Audio Course", href: "/admin/audio-course", description: "Manage audio series. Check 'Extra Pack' to make a series appear in Audio Accelerator Edition." },
       { id: "video-uploads", title: "Video Uploads", href: "/admin/content", description: "Upload and assign video/media assets." },
@@ -92,19 +93,29 @@ export default async function AdminManagePortalPage() {
   const sections = isAdmin ? allSections : filterForCoach(allSections);
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">Admin Manage Portal</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {isAdmin
-            ? "Central command center for admin operations, security, and content governance."
-            : "Coach portal — view students, analytics, and impersonate users."}
+    <div className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <header className="mb-8 border-b border-border/70 pb-6">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+          Administration
         </p>
-      </div>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+              Admin workspace
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          {isAdmin
+                ? "Manage people, learning content, integrations, and system health from one place."
+                : "Review students, check analytics, and preview the portal as a learner."}
+            </p>
+          </div>
+          <div className="inline-flex w-fit items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">
+            {isAdmin ? "Administrator access" : "Coach access"}
+          </div>
+        </div>
+      </header>
 
-      <div className="space-y-4">
-        <AdminManageGrid sections={sections} />
-      </div>
+      <AdminManageGrid sections={sections} />
     </div>
   );
 }

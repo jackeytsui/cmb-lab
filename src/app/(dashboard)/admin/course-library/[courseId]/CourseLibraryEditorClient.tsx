@@ -1043,30 +1043,41 @@ export function CourseLibraryEditorClient({
     <div className="space-y-6">
       {/* Course header */}
       <div className="rounded-lg border border-border bg-card p-5 space-y-3">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex-1">
-            <label className="block text-xs font-medium text-muted-foreground mb-1">
+            <label
+              htmlFor="course-title"
+              className="block text-xs font-medium text-muted-foreground mb-1"
+            >
               Title
             </label>
             <input
+              id="course-title"
+              name="title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-lg font-semibold"
             />
           </div>
-          <div className="flex flex-col items-end gap-1">
-            <label className="block text-xs font-medium text-muted-foreground">
+          <div className="flex w-full flex-col items-start gap-1 sm:w-auto sm:items-end">
+            <label
+              htmlFor="course-visibility"
+              className="block text-xs font-medium text-muted-foreground"
+            >
               Visibility
             </label>
             <select
+              id="course-visibility"
+              name="visibility"
+              aria-describedby="course-visibility-hint"
               value={course.status}
               onChange={(e) =>
                 handleStatusChange(e.target.value as CourseStatus)
               }
               disabled={savingHeader}
               className={cn(
-                "rounded-md border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50",
+                "w-full rounded-md border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50 sm:w-auto",
                 course.status === "published"
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   : course.status === "preview"
@@ -1078,16 +1089,24 @@ export function CourseLibraryEditorClient({
               <option value="preview">Preview (staff only)</option>
               <option value="published">Published</option>
             </select>
-            <span className="text-[10px] text-muted-foreground text-right max-w-[180px]">
+            <span
+              id="course-visibility-hint"
+              className="max-w-[240px] text-left text-[10px] text-muted-foreground sm:max-w-[180px] sm:text-right"
+            >
               {STATUS_HINT[course.status]}
             </span>
           </div>
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
+          <label
+            htmlFor="course-summary"
+            className="block text-xs font-medium text-muted-foreground mb-1"
+          >
             Summary
           </label>
           <textarea
+            id="course-summary"
+            name="summary"
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
             rows={2}
@@ -1103,14 +1122,15 @@ export function CourseLibraryEditorClient({
           </label>
           <input
             ref={coverInputRef}
+            aria-label="Upload course cover image"
             type="file"
             accept="image/jpeg,image/png,image/webp,image/gif"
             className="hidden"
             onChange={(e) => handleCoverSelected(e.target.files?.[0])}
           />
           {course.coverImageUrl ? (
-            <div className="flex items-start gap-3">
-              <div className="relative aspect-video w-48 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+            <div className="flex flex-col items-start gap-3 sm:flex-row">
+              <div className="relative aspect-video w-full max-w-sm shrink-0 overflow-hidden rounded-md border border-border bg-muted sm:w-48">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`/api/course-library/course-image/${course.id}?v=${coverVersion}`}
@@ -1123,7 +1143,7 @@ export function CourseLibraryEditorClient({
                   </div>
                 )}
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-row gap-1.5 sm:flex-col">
                 <button
                   type="button"
                   onClick={() => coverInputRef.current?.click()}
@@ -1255,6 +1275,8 @@ export function CourseLibraryEditorClient({
             </div>
           )}
           <input
+            id="course-student-search"
+            aria-label="Search students by name or email"
             type="text"
             value={studentSearch}
             onChange={(e) => setStudentSearch(e.target.value)}
@@ -1345,6 +1367,8 @@ export function CourseLibraryEditorClient({
         {addingModule && (
           <div className="rounded-md border border-dashed border-border bg-card p-3 flex gap-2">
             <input
+              aria-label="Module title"
+              name="newModuleTitle"
               type="text"
               value={newModuleTitle}
               onChange={(e) => setNewModuleTitle(e.target.value)}
@@ -1455,10 +1479,15 @@ export function CourseLibraryEditorClient({
               <div className="border-b border-border bg-muted/10 p-3 space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`module-title-${mod.id}`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       Module title
                     </label>
                     <input
+                      id={`module-title-${mod.id}`}
+                      name="moduleTitle"
                       type="text"
                       value={moduleDraft.title}
                       onChange={(e) =>
@@ -1468,13 +1497,18 @@ export function CourseLibraryEditorClient({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`module-short-title-${mod.id}`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       Short title{" "}
                       <span className="font-normal">
                         (shown on the student map — e.g. &ldquo;Pronouns&rdquo;)
                       </span>
                     </label>
                     <input
+                      id={`module-short-title-${mod.id}`}
+                      name="moduleShortTitle"
                       type="text"
                       value={moduleDraft.shortTitle}
                       onChange={(e) =>
@@ -1488,10 +1522,15 @@ export function CourseLibraryEditorClient({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`module-map-style-${mod.id}`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       Map stop style
                     </label>
                     <select
+                      id={`module-map-style-${mod.id}`}
+                      name="moduleMapStyle"
                       value={moduleDraft.mapStyle}
                       onChange={(e) =>
                         setModuleDraft((d) => ({
@@ -1511,13 +1550,18 @@ export function CourseLibraryEditorClient({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`module-week-label-${mod.id}`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       Week label{" "}
                       <span className="font-normal">
                         (e.g. &ldquo;Week 1&rdquo; — starts a new band on the map)
                       </span>
                     </label>
                     <input
+                      id={`module-week-label-${mod.id}`}
+                      name="moduleWeekLabel"
                       type="text"
                       value={moduleDraft.weekLabel}
                       onChange={(e) =>
@@ -1568,6 +1612,8 @@ export function CourseLibraryEditorClient({
                 <div className="rounded-md border border-dashed border-border bg-muted/30 p-3 space-y-2">
                   <div className="flex gap-2">
                     <select
+                      aria-label="Lesson type"
+                      name="newLessonType"
                       value={newLessonType}
                       onChange={(e) =>
                         setNewLessonType(e.target.value as LessonType)
@@ -1590,6 +1636,8 @@ export function CourseLibraryEditorClient({
                         <option value="diary_canto">Diary (Canto)</option>
                       </select>
                     <input
+                      aria-label="Lesson title"
+                      name="newLessonTitle"
                       type="text"
                       value={newLessonTitle}
                       onChange={(e) => setNewLessonTitle(e.target.value)}
