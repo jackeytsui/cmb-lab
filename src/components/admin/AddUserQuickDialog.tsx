@@ -221,6 +221,9 @@ export function AddUserQuickDialog() {
                 type="date"
                 value={form.courseEndDate}
                 onChange={(e) => setForm((prev) => ({ ...prev, courseEndDate: e.target.value }))}
+                onInput={(e) =>
+                  setForm((prev) => ({ ...prev, courseEndDate: e.currentTarget.value }))
+                }
               />
             </div>
             <div className="space-y-2">
