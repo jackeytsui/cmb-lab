@@ -5,6 +5,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
@@ -46,6 +47,32 @@ export const groupCoachingEventsRelations = relations(
       references: [users.id],
     }),
   }),
+);
+
+/** Idempotency ledger for scheduled in-app coaching reminders. */
+export const groupCoachingEventReminders = pgTable(
+  "group_coaching_event_reminders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => groupCoachingEvents.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reminderKey: text("reminder_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("group_coaching_reminders_event_user_key_unique").on(
+      table.eventId,
+      table.userId,
+      table.reminderKey,
+    ),
+    index("group_coaching_reminders_event_idx").on(table.eventId),
+  ],
 );
 
 export type GroupCoachingEvent = typeof groupCoachingEvents.$inferSelect;
