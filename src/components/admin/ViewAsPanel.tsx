@@ -92,7 +92,13 @@ export function ViewAsPanel() {
         </div>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label htmlFor="view-as-email" className="sr-only">
+            User email
+          </label>
           <input
+            id="view-as-email"
+            name="email"
+            type="email"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
@@ -119,7 +125,7 @@ export function ViewAsPanel() {
         </div>
       )}
       {error && (
-        <p className="mt-2 text-xs text-red-500">{error}</p>
+        <p role="alert" className="mt-2 text-xs text-red-500">{error}</p>
       )}
     </section>
   );

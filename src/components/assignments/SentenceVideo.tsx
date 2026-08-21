@@ -11,8 +11,8 @@
 
 export function SentenceVideo({ src }: { src: string }) {
   return (
-     
     <video
+      aria-label="Coach example video"
       src={src}
       controls
       playsInline

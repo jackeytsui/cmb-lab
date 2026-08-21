@@ -1367,6 +1367,8 @@ export function CourseLibraryEditorClient({
         {addingModule && (
           <div className="rounded-md border border-dashed border-border bg-card p-3 flex gap-2">
             <input
+              aria-label="Module title"
+              name="newModuleTitle"
               type="text"
               value={newModuleTitle}
               onChange={(e) => setNewModuleTitle(e.target.value)}
@@ -1477,10 +1479,15 @@ export function CourseLibraryEditorClient({
               <div className="border-b border-border bg-muted/10 p-3 space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`module-title-${mod.id}`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       Module title
                     </label>
                     <input
+                      id={`module-title-${mod.id}`}
+                      name="moduleTitle"
                       type="text"
                       value={moduleDraft.title}
                       onChange={(e) =>
@@ -1490,13 +1497,18 @@ export function CourseLibraryEditorClient({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`module-short-title-${mod.id}`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       Short title{" "}
                       <span className="font-normal">
                         (shown on the student map — e.g. &ldquo;Pronouns&rdquo;)
                       </span>
                     </label>
                     <input
+                      id={`module-short-title-${mod.id}`}
+                      name="moduleShortTitle"
                       type="text"
                       value={moduleDraft.shortTitle}
                       onChange={(e) =>
@@ -1510,10 +1522,15 @@ export function CourseLibraryEditorClient({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`module-map-style-${mod.id}`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       Map stop style
                     </label>
                     <select
+                      id={`module-map-style-${mod.id}`}
+                      name="moduleMapStyle"
                       value={moduleDraft.mapStyle}
                       onChange={(e) =>
                         setModuleDraft((d) => ({
@@ -1533,13 +1550,18 @@ export function CourseLibraryEditorClient({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`module-week-label-${mod.id}`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       Week label{" "}
                       <span className="font-normal">
                         (e.g. &ldquo;Week 1&rdquo; — starts a new band on the map)
                       </span>
                     </label>
                     <input
+                      id={`module-week-label-${mod.id}`}
+                      name="moduleWeekLabel"
                       type="text"
                       value={moduleDraft.weekLabel}
                       onChange={(e) =>
@@ -1590,6 +1612,8 @@ export function CourseLibraryEditorClient({
                 <div className="rounded-md border border-dashed border-border bg-muted/30 p-3 space-y-2">
                   <div className="flex gap-2">
                     <select
+                      aria-label="Lesson type"
+                      name="newLessonType"
                       value={newLessonType}
                       onChange={(e) =>
                         setNewLessonType(e.target.value as LessonType)
@@ -1612,6 +1636,8 @@ export function CourseLibraryEditorClient({
                         <option value="diary_canto">Diary (Canto)</option>
                       </select>
                     <input
+                      aria-label="Lesson title"
+                      name="newLessonTitle"
                       type="text"
                       value={newLessonTitle}
                       onChange={(e) => setNewLessonTitle(e.target.value)}

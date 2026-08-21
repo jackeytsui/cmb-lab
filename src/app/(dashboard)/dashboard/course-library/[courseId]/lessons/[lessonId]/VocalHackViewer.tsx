@@ -306,6 +306,7 @@ export function VocalHackViewer({
                   playbackUrls[sentence.id] && (
                     recordingMediaTypes[sentence.id] === "video" ? (
                       <video
+                        aria-label="Your submitted video"
                         controls
                         playsInline
                         preload="metadata"
@@ -316,6 +317,7 @@ export function VocalHackViewer({
                       />
                     ) : (
                       <audio
+                        aria-label="Your submitted audio"
                         controls
                         preload="none"
                         controlsList="nodownload"
@@ -333,7 +335,7 @@ export function VocalHackViewer({
       </div>
 
       {error && (
-        <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-500">
+        <div role="alert" className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-500">
           {error}
         </div>
       )}
