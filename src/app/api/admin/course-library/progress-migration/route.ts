@@ -318,10 +318,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (completionsToAdd.length) {
+      const completionRows = completionsToAdd.map((pair) => ({
+        user_id: pair.userId,
+        lesson_id: pair.lessonId,
+      }));
       await sql`
         WITH migration_rows AS (
           SELECT user_id, lesson_id
-          FROM jsonb_to_recordset(${JSON.stringify(completionsToAdd)}::jsonb)
+          FROM jsonb_to_recordset(${JSON.stringify(completionRows)}::jsonb)
             AS rows(user_id uuid, lesson_id uuid)
         )
         INSERT INTO course_library_lesson_progress
