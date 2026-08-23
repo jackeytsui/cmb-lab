@@ -291,28 +291,41 @@ export async function POST(request: NextRequest) {
 
   if (apply) {
     const sql = getNeonSql();
+    const accessByCourse = new Map<string, string[]>();
     for (const pair of accessToAdd) {
+      const userIds = accessByCourse.get(pair.courseId) ?? [];
+      userIds.push(pair.userId);
+      accessByCourse.set(pair.courseId, userIds);
+    }
+    for (const [courseId, userIds] of accessByCourse) {
       await sql`
         UPDATE course_library_courses
-        SET allowed_user_ids = CASE
-          WHEN COALESCE(allowed_user_ids, '[]'::jsonb) @> ${JSON.stringify([
-            pair.userId,
-          ])}::jsonb
-            THEN COALESCE(allowed_user_ids, '[]'::jsonb)
-          ELSE COALESCE(allowed_user_ids, '[]'::jsonb) || ${JSON.stringify([
-            pair.userId,
-          ])}::jsonb
-        END,
+        SET allowed_user_ids = (
+          SELECT COALESCE(jsonb_agg(user_id), '[]'::jsonb)
+          FROM (
+            SELECT DISTINCT user_id
+            FROM jsonb_array_elements_text(
+              COALESCE(allowed_user_ids, '[]'::jsonb) ||
+              ${JSON.stringify(userIds)}::jsonb
+            ) AS ids(user_id)
+          ) AS unique_ids
+        ),
         updated_at = NOW()
-        WHERE id = ${pair.courseId}::uuid
+        WHERE id = ${courseId}::uuid
       `;
     }
-    for (const pair of completionsToAdd) {
+
+    if (completionsToAdd.length) {
       await sql`
+        WITH migration_rows AS (
+          SELECT user_id, lesson_id
+          FROM jsonb_to_recordset(${JSON.stringify(completionsToAdd)}::jsonb)
+            AS rows(user_id uuid, lesson_id uuid)
+        )
         INSERT INTO course_library_lesson_progress
           (user_id, lesson_id, completed_at, video_watched_percent, started_at, updated_at)
-        VALUES
-          (${pair.userId}::uuid, ${pair.lessonId}::uuid, NOW(), 0, NOW(), NOW())
+        SELECT user_id, lesson_id, NOW(), 0, NOW(), NOW()
+        FROM migration_rows
         ON CONFLICT (user_id, lesson_id) DO UPDATE
         SET completed_at = COALESCE(
           course_library_lesson_progress.completed_at,
@@ -326,7 +339,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     mode: apply ? "applied" : "dry-run",
     sourceRecords: records.length,
-    students: new Set(records.map((record) => record.studentId)).size,
+    students: new Set([...accessPairs.values()].map((pair) => pair.userId)).size,
     accessGrants: {
       candidates: accessPairs.size,
       toAdd: accessToAdd.length,
