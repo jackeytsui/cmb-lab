@@ -140,7 +140,33 @@ type CoachingSession = {
   cantonese: PaneDraft;
 };
 
-function useProcessedText({
+export function mergeSessionsAfterRefresh(
+  refreshed: CoachingSession[],
+  previous: CoachingSession[],
+): CoachingSession[] {
+  return refreshed.map((session) => {
+    const existing = previous.find((candidate) => candidate.id === session.id);
+    if (!existing) return session;
+
+    // Drafts and display modes are local-only UI state. A polling response has
+    // empty draft defaults, so replacing them would erase text mid-entry.
+    return {
+      ...session,
+      mandarin: {
+        ...session.mandarin,
+        draftText: existing.mandarin.draftText,
+        scriptMode: existing.mandarin.scriptMode,
+      },
+      cantonese: {
+        ...session.cantonese,
+        draftText: existing.cantonese.draftText,
+        scriptMode: existing.cantonese.scriptMode,
+      },
+    };
+  });
+}
+
+export function useProcessedText({
   committedText,
   scriptMode,
   language,
@@ -159,6 +185,9 @@ function useProcessedText({
     Map<number, string>
   >(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
+  // This records only a completed request. Recording an in-flight request here
+  // makes an effect cleanup (for example, React Strict Mode) cancel the request
+  // and then causes the replacement effect to deduplicate itself forever.
   const translatedKeyRef = useRef<string>("");
   const [translationCache, setTranslationCache] = useState<
     Map<string, string>
@@ -263,7 +292,7 @@ function useProcessedText({
   const segments = jiebaSegments ?? fallbackSegments;
   const sentences = useMemo(() => detectSentences(segments), [segments]);
   const sentenceKey = useMemo(
-    () => sentences.map((s) => s.text).join("|"),
+    () => JSON.stringify(sentences.map((s) => s.text)),
     [sentences],
   );
 
@@ -271,7 +300,8 @@ function useProcessedText({
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      if (!displayText || sentences.length === 0) {
+      const sentenceTexts = JSON.parse(sentenceKey) as string[];
+      if (sentenceTexts.length === 0) {
         setBatchTranslations(new Map());
         setTranslationCache(new Map());
         translatedKeyRef.current = "";
@@ -279,11 +309,10 @@ function useProcessedText({
         return;
       }
 
-      if (sentenceKey === translatedKeyRef.current) return;
-      translatedKeyRef.current = sentenceKey;
+      const translationKey = `${language}:${sentenceKey}`;
+      if (translationKey === translatedKeyRef.current) return;
       setIsTranslating(true);
 
-      const sentenceTexts = sentences.map((s) => s.text);
       fetchProperTranslations(sentenceTexts, language)
         .then((translations) => {
           if (cancelled || !translations) return;
@@ -295,22 +324,27 @@ function useProcessedText({
 
           setTranslationCache((prev) => {
             const next = new Map(prev);
-            sentences.forEach((s, idx) => {
+            sentenceTexts.forEach((text, idx) => {
               const t = map.get(idx);
-              if (t) next.set(s.text, t);
+              if (t) next.set(text, t);
             });
             return next;
           });
         })
         .finally(() => {
-          if (!cancelled) setIsTranslating(false);
+          if (!cancelled) {
+            translatedKeyRef.current = translationKey;
+            setIsTranslating(false);
+          }
         });
     });
 
     return () => {
       cancelled = true;
     };
-  }, [displayText, language, sentenceKey, sentences]);
+  // Depend on sentenceKey, not the sentences array. Segmentation can replace
+  // the array with an equivalent one while a translation is in flight.
+  }, [language, sentenceKey]);
 
   const handleSpeakSentence = useCallback(
     async (text: string, rate: "slow" | "medium" | "fast") => {
@@ -1743,18 +1777,7 @@ function CoachingPanel({
       }
       const data = await res.json();
       const normalized = normalizeSessions(data.sessions ?? []);
-      setSessions((prev) =>
-        normalized.map((s) => {
-          const existing = prev.find((p) => p.id === s.id);
-          if (!existing) return s;
-          // Preserve purely-local UI state that is not persisted to the DB
-          return {
-            ...s,
-            mandarin: { ...s.mandarin, scriptMode: existing.mandarin.scriptMode },
-            cantonese: { ...s.cantonese, scriptMode: existing.cantonese.scriptMode },
-          };
-        }),
-      );
+      setSessions((prev) => mergeSessionsAfterRefresh(normalized, prev));
       setActiveSessionId((prev) => {
         // Preserve current session if it still exists, otherwise default to first
         if (prev && normalized.some((s) => s.id === prev)) return prev;
