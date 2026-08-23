@@ -140,6 +140,17 @@ type CoachingSession = {
   cantonese: PaneDraft;
 };
 
+type StudentCourseProgress = {
+  courseId: string;
+  courseTitle: string;
+  completedLessons: number;
+  totalLessons: number;
+  percentComplete: number;
+  isComplete: boolean;
+  nextLessonTitle: string | null;
+  nextModuleTitle: string | null;
+};
+
 export function mergeSessionsAfterRefresh(
   refreshed: CoachingSession[],
   previous: CoachingSession[],
@@ -1293,16 +1304,14 @@ function CoachingPanel({
   const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [isSavingGoals, setIsSavingGoals] = useState(false);
 
-  // Student level tracking
-  const [studentLevel, setStudentLevel] = useState<string | null>(null);
-  const [studentLessonNumber, setStudentLessonNumber] = useState<string | null>(null);
-  const [levelSaveState, setLevelSaveState] = useState<"idle" | "editing" | "saving" | "saved" | "error">("idle");
-  const [levelDraftLevel, setLevelDraftLevel] = useState("");
-  const [levelDraftLesson, setLevelDraftLesson] = useState("");
+  // Read-only progress calculated from the student's CMB Lab lesson records.
+  const [studentCourseProgress, setStudentCourseProgress] =
+    useState<StudentCourseProgress | null>(null);
+  const [courseProgressLoading, setCourseProgressLoading] = useState(false);
+  const [courseProgressError, setCourseProgressError] = useState(false);
 
-  // Course end date — read-only, sourced live from GoHighLevel (never LMS data)
+  // Course end date — read-only, retrieved from the enrollment source of truth.
   const [courseEndDate, setCourseEndDate] = useState<string | null>(null);
-  const [endDateLinked, setEndDateLinked] = useState(true);
   const [endDateLoading, setEndDateLoading] = useState(false);
   const [endDateRefreshing, setEndDateRefreshing] = useState(false);
 
@@ -1313,20 +1322,42 @@ function CoachingPanel({
   useEffect(() => {
     if (!goalsStudentEmail) {
       setStudentGoals(null);
-      setStudentLevel(null);
-      setStudentLessonNumber(null);
+      setStudentCourseProgress(null);
+      setCourseProgressLoading(false);
+      setCourseProgressError(false);
       return;
     }
+    const controller = new AbortController();
     const params = new URLSearchParams({ studentEmail: goalsStudentEmail });
-    // Fetch goals and level in parallel from separate endpoints
+    setCourseProgressLoading(true);
+    setCourseProgressError(false);
+
+    // Fetch coaching goals and actual CMB Lab course progress in parallel.
     Promise.all([
-      fetch(`/api/coaching/goals?${params}`).then((r) => r.ok ? r.json() : null),
-      fetch(`/api/coaching/student-level?${params}`).then((r) => r.ok ? r.json() : null),
-    ]).then(([goalsData, levelData]) => {
-      setStudentGoals(goalsData?.goals ?? null);
-      setStudentLevel(levelData?.level ?? null);
-      setStudentLessonNumber(levelData?.lessonNumber ?? null);
-    }).catch(() => {});
+      fetch(`/api/coaching/goals?${params}`, {
+        signal: controller.signal,
+      }).then((response) => (response.ok ? response.json() : null)),
+      fetch(`/api/coaching/student-course-progress?${params}`, {
+        signal: controller.signal,
+      }).then(async (response) => {
+        if (!response.ok) throw new Error("Course progress unavailable");
+        return response.json();
+      }),
+    ])
+      .then(([goalsData, progressData]) => {
+        setStudentGoals(goalsData?.goals ?? null);
+        setStudentCourseProgress(progressData?.progress ?? null);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setStudentCourseProgress(null);
+        setCourseProgressError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCourseProgressLoading(false);
+      });
+
+    return () => controller.abort();
   }, [goalsStudentEmail, canWrite]);
 
   // Fetch the course end date from GHL when a coach opens a student (1:1 only)
@@ -1338,15 +1369,12 @@ function CoachingPanel({
         const res = await fetch(`/api/coaching/student-end-date?${params}`);
         if (!res.ok) {
           setCourseEndDate(null);
-          setEndDateLinked(true);
           return;
         }
         const data = await res.json();
         setCourseEndDate(data?.endDate ?? null);
-        setEndDateLinked(data?.linked !== false);
       } catch {
         setCourseEndDate(null);
-        setEndDateLinked(true);
       } finally {
         setEndDateLoading(false);
         setEndDateRefreshing(false);
@@ -1358,39 +1386,12 @@ function CoachingPanel({
   useEffect(() => {
     if (!goalsStudentEmail || !canWrite || sessionType !== "one-on-one") {
       setCourseEndDate(null);
-      setEndDateLinked(true);
       setEndDateLoading(false);
       return;
     }
     setEndDateLoading(true);
     fetchCourseEndDate(goalsStudentEmail);
   }, [goalsStudentEmail, canWrite, sessionType, fetchCourseEndDate]);
-
-  const handleSaveLevel = useCallback(async () => {
-    if (!goalsStudentEmail) return;
-    setLevelSaveState("saving");
-    try {
-      const res = await fetch("/api/coaching/student-level", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentEmail: goalsStudentEmail,
-          level: levelDraftLevel || null,
-          lessonNumber: levelDraftLesson || null,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStudentLevel(data.level ?? null);
-        setStudentLessonNumber(data.lessonNumber ?? null);
-        setLevelSaveState("idle");
-      } else {
-        setLevelSaveState("editing");
-      }
-    } catch {
-      setLevelSaveState("editing");
-    }
-  }, [goalsStudentEmail, levelDraftLevel, levelDraftLesson]);
 
   const handleSaveRecordingUrl = useCallback(async () => {
     if (!activeSessionId) return;
@@ -2255,73 +2256,64 @@ function CoachingPanel({
                 )}
               </div>
 
-              {/* Current Progress card */}
+              {/* Course progress card — calculated from CMB Lab completions */}
               <div className="rounded-lg border border-indigo-500/25 bg-gradient-to-br from-indigo-500/10 to-violet-500/10 dark:from-indigo-500/[0.07] dark:to-violet-500/[0.07] p-3.5">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
-                    Current Progress
-                  </h3>
-                  {canWrite && levelSaveState !== "editing" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLevelDraftLevel(studentLevel ?? "");
-                        setLevelDraftLesson(studentLessonNumber ?? "");
-                        setLevelSaveState("editing");
-                      }}
-                      className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                    >
-                      <Pencil className="size-3" />
-                    </button>
-                  )}
-                </div>
-                {levelSaveState === "editing" ? (
-                  <div className="mt-2 flex flex-col gap-2">
-                    <select
-                      value={levelDraftLevel}
-                      onChange={(e) => setLevelDraftLevel(e.target.value)}
-                      className="w-full h-8 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-                    >
-                      <option value="">Select level...</option>
-                      <option value="CMB Foundation">CMB Foundation</option>
-                      <option value="CMB Intermediate">CMB Intermediate</option>
-                      <option value="CMB Advanced">CMB Advanced</option>
-                      <option value="Canto Kickstarter">Canto Kickstarter</option>
-                      <option value="Completed CMB">Completed CMB</option>
-                      <option value="Completed Canto Kickstarter">Completed Canto Kickstarter</option>
-                    </select>
-                    <input
-                      value={levelDraftLesson}
-                      onChange={(e) => setLevelDraftLesson(e.target.value)}
-                      placeholder="Lesson / Chapter number"
-                      className="w-full h-8 rounded-md border border-indigo-500/25 bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-                    />
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={handleSaveLevel}
-                        className="rounded-md bg-indigo-500 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-indigo-600 transition-colors disabled:opacity-50">
-                        Save
-                      </button>
-                      <button type="button" onClick={() => setLevelSaveState("idle")}
-                        className="rounded-md border border-input bg-background px-2.5 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                        Cancel
-                      </button>
+                <h3 className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                  Course Progress
+                </h3>
+                {courseProgressLoading ? (
+                  <p className="mt-1.5 text-[10px] text-indigo-600/60 dark:text-indigo-400/50">
+                    Loading course progress...
+                  </p>
+                ) : courseProgressError ? (
+                  <p className="mt-1.5 text-[10px] text-indigo-600/60 dark:text-indigo-400/50">
+                    Course progress is temporarily unavailable.
+                  </p>
+                ) : studentCourseProgress ? (
+                  <div className="mt-1.5 space-y-1.5">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="truncate text-xs font-medium text-foreground">
+                        {studentCourseProgress.courseTitle}
+                      </p>
+                      <span className="shrink-0 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300">
+                        {studentCourseProgress.percentComplete}%
+                      </span>
                     </div>
-                  </div>
-                ) : (studentLevel || studentLessonNumber) ? (
-                  <div className="mt-1.5 space-y-0.5">
-                    <p className="text-xs font-medium text-foreground">{studentLevel || ""}</p>
-                    {studentLessonNumber && (
-                      <p className="text-xs text-muted-foreground">Chapter / Lesson: {studentLessonNumber}</p>
-                    )}
+                    <div
+                      className="h-1.5 w-full overflow-hidden rounded-full bg-indigo-500/15"
+                      role="progressbar"
+                      aria-label={`${studentCourseProgress.courseTitle} course progress`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={studentCourseProgress.percentComplete}
+                    >
+                      <div
+                        className="h-full rounded-full bg-indigo-500 transition-[width]"
+                        style={{
+                          width: `${studentCourseProgress.percentComplete}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {studentCourseProgress.completedLessons} of{" "}
+                      {studentCourseProgress.totalLessons} lessons complete
+                    </p>
+                    <p className="truncate text-[10px] text-indigo-600/70 dark:text-indigo-400/60">
+                      {studentCourseProgress.isComplete
+                        ? "Course complete"
+                        : studentCourseProgress.nextLessonTitle
+                          ? `Up next: ${studentCourseProgress.nextLessonTitle}`
+                          : "Continue in the Course Library"}
+                    </p>
                   </div>
                 ) : (
                   <p className="mt-1.5 text-[10px] text-indigo-600/60 dark:text-indigo-400/50">
-                    {canWrite ? "Click edit to set progress." : "Not set yet."}
+                    No course activity recorded in CMB Lab yet.
                   </p>
                 )}
               </div>
 
-              {/* Course End Date card — read-only, synced from GoHighLevel */}
+              {/* Course End Date card — read-only */}
               {canWrite && (
                 <div className="rounded-lg border border-rose-500/25 bg-gradient-to-br from-rose-500/10 to-orange-500/10 dark:from-rose-500/[0.07] dark:to-orange-500/[0.07] p-3.5">
                   <div className="flex items-center justify-between gap-2">
@@ -2336,7 +2328,8 @@ function CoachingPanel({
                         fetchCourseEndDate(goalsStudentEmail, true);
                       }}
                       disabled={endDateRefreshing || endDateLoading}
-                      title="Refresh from GoHighLevel"
+                      title="Refresh course end date"
+                      aria-label="Refresh course end date"
                       className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors disabled:opacity-50"
                     >
                       <RefreshCw className={cn("size-3", endDateRefreshing && "animate-spin")} />
@@ -2344,7 +2337,7 @@ function CoachingPanel({
                   </div>
                   {endDateLoading ? (
                     <p className="mt-1.5 text-[10px] text-rose-600/60 dark:text-rose-400/50">
-                      Loading from GoHighLevel...
+                      Loading course end date...
                     </p>
                   ) : courseEndDate ? (
                     <div className="mt-1.5 space-y-0.5">
@@ -2375,15 +2368,10 @@ function CoachingPanel({
                           </p>
                         );
                       })()}
-                      <p className="text-[10px] text-rose-600/60 dark:text-rose-400/50">
-                        Synced from GoHighLevel
-                      </p>
                     </div>
                   ) : (
                     <p className="mt-1.5 text-[10px] text-rose-600/60 dark:text-rose-400/50">
-                      {endDateLinked
-                        ? "No end date found in GoHighLevel."
-                        : "Not linked to a GoHighLevel contact."}
+                      No course end date is available.
                     </p>
                   )}
                 </div>
