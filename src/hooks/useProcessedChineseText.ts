@@ -105,6 +105,9 @@ export function useProcessedChineseText({
     Map<number, string>
   >(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
+  // This records only a completed request. Recording an in-flight request here
+  // makes an effect cleanup cancel the request and then causes the replacement
+  // effect to deduplicate itself forever.
   const translatedKeyRef = useRef<string>("");
   const [translationCache, setTranslationCache] = useState<
     Map<string, string>
@@ -206,7 +209,7 @@ export function useProcessedChineseText({
   const segments = jiebaSegments ?? fallbackSegments;
   const sentences = useMemo(() => detectSentences(segments), [segments]);
   const sentenceKey = useMemo(
-    () => sentences.map((s) => s.text).join("|"),
+    () => JSON.stringify(sentences.map((s) => s.text)),
     [sentences],
   );
 
@@ -214,7 +217,8 @@ export function useProcessedChineseText({
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      if (!displayText || sentences.length === 0) {
+      const sentenceTexts = JSON.parse(sentenceKey) as string[];
+      if (sentenceTexts.length === 0) {
         setBatchTranslations(new Map());
         setTranslationCache(new Map());
         translatedKeyRef.current = "";
@@ -222,11 +226,10 @@ export function useProcessedChineseText({
         return;
       }
 
-      if (sentenceKey === translatedKeyRef.current) return;
-      translatedKeyRef.current = sentenceKey;
+      const translationKey = `${language}:${sentenceKey}`;
+      if (translationKey === translatedKeyRef.current) return;
       setIsTranslating(true);
 
-      const sentenceTexts = sentences.map((s) => s.text);
       fetchProperTranslations(sentenceTexts, language)
         .then((translations) => {
           if (cancelled || !translations) return;
@@ -238,12 +241,13 @@ export function useProcessedChineseText({
 
           setTranslationCache((prev) => {
             const next = new Map(prev);
-            sentences.forEach((s, idx) => {
+            sentenceTexts.forEach((text, idx) => {
               const t = map.get(idx);
-              if (t) next.set(s.text, t);
+              if (t) next.set(text, t);
             });
             return next;
           });
+          translatedKeyRef.current = translationKey;
         })
         .finally(() => {
           if (!cancelled) setIsTranslating(false);
@@ -253,7 +257,9 @@ export function useProcessedChineseText({
     return () => {
       cancelled = true;
     };
-  }, [displayText, language, sentenceKey, sentences]);
+  // Depend on sentenceKey, not the sentences array. Segmentation can replace
+  // the array with an equivalent one while a translation is in flight.
+  }, [language, sentenceKey]);
 
   const handleSpeakSentence = useCallback(
     async (text: string, rate: "slow" | "medium" | "fast") => {

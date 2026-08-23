@@ -1,9 +1,42 @@
 // Cantomando Blueprint LMS - Service Worker
 // Smart caching: network-only for dynamic, cache-first for static, network-first for HTML
 
-const CACHE_NAME = "cantomando-v2";
+const CACHE_NAME = "cantomando-v3";
 
 const PRECACHE_URLS = ["/icon-192x192.png", "/icon-512x512.png"];
+
+function offlineNavigationResponse() {
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CMB Lab is temporarily unreachable</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif; background: #09090b; color: #fafafa; }
+      main { width: min(32rem, calc(100% - 3rem)); text-align: center; }
+      p { color: #a1a1aa; line-height: 1.6; }
+      button { margin-top: 1rem; border: 0; border-radius: .5rem; padding: .75rem 1rem; font: inherit; font-weight: 600; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>CMB Lab is temporarily unreachable</h1>
+      <p>Check your internet connection, then try again. Your work has not been deleted.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>`,
+    {
+      status: 503,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    },
+  );
+}
 
 // Patterns that must NEVER be cached (always network-only)
 const NETWORK_ONLY_PATTERNS = [
@@ -67,6 +100,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Authenticated app navigations must always come from the network. Never
+  // replay cached HTML from a previous session. If the network fails, always
+  // resolve respondWith() with a real Response; returning an empty cache match
+  // here causes Chromium/Edge to surface the opaque ERR_FAILED page.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request).catch(() => offlineNavigationResponse()),
+    );
+    return;
+  }
+
   // Strategy 1: Network-only for dynamic routes (API, auth, content pages)
   const pathname = url.pathname;
   if (NETWORK_ONLY_PATTERNS.some((pattern) => pattern.test(pathname))) {
@@ -76,11 +120,15 @@ self.addEventListener("fetch", (event) => {
 
   // Strategy 2: Cache-first for static assets (JS, CSS, images, fonts)
   const destination = request.destination;
+  const isImmutableAsset =
+    url.pathname.startsWith("/_next/static/") ||
+    PRECACHE_URLS.includes(url.pathname);
   if (
-    destination === "style" ||
-    destination === "script" ||
-    destination === "image" ||
-    destination === "font"
+    isImmutableAsset &&
+    (destination === "style" ||
+      destination === "script" ||
+      destination === "image" ||
+      destination === "font")
   ) {
     event.respondWith(
       caches.match(request).then((cached) => {
@@ -102,23 +150,4 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-
-  // Strategy 3: Network-first for HTML navigations and other requests
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        // Cache successful HTML responses for offline fallback
-        if (response && response.status === 200 && request.mode === "navigate") {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
-          });
-        }
-        return response;
-      })
-      .catch(() => {
-        // Network failed — try cache as fallback
-        return caches.match(request);
-      })
-  );
 });
