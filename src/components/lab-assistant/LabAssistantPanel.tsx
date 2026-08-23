@@ -409,24 +409,6 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
               </button>
             )}
           </form>
-          <div className="mt-2 flex items-center justify-between gap-3 px-0.5 text-[11px] text-muted-foreground">
-            <span className="hidden sm:inline">Enter to send · Shift + Enter for a new line</span>
-            <button
-              type="button"
-              onClick={() => {
-                setFeedbackMode('general');
-                setFeedbackState('idle');
-                setFeedbackReference('');
-              }}
-              className="ml-auto font-medium underline-offset-2 hover:text-foreground hover:underline"
-            >
-              Share feedback
-            </button>
-            <span aria-hidden="true">·</span>
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="font-medium underline-offset-2 hover:text-foreground hover:underline">
-              Contact a person
-            </a>
-          </div>
         </div>
       )}
     </div>

@@ -32,5 +32,14 @@ describe("CMB Lab Assistant availability and layout", () => {
     expect(widget).toContain("h-[calc(100dvh-1rem)]");
     expect(widget).toContain("pointer-events-none scale-75 opacity-0");
   });
-});
 
+  it("keeps the composer footer uncluttered", () => {
+    const panel = source(
+      "src/components/lab-assistant/LabAssistantPanel.tsx",
+    );
+
+    expect(panel).not.toContain("Enter to send · Shift + Enter");
+    expect(panel).not.toContain("Contact a person");
+    expect(panel).not.toContain("mt-2 flex items-center justify-between gap-3");
+  });
+});
