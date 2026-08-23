@@ -235,17 +235,6 @@ export default async function DashboardLayout({
 
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
-  // Lab Assistant support widget: staff always; students when whitelisted —
-  // either the lab_assistant feature via a tag (Tag Management), or the same
-  // whitelist that grants them Course Library access (course_library was
-  // resolved above via canViewCourseLibrary, so one whitelist tag covers
-  // both the library and the assistant).
-  const showLabAssistant =
-    role !== "student" ||
-    (enabledFeatures ?? []).some(
-      (f) => f === "lab_assistant" || f === "course_library"
-    );
-
   return (
     <>
       {role === "student" && <StudentContentGuard />}
@@ -276,7 +265,8 @@ export default async function DashboardLayout({
           <RouteThemeScope>{children}</RouteThemeScope>
         </div>
         </SidebarInset>
-        {showLabAssistant && <LabAssistantWidget />}
+        {/* Support is a baseline service for every active signed-in user. */}
+        <LabAssistantWidget />
       </SidebarProvider>
     </>
   );

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
-import { users, studentTags, tags, tagFeatureGrants } from "@/db/schema";
-import { and, eq, ilike, inArray } from "drizzle-orm";
+import { users, studentTags, tags } from "@/db/schema";
+import { eq, ilike } from "drizzle-orm";
 import { resolvePermissions } from "@/lib/permissions";
 import {
   getUserFeatureTagOverrides,
@@ -53,27 +53,6 @@ export async function GET(req: NextRequest) {
   // Apply overrides
   const finalFeatures = Array.from(applyFeatureTagOverrides(baseFeatures, overrides));
 
-  // Lab Assistant widget: per-tag lab_assistant grants + the exact same
-  // visibility computation the dashboard layout uses.
-  const tagIds = userTags.map((t) => t.tagId);
-  const labAssistantGrants =
-    tagIds.length > 0
-      ? await db
-          .select({
-            tagId: tagFeatureGrants.tagId,
-            grantType: tagFeatureGrants.grantType,
-          })
-          .from(tagFeatureGrants)
-          .where(
-            and(
-              inArray(tagFeatureGrants.tagId, tagIds),
-              eq(tagFeatureGrants.featureKey, "lab_assistant")
-            )
-          )
-      : [];
-  const tagNameById = new Map(userTags.map((t) => [t.tagId, t.tagName]));
-  const isStaff = user.role === "admin" || user.role === "coach";
-
   // Course Library tab (tag/content-grant driven, independent of features)
   const courseLibraryVisible = await canViewCourseLibrary(user);
 
@@ -114,25 +93,9 @@ export async function GET(req: NextRequest) {
     },
     finalFeatures,
     labAssistant: {
-      visible:
-        isStaff ||
-        finalFeatures.includes("lab_assistant") ||
-        courseLibraryVisible,
-      reason: isStaff
-        ? "staff role — always visible"
-        : finalFeatures.includes("lab_assistant")
-          ? "granted via the lab_assistant tag feature"
-          : courseLibraryVisible
-            ? "granted via Course Library whitelist (same whitelist covers the assistant)"
-            : labAssistantGrants.some((g) => g.grantType === "deny")
-              ? "a tag explicitly DENIES lab_assistant"
-              : userTags.length === 0
-                ? "user has no tags in the LMS (check GHL tag sync)"
-                : "no whitelist found — grant a Course Library course to one of their tags, or toggle 'Lab Assistant (Support Chat)' on the tag in Tag Management",
-      grantsOnUserTags: labAssistantGrants.map((g) => ({
-        tag: tagNameById.get(g.tagId) ?? g.tagId,
-        grantType: g.grantType,
-      })),
+      visible: true,
+      reason: "baseline support — available to every active signed-in user",
+      grantsOnUserTags: [],
     },
     courseLibrary: { visible: courseLibraryVisible },
     labAssistantFields,

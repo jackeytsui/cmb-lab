@@ -1,7 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useUser } from '@clerk/nextjs';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
 import { Bug, CheckCircle2, Lightbulb, MessageSquarePlus, Send, Square, Star, X } from 'lucide-react';
 import { useLabAssistant } from '@/hooks/useLabAssistant';
 
@@ -10,7 +15,8 @@ const SUPPORT_EMAIL = 'contact@thecmblueprint.com';
 // CMB brand blue — matches the launcher and the course library header.
 const BRAND_BLUE = '#2e3a97';
 
-// FAQ chips pinned at the top — one per launch-scope intent.
+// One starter per launch-scope intent. They live in the scrollable conversation
+// so the actual conversation always gets the available height.
 const FAQ_CHIPS = [
   'When does my program start?',
   'When does my program end?',
@@ -20,7 +26,7 @@ const FAQ_CHIPS = [
 ];
 
 const WELCOME_MESSAGE =
-  "Hi! I'm the CMB Lab Assistant. Ask me about your program, coaching, or referrals — and while CMB Lab is in beta, please use the buttons below whenever you spot a bug or have an idea.";
+  "Hi! I can help with your program dates, coaching, referrals, and finding your way around CMB Lab. Choose a common question or write your own.";
 
 type FeedbackMode = 'bug' | 'feature_request' | 'general';
 
@@ -39,9 +45,7 @@ const FEEDBACK_PROMPTS: Record<FeedbackMode, string> = {
 interface LabAssistantPanelProps {
   onClose: () => void;
 }
-
 export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
-  const { user } = useUser();
   const { messages, sendMessage, status, error, clearError, stop } =
     useLabAssistant();
   const [input, setInput] = useState('');
@@ -50,21 +54,36 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
   const [feedbackState, setFeedbackState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [feedbackReference, setFeedbackReference] = useState('');
   const [ratingPrompt, setRatingPrompt] = useState<{ title: string; href: string } | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const email =
-    user?.primaryEmailAddress?.emailAddress ??
-    user?.emailAddresses?.[0]?.emailAddress ??
-    '';
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const container = messagesRef.current;
+    if (!container) return;
+
+    const frame = requestAnimationFrame(() => {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: messages.length > 1 ? 'smooth' : 'auto',
+      });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [messages, status]);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    // Move keyboard focus into the newly opened dialog without summoning the
+    // on-screen keyboard on phones.
+    closeButtonRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 112)}px`;
+  }, [input]);
 
   useEffect(() => {
     const storageKey = 'cmb-session-rating-prompted-at';
@@ -87,12 +106,13 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
 
   function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || !canSend) return;
+    if (!trimmed || !canSend) return false;
     clearError();
     sendMessage(
       { text: trimmed },
       { body: { pagePath: window.location.pathname + window.location.search } },
     );
+    return true;
   }
 
   async function submitFeedback(e: FormEvent) {
@@ -121,124 +141,158 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    send(input);
-    setInput('');
+    if (send(input)) setInput('');
+  }
+
+  function handleInputKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (
+      e.key === 'Enter' &&
+      !e.shiftKey &&
+      !e.nativeEvent.isComposing
+    ) {
+      e.preventDefault();
+      if (send(input)) setInput('');
+    }
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header: title + BETA badge + signed-in email (brand blue) */}
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Compact header keeps the conversation primary. */}
       <div
-        className="px-4 py-3 border-b border-border"
+        className="shrink-0 border-b border-white/10 px-4 py-3"
         style={{ backgroundColor: BRAND_BLUE }}
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-white text-sm">
-              CMB Lab Assistant
-            </h3>
-            <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-400/20 text-amber-300 border border-amber-300/40 rounded px-1.5 py-0.5">
-              Beta
-            </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 id="lab-assistant-title" className="truncate text-base font-semibold text-white">
+                CMB Lab Assistant
+              </h3>
+              <span className="rounded-md border border-amber-300/40 bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">
+                Beta
+              </span>
+            </div>
+            <p className="mt-0.5 truncate text-xs text-white/70">
+              Answers, guidance, and a direct line to our team
+            </p>
           </div>
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-white/70 hover:text-white transition-colors rounded"
+            className="ml-3 inline-flex size-10 shrink-0 items-center justify-center rounded-full text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
             aria-label="Close assistant"
           >
-            <X size={16} />
+            <X size={20} />
           </button>
         </div>
-        {email && (
-          <p className="text-xs text-white/70 mt-0.5 truncate">
-            Signed in as {email}
-          </p>
-        )}
       </div>
 
-      {/* Beta notice — visible every time the panel opens */}
-      <div className="px-3 py-1.5 border-b border-amber-500/30 bg-amber-500/10 text-[11px] text-amber-700 dark:text-amber-400">
-        This assistant is in beta and may make mistakes. Urgent?{' '}
-        <a href={`mailto:${SUPPORT_EMAIL}`} className="underline font-medium">
-          {SUPPORT_EMAIL}
-        </a>{' '}
-        gets you the best support.
-      </div>
-
-      {/* FAQ chips pinned at top */}
-      <div className="px-3 py-2 border-b border-border bg-muted/40 flex flex-wrap gap-1.5">
-        {FAQ_CHIPS.map((chip) => (
-          <button
-            key={chip}
-            onClick={() => send(chip)}
-            disabled={!canSend}
-            className="text-xs rounded-full px-2.5 py-1 border border-border bg-background text-foreground/80 hover:text-foreground hover:border-[#3a49b8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {chip}
-          </button>
-        ))}
-      </div>
-
-      <div className="border-b border-border bg-background px-3 py-2">
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Help shape the beta
-        </p>
-        <div className="grid grid-cols-3 gap-1.5">
-          {FEEDBACK_ACTIONS.map(({ mode, label, icon: Icon }) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => {
-                setFeedbackMode(mode);
-                setFeedbackState('idle');
-                setFeedbackReference('');
-              }}
-              className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-1.5 py-2 text-[11px] font-medium text-foreground transition-colors hover:border-[#3a49b8] hover:bg-[#3a49b8]/5"
-            >
-              <Icon className="size-4 text-[#3a49b8]" />
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className="shrink-0 border-b border-amber-500/25 bg-amber-50 px-4 py-2 text-xs leading-5 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+        AI can make mistakes. For urgent or personal help,{' '}
+        <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold underline underline-offset-2">
+          email our team
+        </a>
+        .
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-2 bg-background">
+      <div
+        ref={messagesRef}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 py-4"
+      >
         {messages.length === 0 && (
-          <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-muted text-foreground text-sm px-3 py-2">
-            {WELCOME_MESSAGE}
+          <div className="space-y-5">
+            <div className="max-w-[92%] rounded-2xl rounded-bl-md bg-muted px-3.5 py-3 text-sm leading-6 text-foreground">
+              {WELCOME_MESSAGE}
+            </div>
+
+            <section aria-labelledby="popular-questions-heading">
+              <p id="popular-questions-heading" className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Popular questions
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {FAQ_CHIPS.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => send(chip)}
+                    disabled={!canSend}
+                    className="min-h-10 rounded-full border border-border bg-background px-3 py-2 text-left text-xs font-medium text-foreground/85 transition-colors hover:border-[#3a49b8] hover:bg-[#3a49b8]/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3a49b8]/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section aria-labelledby="feedback-actions-heading" className="rounded-xl border border-border bg-muted/20 p-3">
+              <div className="mb-2.5">
+                <p id="feedback-actions-heading" className="text-sm font-semibold text-foreground">
+                  Need to reach our team?
+                </p>
+                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                  Send feedback directly. We’ll include the page you’re viewing.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {FEEDBACK_ACTIONS.map(({ mode, label, icon: Icon }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => {
+                      setFeedbackMode(mode);
+                      setFeedbackState('idle');
+                      setFeedbackReference('');
+                    }}
+                    className="flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-1.5 py-2 text-center text-[11px] font-semibold leading-4 text-foreground transition-colors hover:border-[#3a49b8] hover:bg-[#3a49b8]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3a49b8]/50"
+                  >
+                    <Icon aria-hidden="true" className="size-4 text-[#3a49b8]" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
           </div>
         )}
 
-        {messages.map((message) => {
-          const text = message.parts
-            .filter((part) => part.type === 'text')
-            .map((part) => ('text' in part ? part.text : ''))
-            .join('');
-          if (!text) return null;
-          return message.role === 'user' ? (
-            <div key={message.id} className="flex justify-end">
-              <div
-                className="max-w-[85%] rounded-2xl rounded-br-sm text-white text-sm px-3 py-2 whitespace-pre-wrap"
-                style={{ backgroundColor: BRAND_BLUE }}
-              >
-                {text}
+        <div
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-label="Conversation"
+          className={messages.length === 0 ? '' : 'space-y-3'}
+        >
+          {messages.map((message) => {
+            const text = message.parts
+              .filter((part) => part.type === 'text')
+              .map((part) => ('text' in part ? part.text : ''))
+              .join('');
+            if (!text) return null;
+            return message.role === 'user' ? (
+              <div key={message.id} className="flex justify-end">
+                <div
+                  className="max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md px-3.5 py-2.5 text-sm leading-6 text-white"
+                  style={{ backgroundColor: BRAND_BLUE }}
+                >
+                  {text}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div key={message.id} className="flex justify-start">
-              <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-muted text-foreground text-sm px-3 py-2 whitespace-pre-wrap">
-                {text}
+            ) : (
+              <div key={message.id} className="flex justify-start">
+                <div className="max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5 text-sm leading-6 text-foreground">
+                  {text}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
-        {status === 'submitted' && (
-          <p className="text-muted-foreground text-sm animate-pulse">
-            Thinking...
-          </p>
-        )}
+          {status === 'submitted' && (
+            <p className="animate-pulse text-sm text-muted-foreground">
+              Thinking...
+            </p>
+          )}
+        </div>
 
         {ratingPrompt && (
           <div className="rounded-xl border border-amber-400/40 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/25 dark:text-amber-100">
@@ -258,41 +312,43 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
           </div>
         )}
 
-        <div ref={messagesEndRef} />
       </div>
 
       {feedbackMode && (
-        <form onSubmit={submitFeedback} className="border-t border-border bg-muted/30 p-3">
+        <form onSubmit={submitFeedback} className="max-h-[58%] shrink-0 overflow-y-auto border-t border-border bg-muted/30 p-4">
           {feedbackState === 'sent' ? (
-            <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-700 dark:text-emerald-300">
+            <div role="status" className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
               <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
               <div className="flex-1">
                 <p className="font-semibold">Thank you — it’s in the product queue.</p>
-                <p>Reference: {feedbackReference}</p>
+                <p className="mt-0.5 text-xs">Reference: {feedbackReference}</p>
               </div>
-              <button type="button" onClick={() => setFeedbackMode(null)} aria-label="Close feedback form"><X className="size-4" /></button>
+              <button type="button" onClick={() => setFeedbackMode(null)} className="inline-flex size-8 items-center justify-center rounded-full hover:bg-emerald-500/10" aria-label="Close feedback form"><X className="size-4" /></button>
             </div>
           ) : (
             <>
               <div className="mb-2 flex items-center justify-between gap-2">
-                <label htmlFor="beta-feedback" className="text-xs font-semibold text-foreground">{FEEDBACK_PROMPTS[feedbackMode]}</label>
-                <button type="button" onClick={() => setFeedbackMode(null)} aria-label="Cancel feedback"><X className="size-4 text-muted-foreground" /></button>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Send feedback to our team</p>
+                  <label htmlFor="beta-feedback" className="mt-0.5 block text-xs leading-5 text-muted-foreground">{FEEDBACK_PROMPTS[feedbackMode]}</label>
+                </div>
+                <button type="button" onClick={() => setFeedbackMode(null)} className="inline-flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-muted" aria-label="Cancel feedback"><X className="size-4 text-muted-foreground" /></button>
               </div>
               <textarea
                 id="beta-feedback"
                 value={feedbackText}
                 onChange={(e) => setFeedbackText(e.target.value)}
-                rows={3}
+                rows={4}
                 maxLength={4000}
                 autoFocus
                 placeholder="Include as much detail as you can…"
-                className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#3a49b8]"
+                className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm leading-6 text-foreground focus:outline-none focus:ring-2 focus:ring-[#3a49b8]/50"
               />
-              {feedbackState === 'error' && <p className="mt-1 text-xs text-red-500">Couldn’t save that. Please try again.</p>}
-              <button type="submit" disabled={feedbackState === 'sending' || feedbackText.trim().length < 5} className="mt-2 w-full rounded-lg bg-[#2e3a97] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+              {feedbackState === 'error' && <p role="alert" className="mt-1 text-xs text-red-500">Couldn’t save that. Please try again.</p>}
+              <button type="submit" disabled={feedbackState === 'sending' || feedbackText.trim().length < 5} className="mt-2 min-h-11 w-full rounded-xl bg-[#2e3a97] px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50">
                 {feedbackState === 'sending' ? 'Sending…' : 'Send to the product team'}
               </button>
-              <p className="mt-1 text-center text-[10px] text-muted-foreground">We automatically include the page you’re viewing.</p>
+              <p className="mt-1.5 text-center text-[11px] text-muted-foreground">We automatically include the page you’re viewing.</p>
             </>
           )}
         </form>
@@ -300,7 +356,7 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
 
       {/* Errors */}
       {error && (
-        <div className="text-red-500 dark:text-red-400 text-xs px-4 py-1 bg-background">
+        <div role="alert" className="shrink-0 border-t border-red-500/20 bg-red-50 px-4 py-2 text-xs text-red-700 dark:bg-red-950/20 dark:text-red-300">
           {error.message?.toLowerCase().includes('too many') ||
           error.message?.includes('429') ? (
             <p>You&apos;re sending messages too quickly — give it a moment.</p>
@@ -317,49 +373,44 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
       )}
 
       {/* Input */}
-      <form
-        onSubmit={handleSubmit}
-        className="p-3 border-t border-border bg-background flex gap-2"
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a question or share feedback..."
-          className="flex-1 bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#3a49b8]"
-        />
-        {isStreaming ? (
-          <button
-            type="button"
-            onClick={() => stop()}
-            className="p-2 rounded-lg bg-red-600 hover:bg-red-500 text-white transition-colors"
-            aria-label="Stop generating"
-          >
-            <Square size={16} />
-          </button>
-        ) : (
-          <button
-            type="submit"
-            disabled={!canSend || !input.trim()}
-            style={{ backgroundColor: BRAND_BLUE }}
-            className="p-2 rounded-lg text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-            aria-label="Send message"
-          >
-            <Send size={16} />
-          </button>
-        )}
-      </form>
-
-      {/* Footer */}
-      <div className="px-3 pb-2 text-center bg-background">
-        <a
-          href={`mailto:${SUPPORT_EMAIL}`}
-          className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Urgent? {SUPPORT_EMAIL}
-        </a>
-      </div>
+      {!feedbackMode && (
+        <div className="shrink-0 border-t border-border bg-background px-3 pb-3 pt-3">
+          <form onSubmit={handleSubmit} className="flex items-end gap-2">
+            <label htmlFor="lab-assistant-input" className="sr-only">Ask CMB Lab Assistant</label>
+            <textarea
+              ref={inputRef}
+              id="lab-assistant-input"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              rows={1}
+              maxLength={4000}
+              placeholder="Ask anything about CMB Lab…"
+              className="max-h-28 min-h-12 flex-1 resize-none overflow-y-auto rounded-xl border border-input bg-background px-3.5 py-3 text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#3a49b8]/50"
+            />
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={() => stop()}
+                className="inline-flex size-12 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white transition-colors hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"
+                aria-label="Stop generating"
+              >
+                <Square size={17} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!canSend || !input.trim()}
+                style={{ backgroundColor: BRAND_BLUE }}
+                className="inline-flex size-12 shrink-0 items-center justify-center rounded-xl text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3a49b8]/50 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Send message"
+              >
+                <Send size={18} />
+              </button>
+            )}
+          </form>
+        </div>
+      )}
     </div>
   );
 }

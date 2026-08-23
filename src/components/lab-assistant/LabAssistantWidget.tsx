@@ -1,21 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { MessageCircle, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LabAssistantPanel } from './LabAssistantPanel';
 
-// CMB brand blues (same palette as the course map / library header gradient).
-const BRAND_BLUE = '#2e3a97';
-const BRAND_BLUE_HOVER = '#3a49b8';
-
 export function LabAssistantWidget() {
   const { isSignedIn } = useUser();
   const [isOpen, setIsOpen] = useState(false);
-  const [hovered, setHovered] = useState(false);
+  const launcherRef = useRef<HTMLButtonElement>(null);
 
-  const close = useCallback(() => setIsOpen(false), []);
+  const close = useCallback(() => {
+    setIsOpen(false);
+    requestAnimationFrame(() => launcherRef.current?.focus());
+  }, []);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -25,20 +24,24 @@ export function LabAssistantWidget() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, close]);
 
-  // Access is gated server-side in the dashboard layout (staff always,
-  // students via whitelist tag); this only guards against signed-out states.
+  // The dashboard renders support for every active user. Keep this client-side
+  // guard for the brief signed-out/hydration state only.
   if (!isSignedIn) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-50">
+    <div className="pointer-events-none fixed inset-0 z-50">
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            id="lab-assistant-dialog"
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="lab-assistant-title"
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="absolute bottom-16 right-0 w-[calc(100vw-3rem)] sm:w-[380px] h-[70vh] sm:h-[560px] bg-card text-card-foreground border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            transition={{ duration: 0.18 }}
+            className="pointer-events-auto fixed bottom-2 right-2 flex h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-2xl sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[420px]"
           >
             <LabAssistantPanel onClose={close} />
           </motion.div>
@@ -46,12 +49,16 @@ export function LabAssistantWidget() {
       </AnimatePresence>
 
       <button
+        ref={launcherRef}
+        type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        style={{ backgroundColor: hovered ? BRAND_BLUE_HOVER : BRAND_BLUE }}
-        className="w-14 h-14 rounded-full text-white shadow-lg flex items-center justify-center transition-colors"
+        className={`pointer-events-auto fixed bottom-4 right-4 flex size-14 items-center justify-center rounded-full bg-[#2e3a97] text-white shadow-lg transition-all hover:bg-[#3a49b8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3a49b8]/50 focus-visible:ring-offset-2 sm:bottom-6 sm:right-6 ${
+          isOpen ? 'pointer-events-none scale-75 opacity-0' : 'scale-100 opacity-100'
+        }`}
         aria-label={isOpen ? 'Close CMB Lab Assistant' : 'Open CMB Lab Assistant'}
+        aria-expanded={isOpen}
+        aria-controls="lab-assistant-dialog"
+        aria-haspopup="dialog"
       >
         {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
       </button>

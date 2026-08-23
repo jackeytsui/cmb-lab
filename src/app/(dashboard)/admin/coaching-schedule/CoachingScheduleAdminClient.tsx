@@ -31,14 +31,7 @@ function torontoInputToIso(value: string): string {
   const [datePart, timePart] = value.split("T");
   const [year, month, day] = datePart.split("-").map(Number);
   const [hour, minute] = timePart.split(":").map(Number);
-  return new TZDate(
-    year,
-    month - 1,
-    day,
-    hour,
-    minute,
-    SOURCE_TIME_ZONE,
-  ).toISOString();
+  return new TZDate(year, month - 1, day, hour, minute, SOURCE_TIME_ZONE).toISOString();
 }
 
 function emptyForm(): EventForm {
@@ -77,9 +70,7 @@ export function CoachingScheduleAdminClient() {
       setEvents(data.events ?? []);
       setTags(data.tags ?? []);
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Failed to load events",
-      );
+      setError(reason instanceof Error ? reason.message : "Failed to load events");
     } finally {
       setLoading(false);
     }
@@ -138,17 +129,14 @@ export function CoachingScheduleAdminClient() {
       reset();
       await load();
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Failed to save event",
-      );
+      setError(reason instanceof Error ? reason.message : "Failed to save event");
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (event: EventRecord) => {
-    if (!window.confirm(`Delete “${event.title}”? This cannot be undone.`))
-      return;
+    if (!window.confirm(`Delete “${event.title}”? This cannot be undone.`)) return;
     setError(null);
     const response = await fetch(`/api/admin/coaching-events/${event.id}`, {
       method: "DELETE",
@@ -163,10 +151,10 @@ export function CoachingScheduleAdminClient() {
   };
 
   return (
-    <div className="grid min-w-0 gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
+    <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
       <form
         onSubmit={submit}
-        className="min-w-0 h-fit space-y-4 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-4"
+        className="h-fit space-y-4 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-4"
       >
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-semibold text-foreground">
@@ -189,9 +177,7 @@ export function CoachingScheduleAdminClient() {
             required
             maxLength={200}
             value={form.title}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, title: e.target.value }))
-            }
+            onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
           />
         </label>
@@ -201,9 +187,7 @@ export function CoachingScheduleAdminClient() {
             maxLength={5_000}
             rows={3}
             value={form.description}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, description: e.target.value }))
-            }
+            onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
             className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-foreground"
           />
         </label>
@@ -212,29 +196,23 @@ export function CoachingScheduleAdminClient() {
           <input
             maxLength={200}
             value={form.hostName}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, hostName: e.target.value }))
-            }
+            onChange={(e) => setForm((prev) => ({ ...prev, hostName: e.target.value }))}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
           />
         </label>
-        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
-          <label className="block min-w-0 space-y-1.5 text-sm">
-            <span className="font-medium text-foreground">
-              Date and time (Toronto)
-            </span>
+        <div className="grid grid-cols-[1fr_7rem] gap-3">
+          <label className="block space-y-1.5 text-sm">
+            <span className="font-medium text-foreground">Date and time (Toronto)</span>
             <input
               required
               type="datetime-local"
               value={form.startsAt}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, startsAt: e.target.value }))
-              }
+              onChange={(e) => setForm((prev) => ({ ...prev, startsAt: e.target.value }))}
               onInput={(e) => {
                 const startsAt = e.currentTarget.value;
                 setForm((prev) => ({ ...prev, startsAt }));
               }}
-              className="min-w-0 w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
             />
           </label>
           <label className="block space-y-1.5 text-sm">
@@ -246,12 +224,7 @@ export function CoachingScheduleAdminClient() {
               max={480}
               step={15}
               value={form.durationMinutes}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  durationMinutes: Number(e.target.value),
-                }))
-              }
+              onChange={(e) => setForm((prev) => ({ ...prev, durationMinutes: Number(e.target.value) }))}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
             />
           </label>
@@ -263,27 +236,19 @@ export function CoachingScheduleAdminClient() {
             type="url"
             placeholder="https://zoom.us/j/…"
             value={form.meetingUrl}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, meetingUrl: e.target.value }))
-            }
+            onChange={(e) => setForm((prev) => ({ ...prev, meetingUrl: e.target.value }))}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
           />
         </label>
 
         <fieldset className="space-y-2">
-          <legend className="text-sm font-medium text-foreground">
-            Visible to
-          </legend>
+          <legend className="text-sm font-medium text-foreground">Visible to</legend>
           <p className="text-xs text-muted-foreground">
-            No tags selected means every student with coaching access can see
-            it.
+            No tags selected means every student with coaching access can see it.
           </p>
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border bg-background p-2">
             {tags.map((tag) => (
-              <label
-                key={tag.id}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-              >
+              <label key={tag.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
                 <input
                   type="checkbox"
                   checked={form.tagIds.includes(tag.id)}
@@ -296,10 +261,7 @@ export function CoachingScheduleAdminClient() {
                     }))
                   }
                 />
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: tag.color }}
-                />
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: tag.color }} />
                 <span className="text-foreground">{tag.name}</span>
               </label>
             ))}
@@ -311,9 +273,7 @@ export function CoachingScheduleAdminClient() {
             <input
               type="checkbox"
               checked={form.isCancelled}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, isCancelled: e.target.checked }))
-              }
+              onChange={(e) => setForm((prev) => ({ ...prev, isCancelled: e.target.checked }))}
             />
             Mark this session cancelled
           </label>
@@ -325,13 +285,7 @@ export function CoachingScheduleAdminClient() {
           disabled={saving}
           className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
-          {saving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : editingId ? (
-            <Pencil className="h-4 w-4" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           {editingId ? "Save changes" : "Publish session"}
         </button>
       </form>
@@ -348,43 +302,25 @@ export function CoachingScheduleAdminClient() {
           </div>
         ) : (
           events.map((event) => (
-            <article
-              key={event.id}
-              className="rounded-lg border border-border bg-card p-4"
-            >
+            <article key={event.id} className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3
-                      className={
-                        event.isCancelled
-                          ? "font-semibold text-muted-foreground line-through"
-                          : "font-semibold text-foreground"
-                      }
-                    >
+                    <h3 className={event.isCancelled ? "font-semibold text-muted-foreground line-through" : "font-semibold text-foreground"}>
                       {event.title}
                     </h3>
                     {event.isCancelled && (
-                      <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-500">
-                        Cancelled
-                      </span>
+                      <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-500">Cancelled</span>
                     )}
                   </div>
                   <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                     <CalendarDays className="h-3.5 w-3.5" />
-                    {new Date(event.startsAt).toLocaleString(undefined, {
-                      timeZone: SOURCE_TIME_ZONE,
-                      timeZoneName: "short",
-                    })}{" "}
-                    · {event.durationMinutes} min
+                    {new Date(event.startsAt).toLocaleString(undefined, { timeZone: SOURCE_TIME_ZONE, timeZoneName: "short" })} · {event.durationMinutes} min
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Audience:{" "}
-                    {event.tagIds.length === 0
+                    Audience: {event.tagIds.length === 0
                       ? "All coaching students"
-                      : event.tagIds
-                          .map((id) => tagNameById.get(id) ?? "Unknown tag")
-                          .join(", ")}
+                      : event.tagIds.map((id) => tagNameById.get(id) ?? "Unknown tag").join(", ")}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
