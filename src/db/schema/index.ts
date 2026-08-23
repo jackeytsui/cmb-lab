@@ -50,3 +50,4 @@ export * from "./assignments";
 export * from "./beta-feedback";
 export * from "./student-media-uploads";
 export * from "./videoask";
+export * from "./announcements";

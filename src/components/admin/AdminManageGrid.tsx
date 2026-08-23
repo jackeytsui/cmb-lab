@@ -16,6 +16,7 @@ import {
   LibraryBig,
   ListChecks,
   MessageSquareCode,
+  Megaphone,
   PlugZap,
   ScrollText,
   ShieldCheck,
@@ -74,6 +75,7 @@ const ITEM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
   ghl: PlugZap,
   "dev-toolkit": Wrench,
   migration: FileKey2,
+  announcements: Megaphone,
 };
 
 const SECTION_DESCRIPTIONS: Record<string, string> = {

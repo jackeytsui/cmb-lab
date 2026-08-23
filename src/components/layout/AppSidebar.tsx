@@ -30,6 +30,7 @@ import {
   CalendarCheck,
   CalendarDays,
   NotebookPen,
+  Megaphone,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
 
@@ -61,6 +62,7 @@ type FeatureKey =
 
 type NavItemWithFeature = NavSection["items"][number] & {
   featureKey?: FeatureKey;
+  minRole?: Roles;
 };
 type NavSectionWithRoleAndFeature = Omit<NavSectionWithRole, "items"> & {
   items: NavItemWithFeature[];
@@ -242,6 +244,12 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     minRole: "coach",
     items: [
       { title: "Admin Portal", url: "/admin/manage", icon: LayoutDashboard },
+      {
+        title: "Announcements",
+        url: "/admin/announcements",
+        icon: Megaphone,
+        minRole: "admin",
+      },
     ],
   },
 ];
@@ -267,6 +275,10 @@ export function AppSidebar({
     )
     .map((section) => {
       const items = section.items
+        .filter(
+          (item) =>
+            !item.minRole || userLevel >= roleHierarchy.indexOf(item.minRole),
+        )
         .filter((item) => !item.featureKey || featureSet.has(item.featureKey))
         .map((item) =>
           item.url === "/dashboard/assignment-feedback"

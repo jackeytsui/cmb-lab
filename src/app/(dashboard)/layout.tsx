@@ -12,8 +12,8 @@ import { NotificationBellClient } from "@/components/notifications/NotificationB
 import { RouteThemeScope } from "@/components/layout/RouteThemeScope";
 import type { Roles } from "@/types/globals";
 import { db } from "@/db";
-import { assignmentSubmissions, users } from "@/db/schema";
-import { and, count, eq, isNull } from "drizzle-orm";
+import { announcements, assignmentSubmissions, users } from "@/db/schema";
+import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { FEATURE_KEYS, resolvePermissions } from "@/lib/permissions";
 import { DEFAULT_STUDENT_FEATURES, ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { resolveRoleFromEmail } from "@/lib/access-control";
@@ -25,6 +25,7 @@ import {
 import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 import { LabAssistantWidget } from "@/components/lab-assistant/LabAssistantWidget";
 import { StudentContentGuard } from "@/components/layout/StudentContentGuard";
+import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
 import { assignBaselineCoachingTagsToStudents } from "@/lib/coaching-access";
 
 export const dynamic = "force-dynamic";
@@ -212,11 +213,10 @@ export default async function DashboardLayout({
       : enabledFeatures.filter((f) => f !== "course_library");
   }
 
-  // Unread reviewed-assignment feedback count for the sidebar badge.
-  let assignmentFeedbackUnread = 0;
-  if (dbUser) {
-    try {
-      const [unread] = await db
+  // These independent shell-level reads run together to avoid delaying every
+  // dashboard navigation with a query waterfall.
+  const assignmentFeedbackPromise = dbUser
+    ? db
         .select({ value: count() })
         .from(assignmentSubmissions)
         .where(
@@ -225,13 +225,31 @@ export default async function DashboardLayout({
             eq(assignmentSubmissions.status, "reviewed"),
             isNull(assignmentSubmissions.studentViewedAt),
           ),
-        );
-      assignmentFeedbackUnread = unread?.value ?? 0;
-    } catch {
-      // Table may not exist yet before the migration is deployed.
-      assignmentFeedbackUnread = 0;
-    }
-  }
+        )
+        .then(([unread]) => unread?.value ?? 0)
+        .catch(() => 0)
+    : Promise.resolve(0);
+
+  const activeAnnouncementPromise = db.query.announcements
+    .findFirst({
+        where: eq(announcements.isActive, true),
+        orderBy: [desc(announcements.publishedAt)],
+        columns: {
+          id: true,
+          title: true,
+          body: true,
+          linkUrl: true,
+          linkLabel: true,
+        },
+      })
+    .then((announcement) => announcement ?? null)
+    // Deploys remain usable while the announcement migration is being applied.
+    .catch(() => null);
+
+  const [assignmentFeedbackUnread, activeAnnouncement] = await Promise.all([
+    assignmentFeedbackPromise,
+    activeAnnouncementPromise,
+  ]);
 
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
@@ -251,7 +269,7 @@ export default async function DashboardLayout({
           enabledFeatures={enabledFeatures}
           assignmentFeedbackUnread={assignmentFeedbackUnread}
         />
-        <SidebarInset>
+        <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-3 sm:px-4">
           {/* Mobile hamburger - only visible on small screens where sidebar is a drawer */}
           <SidebarTrigger className="size-9 shrink-0 rounded-md text-muted-foreground hover:text-foreground md:hidden" />
@@ -261,7 +279,10 @@ export default async function DashboardLayout({
             <NotificationBellClient />
           </div>
         </header>
-        <div className="flex-1 overflow-auto">
+        {activeAnnouncement ? (
+          <AnnouncementBanner announcement={activeAnnouncement} />
+        ) : null}
+        <div className="min-w-0 flex-1 overflow-auto">
           <RouteThemeScope>{children}</RouteThemeScope>
         </div>
         </SidebarInset>

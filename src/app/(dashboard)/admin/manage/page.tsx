@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { ArrowRight, Megaphone } from "lucide-react";
 import { hasMinimumRole, checkRole } from "@/lib/auth";
 import { AdminManageGrid, type PortalSection } from "@/components/admin/AdminManageGrid";
 
@@ -27,6 +29,7 @@ const allSections: PortalSection[] = [
     id: "content",
     title: "Content",
     items: [
+      { id: "announcements", title: "Announcements", href: "/admin/announcements", description: "Post a Lab-wide banner and notify every active user." },
       { id: "courses", title: "Courses", href: "/admin/courses", description: "Manage courses, modules, lessons, and publication." },
       { id: "course-library", title: "Course Library", href: "/admin/course-library", description: "Build the student-facing course roadmap, modules, and lessons." },
       { id: "exercises", title: "Exercises", href: "/admin/exercises", description: "Practice bank and assignment flows." },
@@ -114,6 +117,30 @@ export default async function AdminManagePortalPage() {
           </div>
         </div>
       </header>
+
+      {isAdmin ? (
+        <Link
+          href="/admin/announcements"
+          className="group mb-8 flex flex-col gap-4 overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-700 via-violet-700 to-fuchsia-700 p-5 text-white shadow-lg shadow-indigo-950/15 transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 sm:flex-row sm:items-center sm:p-6"
+        >
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white text-indigo-700 shadow-md">
+            <Megaphone className="size-6" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-bold uppercase tracking-[0.16em] text-indigo-100">
+              Reach everyone
+            </span>
+            <span className="mt-1 block text-xl font-bold">Broadcast an announcement</span>
+            <span className="mt-1 block text-sm leading-6 text-white/85">
+              Put an unmistakable banner across CMB Lab and send notifications to every active user.
+            </span>
+          </span>
+          <span className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold text-indigo-700">
+            Post now
+            <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+          </span>
+        </Link>
+      ) : null}
 
       <AdminManageGrid sections={sections} />
     </div>

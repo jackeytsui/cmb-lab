@@ -151,3 +151,49 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 });
+
+// Admin announcements can reach opted-in users even when CMB Lab is not open.
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "" };
+  }
+
+  const title = payload.title || "New CMB Lab announcement";
+  const options = {
+    body: payload.body || "Open CMB Lab to see the latest update.",
+    icon: "/icon-192x192.png",
+    badge: "/icon-192x192.png",
+    tag: payload.tag || "cmb-lab-announcement",
+    renotify: true,
+    data: { url: payload.url || "/dashboard" },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const requestedUrl = event.notification.data?.url || "/dashboard";
+  const targetUrl = new URL(requestedUrl, self.location.origin);
+  const safeUrl =
+    targetUrl.origin === self.location.origin
+      ? targetUrl.href
+      : new URL("/dashboard", self.location.origin).href;
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        const existing = clients.find((client) =>
+          client.url.startsWith(self.location.origin),
+        );
+        if (existing) {
+          return existing.focus().then(() => existing.navigate(safeUrl));
+        }
+        return self.clients.openWindow(safeUrl);
+      }),
+  );
+});
