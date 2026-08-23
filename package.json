@@ -104,6 +104,8 @@
     "@clerk/testing": "^1.13.33",
     "@playwright/test": "^1.58.0",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20.19.30",
     "@types/opencc-js": "^1.0.3",

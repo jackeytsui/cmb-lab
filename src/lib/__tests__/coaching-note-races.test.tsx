@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   mergeSessionsAfterRefresh,
+  shouldCommitCoachingDraft,
   useProcessedText,
 } from "@/app/(dashboard)/dashboard/coaching/CoachingMaterialClient";
 
@@ -81,6 +82,41 @@ afterEach(() => {
 });
 
 describe("coaching note refresh races", () => {
+  it("does not submit Chinese IME candidate confirmation as a completed note", () => {
+    expect(
+      shouldCommitCoachingDraft({
+        key: "Enter",
+        shiftKey: false,
+        isComposing: true,
+        keyCode: 13,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCommitCoachingDraft({
+        key: "Enter",
+        shiftKey: false,
+        isComposing: false,
+        keyCode: 229,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCommitCoachingDraft({
+        key: "Enter",
+        shiftKey: false,
+        isComposing: false,
+        keyCode: 13,
+      }),
+    ).toBe(true);
+    expect(
+      shouldCommitCoachingDraft({
+        key: "Enter",
+        shiftKey: true,
+        isComposing: false,
+        keyCode: 13,
+      }),
+    ).toBe(false);
+  });
+
   it("preserves both unsaved drafts when the polling response refreshes sessions", () => {
     const previous = session({
       mandarin: {

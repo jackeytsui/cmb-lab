@@ -177,6 +177,23 @@ export function mergeSessionsAfterRefresh(
   });
 }
 
+export function shouldCommitCoachingDraft({
+  key,
+  shiftKey,
+  isComposing,
+  keyCode,
+}: {
+  key: string;
+  shiftKey: boolean;
+  isComposing: boolean;
+  keyCode: number;
+}): boolean {
+  // Enter confirms the active candidate in Chinese IMEs. Treating that key as
+  // submit clears the controlled textarea mid-composition. keyCode 229 is the
+  // compatibility fallback for browsers that end composition before keydown.
+  return key === "Enter" && !shiftKey && !isComposing && keyCode !== 229;
+}
+
 export function useProcessedText({
   committedText,
   scriptMode,
@@ -3016,7 +3033,14 @@ function CoachingPanel({
               }}
               onKeyDown={(e) => {
                 if (!canWrite) return;
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (
+                  shouldCommitCoachingDraft({
+                    key: e.key,
+                    shiftKey: e.shiftKey,
+                    isComposing: e.nativeEvent.isComposing,
+                    keyCode: e.nativeEvent.keyCode,
+                  })
+                ) {
                   e.preventDefault();
                   if (activeSession) {
                     handleCommitText(activeSession.id, "mandarin", mandarinDraft);
@@ -3330,7 +3354,14 @@ function CoachingPanel({
               }}
               onKeyDown={(e) => {
                 if (!canWrite) return;
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (
+                  shouldCommitCoachingDraft({
+                    key: e.key,
+                    shiftKey: e.shiftKey,
+                    isComposing: e.nativeEvent.isComposing,
+                    keyCode: e.nativeEvent.keyCode,
+                  })
+                ) {
                   e.preventDefault();
                   if (activeSession) {
                     handleCommitText(activeSession.id, "cantonese", cantoneseDraft);
