@@ -8,7 +8,9 @@ import {
   courseLibraryLessons,
   courseLibraryModules,
 } from "@/db/schema";
-import { isUuid } from "@/lib/uuid";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const COURSE_TITLES = {
   Foundations: "The Canto to Mando Blueprint - Foundations",
@@ -35,7 +37,7 @@ function isProgressRecord(value: unknown): value is ProgressRecord {
   const record = value as Partial<ProgressRecord>;
   return (
     typeof record.studentId === "string" &&
-    isUuid(record.studentId) &&
+    UUID_PATTERN.test(record.studentId) &&
     typeof record.email === "string" &&
     typeof record.contactId === "string" &&
     typeof record.course === "string" &&
