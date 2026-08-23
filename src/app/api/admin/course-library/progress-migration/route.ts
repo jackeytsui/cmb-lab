@@ -1,0 +1,285 @@
+import { NextRequest, NextResponse } from "next/server";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { hasMinimumRole } from "@/lib/auth";
+import { db, getNeonSql } from "@/db";
+import {
+  courseLibraryCourses,
+  courseLibraryLessonProgress,
+  courseLibraryLessons,
+  courseLibraryModules,
+} from "@/db/schema";
+import { isUuid } from "@/lib/uuid";
+
+const COURSE_TITLES = {
+  Foundations: "The Canto to Mando Blueprint - Foundations",
+  Intermediate: "The Canto to Mando Blueprint - Intermediate",
+  Advanced: "The Canto to Mando Blueprint - Advanced",
+} as const;
+
+type CourseLevel = keyof typeof COURSE_TITLES;
+
+interface ProgressRecord {
+  studentId: string;
+  email: string;
+  contactId: string;
+  course: CourseLevel;
+  modules: Array<{ title: string; percent: number }>;
+}
+
+function normalizeTitle(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
+function isProgressRecord(value: unknown): value is ProgressRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<ProgressRecord>;
+  return (
+    typeof record.studentId === "string" &&
+    isUuid(record.studentId) &&
+    typeof record.email === "string" &&
+    typeof record.contactId === "string" &&
+    typeof record.course === "string" &&
+    record.course in COURSE_TITLES &&
+    Array.isArray(record.modules) &&
+    record.modules.every(
+      (module) =>
+        module &&
+        typeof module.title === "string" &&
+        Number.isInteger(module.percent) &&
+        module.percent >= 0 &&
+        module.percent <= 100,
+    )
+  );
+}
+
+export async function POST(request: NextRequest) {
+  if (!(await hasMinimumRole("admin"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = (await request.json()) as {
+    apply?: boolean;
+    records?: unknown[];
+  };
+  const apply = body.apply === true;
+  const records = body.records ?? [];
+
+  if (
+    !Array.isArray(records) ||
+    records.length === 0 ||
+    records.length > 500 ||
+    !records.every(isProgressRecord)
+  ) {
+    return NextResponse.json(
+      { error: "Invalid migration payload" },
+      { status: 400 },
+    );
+  }
+
+  const targetTitles = Object.values(COURSE_TITLES);
+  const structure = await db
+    .select({
+      courseId: courseLibraryCourses.id,
+      courseTitle: courseLibraryCourses.title,
+      allowedUserIds: courseLibraryCourses.allowedUserIds,
+      moduleId: courseLibraryModules.id,
+      moduleTitle: courseLibraryModules.title,
+      lessonId: courseLibraryLessons.id,
+    })
+    .from(courseLibraryCourses)
+    .innerJoin(
+      courseLibraryModules,
+      and(
+        eq(courseLibraryModules.courseId, courseLibraryCourses.id),
+        isNull(courseLibraryModules.deletedAt),
+      ),
+    )
+    .innerJoin(
+      courseLibraryLessons,
+      and(
+        eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
+        isNull(courseLibraryLessons.deletedAt),
+      ),
+    )
+    .where(
+      and(
+        inArray(courseLibraryCourses.title, targetTitles),
+        isNull(courseLibraryCourses.deletedAt),
+      ),
+    );
+
+  const courses = new Map<
+    CourseLevel,
+    {
+      id: string;
+      allowedUserIds: Set<string>;
+      modules: Map<string, { id: string; title: string; lessonIds: string[] }>;
+    }
+  >();
+
+  for (const level of Object.keys(COURSE_TITLES) as CourseLevel[]) {
+    const rows = structure.filter(
+      (row) => row.courseTitle === COURSE_TITLES[level],
+    );
+    if (!rows.length) continue;
+    const modules = new Map<
+      string,
+      { id: string; title: string; lessonIds: string[] }
+    >();
+    for (const row of rows) {
+      const key = normalizeTitle(row.moduleTitle);
+      const courseModule = modules.get(key) ?? {
+        id: row.moduleId,
+        title: row.moduleTitle,
+        lessonIds: [],
+      };
+      courseModule.lessonIds.push(row.lessonId);
+      modules.set(key, courseModule);
+    }
+    courses.set(level, {
+      id: rows[0].courseId,
+      allowedUserIds: new Set(rows[0].allowedUserIds ?? []),
+      modules,
+    });
+  }
+
+  const accessPairs = new Map<string, { courseId: string; userId: string }>();
+  const completionPairs = new Map<
+    string,
+    { userId: string; lessonId: string }
+  >();
+  const unresolvedModules: Array<{
+    email: string;
+    course: CourseLevel;
+    module: string;
+    percent: number;
+    reason: "partial" | "unmatched";
+  }> = [];
+
+  for (const record of records) {
+    const course = courses.get(record.course);
+    if (!course) {
+      return NextResponse.json(
+        { error: `CMB course not found: ${record.course}` },
+        { status: 409 },
+      );
+    }
+    accessPairs.set(`${course.id}:${record.studentId}`, {
+      courseId: course.id,
+      userId: record.studentId,
+    });
+
+    for (const sourceModule of record.modules) {
+      const courseModule = course.modules.get(normalizeTitle(sourceModule.title));
+      if (!courseModule) {
+        unresolvedModules.push({
+          email: record.email,
+          course: record.course,
+          module: sourceModule.title,
+          percent: sourceModule.percent,
+          reason: "unmatched",
+        });
+        continue;
+      }
+      if (sourceModule.percent !== 100) {
+        if (sourceModule.percent > 0) {
+          unresolvedModules.push({
+            email: record.email,
+            course: record.course,
+            module: sourceModule.title,
+            percent: sourceModule.percent,
+            reason: "partial",
+          });
+        }
+        continue;
+      }
+      for (const lessonId of courseModule.lessonIds) {
+        completionPairs.set(`${record.studentId}:${lessonId}`, {
+          userId: record.studentId,
+          lessonId,
+        });
+      }
+    }
+  }
+
+  const accessToAdd = [...accessPairs.values()].filter((pair) => {
+    const course = [...courses.values()].find(
+      (candidate) => candidate.id === pair.courseId,
+    );
+    return !course?.allowedUserIds.has(pair.userId);
+  });
+  const completionCandidates = [...completionPairs.values()];
+  const existingProgress = completionCandidates.length
+    ? await db
+        .select({
+          userId: courseLibraryLessonProgress.userId,
+          lessonId: courseLibraryLessonProgress.lessonId,
+          completedAt: courseLibraryLessonProgress.completedAt,
+        })
+        .from(courseLibraryLessonProgress)
+        .where(
+          inArray(
+            courseLibraryLessonProgress.userId,
+            [...new Set(completionCandidates.map((pair) => pair.userId))],
+          ),
+        )
+    : [];
+  const completedKeys = new Set(
+    existingProgress
+      .filter((row) => row.completedAt)
+      .map((row) => `${row.userId}:${row.lessonId}`),
+  );
+  const completionsToAdd = completionCandidates.filter(
+    (pair) => !completedKeys.has(`${pair.userId}:${pair.lessonId}`),
+  );
+
+  if (apply) {
+    const sql = getNeonSql();
+    for (const pair of accessToAdd) {
+      await sql`
+        UPDATE course_library_courses
+        SET allowed_user_ids = CASE
+          WHEN COALESCE(allowed_user_ids, '[]'::jsonb) @> ${JSON.stringify([
+            pair.userId,
+          ])}::jsonb
+            THEN COALESCE(allowed_user_ids, '[]'::jsonb)
+          ELSE COALESCE(allowed_user_ids, '[]'::jsonb) || ${JSON.stringify([
+            pair.userId,
+          ])}::jsonb
+        END,
+        updated_at = NOW()
+        WHERE id = ${pair.courseId}::uuid
+      `;
+    }
+    for (const pair of completionsToAdd) {
+      await sql`
+        INSERT INTO course_library_lesson_progress
+          (user_id, lesson_id, completed_at, video_watched_percent, started_at, updated_at)
+        VALUES
+          (${pair.userId}::uuid, ${pair.lessonId}::uuid, NOW(), 0, NOW(), NOW())
+        ON CONFLICT (user_id, lesson_id) DO UPDATE
+        SET completed_at = COALESCE(
+          course_library_lesson_progress.completed_at,
+          EXCLUDED.completed_at
+        ),
+        updated_at = NOW()
+      `;
+    }
+  }
+
+  return NextResponse.json({
+    mode: apply ? "applied" : "dry-run",
+    sourceRecords: records.length,
+    students: new Set(records.map((record) => record.studentId)).size,
+    accessGrants: {
+      candidates: accessPairs.size,
+      toAdd: accessToAdd.length,
+    },
+    completions: {
+      candidates: completionCandidates.length,
+      toAdd: completionsToAdd.length,
+      alreadyComplete: completionCandidates.length - completionsToAdd.length,
+    },
+    unresolvedModules,
+  });
+}
