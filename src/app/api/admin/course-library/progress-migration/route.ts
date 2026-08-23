@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { hasMinimumRole } from "@/lib/auth";
 import { db, getNeonSql } from "@/db";
 import {
@@ -106,6 +106,11 @@ export async function POST(request: NextRequest) {
         inArray(courseLibraryCourses.title, targetTitles),
         isNull(courseLibraryCourses.deletedAt),
       ),
+    )
+    .orderBy(
+      asc(courseLibraryCourses.sortOrder),
+      asc(courseLibraryModules.sortOrder),
+      asc(courseLibraryLessons.sortOrder),
     );
 
   const courses = new Map<
@@ -113,6 +118,7 @@ export async function POST(request: NextRequest) {
     {
       id: string;
       allowedUserIds: Set<string>;
+      moduleList: Array<{ id: string; title: string; lessonIds: string[] }>;
       modules: Map<string, { id: string; title: string; lessonIds: string[] }>;
     }
   >();
@@ -139,8 +145,39 @@ export async function POST(request: NextRequest) {
     courses.set(level, {
       id: rows[0].courseId,
       allowedUserIds: new Set(rows[0].allowedUserIds ?? []),
+      moduleList: [...modules.values()],
       modules,
     });
+  }
+
+  function resolveModules(
+    level: CourseLevel,
+    course: NonNullable<ReturnType<typeof courses.get>>,
+    sourceTitle: string,
+  ) {
+    const exact = course.modules.get(normalizeTitle(sourceTitle));
+    if (exact) return [exact];
+
+    const aliases: Record<CourseLevel, Record<string, [number, number]>> = {
+      Foundations: {
+        [normalizeTitle("Chapter 4: Basic Mandarin I")]: [3, 14],
+        [normalizeTitle("Chapter 5: Basic Mandarin II")]: [15, 22],
+        [normalizeTitle("Chapter 6: Basic Mandarin III")]: [23, 31],
+      },
+      Intermediate: {
+        [normalizeTitle("Chapter 6.5 - A 'CHANGE' Before Intermediate")]: [0, 2],
+        [normalizeTitle("Chapter 7: Intermediate Mandarin I")]: [3, 10],
+        [normalizeTitle("Chapter 8: Intermediate Mandarin II")]: [11, 18],
+        [normalizeTitle("Chapter 9: Intermediate III")]: [19, 28],
+      },
+      Advanced: {
+        [normalizeTitle("Chapter 10: Advanced I")]: [0, 8],
+        [normalizeTitle("Chapter 11: Advanced II")]: [9, 16],
+        [normalizeTitle("Chapter 12: Advanced III")]: [17, 21],
+      },
+    };
+    const range = aliases[level][normalizeTitle(sourceTitle)];
+    return range ? course.moduleList.slice(range[0], range[1] + 1) : [];
   }
 
   const accessPairs = new Map<string, { courseId: string; userId: string }>();
@@ -155,6 +192,11 @@ export async function POST(request: NextRequest) {
     percent: number;
     reason: "partial" | "unmatched";
   }> = [];
+  const invalidRecords: Array<{
+    email: string;
+    course: CourseLevel;
+    reason: "no-recognized-modules";
+  }> = [];
 
   for (const record of records) {
     const course = courses.get(record.course);
@@ -164,14 +206,26 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       );
     }
+    const resolved = record.modules.map((sourceModule) => ({
+      sourceModule,
+      courseModules: resolveModules(record.course, course, sourceModule.title),
+    }));
+    if (!resolved.some((entry) => entry.courseModules.length > 0)) {
+      invalidRecords.push({
+        email: record.email,
+        course: record.course,
+        reason: "no-recognized-modules",
+      });
+      continue;
+    }
+
     accessPairs.set(`${course.id}:${record.studentId}`, {
       courseId: course.id,
       userId: record.studentId,
     });
 
-    for (const sourceModule of record.modules) {
-      const courseModule = course.modules.get(normalizeTitle(sourceModule.title));
-      if (!courseModule) {
+    for (const { sourceModule, courseModules } of resolved) {
+      if (!courseModules.length) {
         unresolvedModules.push({
           email: record.email,
           course: record.course,
@@ -193,11 +247,13 @@ export async function POST(request: NextRequest) {
         }
         continue;
       }
-      for (const lessonId of courseModule.lessonIds) {
-        completionPairs.set(`${record.studentId}:${lessonId}`, {
-          userId: record.studentId,
-          lessonId,
-        });
+      for (const courseModule of courseModules) {
+        for (const lessonId of courseModule.lessonIds) {
+          completionPairs.set(`${record.studentId}:${lessonId}`, {
+            userId: record.studentId,
+            lessonId,
+          });
+        }
       }
     }
   }
@@ -281,5 +337,6 @@ export async function POST(request: NextRequest) {
       alreadyComplete: completionCandidates.length - completionsToAdd.length,
     },
     unresolvedModules,
+    invalidRecords,
   });
 }
