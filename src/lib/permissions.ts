@@ -44,8 +44,8 @@ export const FEATURE_KEYS = [
   // This is intentionally not a default student feature: package/tier tags
   // grant it only to cohorts that include coach feedback.
   "assignment_feedback",
-  // CMB Lab Assistant support chatbot widget. Staff always see it; students
-  // need this feature via a whitelist tag (Tag Management).
+  // Legacy permission key retained for existing role/tag records. The support
+  // widget itself is now a baseline service for every active signed-in user.
   "lab_assistant",
   // Reviewer capability: grants access to Admin > Content > Assignment
   // Submissions for text assignments ("Challenge Reviewer" role bundle).
