@@ -24,6 +24,15 @@ export interface ResolveCoachAssignmentInput {
   ghlCoachName: string | null;
 }
 
+/** Reject notes, URLs, emails, and other corrupted values stored as names. */
+export function normalizeCoachDisplayName(value: string | null): string | null {
+  const name = value?.trim().replace(/\s+/g, " ") || "";
+  if (!name || name.length > 80) return null;
+  if (name.split(" ").length > 6) return null;
+  if (/https?:\/\/|www\.|@|[!?;{}<>]/i.test(name)) return null;
+  return name;
+}
+
 /**
  * Resolve coach data without guessing. The CMB Lab assignment is canonical;
  * GHL remains a backwards-compatible fallback only when no CMB Lab coach has
@@ -35,14 +44,15 @@ export function resolveCoachAssignment({
   internalLookupFailed = false,
   ghlCoachName,
 }: ResolveCoachAssignmentInput): CoachAssignment {
-  const legacyName = ghlCoachName?.trim() || null;
+  const legacyRawName = ghlCoachName?.trim() || null;
+  const legacyName = normalizeCoachDisplayName(ghlCoachName);
 
   if (assignedCoachId) {
     if (internalLookupFailed) {
       return { status: "unavailable", name: null, source: null };
     }
 
-    const internalName = internalCoach?.name?.trim() || null;
+    const internalName = normalizeCoachDisplayName(internalCoach?.name ?? null);
     const isEligibleCoach =
       internalCoach?.deletedAt === null &&
       (internalCoach.role === "coach" || internalCoach.role === "admin");
@@ -62,6 +72,10 @@ export function resolveCoachAssignment({
 
   if (legacyName) {
     return { status: "assigned", name: legacyName, source: "ghl" };
+  }
+
+  if (legacyRawName) {
+    return { status: "unavailable", name: null, source: null };
   }
 
   return { status: "unassigned", name: null, source: "cmb_lab" };

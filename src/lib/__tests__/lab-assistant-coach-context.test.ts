@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   coachAssignmentReply,
   isDirectCoachLookup,
+  normalizeCoachDisplayName,
   resolveCoachAssignment,
   type InternalCoachCandidate,
 } from "@/lib/lab-assistant/coach-context";
@@ -124,6 +125,45 @@ describe("coach assignment resolution — ten fictional students", () => {
         ghlCoachName: "Jane Ip",
       }).status,
     ).toBe("unavailable");
+  });
+
+  it("rejects a sentence accidentally stored as an internal coach name", () => {
+    expect(
+      resolveCoachAssignment({
+        assignedCoachId: "corrupted-coach",
+        internalCoach: coach(
+          "This student needs more customized topics for him to improve his mandarin xyzzcasdffefw",
+          "admin",
+        ),
+        ghlCoachName: null,
+      }),
+    ).toEqual({ status: "unavailable", name: null, source: null });
+  });
+
+  it("treats a malformed legacy coach value as unavailable", () => {
+    expect(
+      resolveCoachAssignment({
+        assignedCoachId: null,
+        internalCoach: null,
+        ghlCoachName: "Student needs a custom plan and more speaking topics",
+      }).status,
+    ).toBe("unavailable");
+  });
+});
+
+describe("coach display-name validation", () => {
+  it.each(["Jane Ip", "Dr. Jane Ip", "Mary-Jane O'Connor", "陳老師"])(
+    "accepts a plausible coach name: %s",
+    (name) => expect(normalizeCoachDisplayName(name)).toBe(name),
+  );
+
+  it.each([
+    "This student needs more customized topics for him to improve Mandarin",
+    "https://example.com/coach",
+    "coach@example.com",
+    "Who is the coach?",
+  ])("rejects a malformed coach name: %s", (name) => {
+    expect(normalizeCoachDisplayName(name)).toBeNull();
   });
 });
 
