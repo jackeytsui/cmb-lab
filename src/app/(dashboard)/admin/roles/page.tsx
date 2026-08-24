@@ -223,7 +223,7 @@ function PlatformRoleCard({ platformRole }: { platformRole: PlatformRole }) {
             Feature Access
             {hasLockedFullAccess && (
               <span className="ml-2 normal-case font-normal">
-                (all features enabled for {platformRole.label.toLowerCase()}s)
+                (all features enabled for this role)
               </span>
             )}
           </p>
