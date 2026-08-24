@@ -6,6 +6,7 @@ import {
   hasFullFeatureAccess,
   hasMinimumPlatformRole,
   normalizePlatformRole,
+  resolveNonDowngradingPlatformRole,
 } from "@/lib/platform-roles";
 
 describe("platform roles", () => {
@@ -54,5 +55,12 @@ describe("platform roles", () => {
     expect(normalizePlatformRole("operations")).toBe("operations");
     expect(normalizePlatformRole("manager")).toBeNull();
     expect(normalizePlatformRole(undefined)).toBeNull();
+  });
+
+  it("never lets stale invitation metadata downgrade an existing staff role", () => {
+    expect(resolveNonDowngradingPlatformRole("coach", "student")).toBe("coach");
+    expect(resolveNonDowngradingPlatformRole("admin", "coach")).toBe("admin");
+    expect(resolveNonDowngradingPlatformRole("coach", "operations")).toBe("coach");
+    expect(resolveNonDowngradingPlatformRole("student", "coach")).toBe("coach");
   });
 });

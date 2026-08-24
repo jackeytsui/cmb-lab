@@ -13,6 +13,7 @@ import { assignTag } from "@/lib/tags";
 import {
   hasHigherPlatformAccess,
   normalizePlatformRole,
+  resolveNonDowngradingPlatformRole,
   type PlatformRole,
 } from "@/lib/platform-roles";
 
@@ -87,8 +88,18 @@ async function applyInvitationMetadataToUser(
 
   const normalizedRole = normalizeRoleValue(inviteRoleRaw);
   if (normalizedRole) {
-    await db.update(users).set({ role: normalizedRole }).where(eq(users.id, userId));
-    if (normalizedRole === "student") {
+    const existingUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { role: true },
+    });
+    const effectiveRole = existingUser
+      ? resolveNonDowngradingPlatformRole(existingUser.role, normalizedRole)
+      : normalizedRole;
+
+    if (!existingUser || effectiveRole !== existingUser.role) {
+      await db.update(users).set({ role: effectiveRole }).where(eq(users.id, userId));
+    }
+    if (effectiveRole === "student") {
       await ensureDefaultStudentRoleAssignment(userId);
     }
   } else if (typeof inviteRoleRaw === "string" && inviteRoleRaw.trim()) {

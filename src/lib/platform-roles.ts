@@ -118,6 +118,16 @@ export function hasHigherPlatformAccess(
   return Boolean(candidate && current && candidate.accessLevel > current.accessLevel);
 }
 
+/** Preserve an existing role unless the candidate strictly raises access. */
+export function resolveNonDowngradingPlatformRole(
+  currentRole: PlatformRole,
+  candidateRole: PlatformRole,
+): PlatformRole {
+  return hasHigherPlatformAccess(candidateRole, currentRole)
+    ? candidateRole
+    : currentRole;
+}
+
 export function hasFullFeatureAccess(role: unknown): boolean {
   return getPlatformRoleDefinition(role)?.featureAccess === "full";
 }
