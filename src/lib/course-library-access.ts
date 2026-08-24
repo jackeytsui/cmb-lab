@@ -1,4 +1,5 @@
 import type { CourseLibraryCourseStatus } from "@/db/schema/course-library";
+import { isStaffRole } from "@/lib/platform-roles";
 
 // ---------------------------------------------------------------------------
 // Course Library visibility.
@@ -15,7 +16,7 @@ import type { CourseLibraryCourseStatus } from "@/db/schema/course-library";
 export function isCourseLibraryStaff(
   role: string | null | undefined,
 ): boolean {
-  return role === "admin" || role === "coach";
+  return isStaffRole(role);
 }
 
 /** Course statuses visible on the student-facing library for this viewer. */

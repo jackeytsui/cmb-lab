@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getRealUser } from "@/lib/auth";
 import { sanitizeRecordingUrl } from "@/lib/recording-embed";
+import { isStaffRole } from "@/lib/platform-roles";
 
 const optionalHttpUrlSchema = z
   .union([z.string().trim().max(2_000), z.null()])
@@ -34,7 +35,7 @@ export async function PATCH(
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (dbUser.role !== "coach" && dbUser.role !== "admin") {
+  if (!isStaffRole(dbUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -94,7 +95,7 @@ export async function DELETE(
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (dbUser.role !== "coach" && dbUser.role !== "admin") {
+  if (!isStaffRole(dbUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

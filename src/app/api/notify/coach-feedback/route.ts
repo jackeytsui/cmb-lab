@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getRealUser } from "@/lib/auth";
 import { sendCoachFeedbackNotification } from "@/lib/coach-feedback-notification";
+import { isStaffRole } from "@/lib/platform-roles";
 
 const notificationSchema = z.object({
   studentEmail: z.string().email().max(320),
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   if (!user || user.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (user.role !== "coach" && user.role !== "admin") {
+  if (!isStaffRole(user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

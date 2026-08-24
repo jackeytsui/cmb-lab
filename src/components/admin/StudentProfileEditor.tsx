@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-type UserRole = "student" | "coach" | "admin";
+import {
+  PLATFORM_ROLE_OPTIONS,
+  type PlatformRole,
+} from "@/lib/platform-roles";
 
 export function StudentProfileEditor({
   studentId,
@@ -15,14 +17,14 @@ export function StudentProfileEditor({
   studentId: string;
   initialName: string | null;
   initialEmail: string;
-  initialRole: UserRole;
+  initialRole: PlatformRole;
 }) {
   const [firstName, setFirstName] = useState((initialName || "").split(" ")[0] || "");
   const [lastName, setLastName] = useState(
     (initialName || "").split(" ").slice(1).join(" ") || ""
   );
   const [email, setEmail] = useState(initialEmail);
-  const [role, setRole] = useState<UserRole>(initialRole);
+  const [role, setRole] = useState<PlatformRole>(initialRole);
   const [saving, setSaving] = useState(false);
 
   const onSave = async () => {
@@ -88,13 +90,15 @@ export function StudentProfileEditor({
           <label className="mb-1 block text-xs text-zinc-400">Role</label>
           <select
             value={role}
-            onChange={(e) => setRole(e.target.value as UserRole)}
+            onChange={(e) => setRole(e.target.value as PlatformRole)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             disabled={saving}
           >
-            <option value="student">Student</option>
-            <option value="coach">Coach</option>
-            <option value="admin">Admin</option>
+            {PLATFORM_ROLE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <p className="mt-1 text-[11px] text-zinc-500">
             Single role only. Use Tags below for labels/segments.

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { submissions, coachNotes } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
+import { isStaffRole } from "@/lib/platform-roles";
 
 const noteSchema = z.object({
   content: z.string().trim().min(1).max(20_000),
@@ -23,7 +24,7 @@ export async function POST(
   if (!currentUser || currentUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
@@ -103,7 +104,7 @@ export async function GET(
   if (!currentUser || currentUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
@@ -150,7 +151,7 @@ export async function DELETE(
   if (!currentUser || currentUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }

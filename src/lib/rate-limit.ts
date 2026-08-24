@@ -3,6 +3,7 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { NextResponse } from "next/server";
+import { isStaffRole } from "@/lib/platform-roles";
 
 // Safely initialize Redis (returns undefined if env vars are missing)
 let redis: Redis | undefined;
@@ -139,5 +140,5 @@ export function selectLimiter(
   standard: Ratelimit,
   elevated: Ratelimit
 ): Ratelimit {
-  return ["admin", "coach"].includes(role) ? elevated : standard;
+  return isStaffRole(role) ? elevated : standard;
 }

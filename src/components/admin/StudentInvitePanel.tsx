@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Mail, Send, Copy, CheckCircle2, AlertTriangle, Upload, ChevronDown } from "lucide-react";
+import {
+  PLATFORM_ROLE_OPTIONS,
+  type PlatformRole,
+} from "@/lib/platform-roles";
 
 type InviteResponse = {
   summary: { action: string; total: number; succeeded: number; failed: number };
@@ -218,7 +222,7 @@ export function StudentInvitePanel({
     "upload_only" | "upload_and_invite" | "resend_invite" | "remove_access" | ""
   >("");
   const [sendInviteEmails, setSendInviteEmails] = useState(false);
-  const [batchRole, setBatchRole] = useState<"" | "student" | "coach" | "admin">("student");
+  const [batchRole, setBatchRole] = useState<PlatformRole>("student");
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [previewEmail, setPreviewEmail] = useState("");
   const [previewFirstName, setPreviewFirstName] = useState("");
@@ -429,12 +433,14 @@ export function StudentInvitePanel({
           </label>
           <select
             value={batchRole}
-            onChange={(e) => setBatchRole(e.target.value as "" | "student" | "coach" | "admin")}
+            onChange={(e) => setBatchRole(e.target.value as PlatformRole)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <option value="student">Student</option>
-            <option value="coach">Coach</option>
-            <option value="admin">Admin</option>
+            {PLATFORM_ROLE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <div className="flex flex-wrap items-center gap-3">
             <label className="inline-flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">

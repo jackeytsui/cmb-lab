@@ -8,6 +8,7 @@ import { getRealUser } from "@/lib/auth";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 import { canAccessLesson, resolvePermissions } from "@/lib/permissions";
 import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 export const maxDuration = 60;
 
@@ -29,7 +30,7 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (user.role !== "admin" && user.role !== "coach") {
+  if (!hasFullFeatureAccess(user.role)) {
     const permissions = await resolvePermissions(user.id);
     if (!(await canAccessLesson(permissions, lessonId))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });

@@ -4,6 +4,7 @@ import { vocabularyListAssignments, vocabularyLists, users } from "@/db/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { getRealUser } from "@/lib/auth";
 import { z } from "zod";
+import { isStaffRole } from "@/lib/platform-roles";
 
 const assignListSchema = z.object({
   listId: z.string().uuid(),
@@ -14,7 +15,7 @@ const assignListSchema = z.object({
 export async function POST(req: Request) {
   const currentUser = await getRealUser();
   if (!currentUser) return new NextResponse("Unauthorized", { status: 401 });
-  if (currentUser.role !== "admin" && currentUser.role !== "coach") {
+  if (!isStaffRole(currentUser.role)) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 

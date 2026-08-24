@@ -8,6 +8,7 @@ import {
 import { and, eq, isNull, or, inArray } from "drizzle-orm";
 import { getStudentAssignmentTargets } from "@/lib/student-assignment-targets";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 type ThreadViewer = {
   id: string;
@@ -20,7 +21,7 @@ export async function canUserAccessVideoThread(
   threadId: string,
   courseLibraryLessonId?: string | null,
 ): Promise<boolean> {
-  if (user.role === "admin" || user.role === "coach") return true;
+  if (hasFullFeatureAccess(user.role)) return true;
 
   if (courseLibraryLessonId) {
     const [lesson] = await db

@@ -11,6 +11,7 @@ import {
 import { getRealUser } from "@/lib/auth";
 import { canAccessLesson, resolvePermissions } from "@/lib/permissions";
 import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 const bodySchema = z.object({
   submissionData: z.string().min(1).max(100_000), // JSON string
@@ -88,7 +89,7 @@ export async function POST(
   if (!isAssignmentType(lesson.lessonType)) {
     return NextResponse.json({ error: "Not an assignment lesson" }, { status: 400 });
   }
-  if (dbUser.role !== "admin" && dbUser.role !== "coach") {
+  if (!hasFullFeatureAccess(dbUser.role)) {
     const permissions = await resolvePermissions(dbUser.id);
     if (!(await canAccessLesson(permissions, lessonId))) {
       return NextResponse.json({ error: "Lesson not found" }, { status: 404 });

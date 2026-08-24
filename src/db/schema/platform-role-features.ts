@@ -12,7 +12,7 @@ export const platformRoleFeatures = pgTable(
   "platform_role_features",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    role: text("role").notNull(), // "student" | "coach" | "admin"
+    role: text("role").notNull(), // See PLATFORM_ROLES in src/lib/platform-roles.ts
     featureKey: text("feature_key").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },

@@ -9,6 +9,7 @@ import {
   canAccessLesson,
   resolvePermissions,
 } from "@/lib/permissions";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 const createConversationSchema = z.object({
   lessonId: z.string().uuid(),
@@ -142,7 +143,7 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
-    if (currentUser.role !== "admin" && currentUser.role !== "coach") {
+    if (!hasFullFeatureAccess(currentUser.role)) {
       const permissions = await resolvePermissions(currentUser.id);
       if (!(await canAccessLesson(permissions, lessonId))) {
         return NextResponse.json(

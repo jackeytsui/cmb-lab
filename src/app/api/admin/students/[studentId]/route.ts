@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { users, courseAccess, lessonProgress } from "@/db/schema";
 import { eq, sql, max } from "drizzle-orm";
 import { z } from "zod";
+import { PLATFORM_ROLES } from "@/lib/platform-roles";
 
 interface RouteParams {
   params: Promise<{ studentId: string }>;
@@ -14,7 +15,7 @@ const patchStudentSchema = z.object({
   firstName: z.string().trim().max(120).optional(),
   lastName: z.string().trim().max(120).optional(),
   email: z.string().trim().email(),
-  role: z.enum(["student", "coach", "admin"]),
+  role: z.enum(PLATFORM_ROLES),
 });
 
 /**

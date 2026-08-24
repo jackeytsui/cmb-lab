@@ -3,8 +3,12 @@ import { cookies } from "next/headers";
 import type { Roles } from "@/types/globals";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { resolveRoleFromEmail } from "@/lib/access-control";
+import {
+  hasMinimumPlatformRole,
+  normalizePlatformRole,
+} from "@/lib/platform-roles";
 
 function getClerkEmail(clerkUser: Awaited<ReturnType<typeof currentUser>>) {
   return (
@@ -15,7 +19,7 @@ function getClerkEmail(clerkUser: Awaited<ReturnType<typeof currentUser>>) {
 }
 
 function normalizeRole(value: unknown): Roles | null {
-  return value === "admin" || value === "coach" || value === "student" ? value : null;
+  return normalizePlatformRole(value);
 }
 
 function roleFromSessionClaims(sessionClaims: unknown): Roles | null {
@@ -47,16 +51,9 @@ async function resolveRole(): Promise<Roles> {
   if (userId) {
     const user = await db.query.users.findFirst({
       where: eq(users.clerkId, userId),
-      columns: { role: true },
+      columns: { role: true, deletedAt: true },
     });
-    if (user?.role === "admin" || user?.role === "coach") return user.role as Roles;
-    if (user?.role === "student") {
-      // Prevent stale DB role from downgrading known admins/coaches.
-      if (claimsRole) return claimsRole;
-      if (metadataRole) return metadataRole;
-      if (allowlistRole !== "student") return allowlistRole;
-      return "student";
-    }
+    if (user) return user.deletedAt ? "student" : user.role;
   }
 
   // Fallback: session claims (requires Clerk session token customization)
@@ -80,16 +77,12 @@ export async function checkRole(role: Roles): Promise<boolean> {
 
 /**
  * Check if the current user has at least the minimum required role
- * Role hierarchy: student < coach < admin
+ * Student < staff roles < admin. Peer staff roles share the same access level.
  */
 export async function hasMinimumRole(minimumRole: Roles): Promise<boolean> {
   const userRole = await resolveRole();
 
-  const roleHierarchy: Roles[] = ["student", "coach", "admin"];
-  const userLevel = roleHierarchy.indexOf(userRole);
-  const requiredLevel = roleHierarchy.indexOf(minimumRole);
-
-  return userLevel >= requiredLevel;
+  return hasMinimumPlatformRole(userRole, minimumRole);
 }
 
 /**
@@ -102,7 +95,7 @@ export async function getRealUser() {
   if (!userId) return null;
 
   return db.query.users.findFirst({
-    where: eq(users.clerkId, userId),
+    where: and(eq(users.clerkId, userId), isNull(users.deletedAt)),
   }) ?? null;
 }
 

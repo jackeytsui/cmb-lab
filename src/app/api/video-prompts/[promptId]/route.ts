@@ -11,6 +11,7 @@ import { z } from "zod";
 import { getRealUser } from "@/lib/auth";
 import { canUserAccessPracticeSet } from "@/lib/assignments";
 import { canAccessLesson, resolvePermissions } from "@/lib/permissions";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 // GET /api/video-prompts/[promptId]
 // Public or Student-facing route to get video prompt details
@@ -44,7 +45,7 @@ export async function GET(
       return NextResponse.json({ error: "Prompt not found" }, { status: 404 });
     }
 
-    if (user.role !== "admin" && user.role !== "coach") {
+    if (!hasFullFeatureAccess(user.role)) {
       const [lessonLinks, practiceLinks] = await Promise.all([
         db
           .select({ lessonId: interactions.lessonId })

@@ -27,7 +27,7 @@ async function main() {
     SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'role')
   `;
   if (!roleEnumExists[0].exists) {
-    await sql`CREATE TYPE role AS ENUM ('student', 'coach', 'admin')`;
+    await sql`CREATE TYPE role AS ENUM ('student', 'consultant', 'temp', 'coach', 'operations', 'admin')`;
     console.log("  - Created role enum");
   } else {
     console.log("  - role enum already exists");

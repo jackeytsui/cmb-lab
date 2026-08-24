@@ -5,6 +5,11 @@ import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import {
+  PLATFORM_ROLES,
+  normalizePlatformRole,
+  type PlatformRole,
+} from "@/lib/platform-roles";
 
 const actionEnum = z.enum([
   "upload_only",
@@ -38,7 +43,7 @@ const requestSchema = z
     action: actionEnum,
     emails: z.array(z.string().email()).min(1).max(500).optional(),
     records: z.array(inviteRecordSchema).min(1).max(500).optional(),
-    batchRole: z.enum(["student", "coach", "admin"]).optional(),
+    batchRole: z.enum(PLATFORM_ROLES).optional(),
     expiresInDays: z.number().int().min(1).max(30).optional(),
     redirectUrl: z.string().url().optional(),
     invitationEmail: invitationEmailSchema.optional(),
@@ -80,7 +85,7 @@ function normalizeDate(value?: string) {
 function normalizeTargets(
   records: TargetRecord[] | undefined,
   emails: string[] | undefined,
-  batchRole: "student" | "coach" | "admin" | undefined
+  batchRole: PlatformRole | undefined
 ) {
   const byEmail = new Map<string, TargetRecord>();
 
@@ -263,12 +268,8 @@ function buildCustomEmailForTarget(params: {
   return { subject, html, text };
 }
 
-function normalizeRole(role?: string): "student" | "coach" | "admin" {
-  const normalized = (role || "").trim().toLowerCase();
-  if (normalized === "admin" || normalized === "coach" || normalized === "student") {
-    return normalized;
-  }
-  return "student";
+function normalizeRole(role?: string): PlatformRole {
+  return normalizePlatformRole(role?.trim().toLowerCase()) ?? "student";
 }
 
 async function upsertDbUserFromInvite(params: {

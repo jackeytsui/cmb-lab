@@ -9,6 +9,7 @@ import {
   isRestrictedAudioCourse,
   isStandardAudioCourse,
 } from "@/lib/audio-course-access";
+import { isStaffRole } from "@/lib/platform-roles";
 
 /**
  * GET /api/audio-courses
@@ -34,7 +35,7 @@ export async function GET() {
   const audioCourses = courseRows.filter(isStandardAudioCourse);
 
   // Filter by visibility using tag_content_grants
-  const isStaff = dbUser.role === "admin" || dbUser.role === "coach";
+  const isStaff = isStaffRole(dbUser.role);
   let visibleCourses = audioCourses;
 
   if (!isStaff) {

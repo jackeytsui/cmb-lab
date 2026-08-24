@@ -6,6 +6,7 @@ import {
   getRestrictedContentIds,
   getUserContentGrants,
 } from "@/lib/tag-feature-access";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 type AudioCourseRecord = {
   id: string;
@@ -68,7 +69,7 @@ export async function userCanAccessAudioCourse(
   course: AudioCourseRecord,
 ): Promise<boolean> {
   if (!isStandardAudioCourse(course)) return false;
-  if (user.role === "admin" || user.role === "coach") return true;
+  if (hasFullFeatureAccess(user.role)) return true;
   if (!(await userCanUseFeature(user, "audio_courses"))) return false;
 
   const [grantedIds, restrictedIds] = await Promise.all([

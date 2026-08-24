@@ -14,14 +14,13 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
-
-type RoleValue = "student" | "coach" | "admin";
+import type { PlatformRole } from "@/lib/platform-roles";
 
 interface UserRow {
   id: string;
   name: string | null;
   email: string;
-  role: RoleValue;
+  role: PlatformRole;
   createdAt: Date | string;
   portalAccessStatus: "active" | "paused" | "expired";
   assignedCoachId?: string | null;

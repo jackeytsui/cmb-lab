@@ -5,6 +5,7 @@ import { studentMediaUploads } from "@/db/schema";
 import { getRealUser } from "@/lib/auth";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+import { isStaffRole } from "@/lib/platform-roles";
 
 export const maxDuration = 60;
 
@@ -23,7 +24,7 @@ export async function GET(
   });
   if (
     !upload ||
-    (upload.userId !== user.id && user.role !== "coach" && user.role !== "admin")
+    (upload.userId !== user.id && !isStaffRole(user.role))
   ) {
     return NextResponse.json({ error: "Media not found" }, { status: 404 });
   }

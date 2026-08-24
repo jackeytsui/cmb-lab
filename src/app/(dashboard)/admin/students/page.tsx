@@ -14,6 +14,11 @@ import { users, studentTags, tags } from "@/db/schema";
 import { and, count, desc, eq, gte, lte, ilike, isNull, or, inArray, asc } from "drizzle-orm";
 import { UsersManageTable } from "@/components/admin/UsersManageTable";
 import { UsersFilterBar } from "@/components/admin/UsersFilterBar";
+import {
+  PLATFORM_ROLE_DEFINITIONS,
+  normalizePlatformRole,
+  type PlatformRole,
+} from "@/lib/platform-roles";
 
 /**
  * Admin Students page - displays student data table with server-side
@@ -41,7 +46,8 @@ export default async function AdminStudentsPage({
   // Parse search params
   const params = await searchParams;
   const tab = (params.tab as string) || "users"; // "ghl" | "users"
-  const usersRoleFilter = (params.usersRole as string) || "all"; // "all" | "student" | "coach" | "admin"
+  const usersRoleFilter = (params.usersRole as string) || "all";
+  const normalizedRoleFilter = normalizePlatformRole(usersRoleFilter);
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 25;
   const sortBy = (params.sortBy as string) || (tab === "ghl" ? "created" : "createdAt");
@@ -73,7 +79,7 @@ export default async function AdminStudentsPage({
           id: string;
           name: string | null;
           email: string;
-          role: "student" | "coach" | "admin";
+          role: PlatformRole;
           createdAt: Date;
           portalAccessStatus: "active" | "paused" | "expired";
           assignedCoachId?: string | null;
@@ -101,10 +107,9 @@ export default async function AdminStudentsPage({
         productLine,
       });
     } else if (tab === "users") {
-      const roleClause =
-        usersRoleFilter === "student" || usersRoleFilter === "coach" || usersRoleFilter === "admin"
-          ? eq(users.role, usersRoleFilter)
-          : undefined;
+      const roleClause = normalizedRoleFilter
+        ? eq(users.role, normalizedRoleFilter)
+        : undefined;
 
       // Coach filter
       const coachClause = filterCoachId === "unassigned"
@@ -378,9 +383,10 @@ export default async function AdminStudentsPage({
           <div className="flex flex-wrap items-center gap-2">
             {[
               { key: "all", label: "All" },
-              { key: "student", label: "Students" },
-              { key: "coach", label: "Coaches" },
-              { key: "admin", label: "Admins" },
+              ...PLATFORM_ROLE_DEFINITIONS.map(({ role, label }) => ({
+                key: role,
+                label: role === "operations" ? label : `${label}s`,
+              })),
             ].map((roleTab) => (
               <Link
                 key={roleTab.key}

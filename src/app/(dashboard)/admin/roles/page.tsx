@@ -17,6 +17,9 @@ import {
   Crown,
   GraduationCap,
   UserCog,
+  BriefcaseBusiness,
+  Clock3,
+  Cog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { RoleForm } from "@/components/admin/RoleForm";
 import { toast } from "sonner";
+import { FEATURE_DEFINITIONS } from "@/lib/feature-definitions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,75 +68,8 @@ interface PlatformRole {
   description: string;
   userCount: number;
   features: string[];
+  featureAccess: "configurable" | "full";
 }
-
-// ---------------------------------------------------------------------------
-// Feature list (matching FEATURE_KEYS from permissions.ts)
-// ---------------------------------------------------------------------------
-
-const FEATURES = [
-  {
-    key: "ai_conversation",
-    label: "AI Conversation Bot",
-    description: "Voice practice with AI tutor",
-  },
-  {
-    key: "practice_sets",
-    label: "Practice Sets",
-    description: "Interactive exercises and quizzes",
-  },
-  {
-    key: "dictionary_reader",
-    label: "Dictionary & Reader",
-    description: "Built-in Chinese dictionary and text reader",
-  },
-  {
-    key: "listening_lab",
-    label: "YouTube Listening Lab",
-    description: "YouTube-based listening practice",
-  },
-  {
-    key: "coaching_material",
-    label: "Legacy Coaching Material",
-    description: "Legacy umbrella permission retained for compatibility",
-  },
-  {
-    key: "one_on_one_coaching",
-    label: "1:1 Coaching",
-    description: "Student's private coaching materials",
-  },
-  {
-    key: "inner_circle_group_coaching",
-    label: "Inner Circle Group Coaching",
-    description: "Inner Circle group coaching materials",
-  },
-  {
-    key: "group_coaching_schedule",
-    label: "Group Coaching Schedule",
-    description: "Group coaching calendar and schedule",
-  },
-  {
-    key: "video_threads",
-    label: "Video Threads",
-    description: "Interactive video response activities",
-  },
-  {
-    key: "certificates",
-    label: "Certificates",
-    description: "Course completion certificates",
-  },
-  {
-    key: "ai_chat",
-    label: "AI Chat",
-    description: "Text-based AI conversation assistant",
-  },
-  {
-    key: "assignment_review_text",
-    label: "Assignment Review (Text)",
-    description:
-      "Challenge Reviewer capability: review text assignment submissions",
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Platform Role Card icons & colors
@@ -148,11 +85,29 @@ const ROLE_META: Record<
     badgeBg: "bg-amber-500/10",
     badgeText: "text-amber-500",
   },
+  operations: {
+    icon: Cog,
+    color: "text-violet-500",
+    badgeBg: "bg-violet-500/10",
+    badgeText: "text-violet-500",
+  },
   coach: {
     icon: UserCog,
     color: "text-blue-500",
     badgeBg: "bg-blue-500/10",
     badgeText: "text-blue-500",
+  },
+  consultant: {
+    icon: BriefcaseBusiness,
+    color: "text-cyan-500",
+    badgeBg: "bg-cyan-500/10",
+    badgeText: "text-cyan-500",
+  },
+  temp: {
+    icon: Clock3,
+    color: "text-slate-500",
+    badgeBg: "bg-slate-500/10",
+    badgeText: "text-slate-500",
   },
   student: {
     icon: GraduationCap,
@@ -172,7 +127,7 @@ function PlatformRoleCard({ platformRole }: { platformRole: PlatformRole }) {
     () => new Set(platformRole.features)
   );
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const isAdmin = platformRole.role === "admin";
+  const hasLockedFullAccess = platformRole.featureAccess === "full";
   const meta = ROLE_META[platformRole.role] ?? ROLE_META.student;
   const Icon = meta.icon;
 
@@ -183,7 +138,7 @@ function PlatformRoleCard({ platformRole }: { platformRole: PlatformRole }) {
 
   const onToggle = useCallback(
     async (featureKey: string, enabled: boolean) => {
-      if (isAdmin) return;
+      if (hasLockedFullAccess) return;
 
       const previousFeatures = new Set(enabledFeatures);
       setEnabledFeatures((prev) => {
@@ -215,7 +170,7 @@ function PlatformRoleCard({ platformRole }: { platformRole: PlatformRole }) {
         setSavingKey(null);
       }
     },
-    [platformRole.role, enabledFeatures, isAdmin]
+    [platformRole.role, enabledFeatures, hasLockedFullAccess]
   );
 
   return (
@@ -266,22 +221,23 @@ function PlatformRoleCard({ platformRole }: { platformRole: PlatformRole }) {
         <div className="border-t border-border px-4 pb-4 pt-3">
           <p className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">
             Feature Access
-            {isAdmin && (
+            {hasLockedFullAccess && (
               <span className="ml-2 normal-case font-normal">
-                (all features enabled for admins)
+                (all features enabled for {platformRole.label.toLowerCase()}s)
               </span>
             )}
           </p>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {FEATURES.map((feature) => {
-              const isEnabled = isAdmin || enabledFeatures.has(feature.key);
+            {FEATURE_DEFINITIONS.map((feature) => {
+              const isEnabled =
+                hasLockedFullAccess || enabledFeatures.has(feature.key);
               const isSaving = savingKey === feature.key;
 
               return (
                 <div
                   key={feature.key}
                   className={`flex items-center justify-between rounded-lg border px-4 py-3 ${
-                    isAdmin
+                    hasLockedFullAccess
                       ? "border-border/50 bg-muted/30"
                       : "border-border bg-card"
                   }`}
@@ -289,7 +245,7 @@ function PlatformRoleCard({ platformRole }: { platformRole: PlatformRole }) {
                   <div className="min-w-0 flex-1 pr-3">
                     <p
                       className={`text-sm font-medium ${
-                        isAdmin
+                        hasLockedFullAccess
                           ? "text-muted-foreground"
                           : "text-foreground"
                       }`}
@@ -306,7 +262,7 @@ function PlatformRoleCard({ platformRole }: { platformRole: PlatformRole }) {
                     )}
                     <Switch
                       checked={isEnabled}
-                      disabled={isAdmin}
+                      disabled={hasLockedFullAccess}
                       onCheckedChange={(checked) =>
                         onToggle(feature.key, checked)
                       }

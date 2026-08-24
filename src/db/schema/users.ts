@@ -1,8 +1,8 @@
 import { pgTable, uuid, text, timestamp, pgEnum, integer, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { PLATFORM_ROLES } from "@/lib/platform-roles";
 
-// Role enum: student < coach < admin (hierarchical)
-export const roleEnum = pgEnum("role", ["student", "coach", "admin"]);
+export const roleEnum = pgEnum("role", PLATFORM_ROLES);
 
 // Language preference enum
 export const languagePreferenceEnum = pgEnum("language_preference", [

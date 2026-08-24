@@ -4,6 +4,7 @@ import { coachingNotes, coachingSessions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getRealUser } from "@/lib/auth";
 import { z } from "zod";
+import { isStaffRole } from "@/lib/platform-roles";
 
 const updateNoteSchema = z
   .object({
@@ -42,7 +43,7 @@ export async function PATCH(
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (dbUser.role !== "coach" && dbUser.role !== "admin") {
+  if (!isStaffRole(dbUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (!(await canManageNote(noteId, dbUser))) {
@@ -94,7 +95,7 @@ export async function DELETE(
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (dbUser.role !== "coach" && dbUser.role !== "admin") {
+  if (!isStaffRole(dbUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (!(await canManageNote(noteId, dbUser))) {

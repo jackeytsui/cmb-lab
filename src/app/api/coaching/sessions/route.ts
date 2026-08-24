@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { coachingSessions, coachingNotes, coachingNoteStars, users } from "@/db/schema";
 import { eq, and, desc, inArray, ilike } from "drizzle-orm";
 import { hasMinimumRole, getRealUser } from "@/lib/auth";
+import { isStaffRole } from "@/lib/platform-roles";
 
 function getNextSessionTitle(existingTitles: string[]) {
   let maxSessionNumber = 0;
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
   }
 
   // Use the effective user's role (respects View As impersonation)
-  const isCoachOrAdmin = dbUser.role === "coach" || dbUser.role === "admin";
+  const isCoachOrAdmin = isStaffRole(dbUser.role);
   const isStudent = !isCoachOrAdmin;
   const studentEmail = (dbUser.email ?? "").trim();
   const normalizedStudentEmailParam = studentEmailParam?.trim() || "";

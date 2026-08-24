@@ -5,6 +5,7 @@ import { eq, desc, inArray, ilike, and } from "drizzle-orm";
 import { getRealUser } from "@/lib/auth";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { isStaffRole } from "@/lib/platform-roles";
 
 // Allow up to 60s for translation (Vercel serverless default is 10s)
 export const maxDuration = 60;
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const isCoachOrAdmin = dbUser.role === "coach" || dbUser.role === "admin";
+  const isCoachOrAdmin = isStaffRole(dbUser.role);
   const isStudent = !isCoachOrAdmin;
 
   // Students can only export their own sessions; coaches/admins can export any

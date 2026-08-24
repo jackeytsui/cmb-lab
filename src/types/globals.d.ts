@@ -1,4 +1,6 @@
-export type Roles = "student" | "coach" | "admin";
+import type { PlatformRole } from "@/lib/platform-roles";
+
+export type Roles = PlatformRole;
 
 declare global {
   interface CustomJwtSessionClaims {

@@ -1,5 +1,9 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import {
+  hasMinimumPlatformRole,
+  normalizePlatformRole,
+} from "@/lib/platform-roles";
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
 const isCoachRoute = createRouteMatcher(["/coach(.*)"]);
@@ -40,7 +44,7 @@ function normalizeEmail(value: unknown) {
 }
 
 function normalizeRole(value: unknown) {
-  return value === "admin" || value === "coach" || value === "student" ? value : "";
+  return normalizePlatformRole(value) ?? "";
 }
 
 function roleFromSessionClaims(sessionClaims: unknown) {
@@ -100,7 +104,6 @@ export default clerkMiddleware(async (auth, req) => {
       sessionClaims?.email_address
   );
   const claimRole = roleFromSessionClaims(sessionClaims);
-  const hasRoleSignals = Boolean(claimRole || claimEmail);
   const forcedStudent = process.env.FORCE_STUDENT_MODE === "true";
   const role = forcedStudent
     ? "student"
@@ -113,8 +116,8 @@ export default clerkMiddleware(async (auth, req) => {
   // Admin route protection is enforced in server layouts/pages where full user context is available.
   // Avoid edge false negatives when session claims are missing email/role fields.
 
-  // Coach routes - admin or coach (coach has student capabilities too)
-  if (isCoachRoute(req) && !["admin", "coach"].includes(role)) {
+  // Coach routes are available to every staff role.
+  if (isCoachRoute(req) && !hasMinimumPlatformRole(role, "coach")) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 

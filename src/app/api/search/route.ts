@@ -14,6 +14,7 @@ import { sanitizeSearchQuery } from "@/lib/search-utils";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { isStaffRole } from "@/lib/platform-roles";
 
 /**
  * GET /api/search?q=term
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
         ilike(courses.searchJyutping, pattern),
       ),
     );
-    const isStaff = currentUser.role === "admin" || currentUser.role === "coach";
+    const isStaff = isStaffRole(currentUser.role);
 
     // Staff can search every legacy course; students only see active grants.
     const courseResults = isStaff

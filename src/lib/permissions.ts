@@ -15,48 +15,14 @@ import {
   users,
   platformRoleFeatures,
 } from "@/db/schema";
+import { FEATURE_KEYS } from "@/lib/feature-definitions";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 // ---------------------------------------------------------------------------
 // Feature Key Constants & Zod Schema
 // ---------------------------------------------------------------------------
 
-export const FEATURE_KEYS = [
-  "ai_conversation",
-  "practice_sets",
-  "dictionary_reader",
-  "audio_courses",
-  "listening_lab",
-  "coaching_material",
-  "one_on_one_coaching",
-  "inner_circle_group_coaching",
-  "group_coaching_schedule",
-  "flashcards",
-  "course_library",
-  "video_threads",
-  "certificates",
-  "ai_chat",
-  "mandarin_accelerator",
-  "audio_accelerator_edition",
-  "tone_mastery",
-  "listening_training",
-  "notepad",
-  // Human review and personalised feedback for Course Library assignments.
-  // This is intentionally not a default student feature: package/tier tags
-  // grant it only to cohorts that include coach feedback.
-  "assignment_feedback",
-  // Legacy permission key retained for existing role/tag records. The support
-  // widget itself is now a baseline service for every active signed-in user.
-  "lab_assistant",
-  // Reviewer capability: grants access to Admin > Content > Assignment
-  // Submissions for text assignments ("Challenge Reviewer" role bundle).
-  // Future reviewer capabilities follow the same pattern, e.g.
-  // "assignment_review_audio".
-  "assignment_review_text",
-  "assignment_review_vocal",
-  "assignment_review_diary",
-] as const;
-
-export type FeatureKey = (typeof FEATURE_KEYS)[number];
+export { FEATURE_KEYS, type FeatureKey } from "@/lib/feature-definitions";
 
 export const featureKeySchema = z.enum(FEATURE_KEYS);
 
@@ -165,8 +131,8 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
         )
       ),
 
-    // Platform role features (admin gets all features regardless)
-    platformRole === "admin"
+    // Full-access roles get every feature without persisted toggle rows.
+    hasFullFeatureAccess(platformRole)
       ? Promise.resolve(FEATURE_KEYS.map((k) => ({ featureKey: k })))
       : db
           .select({ featureKey: platformRoleFeatures.featureKey })

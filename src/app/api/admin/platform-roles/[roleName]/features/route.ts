@@ -5,8 +5,11 @@ import { platformRoleFeatures } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { featureKeySchema } from "@/lib/permissions";
-
-const VALID_ROLES = ["student", "coach", "admin"] as const;
+import {
+  hasFullFeatureAccess,
+  normalizePlatformRole,
+} from "@/lib/platform-roles";
+import { FEATURE_KEYS } from "@/lib/feature-definitions";
 
 const toggleSchema = z.object({
   featureKey: featureKeySchema,
@@ -30,17 +33,22 @@ export async function GET(
   try {
     const { roleName } = await params;
 
-    if (!VALID_ROLES.includes(roleName as (typeof VALID_ROLES)[number])) {
+    const platformRole = normalizePlatformRole(roleName);
+    if (!platformRole) {
       return NextResponse.json(
         { error: "Invalid platform role" },
         { status: 400 }
       );
     }
 
+    if (hasFullFeatureAccess(platformRole)) {
+      return NextResponse.json({ features: [...FEATURE_KEYS] });
+    }
+
     const features = await db
       .select({ featureKey: platformRoleFeatures.featureKey })
       .from(platformRoleFeatures)
-      .where(eq(platformRoleFeatures.role, roleName));
+      .where(eq(platformRoleFeatures.role, platformRole));
 
     return NextResponse.json({
       features: features.map((f) => f.featureKey),
@@ -57,7 +65,7 @@ export async function GET(
 /**
  * PUT /api/admin/platform-roles/:roleName/features
  * Toggle a feature for a platform role.
- * Admin role features are not modifiable (return 400).
+ * Full-access role features are not modifiable (return 400).
  * Requires coach role.
  */
 export async function PUT(
@@ -72,16 +80,19 @@ export async function PUT(
   try {
     const { roleName } = await params;
 
-    if (!VALID_ROLES.includes(roleName as (typeof VALID_ROLES)[number])) {
+    const platformRole = normalizePlatformRole(roleName);
+    if (!platformRole) {
       return NextResponse.json(
         { error: "Invalid platform role" },
         { status: 400 }
       );
     }
 
-    if (roleName === "admin") {
+    if (hasFullFeatureAccess(platformRole)) {
       return NextResponse.json(
-        { error: "Admin role features cannot be modified. Admins have access to all features." },
+        {
+          error: `${platformRole === "admin" ? "Admin" : "Coach"} feature access is locked because this role has all features.`,
+        },
         { status: 400 }
       );
     }
@@ -100,14 +111,14 @@ export async function PUT(
     if (enabled) {
       await db
         .insert(platformRoleFeatures)
-        .values({ role: roleName, featureKey })
+        .values({ role: platformRole, featureKey })
         .onConflictDoNothing();
     } else {
       await db
         .delete(platformRoleFeatures)
         .where(
           and(
-            eq(platformRoleFeatures.role, roleName),
+            eq(platformRoleFeatures.role, platformRole),
             eq(platformRoleFeatures.featureKey, featureKey)
           )
         );

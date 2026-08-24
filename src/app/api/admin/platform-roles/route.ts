@@ -2,11 +2,16 @@ import { NextResponse } from "next/server";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import { users, platformRoleFeatures } from "@/db/schema";
-import { eq, sql, isNull } from "drizzle-orm";
+import { sql, isNull } from "drizzle-orm";
+import {
+  PLATFORM_ROLE_DEFINITIONS,
+  hasFullFeatureAccess,
+} from "@/lib/platform-roles";
+import { FEATURE_KEYS } from "@/lib/feature-definitions";
 
 /**
  * GET /api/admin/platform-roles
- * Return all 3 platform roles with their feature lists and user counts.
+ * Return every platform role with effective feature access and user counts.
  * Requires coach role.
  */
 export async function GET() {
@@ -39,43 +44,25 @@ export async function GET() {
       })
       .from(platformRoleFeatures);
 
-    const featureMap: Record<string, string[]> = {
-      admin: [],
-      coach: [],
-      student: [],
-    };
+    const featureMap: Record<string, string[]> = Object.fromEntries(
+      PLATFORM_ROLE_DEFINITIONS.map(({ role }) => [role, []]),
+    );
     for (const row of features) {
       if (featureMap[row.role]) {
         featureMap[row.role].push(row.featureKey);
       }
     }
 
-    const platformRoles = [
-      {
-        role: "admin",
-        label: "Admin",
-        description:
-          "Full platform access. Manages users, content, and settings.",
-        userCount: countMap["admin"] ?? 0,
-        features: featureMap["admin"],
-      },
-      {
-        role: "coach",
-        label: "Coach",
-        description:
-          "Manages students and content. Configurable feature access.",
-        userCount: countMap["coach"] ?? 0,
-        features: featureMap["coach"],
-      },
-      {
-        role: "student",
-        label: "Student",
-        description:
-          "Learns and practices. Feature access based on configuration.",
-        userCount: countMap["student"] ?? 0,
-        features: featureMap["student"],
-      },
-    ];
+    const platformRoles = PLATFORM_ROLE_DEFINITIONS.map((definition) => ({
+      role: definition.role,
+      label: definition.label,
+      description: definition.description,
+      userCount: countMap[definition.role] ?? 0,
+      features: hasFullFeatureAccess(definition.role)
+        ? [...FEATURE_KEYS]
+        : featureMap[definition.role],
+      featureAccess: definition.featureAccess,
+    }));
 
     return NextResponse.json({ platformRoles });
   } catch (error) {

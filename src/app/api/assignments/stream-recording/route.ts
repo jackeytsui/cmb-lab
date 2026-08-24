@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getRealUser } from "@/lib/auth";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+import { isStaffRole } from "@/lib/platform-roles";
 
 export const maxDuration = 60;
 
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Access check: must be the submitting student or a coach
-  const isStaff = user.role === "coach" || user.role === "admin";
+  const isStaff = isStaffRole(user.role);
   if (!isStaff && user.id !== submission.userId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

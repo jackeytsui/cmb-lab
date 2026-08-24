@@ -19,6 +19,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { getStudentAssignmentTargets } from "@/lib/student-assignment-targets";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 // ============================================================
 // Types
@@ -315,7 +316,7 @@ export async function canUserAccessPracticeSet(
     columns: { role: true },
   });
   if (!user) return false;
-  if (user.role === "admin" || user.role === "coach") return true;
+  if (hasFullFeatureAccess(user.role)) return true;
 
   const assignments = await getStudentAssignments(userId);
   return assignments.some(

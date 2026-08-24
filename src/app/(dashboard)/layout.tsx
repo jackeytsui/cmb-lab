@@ -27,6 +27,10 @@ import { LabAssistantWidget } from "@/components/lab-assistant/LabAssistantWidge
 import { StudentContentGuard } from "@/components/layout/StudentContentGuard";
 import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
 import { assignBaselineCoachingTagsToStudents } from "@/lib/coaching-access";
+import {
+  hasFullFeatureAccess,
+  normalizePlatformRole,
+} from "@/lib/platform-roles";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +39,7 @@ function isPast(date: Date) {
 }
 
 function normalizeRole(value: unknown): Roles | null {
-  return value === "admin" || value === "coach" || value === "student" ? value : null;
+  return normalizePlatformRole(value);
 }
 
 function roleFromSessionClaims(sessionClaims: unknown): Roles | null {
@@ -69,7 +73,7 @@ export default async function DashboardLayout({
 
   const forcedStudent = process.env.FORCE_STUDENT_MODE === "true";
   const claimRole = roleFromSessionClaims(sessionClaims);
-  let role = (forcedStudent ? "student" : claimRole || null) as Roles | null;
+  let role: Roles | null = forcedStudent ? "student" : null;
   let enabledFeatures: string[] | undefined;
 
   let dbUser = await db.query.users.findFirst({
@@ -141,29 +145,16 @@ export default async function DashboardLayout({
     if (dbUser && resolvedRole === "student") {
       await ensureDefaultStudentRoleAssignment(dbUser.id);
     }
-  } else if (dbUser && email) {
-    const metadataRole = normalizeRole((metadata as Record<string, unknown>)?.role);
-    const resolvedRole = claimRole || metadataRole || resolveRoleFromEmail(email);
-    if (resolvedRole && dbUser.role !== resolvedRole) {
-      // Only sync if the resolved role is higher than the DB role (never downgrade)
-      const roleHierarchy: Roles[] = ["student", "coach", "admin"];
-      const resolvedLevel = roleHierarchy.indexOf(resolvedRole as Roles);
-      const dbLevel = roleHierarchy.indexOf(dbUser.role as Roles);
-      if (resolvedLevel > dbLevel) {
-        await db.update(users).set({ role: resolvedRole }).where(eq(users.id, dbUser.id));
-        dbUser = { ...dbUser, role: resolvedRole as Roles };
-      }
-    }
   }
 
   if (!role) {
-    role = (dbUser?.role || "student") as Roles;
+    role = dbUser?.role || claimRole || "student";
   }
 
   // "View As" impersonation: admin can view the app as another user
   const cookieStore = await cookies();
   const viewAsUserId = cookieStore.get("view_as_user_id")?.value;
-  let viewAsUser: { id: string; email: string; name: string | null; role: "student" | "coach" | "admin" } | null = null;
+  let viewAsUser: { id: string; email: string; name: string | null; role: Roles } | null = null;
 
   if (viewAsUserId && role === "admin") {
     const target = await db.query.users.findFirst({
@@ -178,7 +169,9 @@ export default async function DashboardLayout({
     }
   }
 
-  if (role === "student") {
+  if (hasFullFeatureAccess(role)) {
+    enabledFeatures = [...FEATURE_KEYS];
+  } else if (role === "student") {
     if (dbUser) {
       // Ensure default role is assigned BEFORE resolving permissions
       // so the first request for a new student picks up features correctly
@@ -191,11 +184,13 @@ export default async function DashboardLayout({
     } else {
       enabledFeatures = [...DEFAULT_STUDENT_FEATURES];
     }
+  } else if (dbUser) {
+    enabledFeatures = Array.from((await resolvePermissions(dbUser.id)).features);
   } else {
-    enabledFeatures = [...FEATURE_KEYS];
+    enabledFeatures = [];
   }
 
-  if (dbUser && enabledFeatures) {
+  if (dbUser && enabledFeatures && !hasFullFeatureAccess(role)) {
     const overrides = await getUserFeatureTagOverrides(dbUser.id);
     enabledFeatures = Array.from(applyFeatureTagOverrides(enabledFeatures, overrides));
   }

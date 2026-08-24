@@ -9,6 +9,7 @@ import {
   tagContentGrants,
 } from "@/db/schema";
 import { FEATURE_KEYS, type FeatureKey } from "@/lib/permissions";
+import { isStaffRole } from "@/lib/platform-roles";
 
 type FeatureOverrideState = {
   allow: Set<FeatureKey>;
@@ -194,7 +195,7 @@ export async function canViewCourseLibrary(
   user: { id: string; role?: string | null } | null | undefined
 ): Promise<boolean> {
   if (!user) return false;
-  if (user.role === "admin" || user.role === "coach") return true;
+  if (isStaffRole(user.role)) return true;
 
   const granted = await getUserContentGrants(
     user.id,
@@ -234,7 +235,7 @@ export async function canViewCourseLibrary(
 export async function getCourseLibraryCourseAccess(
   user: { id: string; role?: string | null } | null | undefined
 ): Promise<(courseId: string) => boolean> {
-  if (user && (user.role === "admin" || user.role === "coach")) {
+  if (user && isStaffRole(user.role)) {
     return () => true;
   }
 

@@ -4,6 +4,7 @@ import { users } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { getRealUser } from "@/lib/auth";
 import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
+import { isStaffRole } from "@/lib/platform-roles";
 
 export async function GET() {
   const user = await getRealUser();
@@ -12,7 +13,7 @@ export async function GET() {
   }
 
   // Verify coach role
-  if (user.role !== "admin" && user.role !== "coach") {
+  if (!isStaffRole(user.role)) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 

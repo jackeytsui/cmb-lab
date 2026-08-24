@@ -4,6 +4,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { interactions, lessons, users } from "@/db/schema";
 import { canAccessLesson, resolvePermissions } from "@/lib/permissions";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 /** Load lesson prompts into the reader only when the signed-in user has access. */
 export async function getReaderInitialText(
@@ -24,7 +25,7 @@ export async function getReaderInitialText(
     });
     if (!lesson) return "";
 
-    if (user.role !== "admin" && user.role !== "coach") {
+    if (!hasFullFeatureAccess(user.role)) {
       const permissions = await resolvePermissions(user.id);
       if (!(await canAccessLesson(permissions, lessonId))) return "";
     }

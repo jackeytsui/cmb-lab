@@ -4,6 +4,7 @@ import { coachingNotes, coachingSessions } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { getRealUser } from "@/lib/auth";
 import { z } from "zod";
+import { isStaffRole } from "@/lib/platform-roles";
 
 const createNoteSchema = z.object({
   text: z.string().trim().min(1).max(20_000),
@@ -19,7 +20,7 @@ export async function POST(
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (dbUser.role !== "coach" && dbUser.role !== "admin") {
+  if (!isStaffRole(dbUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -27,6 +27,8 @@ import {
   getToneColorStyle,
   getToneDataAttr,
 } from "@/lib/tone-colors";
+import type { Roles } from "@/types/globals";
+import { isStaffRole } from "@/lib/platform-roles";
 
 // The end date arrives as a plain "YYYY-MM-DD" from GHL; build the Date from
 // parts so the displayed day never shifts across timezones.
@@ -1228,7 +1230,7 @@ function CoachingPanel({
   label: string;
   subtitle: string;
   sessionType: "one-on-one" | "inner-circle";
-  currentRole?: "student" | "coach" | "admin";
+  currentRole?: Roles;
   initialStudentEmail?: string;
 }) {
   const fetchWithTimeout = useCallback(
@@ -1257,7 +1259,7 @@ function CoachingPanel({
   const roleFromMetadata = user?.publicMetadata?.role as string | undefined;
   const role = (currentRole || roleFromMetadata) as string | undefined;
   const isAdmin = role === "admin";
-  const isCoach = role === "coach";
+  const isCoach = isStaffRole(role);
   const canEditNotes = isAdmin || isCoach;
   const canWrite = canEditNotes;
   const canReorderNotes = isAdmin || isCoach || role === "student";
@@ -3578,7 +3580,7 @@ export function CoachingMaterialClient({
   title: string;
   subtitle: string;
   sessionType: "one-on-one" | "inner-circle";
-  currentRole?: "student" | "coach" | "admin";
+  currentRole?: Roles;
   initialStudentEmail?: string;
 }) {
   return (

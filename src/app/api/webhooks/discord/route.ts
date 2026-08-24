@@ -9,6 +9,7 @@ import { assignRole, removeRole } from "@/lib/user-roles";
 import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { webhookSecretsMatch } from "@/lib/webhook-secret";
+import { isStaffRole } from "@/lib/platform-roles";
 
 const discordWebhookSchema = z
   .object({
@@ -159,7 +160,7 @@ export async function POST(req: NextRequest) {
       }
     } else {
       const resolvedRole = resolveRoleFromEmail(data.email);
-      const role = dbUser.role === "admin" || dbUser.role === "coach"
+      const role = isStaffRole(dbUser.role)
         ? dbUser.role
         : resolvedRole;
       if (dbUser.role !== role) {

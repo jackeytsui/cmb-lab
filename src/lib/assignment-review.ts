@@ -8,6 +8,7 @@ import {
   getUserFeatureTagOverrides,
   hasFeatureWithTagOverrides,
 } from "@/lib/tag-feature-access";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 // ---------------------------------------------------------------------------
 // Assignment review authorization ("Challenge Reviewer").
@@ -38,7 +39,7 @@ export async function userCanReceiveAssignmentFeedback(user: {
   id: string;
   role: string;
 }): Promise<boolean> {
-  if (user.role === "admin" || user.role === "coach") return true;
+  if (hasFullFeatureAccess(user.role)) return true;
   const [permissions, overrides] = await Promise.all([
     resolvePermissions(user.id),
     getUserFeatureTagOverrides(user.id),

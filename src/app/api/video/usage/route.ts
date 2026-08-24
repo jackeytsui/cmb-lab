@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { users, videoSessions } from "@/db/schema";
 import { eq, and, gte, count } from "drizzle-orm";
 import { getTranscriptLimitSettings, getPeriodStart } from "@/lib/usage-limits";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 /**
  * GET /api/video/usage
@@ -52,7 +53,7 @@ export async function GET() {
     }
 
     // Coaches and admins are unlimited
-    if (user.role === "coach" || user.role === "admin") {
+    if (hasFullFeatureAccess(user.role)) {
       return NextResponse.json({
         used: 0,
         limit: -1, // -1 = unlimited

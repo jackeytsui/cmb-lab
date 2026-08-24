@@ -15,8 +15,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  PLATFORM_ROLE_OPTIONS,
+  type PlatformRole,
+} from "@/lib/platform-roles";
 
-type RoleType = "student" | "coach" | "admin";
 type AccessStatus = "active" | "paused" | "expired";
 type CoachOption = { id: string; name: string | null; email: string };
 
@@ -29,7 +32,7 @@ export function AddUserQuickDialog() {
     firstName: "",
     lastName: "",
     email: "",
-    role: "student" as RoleType,
+    role: "student" as PlatformRole,
     courseEndDate: "",
     accessStatus: "active" as AccessStatus,
     assignedCoachId: "" as string,
@@ -189,11 +192,13 @@ export function AddUserQuickDialog() {
                 id="quick-role"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={form.role}
-                onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value as RoleType }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value as PlatformRole }))}
               >
-                <option value="student">Student</option>
-                <option value="coach">Coach</option>
-                <option value="admin">Admin</option>
+                {PLATFORM_ROLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">

@@ -10,6 +10,11 @@ import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { assignRole } from "@/lib/user-roles";
 import { assignTag } from "@/lib/tags";
+import {
+  hasHigherPlatformAccess,
+  normalizePlatformRole,
+  type PlatformRole,
+} from "@/lib/platform-roles";
 
 interface ClerkWebhookEvent {
   type: string;
@@ -25,13 +30,10 @@ interface ClerkWebhookEvent {
   };
 }
 
-function normalizeRoleValue(value: unknown): "student" | "coach" | "admin" | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "student" || normalized === "coach" || normalized === "admin") {
-    return normalized;
-  }
-  return null;
+function normalizeRoleValue(value: unknown): PlatformRole | null {
+  return typeof value === "string"
+    ? normalizePlatformRole(value.trim().toLowerCase())
+    : null;
 }
 
 function parseInviteTags(value: unknown): string[] {
@@ -140,10 +142,9 @@ export async function POST(req: NextRequest) {
           columns: { id: true, role: true },
         });
 
-        // For existing users, only upgrade role (never downgrade)
-        const roleHierarchy = ["student", "coach", "admin"];
+        // Preserve administrator-assigned peer staff roles; only raise access level.
         const effectiveRole = existingByEmail
-          ? roleHierarchy.indexOf(allowlistRole) > roleHierarchy.indexOf(existingByEmail.role ?? "student")
+          ? hasHigherPlatformAccess(allowlistRole, existingByEmail.role)
             ? allowlistRole
             : existingByEmail.role ?? allowlistRole
           : allowlistRole;
@@ -210,9 +211,8 @@ export async function POST(req: NextRequest) {
           where: eq(users.clerkId, id),
           columns: { id: true, role: true },
         });
-        const roleHierarchy = ["student", "coach", "admin"];
         const effectiveRole = existingUser
-          ? roleHierarchy.indexOf(allowlistRole) > roleHierarchy.indexOf(existingUser.role ?? "student")
+          ? hasHigherPlatformAccess(allowlistRole, existingUser.role)
             ? allowlistRole
             : existingUser.role ?? allowlistRole
           : allowlistRole;
@@ -234,7 +234,7 @@ export async function POST(req: NextRequest) {
           });
           if (existingByEmail) {
             // Never downgrade existing role
-            const fallbackRole = roleHierarchy.indexOf(allowlistRole) > roleHierarchy.indexOf(existingByEmail.role ?? "student")
+            const fallbackRole = hasHigherPlatformAccess(allowlistRole, existingByEmail.role)
               ? allowlistRole
               : existingByEmail.role ?? allowlistRole;
             [updated] = await db

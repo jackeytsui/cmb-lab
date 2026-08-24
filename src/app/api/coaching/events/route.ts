@@ -8,6 +8,7 @@ import {
   getUserContentGrants,
   GROUP_COACHING_EVENT_CONTENT_TYPE,
 } from "@/lib/tag-feature-access";
+import { isStaffRole } from "@/lib/platform-roles";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export async function GET() {
     .orderBy(asc(groupCoachingEvents.startsAt))
     .limit(200);
 
-  if (user.role === "admin" || user.role === "coach") {
+  if (isStaffRole(user.role)) {
     return NextResponse.json({ events: rows });
   }
 

@@ -4,6 +4,7 @@ import {
   getUserFeatureTagOverrides,
   hasFeatureWithTagOverrides,
 } from "@/lib/tag-feature-access";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 
 /**
  * Authoritative feature entitlement check shared by pages and API routes.
@@ -14,7 +15,7 @@ export async function userCanUseFeature(
   user: { id: string; role?: string | null },
   feature: FeatureKey,
 ): Promise<boolean> {
-  if (user.role === "coach" || user.role === "admin") return true;
+  if (hasFullFeatureAccess(user.role)) return true;
 
   const [permissions, overrides] = await Promise.all([
     resolvePermissions(user.id),

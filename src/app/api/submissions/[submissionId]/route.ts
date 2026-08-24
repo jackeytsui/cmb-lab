@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
+import { isStaffRole } from "@/lib/platform-roles";
 
 interface RouteParams {
   params: Promise<{ submissionId: string }>;
@@ -27,7 +28,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

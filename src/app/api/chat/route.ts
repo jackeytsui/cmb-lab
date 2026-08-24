@@ -17,6 +17,7 @@ import {
 } from "@/lib/rate-limit";
 import { saveChat } from "@/lib/chat-persistence";
 import { getCurrentUser } from "@/lib/auth";
+import { hasFullFeatureAccess } from "@/lib/platform-roles";
 import { db } from "@/db";
 import { lessons, modules, courses, interactions } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -142,7 +143,7 @@ export async function POST(request: Request) {
     const messages = parsedBody.data.messages as UIMessage[];
     const { languagePreference, chatId, lessonId } = parsedBody.data;
 
-    if (lessonId && user.role !== "admin" && user.role !== "coach") {
+    if (lessonId && !hasFullFeatureAccess(user.role)) {
       const permissions = await resolvePermissions(user.id);
       if (!(await canAccessLesson(permissions, lessonId))) {
         return new Response(JSON.stringify({ error: "Lesson not found" }), {

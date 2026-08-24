@@ -7,6 +7,7 @@ import { createNotification } from "@/lib/notifications";
 import { dispatchWebhook } from "@/lib/ghl/webhooks";
 import { sendCoachFeedbackNotification } from "@/lib/coach-feedback-notification";
 import { z } from "zod";
+import { isStaffRole } from "@/lib/platform-roles";
 
 const feedbackSchema = z.object({
   loomUrl: z.string().trim().max(2_000).optional(),
@@ -45,7 +46,7 @@ export async function POST(
   if (!currentUser || currentUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
@@ -210,7 +211,7 @@ export async function GET(
   if (!currentUser || currentUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (currentUser.role !== "coach" && currentUser.role !== "admin") {
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }

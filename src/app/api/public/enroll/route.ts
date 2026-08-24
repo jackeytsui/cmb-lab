@@ -5,6 +5,7 @@ import { validateBearerApiKey } from "@/lib/validate-api-key";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { isStaffRole, normalizePlatformRole } from "@/lib/platform-roles";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -64,13 +65,12 @@ export async function POST(req: NextRequest) {
           columns: { id: true, role: true },
         });
     const metadataRole = clerkUser.publicMetadata?.role;
+    const existingRole = existingByClerk?.role ?? existingByEmail?.role;
     const role =
-      existingByClerk?.role === "admin" || existingByClerk?.role === "coach"
-        ? existingByClerk.role
-        : existingByEmail?.role === "admin" || existingByEmail?.role === "coach"
-          ? existingByEmail.role
-          : metadataRole === "admin" || metadataRole === "coach"
-            ? metadataRole
+      isStaffRole(existingRole)
+        ? existingRole!
+        : isStaffRole(metadataRole)
+          ? normalizePlatformRole(metadataRole)!
             : "student";
 
     // Existing Clerk user — grant/restore access

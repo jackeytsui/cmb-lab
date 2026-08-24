@@ -33,6 +33,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
+import { hasMinimumPlatformRole } from "@/lib/platform-roles";
 
 type NavSectionWithRole = NavSection & { minRole: Roles };
 type FeatureKey =
@@ -254,8 +255,6 @@ const navSections: NavSectionWithRoleAndFeature[] = [
   },
 ];
 
-const roleHierarchy: Roles[] = ["student", "coach", "admin"];
-
 export function AppSidebar({
   role,
   enabledFeatures,
@@ -266,18 +265,17 @@ export function AppSidebar({
   /** Unread reviewed-assignment count shown beside "Assignment Feedback". */
   assignmentFeedbackUnread?: number;
 }) {
-  const userLevel = roleHierarchy.indexOf(role);
   const featureSet = new Set(enabledFeatures ?? []);
 
   const filteredSections: NavSection[] = navSections
     .filter(
-      (section) => userLevel >= roleHierarchy.indexOf(section.minRole)
+      (section) => hasMinimumPlatformRole(role, section.minRole)
     )
     .map((section) => {
       const items = section.items
         .filter(
           (item) =>
-            !item.minRole || userLevel >= roleHierarchy.indexOf(item.minRole),
+            !item.minRole || hasMinimumPlatformRole(role, item.minRole),
         )
         .filter((item) => !item.featureKey || featureSet.has(item.featureKey))
         .map((item) =>
