@@ -14,6 +14,24 @@ describe("CMB Lab Assistant availability and layout", () => {
     expect(layout).not.toContain("showLabAssistant &&");
   });
 
+  it("states the same all-user availability in the admin health panel", () => {
+    const adminWidget = source(
+      "src/components/admin/LabAssistantAdminWidget.tsx",
+    );
+
+    expect(adminWidget).toContain(
+      "Widget access: every active signed-in CMB Lab user.",
+    );
+    expect(adminWidget).not.toContain("students need");
+  });
+
+  it("keeps admin dry-run traffic out of the real chatbot quota bucket", () => {
+    const route = source("src/app/api/lab-assistant/route.ts");
+
+    expect(route).toContain('`${dryRun ? "lab-test" : "lab"}:${userId}`');
+    expect(route).toContain("const verifiedRole = user.role");
+  });
+
   it("keeps the conversation as the only flexible scroll region", () => {
     const panel = source(
       "src/components/lab-assistant/LabAssistantPanel.tsx",

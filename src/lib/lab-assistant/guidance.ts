@@ -152,6 +152,16 @@ function dateLine(
   return line(label, value ? formatHumanDate(value) : null, emptyHint);
 }
 
+function coachLines(context: StudentContext): string {
+  if (context.coach.status === "assigned" && context.coach.name) {
+    return `- Coach assignment status: assigned\n- Assigned coach: ${context.coach.name}`;
+  }
+  if (context.coach.status === "unassigned") {
+    return "- Coach assignment status: not assigned\n- Assigned coach: No coach has been assigned yet; offer to ask the team for an update";
+  }
+  return "- Coach assignment status: temporarily unavailable\n- Assigned coach: Do not guess or say the student has no coach; offer to ask the team to verify";
+}
+
 /**
  * Render the allowlisted student context block appended to the guidance
  * prompt. This is the ONLY student data the model ever sees.
@@ -166,7 +176,7 @@ STUDENT CONTEXT (server-verified for the signed-in session — your only data so
 - Signed-in email: ${context.email}
 ${dateLine("Program start date", fields.start_date, "say it hasn't been scheduled yet and offer to check with the team")}
 ${dateLine("Program end date", fields.end_date, "say it hasn't been set yet and offer to check with the team")}
-${line("Assigned coach", fields.assigned_coach, "say no coach has been assigned yet and offer to pass it to the team")}
+${coachLines(context)}
 ${line("Referral source", fields.referral_source, "not on record")}
 ${line("Referral status", fields.referral_status, "say they don't have any referral activity yet and explain how the program works")}`;
 }

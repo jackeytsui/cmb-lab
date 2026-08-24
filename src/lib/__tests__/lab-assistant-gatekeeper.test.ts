@@ -85,6 +85,7 @@ describe("Lab Assistant gatekeeper (offline pipeline simulation)", () => {
     firstName: "Mei",
     email: "mei.wong@example.com",
     fields: merged.fields,
+    coach: { status: "assigned", name: "Jane Ip", source: "ghl" },
     ghlContactId: "c-course",
   });
 
@@ -127,10 +128,24 @@ describe("Lab Assistant gatekeeper (offline pipeline simulation)", () => {
       firstName: null,
       email: "new.student@example.com",
       fields: emptyConceptRecord<string | null>(null),
+      coach: { status: "unassigned", name: null, source: "cmb_lab" },
       ghlContactId: null,
     });
     expect(emptyContext).toContain("not set");
     expect(emptyContext).not.toContain("null");
     expect(emptyContext).not.toContain("undefined");
+  });
+
+  it("does not describe an unavailable coach lookup as unassigned", () => {
+    const unavailableContext = renderStudentContext({
+      firstName: "Ari",
+      email: "ari@example.com",
+      fields: emptyConceptRecord<string | null>(null),
+      coach: { status: "unavailable", name: null, source: null },
+      ghlContactId: null,
+    });
+    expect(unavailableContext).toContain("temporarily unavailable");
+    expect(unavailableContext).toContain("Do not guess");
+    expect(unavailableContext).not.toContain("No coach has been assigned");
   });
 });

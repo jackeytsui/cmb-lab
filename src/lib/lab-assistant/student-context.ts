@@ -22,7 +22,9 @@
 // the system of record: its contact is always the primary record (greeting,
 // escalation tasks), and only gaps are filled from the other links.
 
-import type { User } from "@/db/schema";
+import { db } from "@/db";
+import { users, type User } from "@/db/schema";
+import { and, eq, isNull } from "drizzle-orm";
 import { fetchGhlContactDataForLink } from "@/lib/ghl/contact-fields";
 import {
   findOrLinkContact,
@@ -42,6 +44,11 @@ import {
   ALLOWLISTED_FIELD_CONCEPTS,
   type AllowlistedFieldConcept,
 } from "./allowlist";
+import {
+  resolveCoachAssignment,
+  type CoachAssignment,
+  type InternalCoachCandidate,
+} from "./coach-context";
 
 /** Safety cap on how many linked sub-accounts are read per request. */
 const MAX_LINKS = 5;
@@ -53,6 +60,8 @@ export interface StudentContext {
   email: string;
   /** Allowlisted GHL fields; null when empty or unmapped (default DENY for all others). */
   fields: Record<AllowlistedFieldConcept, string | null>;
+  /** Canonical, explicitly resolved coach state for reliable student replies. */
+  coach: CoachAssignment;
   /**
    * Contact for task creation — the primary link (Course location when
    * present, email-verified); null when the student isn't linked.
@@ -60,8 +69,48 @@ export interface StudentContext {
   ghlContactId: string | null;
 }
 
+interface InternalCoachLookup {
+  coach: InternalCoachCandidate | null;
+  failed: boolean;
+}
+
 function normalizeEmail(email: string | null | undefined): string {
   return (email ?? "").trim().toLowerCase();
+}
+
+async function getInternalCoach(user: User): Promise<InternalCoachLookup> {
+  if (!user.assignedCoachId) return { coach: null, failed: false };
+
+  try {
+    const coach = await db.query.users.findFirst({
+      where: and(
+        eq(users.id, user.assignedCoachId),
+        isNull(users.deletedAt),
+      ),
+      columns: {
+        name: true,
+        role: true,
+        deletedAt: true,
+      },
+    });
+    return { coach: coach ?? null, failed: false };
+  } catch (error) {
+    console.error(
+      "[Lab Assistant] Could not resolve CMB Lab coach assignment:",
+      error instanceof Error ? error.message : error,
+    );
+    return { coach: null, failed: true };
+  }
+}
+
+function mergeCoachIntoFields(
+  fields: Record<AllowlistedFieldConcept, string | null>,
+  coach: CoachAssignment,
+): Record<AllowlistedFieldConcept, string | null> {
+  return {
+    ...fields,
+    assigned_coach: coach.status === "assigned" ? coach.name : null,
+  };
 }
 
 /**
@@ -75,6 +124,7 @@ function normalizeEmail(email: string | null | undefined): string {
 export async function getStudentContext(user: User): Promise<StudentContext> {
   const firstNameFallback = user.name?.trim().split(/\s+/)[0] ?? null;
   const sessionEmail = normalizeEmail(user.email);
+  const internalCoachPromise = getInternalCoach(user);
 
   // Ensure the user is linked to their GHL contact(s). Linking is BY EMAIL
   // (session email, server-side); getGhlContactLinks returns active links
@@ -96,10 +146,21 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
   }
 
   if (links.length === 0) {
+    const internalCoach = await internalCoachPromise;
+    const coach = resolveCoachAssignment({
+      assignedCoachId: user.assignedCoachId,
+      internalCoach: internalCoach.coach,
+      internalLookupFailed: internalCoach.failed,
+      ghlCoachName: null,
+    });
     return {
       firstName: firstNameFallback,
       email: user.email,
-      fields: emptyConceptRecord<string | null>(null),
+      fields: mergeCoachIntoFields(
+        emptyConceptRecord<string | null>(null),
+        coach,
+      ),
+      coach,
       ghlContactId: null,
     };
   }
@@ -107,7 +168,15 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
   // The Course sub-account is the system of record — read it first and let
   // it win as primary. (Empty set when locations aren't in the table; the
   // merge then falls back to most-resolved.)
-  const locations = await getActiveGhlLocations();
+  let locations: Awaited<ReturnType<typeof getActiveGhlLocations>> = [];
+  try {
+    locations = await getActiveGhlLocations();
+  } catch (error) {
+    console.error(
+      "[Lab Assistant] Could not load GHL locations:",
+      error instanceof Error ? error.message : error,
+    );
+  }
   const preferredLocationIds: ReadonlySet<string> = new Set(
     locations
       .filter((location) =>
@@ -165,6 +234,14 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
   }
 
   const merged = mergeLinkResolutions(resolutions, { preferredLocationIds });
+  const internalCoach = await internalCoachPromise;
+  const coach = resolveCoachAssignment({
+    assignedCoachId: user.assignedCoachId,
+    internalCoach: internalCoach.coach,
+    internalLookupFailed: internalCoach.failed,
+    ghlCoachName: merged.fields.assigned_coach,
+  });
+  const fields = mergeCoachIntoFields(merged.fields, coach);
   // Tasks only ever go to an email-verified contact; a student with no
   // verified link gets null (escalations still work, unattached).
   const ghlContactId = merged.primary?.ghlContactId ?? null;
@@ -190,9 +267,13 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
       present: Object.fromEntries(
         ALLOWLISTED_FIELD_CONCEPTS.map((concept) => [
           concept,
-          merged.fields[concept] !== null,
+          fields[concept] !== null,
         ])
       ),
+      coachResolution: {
+        status: coach.status,
+        source: coach.source,
+      },
       resolvedVia: Object.fromEntries(
         ALLOWLISTED_FIELD_CONCEPTS.map((concept) => [
           concept,
@@ -212,7 +293,8 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
   return {
     firstName: firstName ?? firstNameFallback,
     email: user.email,
-    fields: merged.fields,
+    fields,
+    coach,
     ghlContactId,
   };
 }

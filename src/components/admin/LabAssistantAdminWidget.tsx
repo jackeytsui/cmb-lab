@@ -183,12 +183,14 @@ export function LabAssistantAdminWidget() {
                   <div className="flex items-start gap-2 text-xs">
                     <Info className="mt-0.5 size-3.5 shrink-0 text-sky-500" />
                     <span className="text-foreground">
-                      Widget access: admins &amp; coaches always; students need
-                      the{" "}
-                      <span className="font-medium">
-                        Lab Assistant (Support Chat)
-                      </span>{" "}
-                      feature via a tag (Tag Management).
+                      Widget access: every active signed-in CMB Lab user.
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2 text-xs">
+                    <Info className="mt-0.5 size-3.5 shrink-0 text-sky-500" />
+                    <span className="text-foreground">
+                      Coach answers use the CMB Lab assignment first, with GHL
+                      only as a legacy fallback.
                     </span>
                   </div>
                   <HealthRow
@@ -950,7 +952,10 @@ function TestConsole() {
 
       {error && (
         <p className="px-3 pb-1 text-xs text-red-400">
-          Request failed — check OPENAI_API_KEY and try again.
+          {error.message?.toLowerCase().includes("too many") ||
+          error.message?.includes("429")
+            ? "Too many test messages — wait a moment, then retry."
+            : "Request failed — retry once, then check the server logs if it continues."}
         </p>
       )}
 

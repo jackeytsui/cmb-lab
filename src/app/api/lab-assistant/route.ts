@@ -18,7 +18,7 @@ import {
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
-import { getRealUser, hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import {
   labAssistantLimiter,
   labAssistantLimiterElevated,
@@ -44,6 +44,10 @@ import {
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import type { User } from "@/db/schema";
 import { isPromptInjectionProbe } from "@/lib/lab-assistant/safety";
+import {
+  coachAssignmentReply,
+  isDirectCoachLookup,
+} from "@/lib/lab-assistant/coach-context";
 import { searchKnowledgeBase } from "@/lib/chat-utils";
 import { storeBetaFeedback } from "@/lib/beta-feedback";
 import type { BetaFeedbackCategory } from "@/db/schema";
@@ -212,23 +216,9 @@ function cannedResponse(text: string): Response {
 }
 
 export async function POST(request: Request) {
-  const { userId, sessionClaims } = await auth();
+  const { userId } = await auth();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Rate limiting (per Clerk user)
-  const role =
-    ((sessionClaims?.metadata as Record<string, unknown>)?.role as string) ||
-    "student";
-  const limiter = selectLimiter(
-    role,
-    labAssistantLimiter,
-    labAssistantLimiterElevated
-  );
-  const rl = await limiter.limit(`lab:${userId}`);
-  if (!rl.success) {
-    return rateLimitResponse(rl);
   }
 
   // Identify: always the real session user (never impersonation, never
@@ -250,7 +240,24 @@ export async function POST(request: Request) {
     // Dry run (admin test console): full pipeline, but no GHL tasks are
     // created and intent scans stay out of the resolution metrics.
     // Only honored for coach/admin so students can't suppress escalation.
-    const dryRun = body.dryRun === true && (await hasMinimumRole("coach"));
+    const verifiedRole = user.role;
+    const dryRun =
+      body.dryRun === true &&
+      (verifiedRole === "coach" || verifiedRole === "admin");
+
+    // Admin QA traffic gets its own per-user bucket. Intensive dry-run tests
+    // must not consume or inherit the quota used by the real support widget.
+    const limiter = selectLimiter(
+      verifiedRole,
+      labAssistantLimiter,
+      labAssistantLimiterElevated,
+    );
+    const rl = await limiter.limit(
+      `${dryRun ? "lab-test" : "lab"}:${userId}`,
+    );
+    if (!rl.success) {
+      return rateLimitResponse(rl);
+    }
 
     const transcript = buildTranscript(messages);
     const latestUserMessage = [...messages]
@@ -272,6 +279,23 @@ export async function POST(request: Request) {
       isPromptInjectionProbe(messageText(latestUserMessage))
     ) {
       return cannedResponse(SAFE_SCOPE_REPLY);
+    }
+
+    // Direct coach-assignment questions use the server-verified CMB Lab
+    // assignment and a deterministic reply. This keeps the most common coach
+    // question correct even if the intent model is unavailable or GHL has a
+    // stale Coach Name field.
+    if (isDirectCoachLookup(latestUserText)) {
+      const studentContext = await getStudentContext(user);
+      const coachScan: IntentScan = {
+        intent: "my_coach",
+        confidence: 1,
+        urgent: false,
+      };
+      if (!dryRun) logIntentScan(user, coachScan, true);
+      return cannedResponse(
+        coachAssignmentReply(studentContext.coach, latestUserText),
+      );
     }
 
     // Pipeline: intent scan + gatekept context (independent, run together)
