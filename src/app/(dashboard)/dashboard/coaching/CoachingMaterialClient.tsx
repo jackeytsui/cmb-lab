@@ -194,6 +194,21 @@ export function shouldCommitCoachingDraft({
   return key === "Enter" && !shiftKey && !isComposing && keyCode !== 229;
 }
 
+export function getCoachingSessionRecordingUrl(session: {
+  recordingUrl?: string | null;
+  fathomLink?: string | null;
+} | null): string | null {
+  if (!session) return null;
+
+  for (const candidate of [session.recordingUrl, session.fathomLink]) {
+    if (!candidate) continue;
+    const sanitized = sanitizeRecordingUrl(candidate);
+    if (sanitized) return sanitized;
+  }
+
+  return null;
+}
+
 export function useProcessedText({
   committedText,
   scriptMode,
@@ -1309,12 +1324,6 @@ function CoachingPanel({
   const [isSavingRecordingUrl, setIsSavingRecordingUrl] = useState(false);
   const [recordingUrlError, setRecordingUrlError] = useState<string | null>(null);
 
-  // Fathom link state
-  const [fathomLinkDraft, setFathomLinkDraft] = useState("");
-  const [isEditingFathomLink, setIsEditingFathomLink] = useState(false);
-  const [isSavingFathomLink, setIsSavingFathomLink] = useState(false);
-  const [fathomLinkError, setFathomLinkError] = useState<string | null>(null);
-
   // Goals state — student-level (not session-level)
   const [studentGoals, setStudentGoals] = useState<string | null>(null);
   const [goalsDraft, setGoalsDraft] = useState("");
@@ -1425,7 +1434,10 @@ function CoachingPanel({
       const res = await fetch(`/api/coaching/sessions/${activeSessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recordingUrl: normalizedUrl }),
+        // `fathomLink` is a legacy duplicate of the recording link field.
+        // Clear it whenever the consolidated link is edited so old sessions
+        // are migrated without a destructive database-wide backfill.
+        body: JSON.stringify({ recordingUrl: normalizedUrl, fathomLink: null }),
       });
       if (!res.ok) {
         setRecordingUrlError(
@@ -1437,7 +1449,7 @@ function CoachingPanel({
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSessionId
-            ? { ...s, recordingUrl: normalizedUrl }
+            ? { ...s, recordingUrl: normalizedUrl, fathomLink: null }
             : s,
         ),
       );
@@ -1449,46 +1461,6 @@ function CoachingPanel({
       setIsSavingRecordingUrl(false);
     }
   }, [activeSessionId, recordingUrlDraft]);
-
-  const handleSaveFathomLink = useCallback(async () => {
-    if (!activeSessionId) return;
-    const rawUrl = fathomLinkDraft.trim();
-    const normalizedUrl = rawUrl ? sanitizeRecordingUrl(rawUrl) : null;
-    if (rawUrl && !normalizedUrl) {
-      setFathomLinkError("Enter a full link beginning with http:// or https://.");
-      return;
-    }
-
-    setIsSavingFathomLink(true);
-    setFathomLinkError(null);
-    try {
-      const res = await fetch(`/api/coaching/sessions/${activeSessionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fathomLink: normalizedUrl }),
-      });
-      if (!res.ok) {
-        setFathomLinkError(
-          await getResponseError(res, "Could not save the Fathom link."),
-        );
-        return;
-      }
-
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === activeSessionId
-            ? { ...s, fathomLink: normalizedUrl }
-            : s,
-        ),
-      );
-      setFathomLinkDraft(normalizedUrl ?? "");
-      setIsEditingFathomLink(false);
-    } catch {
-      setFathomLinkError("Could not save the Fathom link. Please try again.");
-    } finally {
-      setIsSavingFathomLink(false);
-    }
-  }, [activeSessionId, fathomLinkDraft]);
 
   const handleSaveGoals = useCallback(async () => {
     if (!goalsStudentEmail) return;
@@ -1604,21 +1576,18 @@ function CoachingPanel({
     () => sessions.find((s) => s.id === activeSessionId) ?? null,
     [sessions, activeSessionId],
   );
-  const safeRecordingUrl = activeSession?.recordingUrl
-    ? sanitizeRecordingUrl(activeSession.recordingUrl)
-    : null;
-  const safeFathomLink = activeSession?.fathomLink
-    ? sanitizeRecordingUrl(activeSession.fathomLink)
-    : null;
+  const safeRecordingUrl = getCoachingSessionRecordingUrl(activeSession);
+  const hasSavedRecordingUrl = Boolean(
+    activeSession?.recordingUrl || activeSession?.fathomLink,
+  );
 
   // Sync link editors when the active session or its persisted links change.
   useEffect(() => {
-    setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
+    setRecordingUrlDraft(
+      activeSession?.recordingUrl ?? activeSession?.fathomLink ?? "",
+    );
     setIsEditingRecordingUrl(false);
     setRecordingUrlError(null);
-    setFathomLinkDraft(activeSession?.fathomLink ?? "");
-    setIsEditingFathomLink(false);
-    setFathomLinkError(null);
   }, [
     activeSession?.id,
     activeSession?.recordingUrl,
@@ -2719,8 +2688,7 @@ function CoachingPanel({
 
       {/* Session links */}
       {activeSession && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-border bg-card p-4">
+        <div className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <LinkIcon className="size-4 text-muted-foreground" />
@@ -2730,14 +2698,16 @@ function CoachingPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    setRecordingUrlDraft(activeSession.recordingUrl ?? "");
+                    setRecordingUrlDraft(
+                      activeSession.recordingUrl ?? activeSession.fathomLink ?? "",
+                    );
                     setRecordingUrlError(null);
                     setIsEditingRecordingUrl(true);
                   }}
                   className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
                 >
                   <Pencil className="size-3 mr-1" />
-                  {activeSession.recordingUrl ? "Edit" : "Add Link"}
+                  {hasSavedRecordingUrl ? "Edit" : "Add Link"}
                 </button>
               )}
             </div>
@@ -2800,7 +2770,7 @@ function CoachingPanel({
                 <ExternalLink className="size-3.5 shrink-0" />
                 {safeRecordingUrl}
               </a>
-            ) : activeSession.recordingUrl ? (
+            ) : hasSavedRecordingUrl ? (
               <p className="mt-2 text-xs text-red-500">
                 This saved link is invalid. Edit it before opening.
               </p>
@@ -2809,98 +2779,6 @@ function CoachingPanel({
                 No recording link added yet.
               </p>
             )}
-          </div>
-
-          <div className="rounded-lg border border-border bg-card p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <LinkIcon className="size-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold text-foreground">Fathom Link</h3>
-              </div>
-              {canWrite && !isEditingFathomLink && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFathomLinkDraft(activeSession.fathomLink ?? "");
-                    setFathomLinkError(null);
-                    setIsEditingFathomLink(true);
-                  }}
-                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                >
-                  <Pencil className="size-3 mr-1" />
-                  {activeSession.fathomLink ? "Edit" : "Add Link"}
-                </button>
-              )}
-            </div>
-            {isEditingFathomLink ? (
-              <div className="mt-2 space-y-2">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <input
-                    type="url"
-                    inputMode="url"
-                    value={fathomLinkDraft}
-                    onChange={(e) => {
-                      setFathomLinkDraft(e.target.value);
-                      setFathomLinkError(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleSaveFathomLink();
-                      }
-                    }}
-                    aria-invalid={Boolean(fathomLinkError)}
-                    aria-describedby={fathomLinkError ? "fathom-link-error" : undefined}
-                    placeholder="https://fathom.video/..."
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleSaveFathomLink}
-                      disabled={isSavingFathomLink}
-                      className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50"
-                    >
-                      {isSavingFathomLink ? "Saving..." : "Save"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFathomLinkError(null);
-                        setIsEditingFathomLink(false);
-                      }}
-                      className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-                {fathomLinkError && (
-                  <p id="fathom-link-error" className="text-xs text-red-500" role="alert">
-                    {fathomLinkError}
-                  </p>
-                )}
-              </div>
-            ) : safeFathomLink ? (
-              <a
-                href={safeFathomLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1.5 break-all text-sm text-primary hover:underline"
-              >
-                <ExternalLink className="size-3.5 shrink-0" />
-                {safeFathomLink}
-              </a>
-            ) : activeSession.fathomLink ? (
-              <p className="mt-2 text-xs text-red-500">
-                This saved link is invalid. Edit it before opening.
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                No Fathom link added yet.
-              </p>
-            )}
-          </div>
         </div>
       )}
 

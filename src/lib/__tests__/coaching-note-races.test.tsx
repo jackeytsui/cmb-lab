@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getCoachingSessionRecordingUrl,
   mergeSessionsAfterRefresh,
   shouldCommitCoachingDraft,
   useProcessedText,
@@ -82,6 +83,31 @@ afterEach(() => {
 });
 
 describe("coaching note refresh races", () => {
+  it("consolidates legacy Fathom links into the single recording link", () => {
+    expect(
+      getCoachingSessionRecordingUrl({
+        recordingUrl: null,
+        fathomLink: "https://fathom.video/share/session-123",
+      }),
+    ).toBe("https://fathom.video/share/session-123");
+
+    expect(
+      getCoachingSessionRecordingUrl({
+        recordingUrl: "https://www.loom.com/share/recording-456",
+        fathomLink: "https://fathom.video/share/session-123",
+      }),
+    ).toBe("https://www.loom.com/share/recording-456");
+  });
+
+  it("falls back to a valid legacy link when the primary link is invalid", () => {
+    expect(
+      getCoachingSessionRecordingUrl({
+        recordingUrl: "javascript:alert(1)",
+        fathomLink: "https://fathom.video/share/session-123",
+      }),
+    ).toBe("https://fathom.video/share/session-123");
+  });
+
   it("does not submit Chinese IME candidate confirmation as a completed note", () => {
     expect(
       shouldCommitCoachingDraft({
