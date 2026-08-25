@@ -342,7 +342,7 @@ export function AppSidebar({
           </Link>
         )}
       </div>
-      <NavUser />
+      <NavUser role={role} />
       <SidebarRail />
     </Sidebar>
   );

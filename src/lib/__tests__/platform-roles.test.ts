@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FEATURE_DEFINITIONS, FEATURE_KEYS } from "@/lib/feature-definitions";
 import {
+  DEFAULT_PLATFORM_ROLE,
   PLATFORM_ROLE_DEFINITIONS,
   PLATFORM_ROLES,
   hasFullFeatureAccess,
@@ -10,6 +11,10 @@ import {
 } from "@/lib/platform-roles";
 
 describe("platform roles", () => {
+  it("defaults new accounts to student without using identity data", () => {
+    expect(DEFAULT_PLATFORM_ROLE).toBe("student");
+  });
+
   it("defines the complete database and UI role set", () => {
     expect(PLATFORM_ROLES).toEqual([
       "student",

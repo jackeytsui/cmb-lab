@@ -7,10 +7,9 @@ import { eq, and, ilike, isNull } from "drizzle-orm";
 import { assignRole } from "@/lib/user-roles";
 import { createNotification } from "@/lib/notifications";
 import { z } from "zod";
-import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { webhookSecretsMatch } from "@/lib/webhook-secret";
-import { isStaffRole } from "@/lib/platform-roles";
+import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
 
 const enrollmentSchema = z.object({
   email: z.string().email(),
@@ -146,32 +145,19 @@ export async function POST(req: NextRequest) {
     });
 
     if (!dbUser) {
-      const role = resolveRoleFromEmail(data.email);
       const [newUser] = await db
         .insert(users)
         .values({
           clerkId: clerkUser.id,
           email: data.email,
           name: data.name || null,
-          role,
+          role: DEFAULT_PLATFORM_ROLE,
         })
         .returning();
       dbUser = newUser;
-      if (role === "student") {
-        await ensureDefaultStudentRoleAssignment(dbUser.id);
-      }
+      await ensureDefaultStudentRoleAssignment(dbUser.id);
     } else {
-      const resolvedRole = resolveRoleFromEmail(data.email);
-      const role = isStaffRole(dbUser.role)
-        ? dbUser.role
-        : resolvedRole;
-      if (dbUser.role !== role) {
-        await db
-          .update(users)
-          .set({ role })
-          .where(eq(users.id, dbUser.id));
-      }
-      if (role === "student") {
+      if (dbUser.role === DEFAULT_PLATFORM_ROLE) {
         await ensureDefaultStudentRoleAssignment(dbUser.id);
       }
     }

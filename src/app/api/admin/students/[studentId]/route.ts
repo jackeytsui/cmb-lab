@@ -151,6 +151,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const clerk = await clerkClient();
+    const clerkUser = await clerk.users.getUser(student.clerkId);
     await clerk.users.updateUser(student.clerkId, {
       firstName: firstName || undefined,
       lastName: lastName || undefined,
@@ -159,7 +160,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // Update email via Clerk API only when changed.
     if (student.email.toLowerCase() !== normalizedEmail) {
-      const clerkUser = await clerk.users.getUser(student.clerkId);
       const existingAddress = clerkUser.emailAddresses.find(
         (item) => item.emailAddress.toLowerCase() === normalizedEmail
       );
@@ -183,6 +183,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         });
       }
     }
+
+    await clerk.users.updateUserMetadata(student.clerkId, {
+      publicMetadata: {
+        ...(clerkUser.publicMetadata ?? {}),
+        role: parsed.data.role,
+      },
+    });
   } catch (error) {
     console.error("Failed to update Clerk student profile:", error);
     return NextResponse.json(

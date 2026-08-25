@@ -6,10 +6,9 @@ import { db } from "@/db";
 import { users, roles, roleFeatures, processedWebhooks } from "@/db/schema";
 import { featureKeySchema } from "@/lib/permissions";
 import { assignRole, removeRole } from "@/lib/user-roles";
-import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { webhookSecretsMatch } from "@/lib/webhook-secret";
-import { isStaffRole } from "@/lib/platform-roles";
+import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
 
 const discordWebhookSchema = z
   .object({
@@ -144,32 +143,19 @@ export async function POST(req: NextRequest) {
       columns: { id: true, role: true },
     });
     if (!dbUser) {
-      const role = resolveRoleFromEmail(data.email);
       const [created] = await db
         .insert(users)
         .values({
           clerkId: clerkUser.id,
           email: data.email,
           name: data.name || null,
-          role,
+          role: DEFAULT_PLATFORM_ROLE,
         })
         .returning({ id: users.id, role: users.role });
       dbUser = created;
-      if (role === "student") {
-        await ensureDefaultStudentRoleAssignment(dbUser.id);
-      }
+      await ensureDefaultStudentRoleAssignment(dbUser.id);
     } else {
-      const resolvedRole = resolveRoleFromEmail(data.email);
-      const role = isStaffRole(dbUser.role)
-        ? dbUser.role
-        : resolvedRole;
-      if (dbUser.role !== role) {
-        await db
-          .update(users)
-          .set({ role })
-          .where(eq(users.id, dbUser.id));
-      }
-      if (role === "student") {
+      if (dbUser.role === DEFAULT_PLATFORM_ROLE) {
         await ensureDefaultStudentRoleAssignment(dbUser.id);
       }
     }

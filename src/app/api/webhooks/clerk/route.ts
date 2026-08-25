@@ -6,12 +6,11 @@ import { users, roles, tags } from "@/db/schema";
 import { eq, and, ilike, isNull } from "drizzle-orm";
 import { getGhlContactLinks, updateGhlContactEmail } from "@/lib/ghl/contacts";
 import { linkAndSyncTagsFromGhl } from "@/lib/ghl/tag-sync";
-import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { assignRole } from "@/lib/user-roles";
 import { assignTag } from "@/lib/tags";
 import {
-  hasHigherPlatformAccess,
+  DEFAULT_PLATFORM_ROLE,
   normalizePlatformRole,
   resolveNonDowngradingPlatformRole,
   type PlatformRole,
@@ -147,18 +146,12 @@ export async function POST(req: NextRequest) {
 
       if (primaryEmail) {
         const normalizedEmail = primaryEmail.trim().toLowerCase();
-        const allowlistRole = resolveRoleFromEmail(primaryEmail);
         const existingByEmail = await db.query.users.findFirst({
           where: ilike(users.email, normalizedEmail),
           columns: { id: true, role: true },
         });
 
-        // Preserve administrator-assigned peer staff roles; only raise access level.
-        const effectiveRole = existingByEmail
-          ? hasHigherPlatformAccess(allowlistRole, existingByEmail.role)
-            ? allowlistRole
-            : existingByEmail.role ?? allowlistRole
-          : allowlistRole;
+        const effectiveRole = existingByEmail?.role ?? DEFAULT_PLATFORM_ROLE;
 
         const [created] = existingByEmail
           ? await db
@@ -178,7 +171,7 @@ export async function POST(req: NextRequest) {
                 clerkId: id,
                 email: normalizedEmail,
                 name: [first_name, last_name].filter(Boolean).join(" ") || null,
-                role: allowlistRole,
+                role: DEFAULT_PLATFORM_ROLE,
               })
               .returning({ id: users.id });
 
@@ -215,28 +208,15 @@ export async function POST(req: NextRequest) {
 
       if (primaryEmail) {
         const normalizedEmail = primaryEmail.trim().toLowerCase();
-        const allowlistRole = resolveRoleFromEmail(primaryEmail);
-
-        // Look up existing role so we never downgrade
-        const existingUser = await db.query.users.findFirst({
-          where: eq(users.clerkId, id),
-          columns: { id: true, role: true },
-        });
-        const effectiveRole = existingUser
-          ? hasHigherPlatformAccess(allowlistRole, existingUser.role)
-            ? allowlistRole
-            : existingUser.role ?? allowlistRole
-          : allowlistRole;
 
         let [updated] = await db
           .update(users)
           .set({
             email: normalizedEmail,
             name: [first_name, last_name].filter(Boolean).join(" ") || null,
-            role: effectiveRole,
           })
           .where(eq(users.clerkId, id))
-          .returning({ id: users.id });
+          .returning({ id: users.id, role: users.role });
 
         if (!updated) {
           const existingByEmail = await db.query.users.findFirst({
@@ -244,30 +224,21 @@ export async function POST(req: NextRequest) {
             columns: { id: true, role: true },
           });
           if (existingByEmail) {
-            // Never downgrade existing role
-            const fallbackRole = hasHigherPlatformAccess(allowlistRole, existingByEmail.role)
-              ? allowlistRole
-              : existingByEmail.role ?? allowlistRole;
             [updated] = await db
               .update(users)
               .set({
                 clerkId: id,
                 email: normalizedEmail,
                 name: [first_name, last_name].filter(Boolean).join(" ") || null,
-                role: fallbackRole,
                 deletedAt: null,
               })
               .where(eq(users.id, existingByEmail.id))
-              .returning({ id: users.id });
+              .returning({ id: users.id, role: users.role });
           }
         }
 
-        if (effectiveRole === "student" && updated) {
+        if (updated?.role === DEFAULT_PLATFORM_ROLE) {
           await ensureDefaultStudentRoleAssignment(updated.id);
-        }
-
-        if (updated) {
-          await applyInvitationMetadataToUser(updated.id, invitationMetadata);
         }
 
         // Sync email change to GHL if user is linked; otherwise try to link now.

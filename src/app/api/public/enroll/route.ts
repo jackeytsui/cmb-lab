@@ -5,7 +5,10 @@ import { validateBearerApiKey } from "@/lib/validate-api-key";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { isStaffRole, normalizePlatformRole } from "@/lib/platform-roles";
+import {
+  DEFAULT_PLATFORM_ROLE,
+  normalizePlatformRole,
+} from "@/lib/platform-roles";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -64,14 +67,8 @@ export async function POST(req: NextRequest) {
           where: eq(users.email, normalizedEmail),
           columns: { id: true, role: true },
         });
-    const metadataRole = clerkUser.publicMetadata?.role;
     const existingRole = existingByClerk?.role ?? existingByEmail?.role;
-    const role =
-      isStaffRole(existingRole)
-        ? existingRole!
-        : isStaffRole(metadataRole)
-          ? normalizePlatformRole(metadataRole)!
-            : "student";
+    const role = normalizePlatformRole(existingRole) ?? DEFAULT_PLATFORM_ROLE;
 
     // Existing Clerk user — grant/restore access
     await clerk.users.updateUserMetadata(clerkUser.id, {
@@ -110,7 +107,12 @@ export async function POST(req: NextRequest) {
       } else {
         await db
           .insert(users)
-          .values({ clerkId: clerkUser.id, email: normalizedEmail, name, role: "student" })
+          .values({
+            clerkId: clerkUser.id,
+            email: normalizedEmail,
+            name,
+            role: DEFAULT_PLATFORM_ROLE,
+          })
           .onConflictDoNothing();
       }
     }
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
     await clerk.invitations.createInvitation({
       emailAddress: normalizedEmail,
       redirectUrl: `${appUrl}/sign-in`,
-      publicMetadata: { ...enrollmentMetadata, role: "student" },
+      publicMetadata: { ...enrollmentMetadata, role: DEFAULT_PLATFORM_ROLE },
       notify: true,
     });
   } catch (err: unknown) {

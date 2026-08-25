@@ -16,7 +16,6 @@ import { announcements, assignmentSubmissions, users } from "@/db/schema";
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { FEATURE_KEYS, resolvePermissions } from "@/lib/permissions";
 import { DEFAULT_STUDENT_FEATURES, ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
-import { resolveRoleFromEmail } from "@/lib/access-control";
 import {
   applyFeatureTagOverrides,
   canViewCourseLibrary,
@@ -28,29 +27,14 @@ import { StudentContentGuard } from "@/components/layout/StudentContentGuard";
 import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
 import { assignBaselineCoachingTagsToStudents } from "@/lib/coaching-access";
 import {
+  DEFAULT_PLATFORM_ROLE,
   hasFullFeatureAccess,
-  normalizePlatformRole,
 } from "@/lib/platform-roles";
 
 export const dynamic = "force-dynamic";
 
 function isPast(date: Date) {
   return date.getTime() < new Date().getTime();
-}
-
-function normalizeRole(value: unknown): Roles | null {
-  return normalizePlatformRole(value);
-}
-
-function roleFromSessionClaims(sessionClaims: unknown): Roles | null {
-  if (!sessionClaims || typeof sessionClaims !== "object") return null;
-  const claims = sessionClaims as Record<string, unknown>;
-  return (
-    normalizeRole((claims.metadata as Record<string, unknown> | undefined)?.role) ||
-    normalizeRole((claims.public_metadata as Record<string, unknown> | undefined)?.role) ||
-    normalizeRole((claims.publicMetadata as Record<string, unknown> | undefined)?.role) ||
-    normalizeRole(claims.role)
-  );
 }
 
 function getClerkEmail(clerkUser: Awaited<ReturnType<typeof currentUser>>) {
@@ -66,13 +50,12 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { userId, sessionClaims } = await auth();
+  const { userId } = await auth();
   if (!userId) {
     redirect("/sign-in");
   }
 
   const forcedStudent = process.env.FORCE_STUDENT_MODE === "true";
-  const claimRole = roleFromSessionClaims(sessionClaims);
   let role: Roles | null = forcedStudent ? "student" : null;
   let enabledFeatures: string[] | undefined;
 
@@ -123,8 +106,6 @@ export default async function DashboardLayout({
     redirect("/sign-in?access=expired");
   }
   if (!dbUser && email) {
-    const metadataRole = normalizeRole((metadata as Record<string, unknown>)?.role);
-    const resolvedRole = (claimRole || metadataRole || resolveRoleFromEmail(email)) as Roles;
     await db
       .insert(users)
       .values({
@@ -133,7 +114,7 @@ export default async function DashboardLayout({
         name:
           [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ") || null,
         imageUrl: clerkUser?.imageUrl ?? null,
-        role: resolvedRole,
+        role: DEFAULT_PLATFORM_ROLE,
       })
       .onConflictDoNothing({ target: users.clerkId });
 
@@ -142,13 +123,13 @@ export default async function DashboardLayout({
       columns: { id: true, role: true },
     });
 
-    if (dbUser && resolvedRole === "student") {
+    if (dbUser) {
       await ensureDefaultStudentRoleAssignment(dbUser.id);
     }
   }
 
   if (!role) {
-    role = dbUser?.role || claimRole || "student";
+    role = dbUser?.role ?? DEFAULT_PLATFORM_ROLE;
   }
 
   // "View As" impersonation: admin can view the app as another user

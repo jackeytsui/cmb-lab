@@ -17,25 +17,16 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
+import type { Roles } from "@/types/globals";
 
-export function NavUser() {
+export function NavUser({ role }: { role: Roles }) {
   const { user } = useUser();
-  const roleRaw = user?.publicMetadata?.role;
-  const role =
-    typeof roleRaw === "string" && roleRaw.trim().length > 0
-      ? roleRaw.charAt(0).toUpperCase() + roleRaw.slice(1)
-      : "Account";
   const email =
     user?.primaryEmailAddress?.emailAddress ||
     user?.emailAddresses?.[0]?.emailAddress ||
     "";
-  const normalizedEmail = email.trim().toLowerCase();
-  const isAdminEmail =
-    normalizedEmail === "jackey.tsui@thecmblueprint.com" ||
-    normalizedEmail === "contact@thecmblueprint.com";
-  const isAdminRole = typeof roleRaw === "string" && roleRaw.toLowerCase() === "admin";
-  const showAdminMenu = isAdminEmail || isAdminRole;
-  const displayRole = showAdminMenu ? "Admin" : role;
+  const showAdminMenu = role === "admin";
+  const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
 
   return (
     <SidebarFooter>

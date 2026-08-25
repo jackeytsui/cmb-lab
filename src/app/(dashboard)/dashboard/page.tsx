@@ -22,9 +22,9 @@ import { XPOverview } from "@/components/xp/XPOverview";
 import { resolvePermissions } from "@/lib/permissions";
 import { hasMinimumRole } from "@/lib/auth";
 import { StudyTodayCard } from "@/components/dashboard/StudyTodayCard";
-import { resolveRoleFromEmail } from "@/lib/access-control";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { getUserFeatureTagOverrides, applyFeatureTagOverrides } from "@/lib/tag-feature-access";
+import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
 
 /**
  * Dashboard page - shows courses the authenticated user has access to.
@@ -57,7 +57,6 @@ export default async function DashboardPage() {
         redirect("/sign-in");
       }
 
-      const role = resolveRoleFromEmail(email);
       await db
         .insert(users)
         .values({
@@ -66,7 +65,7 @@ export default async function DashboardPage() {
           name:
             [user?.firstName, user?.lastName].filter(Boolean).join(" ") || null,
           imageUrl: user?.imageUrl ?? null,
-          role,
+          role: DEFAULT_PLATFORM_ROLE,
         })
         .onConflictDoNothing({ target: users.clerkId });
 
@@ -77,12 +76,6 @@ export default async function DashboardPage() {
 
       if (!dbUser) {
         redirect("/sign-in");
-      }
-    } else if (dbUser.email) {
-      const role = resolveRoleFromEmail(dbUser.email);
-      if (dbUser.role !== role) {
-        await db.update(users).set({ role }).where(eq(users.id, dbUser.id));
-        dbUser = { ...dbUser, role };
       }
     }
 

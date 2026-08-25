@@ -1,11 +1,11 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import {
+  DEFAULT_PLATFORM_ROLE,
   hasMinimumPlatformRole,
   normalizePlatformRole,
 } from "@/lib/platform-roles";
 
-const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
 const isCoachRoute = createRouteMatcher(["/coach(.*)"]);
 const isSignUpRoute = createRouteMatcher(["/sign-up(.*)"]);
 const isStudentAllowedRoute = createRouteMatcher([
@@ -39,10 +39,6 @@ const isPublicRoute = createRouteMatcher([
   "/api/podcast/private/(.*)/audio/(.*)",
 ]);
 
-function normalizeEmail(value: unknown) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
 function normalizeRole(value: unknown) {
   return normalizePlatformRole(value) ?? "";
 }
@@ -57,23 +53,6 @@ function roleFromSessionClaims(sessionClaims: unknown) {
     normalizeRole(claims.role)
   );
 }
-
-function getEmailSet(defaults: string[], envVar?: string) {
-  const extra = (envVar || "")
-    .split(",")
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-  return new Set([...defaults, ...extra].map((v) => v.trim().toLowerCase()));
-}
-
-const adminEmails = getEmailSet(
-  ["contact@thecmblueprint.com", "jackey.tsui@thecmblueprint.com"],
-  process.env.ADMIN_EMAILS
-);
-const coachEmails = getEmailSet(
-  ["janelle.wong@thecmblueprint.com", "jackeytsui.wf@gmail.com"],
-  process.env.COACH_EMAILS
-);
 
 export default clerkMiddleware(async (auth, req) => {
   if (isSignUpRoute(req)) {
@@ -97,21 +76,13 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.redirect(new URL("/sign-in", req.url));
   }
 
-  // Resolve role in middleware (edge-safe): email allowlist first, then session claims.
-  const claimEmail = normalizeEmail(
-    sessionClaims?.email ||
-      sessionClaims?.primary_email_address ||
-      sessionClaims?.email_address
-  );
+  // Clerk metadata mirrors the database role for edge-only route hints.
+  // Server layouts and pages still authorize against the database.
   const claimRole = roleFromSessionClaims(sessionClaims);
   const forcedStudent = process.env.FORCE_STUDENT_MODE === "true";
   const role = forcedStudent
-    ? "student"
-    : adminEmails.has(claimEmail)
-      ? "admin"
-      : coachEmails.has(claimEmail)
-        ? "coach"
-        : (claimRole || "student");
+    ? DEFAULT_PLATFORM_ROLE
+    : (claimRole || DEFAULT_PLATFORM_ROLE);
 
   // Admin route protection is enforced in server layouts/pages where full user context is available.
   // Avoid edge false negatives when session claims are missing email/role fields.

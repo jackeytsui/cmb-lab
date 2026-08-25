@@ -9,6 +9,8 @@ export const PLATFORM_ROLES = [
 
 export type PlatformRole = (typeof PLATFORM_ROLES)[number];
 
+export const DEFAULT_PLATFORM_ROLE: PlatformRole = "student";
+
 export type PlatformRoleDefinition = {
   role: PlatformRole;
   label: string;

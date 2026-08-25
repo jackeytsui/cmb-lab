@@ -1,51 +1,20 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import type { Roles } from "@/types/globals";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
-import { resolveRoleFromEmail } from "@/lib/access-control";
 import {
+  DEFAULT_PLATFORM_ROLE,
   hasMinimumPlatformRole,
-  normalizePlatformRole,
 } from "@/lib/platform-roles";
-
-function getClerkEmail(clerkUser: Awaited<ReturnType<typeof currentUser>>) {
-  return (
-    clerkUser?.primaryEmailAddress?.emailAddress ||
-    clerkUser?.emailAddresses?.[0]?.emailAddress ||
-    null
-  );
-}
-
-function normalizeRole(value: unknown): Roles | null {
-  return normalizePlatformRole(value);
-}
-
-function roleFromSessionClaims(sessionClaims: unknown): Roles | null {
-  if (!sessionClaims || typeof sessionClaims !== "object") return null;
-  const claims = sessionClaims as Record<string, unknown>;
-  return (
-    normalizeRole((claims.metadata as Record<string, unknown> | undefined)?.role) ||
-    normalizeRole((claims.public_metadata as Record<string, unknown> | undefined)?.role) ||
-    normalizeRole((claims.publicMetadata as Record<string, unknown> | undefined)?.role) ||
-    normalizeRole(claims.role)
-  );
-}
 
 /**
  * Resolve the current user's role.
- * Uses database role first (source of truth), then falls back to session claims.
+ * The database is the only authorization source of truth.
  */
 async function resolveRole(): Promise<Roles> {
-  const { sessionClaims, userId } = await auth();
-  const clerkUser = await currentUser();
-  const email = getClerkEmail(clerkUser);
-  const allowlistRole = resolveRoleFromEmail(email);
-  const claimsRole = roleFromSessionClaims(sessionClaims);
-  const metadataRole = normalizeRole(
-    (clerkUser?.publicMetadata as Record<string, unknown> | undefined)?.role
-  );
+  const { userId } = await auth();
 
   // Source of truth: database
   if (userId) {
@@ -56,16 +25,7 @@ async function resolveRole(): Promise<Roles> {
     if (user) return user.deletedAt ? "student" : user.role;
   }
 
-  // Fallback: session claims (requires Clerk session token customization)
-  if (claimsRole) return claimsRole;
-
-  if (metadataRole) return metadataRole;
-
-  // Final fallback: deterministic email allowlist mapping.
-  // This keeps admin API authorization consistent with middleware route checks.
-  if (email) return allowlistRole;
-
-  return "student";
+  return DEFAULT_PLATFORM_ROLE;
 }
 
 /**
