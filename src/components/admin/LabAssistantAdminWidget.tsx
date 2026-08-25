@@ -859,10 +859,15 @@ function TestConsole() {
       }),
     });
   const [input, setInput] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length === 0) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   const canSend = status === "ready" || status === "error";
@@ -907,7 +912,10 @@ function TestConsole() {
         )}
       </div>
 
-      <div className="max-h-[360px] flex-1 space-y-2 overflow-y-auto p-3">
+      <div
+        ref={messagesContainerRef}
+        className="max-h-[360px] flex-1 space-y-2 overflow-y-auto p-3"
+      >
         {messages.length === 0 && (
           <p className="text-xs text-muted-foreground">
             Ask what a student would ask — &quot;When does my program
@@ -947,7 +955,6 @@ function TestConsole() {
             Thinking...
           </p>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {error && (

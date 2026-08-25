@@ -25,6 +25,19 @@ describe("CMB Lab Assistant availability and layout", () => {
     expect(adminWidget).not.toContain("students need");
   });
 
+  it("does not scroll the Admin Portal page when the test console mounts", () => {
+    const adminWidget = source(
+      "src/components/admin/LabAssistantAdminWidget.tsx",
+    );
+
+    expect(adminWidget).toContain("if (messages.length === 0) return;");
+    expect(adminWidget).toContain("messagesContainerRef.current");
+    expect(adminWidget).toContain(
+      "container.scrollTo({ top: container.scrollHeight",
+    );
+    expect(adminWidget).not.toContain("scrollIntoView");
+  });
+
   it("keeps admin dry-run traffic out of the real chatbot quota bucket", () => {
     const route = source("src/app/api/lab-assistant/route.ts");
 
