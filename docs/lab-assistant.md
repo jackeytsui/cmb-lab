@@ -56,13 +56,15 @@ Unmapped/empty fields degrade to friendly null phrasing (e.g. "no coach assigned
 Created on the student's GHL contact:
 
 - Title: `[Lab Bot] Escalation — {intent|unclassified} — {name}`
-- Body: full transcript + detected intent + confidence + timestamp
-- Due: 24h (4h when urgent signals are detected)
-- Bot reply: "passed to the team, reply within 1 business day; urgent → contact@thecmblueprint.com"
+- Body: submitter + support assignee + student email + conversation summary + detected intent + confidence + timestamp + full transcript
+- Due: 48h (4h when urgent signals are detected)
+- Bot reply: "passed to the support team, expect a reply within 48 hours; urgent → contact@thecmblueprint.com"
 
 Triggered when: intent is `other`/unclassified, confidence is below threshold, the model calls its `escalateToTeam` tool (student asks for a human, accepts an offer, off-scope follow-up), or urgency is detected (task created *and* the inbox is surfaced). Repeat unresolved messages in an already-escalated conversation do not create duplicate tasks.
 
-**Handover always lands in GHL** (like the team's operations form): first choice is a task on the student's own contact; if they have no linked contact — or that call fails — the task is created on a dedicated **CMB Lab Operations** contact instead (upserted automatically; email configurable via `GHL_OPS_CONTACT_EMAIL`, default `contact@thecmblueprint.com`) with the requester's email appended to the title. The audit log records which route was used (`via: student|ops`). Only if both routes fail does the bot point to the support inbox.
+Every task begins with a concise AI-generated conversation summary, followed by the full transcript. It records `jackey.tsui@thecmblueprint.com` as the submitter, includes the signed-in student's email explicitly, and is assigned to the exact GHL user matching `contact@thecmblueprint.com` in the task's sub-account.
+
+**Handover always lands in GHL** (like the team's operations form): first choice is a task on the student's own contact; if they have no linked contact — or that call fails — the task is created on a dedicated **CMB Lab Operations** contact instead (upserted automatically; email configurable via `GHL_OPS_CONTACT_EMAIL`, default `contact@thecmblueprint.com`) with the requester's email appended to the title. The audit log records which route was used (`via: student|ops`). Only if both routes fail does the bot point to the support inbox. If the support assignee cannot be resolved in a sub-account, that attempt fails rather than creating an unassigned task, and the normal operations fallback is used.
 
 **Discord alerts**: every handover also pings the issue-escalation channel — student, intent, urgency, relative due time, where the task landed (student contact / ops contact / a FAILED alert for manual follow-up), and the student's last message. The full transcript stays in the GHL task. Configure it in the admin block's Config health section: paste the channel's webhook URL (Discord channel → Integrations → Webhooks); it's verified with a test ping before saving (stored in `app_settings`; the `DISCORD_WEBHOOK_URL` env var works as a fallback). A "Send test" button re-verifies any time.
 

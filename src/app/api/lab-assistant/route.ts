@@ -10,7 +10,8 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  generateObject,
+  generateText,
+  Output,
   stepCountIs,
   streamText,
   type UIMessage,
@@ -51,12 +52,16 @@ import {
 import { searchKnowledgeBase } from "@/lib/chat-utils";
 import { storeBetaFeedback } from "@/lib/beta-feedback";
 import type { BetaFeedbackCategory } from "@/db/schema";
+import {
+  HANDOFF_RESPONSE_WINDOW,
+  normalizeHandoffSummary,
+} from "@/lib/lab-assistant/handoff-policy";
 
 export const maxDuration = 30;
 
-const ESCALATION_CONFIRMATION = `I've passed this to the team — they'll get back to you within 1 business day. If it's urgent, email ${SUPPORT_EMAIL} and we'll prioritise it.`;
+const ESCALATION_CONFIRMATION = `I've passed this to the support team — you can expect to hear back within ${HANDOFF_RESPONSE_WINDOW}. If it's urgent, email ${SUPPORT_EMAIL} and we'll prioritise it.`;
 
-const ALREADY_ESCALATED_REPLY = `The team already has your request and will reply within 1 business day. If it's urgent, email ${SUPPORT_EMAIL}.`;
+const ALREADY_ESCALATED_REPLY = `The support team already has your request and will reply within ${HANDOFF_RESPONSE_WINDOW}. If it's urgent, email ${SUPPORT_EMAIL}.`;
 
 const ESCALATION_FALLBACK_REPLY = `I couldn't reach the team's system just now — please email ${SUPPORT_EMAIL} directly and they'll take care of you.`;
 
@@ -96,6 +101,14 @@ const intentSchema = z.object({
     .describe(
       "True if the student signals urgency, distress, or a time-critical problem"
     ),
+  handoffSummary: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .describe(
+      "One concise sentence summarizing what the student needs, including essential context from the recent conversation",
+    ),
 });
 
 type IntentScan = z.infer<typeof intentSchema>;
@@ -127,9 +140,15 @@ function buildTranscript(messages: UIMessage[]): string {
 /** True once this conversation has already produced an escalation task. */
 function alreadyEscalated(messages: UIMessage[]): boolean {
   return messages.some(
-    (message) =>
-      message.role === "assistant" &&
-      messageText(message).includes("passed this to the team")
+    (message) => {
+      if (message.role !== "assistant") return false;
+      const text = messageText(message).toLowerCase();
+      return (
+        text.includes("passed this to the team") ||
+        text.includes("passed this to the support team") ||
+        text.includes("support team already has your request")
+      );
+    },
   );
 }
 
@@ -151,9 +170,9 @@ async function scanIntent(messages: UIMessage[]): Promise<IntentScan | null> {
     .join("\n");
 
   try {
-    const { object } = await generateObject({
+    const { output } = await generateText({
       model: openai("gpt-4o-mini"),
-      schema: intentSchema,
+      output: Output.object({ schema: intentSchema }),
       system: `You classify support messages for CMB Lab (a language-learning program). Classify the STUDENT'S LATEST message given the conversation.
 
 Intents:
@@ -169,10 +188,11 @@ Intents:
 - smalltalk: greetings, thanks, pleasantries, "ok great" — nothing to resolve
 - other: anything else (payments, account changes, personal entitlement disputes, another person's data, unclear requests)
 
-Set urgent=true only for genuine urgency or distress signals.`,
+Set urgent=true only for genuine urgency or distress signals.
+Always write handoffSummary as a neutral, concise sentence for a human support task. State what the student needs and preserve essential details from the recent exchange; do not mention classification, confidence, or internal systems.`,
       prompt: recent || "Student: (empty message)",
     });
-    return object;
+    return output;
   } catch (error) {
     console.error(
       "[Lab Assistant] Intent scan failed:",
@@ -291,6 +311,7 @@ export async function POST(request: Request) {
         intent: "my_coach",
         confidence: 1,
         urgent: false,
+        handoffSummary: "Student is asking who their assigned coach is.",
       };
       if (!dryRun) logIntentScan(user, coachScan, true);
       return cannedResponse(
@@ -308,6 +329,10 @@ export async function POST(request: Request) {
       scan !== null && scan.confidence >= INTENT_CONFIDENCE_THRESHOLD;
     const intent: LabAssistantIntent | null = confident ? scan.intent : null;
     const urgent = scan?.urgent ?? false;
+    const handoffSummary = normalizeHandoffSummary(
+      scan?.handoffSummary,
+      latestUserText,
+    );
 
     // Product feedback is stored in CMB Lab itself, not buried in a GHL
     // escalation transcript. Bare quick-action phrases ask for detail first;
@@ -361,6 +386,7 @@ export async function POST(request: Request) {
             ghlContactId: studentContext.ghlContactId,
             intent: scan && intent === "other" ? "other" : null,
             confidence: scan?.confidence ?? null,
+            summary: handoffSummary,
             transcript,
             urgent,
           });
@@ -380,6 +406,7 @@ export async function POST(request: Request) {
         : await createTestimonialTask({
             user,
             ghlContactId: studentContext.ghlContactId,
+            summary: handoffSummary,
             transcript,
           });
       testimonialNote = result.ok
@@ -397,6 +424,7 @@ export async function POST(request: Request) {
             ghlContactId: studentContext.ghlContactId,
             intent,
             confidence: scan?.confidence ?? null,
+            summary: handoffSummary,
             transcript,
             urgent: true,
           });
@@ -457,6 +485,11 @@ export async function POST(request: Request) {
                   ghlContactId: studentContext.ghlContactId,
                   intent,
                   confidence: scan?.confidence ?? null,
+                  summary: normalizeHandoffSummary(
+                    scan?.handoffSummary,
+                    latestUserText,
+                    reason,
+                  ),
                   transcript: `${transcript}\n\n[Bot escalation reason: ${reason}]`,
                   urgent: toolUrgent || urgent,
                 });
@@ -464,7 +497,7 @@ export async function POST(request: Request) {
               ? {
                   ok: true,
                   message:
-                    "Task created. Tell the student it's been passed to the team and they'll hear back within 1 business day; urgent issues should go to " +
+                    `Task created. Tell the student it's been passed to the support team and they'll hear back within ${HANDOFF_RESPONSE_WINDOW}; urgent issues should go to ` +
                     SUPPORT_EMAIL +
                     ".",
                 }

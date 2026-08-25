@@ -7,10 +7,13 @@ import { createGhlClient, getAnyActiveGhlLocation } from "@/lib/ghl/client";
 import { createContactTask } from "@/lib/ghl/tasks";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import { SUPPORT_EMAIL } from "./allowlist";
+import {
+  buildHandoffTaskBody,
+  HANDOFF_ASSIGNEE_EMAIL,
+  STANDARD_HANDOFF_DUE_HOURS,
+  URGENT_HANDOFF_DUE_HOURS,
+} from "./handoff-policy";
 import { sendDiscordHandoverNotification } from "./notifications";
-
-const ESCALATION_DUE_HOURS = 24;
-const URGENT_DUE_HOURS = 4; // same-day follow-up for urgent signals
 
 // -----------------------------------------------------------------------
 // Operations fallback contact.
@@ -69,6 +72,7 @@ export interface EscalationParams {
   ghlContactId: string | null;
   intent: string | null;
   confidence: number | null;
+  summary: string;
   transcript: string;
   urgent: boolean;
 }
@@ -103,31 +107,42 @@ function lastStudentMessage(transcript: string): string | null {
 export async function createEscalationTask(
   params: EscalationParams
 ): Promise<HandoverResult> {
-  const { user, ghlContactId, intent, confidence, transcript, urgent } = params;
+  const {
+    user,
+    ghlContactId,
+    intent,
+    confidence,
+    summary,
+    transcript,
+    urgent,
+  } = params;
 
   const title = `[Lab Bot] Escalation — ${intent ?? "unclassified"} — ${studentDisplayName(user)}`;
-  const body = [
-    `Student: ${studentDisplayName(user)} <${user.email}>`,
-    `Detected intent: ${intent ?? "unclassified"}`,
-    `Confidence: ${confidence !== null ? confidence.toFixed(2) : "n/a"}`,
-    `Urgent: ${urgent ? "YES — same-day follow-up" : "no"}`,
-    `Timestamp: ${new Date().toISOString()}`,
-    "",
-    "--- Transcript ---",
+  const body = buildHandoffTaskBody({
+    studentName: studentDisplayName(user),
+    studentEmail: user.email,
+    summary,
+    intent,
+    confidence,
+    urgent,
+    timestamp: new Date(),
     transcript,
-  ].join("\n");
+  });
 
   return createHandoverTask({
     user,
     ghlContactId,
     title,
     body,
-    dueDate: dueDateFromNow(urgent ? URGENT_DUE_HOURS : ESCALATION_DUE_HOURS),
+    dueDate: dueDateFromNow(
+      urgent ? URGENT_HANDOFF_DUE_HOURS : STANDARD_HANDOFF_DUE_HOURS,
+    ),
     eventType: "lab_assistant.escalation",
     notify: {
       kind: "escalation",
       intent,
       urgent,
+      summary,
       lastMessage: lastStudentMessage(transcript),
     },
   });
@@ -140,30 +155,35 @@ export async function createEscalationTask(
 export async function createTestimonialTask(params: {
   user: User;
   ghlContactId: string | null;
+  summary: string;
   transcript: string;
 }): Promise<HandoverResult> {
-  const { user, ghlContactId, transcript } = params;
+  const { user, ghlContactId, summary, transcript } = params;
 
-  const body = [
-    `Student: ${studentDisplayName(user)} <${user.email}>`,
-    `Request: testimonial interview with Sheldon (via Lab Assistant)`,
-    `Timestamp: ${new Date().toISOString()}`,
-    "",
-    "--- Transcript ---",
+  const body = buildHandoffTaskBody({
+    studentName: studentDisplayName(user),
+    studentEmail: user.email,
+    summary,
+    intent: "testimonial_sheldon",
+    confidence: null,
+    urgent: false,
+    timestamp: new Date(),
     transcript,
-  ].join("\n");
+    request: "Testimonial interview with Sheldon (via Lab Assistant)",
+  });
 
   return createHandoverTask({
     user,
     ghlContactId,
     title: "Testimonial interview request",
     body,
-    dueDate: dueDateFromNow(ESCALATION_DUE_HOURS),
+    dueDate: dueDateFromNow(STANDARD_HANDOFF_DUE_HOURS),
     eventType: "lab_assistant.testimonial_request",
     notify: {
       kind: "testimonial",
       intent: "testimonial_sheldon",
       urgent: false,
+      summary,
       lastMessage: lastStudentMessage(transcript),
     },
   });
@@ -180,6 +200,7 @@ async function createHandoverTask(params: {
     kind: "escalation" | "testimonial";
     intent: string | null;
     urgent: boolean;
+    summary: string;
     lastMessage: string | null;
   };
 }): Promise<HandoverResult> {
@@ -197,6 +218,7 @@ async function createHandoverTask(params: {
       urgent: notify.urgent,
       dueDate,
       taskVia,
+      summary: notify.summary,
       lastMessage: notify.lastMessage,
     });
 
@@ -225,6 +247,7 @@ async function createHandoverTask(params: {
         title,
         body,
         dueDate,
+        assignedToEmail: HANDOFF_ASSIGNEE_EMAIL,
       });
       await logOutcome(
         { title, taskId, dueDate: dueDate.toISOString(), via: "student" },
@@ -252,6 +275,7 @@ async function createHandoverTask(params: {
           title: `${title} — ${user.email}`,
           body,
           dueDate,
+          assignedToEmail: HANDOFF_ASSIGNEE_EMAIL,
         },
         ops.locationId
       );

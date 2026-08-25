@@ -5,11 +5,13 @@
 import { getLocationForContact } from "@/lib/ghl/contacts";
 import { getGhlClientForLocation } from "@/lib/ghl/client";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
+import { resolveGhlUserIdByEmail } from "@/lib/ghl/users";
 
 export interface CreateContactTaskParams {
   title: string;
   body: string;
   dueDate: Date;
+  assignedToEmail?: string;
 }
 
 interface GhlTaskResponse {
@@ -33,13 +35,16 @@ export async function createContactTask(
     ? await getGhlClientForLocation(ghlLocationId)
     : null;
 
-  if (!client) {
+  if (!ghlLocationId || !client) {
     throw new Error(
       `No active GHL location configured for contact ${ghlContactId}`
     );
   }
 
   try {
+    const assignedTo = params.assignedToEmail
+      ? await resolveGhlUserIdByEmail(ghlLocationId, params.assignedToEmail)
+      : undefined;
     const response = await client.post<GhlTaskResponse>(
       `/contacts/${ghlContactId}/tasks`,
       {
@@ -47,6 +52,7 @@ export async function createContactTask(
         body: params.body,
         dueDate: params.dueDate.toISOString(),
         completed: false,
+        ...(assignedTo ? { assignedTo } : {}),
       }
     );
 
@@ -58,7 +64,11 @@ export async function createContactTask(
       entityType: "task",
       entityId: taskId ?? undefined,
       ghlContactId,
-      payload: { title: params.title, dueDate: params.dueDate.toISOString() },
+      payload: {
+        title: params.title,
+        dueDate: params.dueDate.toISOString(),
+        assignedToEmail: params.assignedToEmail ?? null,
+      },
     });
 
     return taskId;

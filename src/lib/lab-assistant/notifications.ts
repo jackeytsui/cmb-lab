@@ -63,6 +63,8 @@ export interface HandoverNotification {
   dueDate: Date;
   /** "student" = task on their contact, "ops" = fallback contact, "failed" = no task created */
   taskVia: "student" | "ops" | "failed";
+  /** Short triage summary; the GHL task also includes the full transcript. */
+  summary: string;
   /** Last student message, truncated — the task body carries the full transcript. */
   lastMessage: string | null;
 }
@@ -85,6 +87,7 @@ export async function sendDiscordHandoverNotification(
     urgent,
     dueDate,
     taskVia,
+    summary,
     lastMessage,
   } = notification;
 
@@ -117,6 +120,11 @@ export async function sendDiscordHandoverNotification(
           : taskVia === "ops"
             ? "Created on the CMB Lab Operations contact"
             : "⚠️ FAILED — no task created, follow up manually",
+      inline: false,
+    },
+    {
+      name: "Conversation summary",
+      value: summary.length > 500 ? `${summary.slice(0, 499)}…` : summary,
       inline: false,
     },
   ];

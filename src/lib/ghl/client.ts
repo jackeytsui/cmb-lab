@@ -8,10 +8,17 @@ const GHL_BASE_URL = "https://services.leadconnectorhq.com";
 const GHL_API_VERSION = "2021-07-28";
 const MAX_RETRIES = 3;
 
+export type GhlApiVersion = "2021-07-28" | "v3";
+
+interface GhlCallOptions {
+  apiVersion?: GhlApiVersion;
+}
+
 interface GhlRequestOptions {
   method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
   body?: unknown;
+  apiVersion?: GhlApiVersion;
 }
 
 interface GhlResponse<T = unknown> {
@@ -42,8 +49,11 @@ class GhlClient {
     return token;
   }
 
-  async get<T = unknown>(path: string): Promise<GhlResponse<T>> {
-    return this.request<T>({ method: "GET", path });
+  async get<T = unknown>(
+    path: string,
+    options: GhlCallOptions = {},
+  ): Promise<GhlResponse<T>> {
+    return this.request<T>({ method: "GET", path, ...options });
   }
 
   async post<T = unknown>(path: string, body: unknown): Promise<GhlResponse<T>> {
@@ -83,7 +93,7 @@ class GhlClient {
 
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
-      Version: GHL_API_VERSION,
+      Version: options.apiVersion ?? GHL_API_VERSION,
       "Content-Type": "application/json",
     };
 
