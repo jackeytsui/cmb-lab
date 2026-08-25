@@ -1,9 +1,32 @@
 // Cantomando Blueprint LMS - Service Worker
 // Smart caching: network-only for dynamic, cache-first for static, network-first for HTML
 
-const CACHE_NAME = "cantomando-v3";
+const CACHE_NAME = "cantomando-v4";
 
 const PRECACHE_URLS = ["/icon-192x192.png", "/icon-512x512.png"];
+const NAVIGATION_RETRY_DELAYS_MS = [250, 750];
+
+function wait(delayMs) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function fetchNavigationWithRetry(request) {
+  for (let attempt = 0; attempt <= NAVIGATION_RETRY_DELAYS_MS.length; attempt += 1) {
+    if (attempt > 0) {
+      await wait(NAVIGATION_RETRY_DELAYS_MS[attempt - 1]);
+    }
+
+    try {
+      return await fetch(request);
+    } catch {
+      // A deployment handoff, Wi-Fi transition, or brief upstream reset can
+      // reject one navigation even while the user's connection is healthy.
+      // Retry only network failures; real HTTP responses are returned as-is.
+    }
+  }
+
+  return offlineNavigationResponse();
+}
 
 function offlineNavigationResponse() {
   return new Response(
@@ -18,14 +41,51 @@ function offlineNavigationResponse() {
       main { width: min(32rem, calc(100% - 3rem)); text-align: center; }
       p { color: #a1a1aa; line-height: 1.6; }
       button { margin-top: 1rem; border: 0; border-radius: .5rem; padding: .75rem 1rem; font: inherit; font-weight: 600; cursor: pointer; }
+      small { display: block; min-height: 1.5rem; margin-top: .75rem; color: #71717a; }
     </style>
   </head>
   <body>
     <main>
       <h1>CMB Lab is temporarily unreachable</h1>
       <p>Check your internet connection, then try again. Your work has not been deleted.</p>
-      <button type="button" onclick="location.reload()">Try again</button>
+      <button id="retry" type="button">Try again</button>
+      <small id="status" aria-live="polite">We will reconnect automatically.</small>
     </main>
+    <script>
+      (() => {
+        const button = document.getElementById("retry");
+        const status = document.getElementById("status");
+        let retrying = false;
+
+        async function retry() {
+          if (retrying) return;
+          retrying = true;
+          button.disabled = true;
+          status.textContent = "Reconnecting…";
+
+          try {
+            const response = await fetch(location.href, {
+              cache: "no-store",
+              credentials: "same-origin",
+            });
+            if (response.ok) {
+              location.reload();
+              return;
+            }
+          } catch {
+            // Stay on the recovery page and try again on the next interval.
+          }
+
+          retrying = false;
+          button.disabled = false;
+          status.textContent = "Still reconnecting. Your work is safe.";
+        }
+
+        button.addEventListener("click", retry);
+        window.addEventListener("online", retry);
+        window.setInterval(retry, 5000);
+      })();
+    </script>
   </body>
 </html>`,
     {
@@ -105,9 +165,7 @@ self.addEventListener("fetch", (event) => {
   // resolve respondWith() with a real Response; returning an empty cache match
   // here causes Chromium/Edge to surface the opaque ERR_FAILED page.
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request).catch(() => offlineNavigationResponse()),
-    );
+    event.respondWith(fetchNavigationWithRetry(request));
     return;
   }
 

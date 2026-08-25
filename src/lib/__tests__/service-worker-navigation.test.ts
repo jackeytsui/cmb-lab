@@ -74,26 +74,60 @@ describe("service worker navigation handling", () => {
     });
 
     await expect(responsePromise).resolves.toBe(networkResponse);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(cachesMock.open).not.toHaveBeenCalled();
   });
 
+  it("recovers from a transient navigation failure before showing the offline page", async () => {
+    vi.useFakeTimers();
+    try {
+      const networkResponse = new Response("live after retry", { status: 200 });
+      const fetchMock = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(networkResponse);
+      const { handler } = loadFetchHandler(fetchMock);
+      let responsePromise: Promise<Response> | undefined;
+
+      handler({
+        request: navigationRequest("/admin/manage"),
+        respondWith: (response) => {
+          responsePromise = Promise.resolve(response);
+        },
+      });
+
+      await vi.runAllTimersAsync();
+      await expect(responsePromise).resolves.toBe(networkResponse);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns a real 503 page instead of resolving respondWith to undefined", async () => {
-    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    const { handler } = loadFetchHandler(fetchMock);
-    let responsePromise: Promise<Response> | undefined;
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { handler } = loadFetchHandler(fetchMock);
+      let responsePromise: Promise<Response> | undefined;
 
-    handler({
-      request: navigationRequest("/admin/users"),
-      respondWith: (response) => {
-        responsePromise = Promise.resolve(response);
-      },
-    });
+      handler({
+        request: navigationRequest("/admin/users"),
+        respondWith: (response) => {
+          responsePromise = Promise.resolve(response);
+        },
+      });
 
-    const response = await responsePromise;
-    expect(response).toBeInstanceOf(Response);
-    expect(response?.status).toBe(503);
-    await expect(response?.text()).resolves.toContain(
-      "CMB Lab is temporarily unreachable",
-    );
+      await vi.runAllTimersAsync();
+      const response = await responsePromise;
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(response).toBeInstanceOf(Response);
+      expect(response?.status).toBe(503);
+      const body = await response?.text();
+      expect(body).toContain("CMB Lab is temporarily unreachable");
+      expect(body).toContain("We will reconnect automatically.");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
