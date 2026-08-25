@@ -100,10 +100,12 @@ function TagRow({
   tag,
   audioSeries,
   libraryCourses,
+  onTagUpdated,
 }: {
   tag: Tag;
   audioSeries: AudioSeries[];
   libraryCourses: LibraryCourse[];
+  onTagUpdated: (tag: Tag) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [featureGrants, setFeatureGrants] = useState<FeatureGrant[]>([]);
@@ -111,6 +113,12 @@ function TagRow({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [description, setDescription] = useState(tag.description ?? "");
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDescription(tag.description ?? "");
+  }, [tag.description]);
 
   const fetchGrants = useCallback(async () => {
     setLoading(true);
@@ -140,8 +148,9 @@ function TagRow({
 
   const handleSave = useCallback(async () => {
     setSaving(true);
+    setSaveError(null);
     try {
-      await Promise.all([
+      const [featureResponse, contentResponse, tagResponse] = await Promise.all([
         fetch(`/api/admin/tags/${tag.id}/features`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -152,14 +161,26 @@ function TagRow({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ grants: contentGrants }),
         }),
+        fetch(`/api/admin/tags/${tag.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: description.trim() }),
+        }),
       ]);
+      if (!featureResponse.ok || !contentResponse.ok || !tagResponse.ok) {
+        throw new Error("The tag changes could not be saved.");
+      }
+      const data = (await tagResponse.json()) as { tag?: Tag };
+      if (data.tag) onTagUpdated(data.tag);
       setDirty(false);
-    } catch {
-      // ignore
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "The tag changes could not be saved.",
+      );
     } finally {
       setSaving(false);
     }
-  }, [tag.id, featureGrants, contentGrants]);
+  }, [tag.id, featureGrants, contentGrants, description, onTagUpdated]);
 
   // Toggle between Grant (green ✓) and Deny (red ✗).
   // A feature with no record is treated as deny visually, so clicking it
@@ -275,12 +296,17 @@ function TagRow({
         ) : (
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
         )}
-        <TagBadge
-          name={tag.name}
-          color={tag.color}
-          type={tag.type}
-          showSystemIndicator={false}
-        />
+        <div className="min-w-0">
+          <TagBadge
+            name={tag.name}
+            color={tag.color}
+            type={tag.type}
+            showSystemIndicator={false}
+          />
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+            {tag.description?.trim() || "No description yet"}
+          </p>
+        </div>
         <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
           {featureGrants.length > 0 && expanded
             ? `${featureGrants.length} feature ${featureGrants.length === 1 ? "grant" : "grants"}`
@@ -297,6 +323,31 @@ function TagRow({
             </div>
           ) : (
             <>
+              <div>
+                <label
+                  className="mb-2 block text-sm font-semibold text-foreground"
+                  htmlFor={`tag-description-${tag.id}`}
+                >
+                  Tag description
+                </label>
+                <textarea
+                  id={`tag-description-${tag.id}`}
+                  value={description}
+                  maxLength={500}
+                  onChange={(event) => {
+                    setDescription(event.target.value);
+                    setDirty(true);
+                    setSaveError(null);
+                  }}
+                  placeholder="Explain who should receive this tag and what access it controls."
+                  className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                />
+                <div className="mt-1 flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+                  <span>Shown here so admins can verify a tag before assigning it.</span>
+                  <span>{description.length}/500</span>
+                </div>
+              </div>
+
               {/* Feature grants */}
               <div>
                 <h4 className="text-sm font-semibold text-foreground mb-3">
@@ -511,6 +562,8 @@ function TagRow({
                     type="button"
                     onClick={() => {
                       fetchGrants();
+                      setDescription(tag.description ?? "");
+                      setSaveError(null);
                       setDirty(false);
                     }}
                     className="rounded-md border border-input bg-background px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -518,6 +571,11 @@ function TagRow({
                     Discard
                   </button>
                 </div>
+              )}
+              {saveError && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {saveError}
+                </p>
               )}
             </>
           )}
@@ -545,6 +603,7 @@ export function TagAccessClient() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState(TAG_COLORS[5]);
+  const [newTagDescription, setNewTagDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [deletingTagId, setDeletingTagId] = useState<string | null>(null);
 
@@ -615,10 +674,12 @@ export function TagAccessClient() {
           name: newTagName.trim(),
           color: newTagColor,
           type: "coach",
+          description: newTagDescription.trim(),
         }),
       });
       if (res.ok) {
         setNewTagName("");
+        setNewTagDescription("");
         setShowCreateForm(false);
         fetchData();
       }
@@ -683,6 +744,13 @@ export function TagAccessClient() {
               {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create"}
             </Button>
           </div>
+          <textarea
+            value={newTagDescription}
+            maxLength={500}
+            onChange={(event) => setNewTagDescription(event.target.value)}
+            placeholder="Description: who receives this tag and what access does it control?"
+            className="min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+          />
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Color:</span>
             {TAG_COLORS.map((color) => (
@@ -713,7 +781,18 @@ export function TagAccessClient() {
       {/* Tag rows */}
       {tags.map((tag) => (
         <div key={tag.id} className="relative">
-          <TagRow tag={tag} audioSeries={audioSeries} libraryCourses={libraryCourses} />
+          <TagRow
+            tag={tag}
+            audioSeries={audioSeries}
+            libraryCourses={libraryCourses}
+            onTagUpdated={(updatedTag) =>
+              setTags((current) =>
+                current.map((candidate) =>
+                  candidate.id === updatedTag.id ? updatedTag : candidate,
+                ),
+              )
+            }
+          />
           <button
             type="button"
             onClick={() => handleDeleteTag(tag.id, tag.name)}

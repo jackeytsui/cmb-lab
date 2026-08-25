@@ -6,7 +6,7 @@ import { z } from "zod";
 const updateTagSchema = z.object({
   name: z.string().min(1).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a valid hex color").optional(),
-  description: z.string().optional(),
+  description: z.string().max(500, "Description must be 500 characters or less").optional(),
 });
 
 /**

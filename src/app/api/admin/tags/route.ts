@@ -8,7 +8,7 @@ const createTagSchema = z.object({
   name: z.string().min(1, "Tag name is required"),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a valid hex color"),
   type: z.enum(["coach", "system"]).optional(),
-  description: z.string().optional(),
+  description: z.string().max(500, "Description must be 500 characters or less").optional(),
 });
 
 /**
