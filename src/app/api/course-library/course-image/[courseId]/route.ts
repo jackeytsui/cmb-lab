@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { courseLibraryCourses } from "@/db/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { getCurrentUser } from "@/lib/auth";
-import { visibleCourseStatuses } from "@/lib/course-library-access";
+import { getRealUser } from "@/lib/auth";
+import { visibleCourseCoverStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
 // Match the 60s used by the other blob-proxy routes for consistency.
@@ -20,7 +20,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ courseId: string }> },
 ) {
-  const user = await getCurrentUser();
+  // The admin catalogue must use the real actor while View As is active;
+  // otherwise draft covers are incorrectly evaluated as student requests.
+  const user = await getRealUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -40,7 +42,7 @@ export async function GET(
         isNull(courseLibraryCourses.deletedAt),
         inArray(
           courseLibraryCourses.status,
-          visibleCourseStatuses(user.role),
+          visibleCourseCoverStatuses(user.role),
         ),
       ),
     )

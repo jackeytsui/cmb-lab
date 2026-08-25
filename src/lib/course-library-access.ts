@@ -27,3 +27,12 @@ export function visibleCourseStatuses(
     ? ["published", "preview"]
     : ["published"];
 }
+
+/** Statuses whose covers the real viewer may request from the image proxy. */
+export function visibleCourseCoverStatuses(
+  role: string | null | undefined,
+): CourseLibraryCourseStatus[] {
+  return role === "admin"
+    ? ["draft", "preview", "published"]
+    : visibleCourseStatuses(role);
+}
