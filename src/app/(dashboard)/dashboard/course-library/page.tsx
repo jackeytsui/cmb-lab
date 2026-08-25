@@ -12,6 +12,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { courseCoverImagePath } from "@/lib/course-cover-image";
 
 export const metadata = {
   title: "Course Library",
@@ -128,7 +129,7 @@ export default async function CourseLibraryStudentPage() {
                     {course.coverImageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={`/api/course-library/course-image/${course.id}`}
+                        src={courseCoverImagePath(course.id, course.updatedAt)}
                         alt={course.title}
                         className="w-full h-full object-cover"
                       />

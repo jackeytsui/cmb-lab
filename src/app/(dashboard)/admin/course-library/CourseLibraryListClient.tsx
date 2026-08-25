@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Loader2, BookOpen, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { courseCoverImagePath } from "@/lib/course-cover-image";
 
 type CourseStatus = "draft" | "preview" | "published";
 
@@ -17,6 +18,7 @@ interface CourseRow {
   status: CourseStatus;
   sortOrder: number;
   createdAt: string;
+  updatedAt: string;
 }
 
 const STATUS_BADGE: Record<CourseStatus, { label: string; className: string }> = {
@@ -191,7 +193,7 @@ export function CourseLibraryListClient({
                   {course.coverImageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={`/api/course-library/course-image/${course.id}`}
+                      src={courseCoverImagePath(course.id, course.updatedAt)}
                       alt={course.title}
                       className="w-full h-full object-cover"
                     />

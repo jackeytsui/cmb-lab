@@ -28,6 +28,7 @@ import {
   MessagesSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { courseCoverImagePath } from "@/lib/course-cover-image";
 import { DragDropProvider, useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { move } from "@dnd-kit/helpers";
@@ -86,6 +87,7 @@ interface CourseData {
   title: string;
   summary: string;
   coverImageUrl: string | null;
+  updatedAt: string;
   isPublished: boolean;
   status: CourseStatus;
   modules: ModuleRow[];
@@ -389,9 +391,6 @@ export function CourseLibraryEditorClient({
   const [savingHeader, setSavingHeader] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [coverError, setCoverError] = useState<string | null>(null);
-  // Bumped after each cover change so the same-origin preview URL (keyed by
-  // courseId, not the blob URL) refetches instead of showing a cached image.
-  const [coverVersion, setCoverVersion] = useState(0);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [addingModule, setAddingModule] = useState(false);
   const [newModuleTitle, setNewModuleTitle] = useState("");
@@ -474,8 +473,8 @@ export function CourseLibraryEditorClient({
     setCourse((prev) => ({
       ...prev,
       coverImageUrl: data.course.coverImageUrl ?? null,
+      updatedAt: data.course.updatedAt,
     }));
-    setCoverVersion((v) => v + 1);
   };
 
   const handleCoverSelected = async (file: File | undefined) => {
@@ -1133,7 +1132,7 @@ export function CourseLibraryEditorClient({
               <div className="relative aspect-video w-full max-w-sm shrink-0 overflow-hidden rounded-md border border-border bg-muted sm:w-48">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/api/course-library/course-image/${course.id}?v=${coverVersion}`}
+                  src={courseCoverImagePath(course.id, course.updatedAt)}
                   alt="Course cover"
                   className="h-full w-full object-cover"
                 />

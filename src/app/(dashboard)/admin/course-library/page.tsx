@@ -84,6 +84,7 @@ export default async function CourseLibraryAdminPage() {
           status: c.status,
           sortOrder: c.sortOrder,
           createdAt: c.createdAt.toISOString(),
+          updatedAt: c.updatedAt.toISOString(),
         }))}
       />
     </div>
