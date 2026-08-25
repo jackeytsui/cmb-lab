@@ -13,6 +13,7 @@ import {
   UserCheck,
   X,
   ArrowUpDown,
+  BookOpenCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,7 +38,6 @@ interface Coach {
 }
 
 interface Props {
-  currentUserId: string;
   isAdmin: boolean;
   coaches: Coach[];
 }
@@ -92,7 +92,7 @@ function SortButton({
   );
 }
 
-export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) {
+export function CoachStudentsClient({ isAdmin, coaches }: Props) {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -237,8 +237,8 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
         </div>
         <p className="text-muted-foreground text-sm">
           {isAdmin
-            ? "View all students, manage coach assignments, and track coaching ratings."
-            : "View your assigned students and their coaching session ratings."}
+            ? "View all students, manage coach assignments, unlock roadmap chapters, and track coaching ratings."
+            : "View your assigned students, unlock roadmap chapters, and review coaching ratings."}
         </p>
       </header>
 
@@ -371,7 +371,6 @@ export function CoachStudentsClient({ currentUserId, isAdmin, coaches }: Props) 
           sortKey={sortKey}
           sortDir={sortDir}
           onToggleSort={handleToggleSort}
-          isAdmin={isAdmin}
         />
       )}
     </div>
@@ -387,7 +386,6 @@ function StudentTable({
   sortKey,
   sortDir,
   onToggleSort,
-  isAdmin,
 }: {
   students: StudentRow[];
   showCoach: boolean;
@@ -397,7 +395,6 @@ function StudentTable({
   sortKey: SortKey;
   sortDir: SortDir;
   onToggleSort: (key: SortKey) => void;
-  isAdmin: boolean;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -442,7 +439,7 @@ function StudentTable({
                 </span>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Coaching Notes
+                Actions
               </th>
             </tr>
           </thead>
@@ -463,16 +460,12 @@ function StudentTable({
                   </td>
                 )}
                 <td className="px-4 py-3 text-sm text-foreground font-medium">
-                  {isAdmin ? (
-                    <Link
-                      href={`/admin/students/${student.id}`}
-                      className="hover:text-primary transition-colors"
-                    >
-                      {student.name || student.email.split("@")[0]}
-                    </Link>
-                  ) : (
-                    <span>{student.name || student.email.split("@")[0]}</span>
-                  )}
+                  <Link
+                    href={`/admin/students/${student.id}`}
+                    className="hover:text-primary transition-colors"
+                  >
+                    {student.name || student.email.split("@")[0]}
+                  </Link>
                 </td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">
                   {student.email}
@@ -497,13 +490,22 @@ function StudentTable({
                   />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/dashboard/coaching/one-on-one?student=${encodeURIComponent(student.email)}`}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:border-primary/40 hover:text-primary transition-colors"
-                  >
-                    <FileText className="size-3.5" />
-                    1:1 Coaching Notes
-                  </Link>
+                  <div className="flex justify-end gap-2">
+                    <Link
+                      href={`/admin/students/${student.id}#course-library-progress`}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      <BookOpenCheck className="size-3.5" />
+                      Progress &amp; unlock
+                    </Link>
+                    <Link
+                      href={`/dashboard/coaching/one-on-one?student=${encodeURIComponent(student.email)}`}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:border-primary/40 hover:text-primary transition-colors"
+                    >
+                      <FileText className="size-3.5" />
+                      1:1 Notes
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}

@@ -1,8 +1,10 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { clerkClient } from "@clerk/nextjs/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
+import { hasMinimumPlatformRole } from "@/lib/platform-roles";
 import { StudentProgressView } from "@/components/admin/StudentProgressView";
+import { StudentCourseLibraryUnlock } from "@/components/admin/StudentCourseLibraryUnlock";
 import { GhlProfileSection } from "@/components/ghl/GhlProfileSection";
 import { StudentTagsSection } from "./StudentTagsSection";
 import { StudentAccessAttribution } from "@/components/admin/StudentAccessAttribution";
@@ -24,6 +26,7 @@ import {
   ClipboardList,
   Key,
   UserCheck,
+  BookOpenCheck,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 
@@ -200,10 +203,12 @@ async function getActivityTimeline(
  */
 export default async function AdminStudentDetailPage({ params }: PageProps) {
   // Verify user has coach+ role
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const actor = await getRealUser();
+  if (!actor || !hasMinimumPlatformRole(actor.role, "coach")) {
     redirect("/dashboard");
   }
+  const canManuallyUnlockCourseLibrary =
+    actor.role === "admin" || actor.role === "coach";
 
   const { studentId } = await params;
 
@@ -685,6 +690,20 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
           <StudentAccessAttribution studentId={studentId} />
         </div>
       </section>
+
+      {/* Course Library chapter unlock */}
+      {student.role === "student" && canManuallyUnlockCourseLibrary ? (
+        <section id="course-library-progress" className="mb-8 scroll-mt-6">
+          <div className="mb-4 flex items-center gap-2">
+            <BookOpenCheck className="size-5 text-cyan-400" aria-hidden="true" />
+            <h2 className="text-xl font-semibold">Course Library Progress</h2>
+          </div>
+          <StudentCourseLibraryUnlock
+            studentId={studentId}
+            studentName={displayName}
+          />
+        </section>
+      ) : null}
 
       {/* Activity Timeline */}
       <section className="mb-8">

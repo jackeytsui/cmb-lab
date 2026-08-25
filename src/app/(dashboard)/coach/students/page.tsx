@@ -4,7 +4,6 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { and, isNull, or, eq } from "drizzle-orm";
 import { CoachStudentsClient } from "./CoachStudentsClient";
-import { ErrorAlert } from "@/components/ui/error-alert";
 
 /**
  * Coach Students page — enhanced management tool.
@@ -51,7 +50,6 @@ export default async function CoachStudentsPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <CoachStudentsClient
-        currentUserId={currentDbUser.id}
         isAdmin={isAdmin}
         coaches={coaches}
       />
