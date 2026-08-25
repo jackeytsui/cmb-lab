@@ -10,9 +10,10 @@ interface LessonVideoPlayerProps {
   nextHref: string | null;
 }
 
-/** Loading stays patient before we expose a manual recovery action. */
-const SLOW_LOAD_MS = 20000;
-const MANUAL_RETRY_MS = 45000;
+/** Bound the silent-loading states so students always get a recovery path. */
+export const SLOW_LOAD_MS = 8000;
+export const MANUAL_RETRY_MS = 20000;
+export const HARD_FAILURE_MS = 30000;
 const AUTO_RETRY_DELAYS_MS = [3000, 8000] as const;
 
 /**
@@ -60,7 +61,7 @@ export function LessonVideoPlayer({
     const err = video?.error;
     const errPart = err
       ? `Error ${err.code} (${MEDIA_ERR_LABELS[err.code] ?? "UNKNOWN"})${err.message ? `: ${err.message}` : ""}`
-      : "Unknown media error";
+      : `Media stalled before metadata (readyState ${video?.readyState ?? "?"}, networkState ${video?.networkState ?? "?"})`;
     let httpPart = "";
     try {
       const res = await fetch(src.split("#")[0], {
@@ -85,8 +86,9 @@ export function LessonVideoPlayer({
     recoveryTimerRef.current = null;
   }, []);
 
-  // The message changes after 20 seconds, but a reload action is deliberately
-  // withheld until 45 seconds. Slow connections get time to recover normally.
+  // Course MP4s can store their metadata index at the end of the file. Keep a
+  // short patient window for that tail probe, then guarantee that a silent
+  // readyState=0 stall becomes actionable instead of spinning indefinitely.
   useEffect(() => {
     if (status !== "loading") return;
     const elapsed = loadStartedAtRef.current
@@ -100,11 +102,22 @@ export function LessonVideoPlayer({
       () => setShowManualRetry(true),
       Math.max(0, MANUAL_RETRY_MS - elapsed),
     );
+    const failureTimer = setTimeout(() => {
+      const video = videoRef.current;
+      if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+        setStatus("ready");
+        return;
+      }
+      setShowManualRetry(true);
+      setStatus("error");
+      void diagnose();
+    }, Math.max(0, HARD_FAILURE_MS - elapsed));
     return () => {
       clearTimeout(slowTimer);
       clearTimeout(retryTimer);
+      clearTimeout(failureTimer);
     };
-  }, [status, src]);
+  }, [diagnose, status, src]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -119,7 +132,11 @@ export function LessonVideoPlayer({
       setSlow(false);
       setShowManualRetry(false);
       setDiagnosis(null);
-      setStatus(video.readyState >= 3 ? "ready" : "loading");
+      setStatus(
+        video.readyState >= HTMLMediaElement.HAVE_METADATA
+          ? "ready"
+          : "loading",
+      );
     });
     return () => {
       cancelAnimationFrame(raf);
@@ -215,6 +232,7 @@ export function LessonVideoPlayer({
         disablePictureInPicture
         onContextMenu={(e) => e.preventDefault()}
         className="h-full w-full"
+        onLoadedMetadata={markReady}
         onCanPlay={markReady}
         onPlaying={markReady}
         onEnded={() => void completeAndAdvance()}

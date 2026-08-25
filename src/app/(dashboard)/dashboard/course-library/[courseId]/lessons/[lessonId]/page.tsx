@@ -414,7 +414,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               <div className="space-y-4">
                 <div className="rounded-lg overflow-hidden bg-black aspect-video">
                   <LessonVideoPlayer
-                    src={`${signMediaPath(`/api/course-library/stream/${lessonId}`)}#t=0.1`}
+                    src={signMediaPath(`/api/course-library/stream/${lessonId}`)}
                     lessonId={lessonId}
                     nextHref={nextHref}
                   />
