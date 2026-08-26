@@ -62,3 +62,20 @@ export function planPostPurchaseTagReconciliation(params: {
     ),
   };
 }
+
+export function shouldApplyInboundPostPurchaseTagChange(params: {
+  tagName: string;
+  action: "add" | "remove";
+  expectedTags: Iterable<PostPurchaseControlledTag> | null;
+}) {
+  if (params.expectedTags === null) return true;
+
+  const normalizedTag = params.tagName.trim().toLowerCase();
+  const controlled = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
+  if (!controlled.has(normalizedTag)) return true;
+
+  const expected = new Set<string>(params.expectedTags);
+  return params.action === "add"
+    ? expected.has(normalizedTag)
+    : !expected.has(normalizedTag);
+}

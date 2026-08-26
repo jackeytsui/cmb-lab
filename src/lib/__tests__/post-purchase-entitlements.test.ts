@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   derivePostPurchaseTags,
   planPostPurchaseTagReconciliation,
+  shouldApplyInboundPostPurchaseTagChange,
 } from "@/lib/post-purchase-entitlements";
 
 describe("derivePostPurchaseTags", () => {
@@ -27,6 +28,34 @@ describe("derivePostPurchaseTags", () => {
         addOnPurchased: ["Custom course"],
       }),
     ).toEqual(["ic_student"]);
+  });
+});
+
+describe("shouldApplyInboundPostPurchaseTagChange", () => {
+  it("keeps configured post-purchase access authoritative across GHL locations", () => {
+    const expected = ["cmb_student", "icgc_student"] as const;
+
+    expect(
+      shouldApplyInboundPostPurchaseTagChange({
+        tagName: "icgc_student",
+        action: "remove",
+        expectedTags: expected,
+      }),
+    ).toBe(false);
+    expect(
+      shouldApplyInboundPostPurchaseTagChange({
+        tagName: "1on1_student",
+        action: "add",
+        expectedTags: expected,
+      }),
+    ).toBe(false);
+    expect(
+      shouldApplyInboundPostPurchaseTagChange({
+        tagName: "manual_vip",
+        action: "remove",
+        expectedTags: expected,
+      }),
+    ).toBe(true);
   });
 });
 

@@ -6,14 +6,50 @@
 // No prefix: tags sync with their exact name across both platforms.
 
 import { db } from "@/db";
-import { ghlContacts, tags, users } from "@/db/schema";
-import { eq, ilike } from "drizzle-orm";
+import { activeStudents, ghlContacts, tags, users } from "@/db/schema";
+import { and, eq, ilike, isNotNull } from "drizzle-orm";
 import { getGhlClientForLocation } from "@/lib/ghl/client";
-import { findOrLinkContact, getGhlContactLinks, getLocationForContact } from "@/lib/ghl/contacts";
+import {
+  findOrLinkContact,
+  getGhlContactLinks,
+} from "@/lib/ghl/contacts";
 import { markOutboundChange, isEchoWebhook } from "@/lib/ghl/echo-detection";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import { assignTag, removeTag } from "@/lib/tags";
 import { clerkClient } from "@clerk/nextjs/server";
+import {
+  derivePostPurchaseTags,
+  shouldApplyInboundPostPurchaseTagChange,
+  type PostPurchaseControlledTag,
+} from "@/lib/post-purchase-entitlements";
+
+async function getConfiguredPostPurchaseTagsForUser(
+  userId: string,
+): Promise<Set<PostPurchaseControlledTag> | null> {
+  const user = await db.query.users.findFirst({
+    columns: { email: true },
+    where: eq(users.id, userId),
+  });
+  if (!user?.email) return null;
+
+  const rows = await db
+    .select({
+      productLine: activeStudents.productLine,
+      addOnPurchased: activeStudents.addOnPurchased,
+    })
+    .from(activeStudents)
+    .where(
+      and(
+        ilike(activeStudents.email, user.email),
+        ilike(activeStudents.courseEligibility, "YES"),
+        isNotNull(activeStudents.productLine),
+      ),
+    );
+  const configured = rows.filter((row) => row.productLine?.trim());
+  if (configured.length === 0) return null;
+
+  return new Set(configured.flatMap((row) => derivePostPurchaseTags(row)));
+}
 
 /**
  * Sync a tag change from LMS to GHL across ALL linked locations.
@@ -43,10 +79,9 @@ export async function syncTagToGhl(
           tags: [tagName],
         });
       } else {
-        await client.delete(
-          `/contacts/${link.ghlContactId}/tags`,
-          { tags: [tagName] },
-        );
+        await client.delete(`/contacts/${link.ghlContactId}/tags`, {
+          tags: [tagName],
+        });
       }
 
       await logSyncEvent({
@@ -142,12 +177,32 @@ export async function processInboundTagUpdate(
   // Diff: find additions and removals
   const addedTags = currentGhlTags.filter((t) => !previousTags.includes(t));
   const removedTags = previousTags.filter((t) => !currentGhlTags.includes(t));
+  const configuredPostPurchaseTags =
+    await getConfiguredPostPurchaseTagsForUser(userId);
 
   // Process additions — only for tags that exist in CMB Lab
   for (const tagName of addedTags) {
     // Check echo detection
     const isEcho = await isEchoWebhook(ghlContactId, "tag", tagName);
     if (isEcho) {
+      continue;
+    }
+
+    if (
+      !shouldApplyInboundPostPurchaseTagChange({
+        tagName,
+        action: "add",
+        expectedTags: configuredPostPurchaseTags,
+      })
+    ) {
+      await logSyncEvent({
+        eventType: "tag.add_skipped",
+        direction: "inbound",
+        entityType: "tag",
+        entityId: tagName,
+        ghlContactId,
+        payload: { reason: "post_purchase_not_entitled" },
+      });
       continue;
     }
 
@@ -181,6 +236,24 @@ export async function processInboundTagUpdate(
   for (const tagName of removedTags) {
     const isEcho = await isEchoWebhook(ghlContactId, "tag", tagName);
     if (isEcho) {
+      continue;
+    }
+
+    if (
+      !shouldApplyInboundPostPurchaseTagChange({
+        tagName,
+        action: "remove",
+        expectedTags: configuredPostPurchaseTags,
+      })
+    ) {
+      await logSyncEvent({
+        eventType: "tag.remove_skipped",
+        direction: "inbound",
+        entityType: "tag",
+        entityId: tagName,
+        ghlContactId,
+        payload: { reason: "post_purchase_entitlement" },
+      });
       continue;
     }
 
