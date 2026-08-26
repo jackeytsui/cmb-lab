@@ -1,0 +1,496 @@
+import "server-only";
+
+import { clerkClient } from "@clerk/nextjs/server";
+import { and, eq, ilike, isNotNull, isNull } from "drizzle-orm";
+import { db } from "@/db";
+import {
+  activeStudents,
+  ghlContacts,
+  ghlLocations,
+  studentTags,
+  tags,
+  users,
+} from "@/db/schema";
+import { getGhlClientForLocation } from "@/lib/ghl/client";
+import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
+import { assignTag, removeTag } from "@/lib/tags";
+import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
+import {
+  derivePostPurchaseTags,
+  planPostPurchaseTagReconciliation,
+  POST_PURCHASE_CONTROLLED_TAGS,
+  type PostPurchaseControlledTag,
+  type PostPurchaseEntitlementInput,
+} from "@/lib/post-purchase-entitlements";
+
+export type PostPurchaseProvisioningInput = PostPurchaseEntitlementInput & {
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  ghlContactId?: string | null;
+  ghlLocationId?: string | null;
+};
+
+type ProvisioningResult = {
+  action: "existing_user" | "created_user";
+  invitation: "not_needed" | "sent" | "already_pending";
+  userId: string;
+  expectedTags: PostPurchaseControlledTag[];
+  tagsAdded: PostPurchaseControlledTag[];
+  tagsRemoved: PostPurchaseControlledTag[];
+};
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function invitationRedirectUrl() {
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    "https://cmb-lab.thecmblueprint.com";
+  return `${appUrl.replace(/\/$/, "")}/sign-in`;
+}
+
+async function ensureCmbUser(params: {
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  expectedTags: PostPurchaseControlledTag[];
+}) {
+  const clerk = await clerkClient();
+  const lookup = await clerk.users.getUserList({
+    emailAddress: [params.email],
+    limit: 1,
+  });
+  let clerkUser = lookup.data[0] ?? null;
+  const created = !clerkUser;
+  const priorMetadata = clerkUser?.publicMetadata ?? {};
+  const retryPostPurchaseInvitation =
+    priorMetadata.invitedBy === "ghl_post_purchase" &&
+    typeof priorMetadata.cmbPostPurchaseInviteSentAt !== "string";
+  const provisioningMetadata = {
+    role: DEFAULT_PLATFORM_ROLE,
+    cmbInviteRole: DEFAULT_PLATFORM_ROLE,
+    cmbInviteTags: params.expectedTags,
+    cmbPortalAccessStatus: "active",
+    cmbPortalAccessRevoked: false,
+  };
+  const invitationMetadata = {
+    ...provisioningMetadata,
+    invitedBy: "ghl_post_purchase",
+  };
+
+  if (!clerkUser) {
+    clerkUser = await clerk.users.createUser({
+      emailAddress: [params.email],
+      firstName: params.firstName?.trim() || undefined,
+      lastName: params.lastName?.trim() || undefined,
+      skipPasswordRequirement: true,
+      publicMetadata: invitationMetadata,
+    });
+  } else {
+    const existingInviteTags = Array.isArray(
+      clerkUser.publicMetadata?.cmbInviteTags,
+    )
+      ? clerkUser.publicMetadata.cmbInviteTags.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [];
+    const controlledTags = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
+    const preservedInviteTags = existingInviteTags.filter(
+      (tag) => !controlledTags.has(tag.toLowerCase()),
+    );
+    const mergedInviteTags = [...new Set([
+      ...preservedInviteTags,
+      ...params.expectedTags,
+    ])];
+    await clerk.users.updateUserMetadata(clerkUser.id, {
+      publicMetadata: {
+        ...(clerkUser.publicMetadata ?? {}),
+        ...provisioningMetadata,
+        cmbInviteTags: mergedInviteTags,
+      },
+    });
+    await clerk.users.unbanUser(clerkUser.id).catch(() => {});
+    await clerk.users.unlockUser(clerkUser.id).catch(() => {});
+  }
+
+  const fullName = [params.firstName?.trim(), params.lastName?.trim()]
+    .filter(Boolean)
+    .join(" ") || null;
+  const existingByClerk = await db.query.users.findFirst({
+    where: eq(users.clerkId, clerkUser.id),
+  });
+  const existingByEmail = existingByClerk
+    ? null
+    : await db.query.users.findFirst({
+        where: ilike(users.email, params.email),
+      });
+
+  let dbUserId: string;
+  if (existingByClerk) {
+    dbUserId = existingByClerk.id;
+    await db
+      .update(users)
+      .set({
+        email: params.email,
+        ...(fullName ? { name: fullName } : {}),
+        deletedAt: null,
+      })
+      .where(eq(users.id, dbUserId));
+  } else if (existingByEmail) {
+    dbUserId = existingByEmail.id;
+    await db
+      .update(users)
+      .set({
+        clerkId: clerkUser.id,
+        ...(fullName ? { name: fullName } : {}),
+        deletedAt: null,
+      })
+      .where(eq(users.id, dbUserId));
+  } else {
+    const [inserted] = await db
+      .insert(users)
+      .values({
+        clerkId: clerkUser.id,
+        email: params.email,
+        name: fullName,
+        role: DEFAULT_PLATFORM_ROLE,
+      })
+      .returning({ id: users.id });
+    dbUserId = inserted.id;
+  }
+
+  await ensureDefaultStudentRoleAssignment(dbUserId);
+
+  let invitation: ProvisioningResult["invitation"] = "not_needed";
+  if (created || retryPostPurchaseInvitation) {
+    try {
+      await clerk.invitations.createInvitation({
+        emailAddress: params.email,
+        notify: true,
+        ignoreExisting: true,
+        redirectUrl: invitationRedirectUrl(),
+        expiresInDays: 14,
+        publicMetadata: invitationMetadata,
+      });
+      invitation = "sent";
+      await clerk.users.updateUserMetadata(clerkUser.id, {
+        publicMetadata: {
+          ...clerkUser.publicMetadata,
+          ...invitationMetadata,
+          cmbPostPurchaseInviteSentAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      const code = (error as { errors?: Array<{ code?: string }> }).errors?.[0]
+        ?.code;
+      if (status === 422 || code === "duplicate_record") {
+        invitation = "already_pending";
+        await clerk.users.updateUserMetadata(clerkUser.id, {
+          publicMetadata: {
+            ...clerkUser.publicMetadata,
+            ...invitationMetadata,
+            cmbPostPurchaseInviteSentAt: new Date().toISOString(),
+          },
+        });
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  return { dbUserId, created, invitation };
+}
+
+async function getControlledTagRows() {
+  const rows = await db.select().from(tags);
+  const byName = new Map(rows.map((tag) => [tag.name.toLowerCase(), tag]));
+  const missing = POST_PURCHASE_CONTROLLED_TAGS.filter(
+    (name) => !byName.has(name),
+  );
+  if (missing.length > 0) {
+    throw new Error(`Missing controlled CMB tags: ${missing.join(", ")}`);
+  }
+  return byName;
+}
+
+async function getUserTagNames(userId: string) {
+  const rows = await db
+    .select({ name: tags.name })
+    .from(studentTags)
+    .innerJoin(tags, eq(tags.id, studentTags.tagId))
+    .where(eq(studentTags.userId, userId));
+  return rows.map((row) => row.name);
+}
+
+async function applyCmbTags(params: {
+  userId: string;
+  expectedTags: PostPurchaseControlledTag[];
+}) {
+  const currentTags = await getUserTagNames(params.userId);
+  const plan = planPostPurchaseTagReconciliation({
+    currentTags,
+    expectedTags: params.expectedTags,
+  });
+  const tagRows = await getControlledTagRows();
+
+  for (const tagName of plan.add) {
+    await assignTag(params.userId, tagRows.get(tagName)!.id, undefined, {
+      source: "webhook",
+    });
+  }
+  for (const tagName of plan.remove) {
+    await removeTag(params.userId, tagRows.get(tagName)!.id, {
+      source: "webhook",
+    });
+  }
+
+  return plan;
+}
+
+async function syncControlledTagsToSourceContact(params: {
+  ghlContactId?: string | null;
+  ghlLocationId?: string | null;
+  expectedTags: PostPurchaseControlledTag[];
+}) {
+  if (!params.ghlContactId || !params.ghlLocationId) return;
+  const client = await getGhlClientForLocation(params.ghlLocationId);
+  if (!client) throw new Error("Post-purchase GHL location is unavailable");
+
+  const response = await client.get<{
+    contact?: { tags?: string[] };
+  }>(`/contacts/${params.ghlContactId}`);
+  const currentTags = new Set(
+    (response.data.contact?.tags ?? []).map((tag) => tag.toLowerCase()),
+  );
+  const tagsToAdd = params.expectedTags.filter(
+    (tag) => !currentTags.has(tag),
+  );
+  if (tagsToAdd.length > 0) {
+    await client.post(`/contacts/${params.ghlContactId}/tags`, {
+      tags: tagsToAdd,
+    });
+  }
+  const expected = new Set(params.expectedTags);
+  for (const tagName of POST_PURCHASE_CONTROLLED_TAGS) {
+    if (expected.has(tagName) || !currentTags.has(tagName)) continue;
+    await client.delete(
+      `/contacts/${params.ghlContactId}/tags/${encodeURIComponent(tagName)}`,
+    );
+  }
+}
+
+async function ensureSourceContactLink(params: {
+  userId: string;
+  ghlContactId?: string | null;
+  ghlLocationId?: string | null;
+}) {
+  if (!params.ghlContactId || !params.ghlLocationId) return;
+
+  const byContact = await db.query.ghlContacts.findFirst({
+    where: eq(ghlContacts.ghlContactId, params.ghlContactId),
+  });
+  if (byContact) {
+    if (byContact.userId === params.userId) {
+      await db
+        .update(ghlContacts)
+        .set({ syncStatus: "active", lastSyncedAt: new Date() })
+        .where(eq(ghlContacts.id, byContact.id));
+    }
+    return;
+  }
+
+  const byUserLocation = await db.query.ghlContacts.findFirst({
+    where: and(
+      eq(ghlContacts.userId, params.userId),
+      eq(ghlContacts.ghlLocationId, params.ghlLocationId),
+    ),
+  });
+  if (byUserLocation) {
+    await db
+      .update(ghlContacts)
+      .set({
+        ghlContactId: params.ghlContactId,
+        syncStatus: "active",
+        lastSyncedAt: new Date(),
+      })
+      .where(eq(ghlContacts.id, byUserLocation.id));
+    return;
+  }
+
+  await db.insert(ghlContacts).values({
+    userId: params.userId,
+    ghlContactId: params.ghlContactId,
+    ghlLocationId: params.ghlLocationId,
+    syncStatus: "active",
+    lastSyncedAt: new Date(),
+  });
+}
+
+export async function provisionPostPurchaseEntitlements(
+  input: PostPurchaseProvisioningInput,
+): Promise<ProvisioningResult> {
+  const email = normalizeEmail(input.email);
+  const expectedTags = derivePostPurchaseTags(input);
+  if (expectedTags.length === 0) {
+    throw new Error("Post-purchase submission has no recognized package");
+  }
+
+  const ensured = await ensureCmbUser({
+    email,
+    firstName: input.firstName,
+    lastName: input.lastName,
+    expectedTags,
+  });
+  const plan = await applyCmbTags({
+    userId: ensured.dbUserId,
+    expectedTags,
+  });
+
+  await syncControlledTagsToSourceContact({
+    ghlContactId: input.ghlContactId,
+    ghlLocationId: input.ghlLocationId,
+    expectedTags,
+  });
+  await ensureSourceContactLink({
+    userId: ensured.dbUserId,
+    ghlContactId: input.ghlContactId,
+    ghlLocationId: input.ghlLocationId,
+  });
+
+  return {
+    action: ensured.created ? "created_user" : "existing_user",
+    invitation: ensured.invitation,
+    userId: ensured.dbUserId,
+    expectedTags,
+    tagsAdded: plan.add,
+    tagsRemoved: plan.remove,
+  };
+}
+
+export async function reconcilePostPurchaseEntitlements(params?: {
+  dryRun?: boolean;
+  limit?: number;
+}) {
+  const dryRun = params?.dryRun ?? false;
+  const limit = Math.min(Math.max(params?.limit ?? 500, 1), 500);
+  const [courseLocation] = await db
+    .select({ locationId: ghlLocations.ghlLocationId })
+    .from(ghlLocations)
+    .where(
+      and(
+        eq(ghlLocations.isActive, true),
+        ilike(ghlLocations.name, "%course%"),
+      ),
+    )
+    .limit(1);
+  const students = await db
+    .select({
+      contactId: activeStudents.contactId,
+      email: activeStudents.email,
+      firstName: activeStudents.firstName,
+      lastName: activeStudents.lastName,
+      productLine: activeStudents.productLine,
+      addOnPurchased: activeStudents.addOnPurchased,
+    })
+    .from(activeStudents)
+    .where(
+      and(
+        ilike(activeStudents.courseEligibility, "YES"),
+        isNotNull(activeStudents.productLine),
+      ),
+    )
+    .limit(limit);
+
+  const existingTagRows = await db
+    .select({
+      userId: users.id,
+      email: users.email,
+      tagName: tags.name,
+    })
+    .from(users)
+    .leftJoin(studentTags, eq(studentTags.userId, users.id))
+    .leftJoin(tags, eq(tags.id, studentTags.tagId))
+    .where(isNull(users.deletedAt));
+  const usersByEmail = new Map<
+    string,
+    { userId: string; tags: Set<string> }
+  >();
+  for (const row of existingTagRows) {
+    const email = normalizeEmail(row.email);
+    const entry = usersByEmail.get(email) ?? {
+      userId: row.userId,
+      tags: new Set<string>(),
+    };
+    if (row.tagName) entry.tags.add(row.tagName);
+    usersByEmail.set(email, entry);
+  }
+
+  const stats = {
+    checked: 0,
+    alreadyCorrect: 0,
+    wouldProvision: 0,
+    provisioned: 0,
+    usersCreated: 0,
+    invitationsSent: 0,
+    tagsAdded: 0,
+    tagsRemoved: 0,
+    skippedInvalid: 0,
+    failed: 0,
+  };
+
+  for (const student of students) {
+    if (
+      !student.email?.trim() ||
+      !student.productLine?.trim()
+    ) {
+      stats.skippedInvalid += 1;
+      continue;
+    }
+    stats.checked += 1;
+    const email = normalizeEmail(student.email);
+    const expectedTags = derivePostPurchaseTags(student);
+    if (expectedTags.length === 0) {
+      stats.skippedInvalid += 1;
+      continue;
+    }
+    const existing = usersByEmail.get(email);
+    const plan = planPostPurchaseTagReconciliation({
+      currentTags: existing?.tags ?? [],
+      expectedTags,
+    });
+    if (existing && plan.add.length === 0 && plan.remove.length === 0) {
+      stats.alreadyCorrect += 1;
+      continue;
+    }
+    stats.wouldProvision += 1;
+    if (dryRun) continue;
+
+    try {
+      const result = await provisionPostPurchaseEntitlements({
+        email,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        productLine: student.productLine,
+        addOnPurchased: student.addOnPurchased,
+        ghlContactId: student.contactId,
+        ghlLocationId: courseLocation?.locationId,
+      });
+      stats.provisioned += 1;
+      if (result.action === "created_user") stats.usersCreated += 1;
+      if (result.invitation === "sent") stats.invitationsSent += 1;
+      stats.tagsAdded += result.tagsAdded.length;
+      stats.tagsRemoved += result.tagsRemoved.length;
+    } catch (error) {
+      stats.failed += 1;
+      console.error(
+        "[Post Purchase] Reconciliation failed for one student:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  return stats;
+}
