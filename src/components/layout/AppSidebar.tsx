@@ -71,6 +71,18 @@ type NavSectionWithRoleAndFeature = Omit<NavSectionWithRole, "items"> & {
 
 const navSections: NavSectionWithRoleAndFeature[] = [
   {
+    label: "Admin",
+    minRole: "admin",
+    items: [
+      { title: "Admin Portal", url: "/admin/manage", icon: LayoutDashboard },
+      {
+        title: "Announcements",
+        url: "/admin/announcements",
+        icon: Megaphone,
+      },
+    ],
+  },
+  {
     label: "Courses",
     minRole: "student",
     items: [
@@ -238,19 +250,6 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     items: [
       { title: "Students", url: "/coach/students", icon: Users },
       { title: "Internal Docs", url: "/coach/internal-docs", icon: FileText },
-    ],
-  },
-  {
-    label: "Admin",
-    minRole: "coach",
-    items: [
-      { title: "Admin Portal", url: "/admin/manage", icon: LayoutDashboard },
-      {
-        title: "Announcements",
-        url: "/admin/announcements",
-        icon: Megaphone,
-        minRole: "admin",
-      },
     ],
   },
 ];
