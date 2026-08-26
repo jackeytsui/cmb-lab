@@ -41,6 +41,8 @@ export function buildHandoffTaskBody(input: {
   timestamp: Date;
   transcript: string;
   request?: string;
+  reference?: string;
+  pagePath?: string | null;
 }): string {
   return [
     `Submitted by: ${HANDOFF_SUBMITTER_EMAIL}`,
@@ -48,6 +50,8 @@ export function buildHandoffTaskBody(input: {
     `Student: ${input.studentName} <${input.studentEmail}>`,
     `Student email: ${input.studentEmail}`,
     ...(input.request ? [`Request: ${input.request}`] : []),
+    ...(input.reference ? [`Reference: ${input.reference}`] : []),
+    ...(input.pagePath ? [`Page: ${input.pagePath}`] : []),
     `Conversation summary: ${input.summary}`,
     `Detected intent: ${input.intent ?? "unclassified"}`,
     `Confidence: ${

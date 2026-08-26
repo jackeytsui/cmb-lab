@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildHandoffTaskBody,
@@ -8,6 +10,10 @@ import {
   STANDARD_HANDOFF_DUE_HOURS,
 } from "@/lib/lab-assistant/handoff-policy";
 import { selectExactGhlUserId } from "@/lib/ghl/user-resolution";
+
+function source(relativePath: string): string {
+  return readFileSync(path.join(process.cwd(), relativePath), "utf8");
+}
 
 describe("Lab Assistant handoff policy", () => {
   it("uses the requested SLA and routing identities", () => {
@@ -29,6 +35,8 @@ describe("Lab Assistant handoff policy", () => {
       urgent: false,
       timestamp: new Date("2026-08-25T12:00:00.000Z"),
       transcript: "Student: I cannot access Week 3.\nAssistant: I can help.",
+      reference: "abc12345",
+      pagePath: "/dashboard/course-library",
     });
 
     expect(body).toContain(
@@ -36,6 +44,8 @@ describe("Lab Assistant handoff policy", () => {
     );
     expect(body).toContain("Assigned to: contact@thecmblueprint.com");
     expect(body).toContain("Student email: mei@example.com");
+    expect(body).toContain("Reference: abc12345");
+    expect(body).toContain("Page: /dashboard/course-library");
     expect(body).toContain(
       "Conversation summary: Mei cannot access the Week 3 lesson and wants human help.",
     );
@@ -51,6 +61,33 @@ describe("Lab Assistant handoff policy", () => {
     ).toBe(
       "Student is asking for support with: I need a person to fix my access.",
     );
+  });
+});
+
+describe("feedback task routing", () => {
+  it("turns feedback-form submissions into assigned handoff tasks", () => {
+    const route = source("src/app/api/beta-feedback/route.ts");
+
+    expect(route).toContain("createFeedbackTask({");
+    expect(route).toContain("taskCreated");
+    expect(route).toContain("HANDOFF_RESPONSE_WINDOW");
+  });
+
+  it("turns natural-language feedback in chat into the same tasks", () => {
+    const route = source("src/app/api/lab-assistant/route.ts");
+
+    expect(route).toContain("createFeedbackTask({");
+    expect(route).toContain("has been sent to the support team as a task");
+  });
+
+  it("shows feedback handoffs in the admin overview", () => {
+    const overview = source(
+      "src/app/api/admin/lab-assistant/overview/route.ts",
+    );
+    const widget = source("src/components/admin/LabAssistantAdminWidget.tsx");
+
+    expect(overview).toContain('"lab_assistant.feedback_handoff"');
+    expect(widget).toContain('label="Feedback tasks"');
   });
 });
 

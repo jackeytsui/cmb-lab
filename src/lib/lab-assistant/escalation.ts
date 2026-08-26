@@ -2,7 +2,7 @@
 // Handover layer: escalation and testimonial requests become GHL tasks on the
 // student's own contact (single-contact scope enforced by student-context.ts).
 
-import { type User } from "@/db/schema";
+import { type BetaFeedbackCategory, type User } from "@/db/schema";
 import { createGhlClient, getAnyActiveGhlLocation } from "@/lib/ghl/client";
 import { createContactTask } from "@/lib/ghl/tasks";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
@@ -81,6 +81,15 @@ export interface HandoverResult {
   ok: boolean;
   taskId: string | null;
 }
+
+const FEEDBACK_TASK_DETAILS: Record<
+  BetaFeedbackCategory,
+  { label: string; intent: string }
+> = {
+  bug: { label: "Bug report", intent: "bug_report" },
+  feature_request: { label: "Feature request", intent: "feature_request" },
+  general: { label: "Product feedback", intent: "product_feedback" },
+};
 
 function dueDateFromNow(hours: number): Date {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
@@ -189,6 +198,59 @@ export async function createTestimonialTask(params: {
   });
 }
 
+/**
+ * Every feedback entry remains in CMB Lab for history and also becomes an
+ * assigned GHL task, so nobody has to monitor the internal queue manually.
+ */
+export async function createFeedbackTask(params: {
+  user: User;
+  ghlContactId: string | null;
+  category: BetaFeedbackCategory;
+  message: string;
+  pagePath?: string | null;
+  reference: string;
+  summary: string;
+  transcript?: string;
+}): Promise<HandoverResult> {
+  const details = FEEDBACK_TASK_DETAILS[params.category];
+  const transcript =
+    params.transcript?.trim() ||
+    [
+      `Student submitted ${details.label.toLowerCase()} through the CMB Lab Assistant.`,
+      ...(params.pagePath ? [`Page: ${params.pagePath}`] : []),
+      `Student: ${params.message.trim()}`,
+    ].join("\n");
+  const body = buildHandoffTaskBody({
+    studentName: studentDisplayName(params.user),
+    studentEmail: params.user.email,
+    summary: params.summary,
+    intent: details.intent,
+    confidence: null,
+    urgent: false,
+    timestamp: new Date(),
+    transcript,
+    request: `${details.label} submitted through the CMB Lab Assistant`,
+    reference: params.reference,
+    pagePath: params.pagePath,
+  });
+
+  return createHandoverTask({
+    user: params.user,
+    ghlContactId: params.ghlContactId,
+    title: `[Lab Bot] ${details.label} — ${studentDisplayName(params.user)}`,
+    body,
+    dueDate: dueDateFromNow(STANDARD_HANDOFF_DUE_HOURS),
+    eventType: "lab_assistant.feedback_handoff",
+    notify: {
+      kind: "feedback",
+      intent: details.intent,
+      urgent: false,
+      summary: params.summary,
+      lastMessage: params.message.trim(),
+    },
+  });
+}
+
 async function createHandoverTask(params: {
   user: User;
   ghlContactId: string | null;
@@ -197,7 +259,7 @@ async function createHandoverTask(params: {
   dueDate: Date;
   eventType: string;
   notify: {
-    kind: "escalation" | "testimonial";
+    kind: "escalation" | "testimonial" | "feedback";
     intent: string | null;
     urgent: boolean;
     summary: string;

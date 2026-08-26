@@ -7,7 +7,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { Bug, CheckCircle2, Lightbulb, MessageSquarePlus, Send, Square, Star, X } from 'lucide-react';
+import { AlertTriangle, Bug, CheckCircle2, Lightbulb, MessageSquarePlus, Send, Square, Star, X } from 'lucide-react';
 import { useLabAssistant } from '@/hooks/useLabAssistant';
 
 const SUPPORT_EMAIL = 'contact@thecmblueprint.com';
@@ -51,8 +51,9 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
   const [input, setInput] = useState('');
   const [feedbackMode, setFeedbackMode] = useState<FeedbackMode | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
-  const [feedbackState, setFeedbackState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [feedbackState, setFeedbackState] = useState<'idle' | 'sending' | 'sent' | 'handoff-error' | 'error'>('idle');
   const [feedbackReference, setFeedbackReference] = useState('');
+  const [feedbackResponseWindow, setFeedbackResponseWindow] = useState('48 hours');
   const [ratingPrompt, setRatingPrompt] = useState<{ title: string; href: string } | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -132,7 +133,8 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || 'Could not save feedback');
       setFeedbackReference(data.reference || data.id?.slice(0, 8) || 'saved');
-      setFeedbackState('sent');
+      setFeedbackResponseWindow(data.responseWindow || '48 hours');
+      setFeedbackState(data.taskCreated === false ? 'handoff-error' : 'sent');
       setFeedbackText('');
     } catch {
       setFeedbackState('error');
@@ -316,20 +318,21 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
 
       {feedbackMode && (
         <form onSubmit={submitFeedback} className="max-h-[58%] shrink-0 overflow-y-auto border-t border-border bg-muted/30 p-4">
-          {feedbackState === 'sent' ? (
-            <div role="status" className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+          {feedbackState === 'sent' || feedbackState === 'handoff-error' ? (
+            <div role={feedbackState === 'sent' ? 'status' : 'alert'} className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${feedbackState === 'sent' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300'}`}>
+              {feedbackState === 'sent' ? <CheckCircle2 className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}
               <div className="flex-1">
-                <p className="font-semibold">Thank you — it’s in the product queue.</p>
+                <p className="font-semibold">{feedbackState === 'sent' ? 'Sent to our support team.' : 'Saved, but the support task could not be created.'}</p>
+                {feedbackState === 'sent' ? <p className="mt-0.5 text-xs">Expect to hear back within {feedbackResponseWindow}.</p> : <p className="mt-0.5 text-xs">Please email <a className="underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> so the team doesn’t miss it.</p>}
                 <p className="mt-0.5 text-xs">Reference: {feedbackReference}</p>
               </div>
-              <button type="button" onClick={() => setFeedbackMode(null)} className="inline-flex size-8 items-center justify-center rounded-full hover:bg-emerald-500/10" aria-label="Close feedback form"><X className="size-4" /></button>
+              <button type="button" onClick={() => setFeedbackMode(null)} className="inline-flex size-8 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/5" aria-label="Close feedback form"><X className="size-4" /></button>
             </div>
           ) : (
             <>
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Send feedback to our team</p>
+                  <p className="text-sm font-semibold text-foreground">Send feedback to our support team</p>
                   <label htmlFor="beta-feedback" className="mt-0.5 block text-xs leading-5 text-muted-foreground">{FEEDBACK_PROMPTS[feedbackMode]}</label>
                 </div>
                 <button type="button" onClick={() => setFeedbackMode(null)} className="inline-flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-muted" aria-label="Cancel feedback"><X className="size-4 text-muted-foreground" /></button>
@@ -346,7 +349,7 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
               />
               {feedbackState === 'error' && <p role="alert" className="mt-1 text-xs text-red-500">Couldn’t save that. Please try again.</p>}
               <button type="submit" disabled={feedbackState === 'sending' || feedbackText.trim().length < 5} className="mt-2 min-h-11 w-full rounded-xl bg-[#2e3a97] px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50">
-                {feedbackState === 'sending' ? 'Sending…' : 'Send to the product team'}
+                {feedbackState === 'sending' ? 'Sending…' : 'Send to the support team'}
               </button>
               <p className="mt-1.5 text-center text-[11px] text-muted-foreground">We automatically include the page you’re viewing.</p>
             </>

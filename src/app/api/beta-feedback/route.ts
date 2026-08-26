@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getRealUser } from "@/lib/auth";
 import { storeBetaFeedback } from "@/lib/beta-feedback";
+import { getStudentContext } from "@/lib/lab-assistant/student-context";
+import { createFeedbackTask } from "@/lib/lab-assistant/escalation";
+import {
+  HANDOFF_RESPONSE_WINDOW,
+  normalizeHandoffSummary,
+} from "@/lib/lab-assistant/handoff-policy";
+import { SUPPORT_EMAIL } from "@/lib/lab-assistant/allowlist";
 import {
   labAssistantLimiter,
   rateLimitResponse,
@@ -12,6 +19,12 @@ const bodySchema = z.object({
   message: z.string().trim().min(5).max(4000),
   pagePath: z.string().trim().max(1000).optional(),
 });
+
+const CATEGORY_LABELS = {
+  bug: "Bug report",
+  feature_request: "Feature request",
+  general: "Product feedback",
+} as const;
 
 export async function POST(request: NextRequest) {
   const user = await getRealUser();
@@ -31,16 +44,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let record: Awaited<ReturnType<typeof storeBetaFeedback>>;
   try {
-    const record = await storeBetaFeedback({
+    record = await storeBetaFeedback({
       userId: user.id,
       ...parsed.data,
       source: "chatbot_form",
     });
-    return NextResponse.json(
-      { id: record.id, reference: record.id.slice(0, 8) },
-      { status: 201 },
-    );
   } catch (error) {
     console.error("[Beta Feedback] Failed to store feedback:", error);
     return NextResponse.json(
@@ -48,4 +58,41 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+
+  let taskCreated = false;
+  try {
+    const studentContext = await getStudentContext(user);
+    const label = CATEGORY_LABELS[parsed.data.category];
+    const handoff = await createFeedbackTask({
+      user,
+      ghlContactId: studentContext.ghlContactId,
+      category: parsed.data.category,
+      message: parsed.data.message,
+      pagePath: parsed.data.pagePath,
+      reference: record.id.slice(0, 8),
+      summary: normalizeHandoffSummary(
+        `${label}: ${parsed.data.message}`,
+        parsed.data.message,
+      ),
+    });
+    taskCreated = handoff.ok;
+  } catch (error) {
+    console.error("[Beta Feedback] Failed to create support task:", error);
+  }
+
+  return NextResponse.json(
+    {
+      id: record.id,
+      reference: record.id.slice(0, 8),
+      taskCreated,
+      responseWindow: HANDOFF_RESPONSE_WINDOW,
+      ...(!taskCreated
+        ? {
+            warning: `Your feedback was saved, but we couldn't create the support task. Please email ${SUPPORT_EMAIL}.`,
+            supportEmail: SUPPORT_EMAIL,
+          }
+        : {}),
+    },
+    { status: 201 },
+  );
 }

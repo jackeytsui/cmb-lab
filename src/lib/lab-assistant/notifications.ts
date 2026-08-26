@@ -1,6 +1,6 @@
 // src/lib/lab-assistant/notifications.ts
 // Discord notifications for Lab Assistant handovers — mirrors the team's GHL
-// operations-form automation: every escalation/testimonial creates a GHL task
+// operations-form automation: every handoff/feedback entry creates a GHL task
 // AND fires a message into the issue-escalation Discord channel.
 //
 // The webhook URL is configured from the admin block (stored in app_settings)
@@ -51,11 +51,12 @@ export async function isDiscordConfigured(): Promise<boolean> {
 const COLOR_URGENT = 0xef4444; // red
 const COLOR_ESCALATION = 0xf59e0b; // amber
 const COLOR_TESTIMONIAL = 0x22c55e; // green
+const COLOR_FEEDBACK = 0x3a49b8; // CMB blue
 const COLOR_FAILED = 0x991b1b; // dark red
 const COLOR_TEST = 0x3a49b8; // CMB blue
 
 export interface HandoverNotification {
-  kind: "escalation" | "testimonial";
+  kind: "escalation" | "testimonial" | "feedback";
   studentName: string;
   studentEmail: string;
   intent: string | null;
@@ -94,7 +95,9 @@ export async function sendDiscordHandoverNotification(
   const title =
     kind === "testimonial"
       ? `🎤 Testimonial interview request — ${studentName}`
-      : `${urgent ? "🚨" : "🔔"} Lab Bot escalation — ${intent ?? "unclassified"} — ${studentName}`;
+      : kind === "feedback"
+        ? `📝 Lab Bot feedback — ${intent ?? "general"} — ${studentName}`
+        : `${urgent ? "🚨" : "🔔"} Lab Bot escalation — ${intent ?? "unclassified"} — ${studentName}`;
 
   const color =
     taskVia === "failed"
@@ -103,7 +106,9 @@ export async function sendDiscordHandoverNotification(
         ? COLOR_URGENT
         : kind === "testimonial"
           ? COLOR_TESTIMONIAL
-          : COLOR_ESCALATION;
+          : kind === "feedback"
+            ? COLOR_FEEDBACK
+            : COLOR_ESCALATION;
 
   const fields = [
     { name: "Student", value: `${studentName} (${studentEmail})`, inline: true },
@@ -189,7 +194,7 @@ export async function sendDiscordTestMessage(
           {
             title: "✅ CMB Lab Assistant connected",
             description:
-              "Escalations and testimonial requests will be posted in this channel, alongside their GHL tasks.",
+              "Escalations, feedback, and testimonial requests will be posted in this channel, alongside their GHL tasks.",
             color: COLOR_TEST,
             timestamp: new Date().toISOString(),
           },

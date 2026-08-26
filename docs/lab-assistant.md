@@ -23,6 +23,7 @@ Requires the existing GHL integration to be configured: at least one active loca
 | Guidance | `ai_prompts` slug `lab-assistant-guidance` | Team-editable in **Admin → AI Prompts**, no code change. Fallback default in `src/lib/lab-assistant/guidance.ts` |
 | Data gatekeeper | `src/lib/lab-assistant/student-context.ts` | See below |
 | Handover | `src/lib/lab-assistant/escalation.ts` + `src/lib/ghl/tasks.ts` | GHL tasks on the student's contact |
+| Feedback capture | `src/app/api/beta-feedback/route.ts` + chat API | Saves an internal history record and creates the same assigned GHL + Discord handoff |
 | Admin block | `src/components/admin/LabAssistantAdminWidget.tsx` on **Admin → Manage Portal** | Stats, config health, recent handovers, live test console (`/api/admin/lab-assistant/overview`) |
 
 ## Data gatekeeping (non-negotiable)
@@ -62,11 +63,13 @@ Created on the student's GHL contact:
 
 Triggered when: intent is `other`/unclassified, confidence is below threshold, the model calls its `escalateToTeam` tool (student asks for a human, accepts an offer, off-scope follow-up), or urgency is detected (task created *and* the inbox is surfaced). Repeat unresolved messages in an already-escalated conversation do not create duplicate tasks.
 
+Bug reports, feature requests, and general feedback follow the same operational route whether submitted through the three feedback buttons or written naturally in chat. CMB Lab retains the submission in **Feedback history** for product tracking, but an assigned 48-hour GHL task and Discord alert are created immediately so the internal view does not need to be monitored.
+
 Every task begins with a concise AI-generated conversation summary, followed by the full transcript. It records `jackey.tsui@thecmblueprint.com` as the submitter, includes the signed-in student's email explicitly, and is assigned to the exact GHL user matching `contact@thecmblueprint.com` in the task's sub-account.
 
 **Handover always lands in GHL** (like the team's operations form): first choice is a task on the student's own contact; if they have no linked contact — or that call fails — the task is created on a dedicated **CMB Lab Operations** contact instead (upserted automatically; email configurable via `GHL_OPS_CONTACT_EMAIL`, default `contact@thecmblueprint.com`) with the requester's email appended to the title. The audit log records which route was used (`via: student|ops`). Only if both routes fail does the bot point to the support inbox. If the support assignee cannot be resolved in a sub-account, that attempt fails rather than creating an unassigned task, and the normal operations fallback is used.
 
-**Discord alerts**: every handover also pings the issue-escalation channel — student, intent, urgency, relative due time, where the task landed (student contact / ops contact / a FAILED alert for manual follow-up), and the student's last message. The full transcript stays in the GHL task. Configure it in the admin block's Config health section: paste the channel's webhook URL (Discord channel → Integrations → Webhooks); it's verified with a test ping before saving (stored in `app_settings`; the `DISCORD_WEBHOOK_URL` env var works as a fallback). A "Send test" button re-verifies any time.
+**Discord alerts**: every handover and feedback submission also pings the issue-escalation channel — student, intent/category, summary, relative due time, where the task landed (student contact / ops contact / a FAILED alert for manual follow-up), and the student's last message. The full transcript stays in the GHL task. Configure it in the admin block's Config health section: paste the channel's webhook URL (Discord channel → Integrations → Webhooks); it's verified with a test ping before saving (stored in `app_settings`; the `DISCORD_WEBHOOK_URL` env var works as a fallback). A "Send test" button re-verifies any time.
 
 **GHL credentials**: all Lab Assistant GHL calls (contact linking, field reads, task creation, the ops fallback contact, the field catalog) use the active location in **Admin → GHL → Locations**; when that table is empty they fall back to the legacy `GHL_API_TOKEN` + `GHL_LOCATION_ID` env vars, so either configuration works.
 
@@ -74,9 +77,10 @@ Every task begins with a concise AI-generated conversation summary, followed by 
 
 Everything sits in one block on **Admin → Manage Portal** ("CMB Lab Assistant", admin-only):
 
-- **Stats (30d)** — chats, in-scope resolution rate (amber below the 60% gate), escalations (with failures), testimonial requests, intent breakdown
+- **Stats (30d)** — chats, in-scope resolution rate (amber below the 60% gate), escalations, feedback tasks, testimonial requests, and failures
 - **Config health** — widget access rule, OpenAI key, active GHL location, saved guidance prompt, missing field mappings
-- **Recent handovers** — last 5 escalation/testimonial tasks with failure reasons, linking to the full sync log
+- **Recent handovers** — last 5 escalation/feedback/testimonial tasks with failure reasons, linking to the full sync log
+- **Feedback history** — searchable product record for every bug, idea, and feedback submission; GHL tasks are the actionable inbox
 - **Guidance & talk tracks editor** — the Gorgias-style mechanism the team owns: the overall guidance (a full built-in playbook covers voice, scope, context use, data rules, actions, urgent handling) plus a per-intent talk track for each of the 5 intents (pre-filled with built-in defaults to refine, not write from scratch). Every save is a new version (`lab-assistant-guidance` / `lab-assistant-track-*`, rows created automatically) and applies on the next message; saving a track empty reverts it to the built-in default
 - **Test console** — chat against the real pipeline in dry-run mode (admin/coach only): intent scan, gatekept context, and guidance all run for real, but no GHL tasks are created and test chats are excluded from resolution metrics. Responses use the signed-in admin's own contact data — the gatekeeper never impersonates a student.
 

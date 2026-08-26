@@ -47,7 +47,7 @@ export function BetaFeedbackQueue() {
   return (
     <section className="mt-5 border-t border-border pt-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h3 className="text-sm font-semibold text-foreground">Beta feedback queue</h3><p className="mt-0.5 text-xs text-muted-foreground">Bugs, ideas, and product feedback submitted through the Lab Assistant.</p></div>
+        <div><h3 className="text-sm font-semibold text-foreground">Feedback history</h3><p className="mt-0.5 text-xs text-muted-foreground">Every submission is also routed to an assigned GHL support task; this view is the searchable product record.</p></div>
         <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"><RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh</button>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">

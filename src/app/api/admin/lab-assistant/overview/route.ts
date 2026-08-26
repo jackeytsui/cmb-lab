@@ -26,6 +26,7 @@ const RECENT_HANDOVER_LIMIT = 5;
 
 const HANDOVER_EVENT_TYPES = [
   "lab_assistant.escalation",
+  "lab_assistant.feedback_handoff",
   "lab_assistant.testimonial_request",
 ];
 
@@ -205,6 +206,7 @@ export async function GET() {
           : null,
       urgent: stats.urgent,
       escalations: tally("lab_assistant.escalation"),
+      feedbackTasks: tally("lab_assistant.feedback_handoff"),
       testimonials: tally("lab_assistant.testimonial_request"),
     },
     intentBreakdown,
@@ -213,6 +215,8 @@ export async function GET() {
       type:
         event.eventType === "lab_assistant.testimonial_request"
           ? "testimonial"
+          : event.eventType === "lab_assistant.feedback_handoff"
+            ? "feedback"
           : "escalation",
       status: event.status,
       // Title carries intent + student name; transcripts stay in GHL tasks.

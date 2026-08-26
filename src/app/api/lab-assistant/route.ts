@@ -35,6 +35,7 @@ import {
 import { getStudentContext } from "@/lib/lab-assistant/student-context";
 import {
   createEscalationTask,
+  createFeedbackTask,
   createTestimonialTask,
 } from "@/lib/lab-assistant/escalation";
 import {
@@ -334,39 +335,75 @@ export async function POST(request: Request) {
       latestUserText,
     );
 
-    // Product feedback is stored in CMB Lab itself, not buried in a GHL
-    // escalation transcript. Bare quick-action phrases ask for detail first;
-    // substantive natural-language reports are captured immediately.
+    // Product feedback is stored in CMB Lab for history and also routed into
+    // the same assigned GHL + Discord handoff flow as unanswered chats.
+    // Bare quick-action phrases ask for detail before anything is created.
     const feedbackCategory = intent ? FEEDBACK_INTENTS[intent] : undefined;
     if (feedbackCategory) {
       if (!dryRun) logIntentScan(user, scan, true);
       if (isBareFeedbackRequest(latestUserText)) {
         const prompt =
           feedbackCategory === "bug"
-            ? "Tell me what happened, what you expected, and which page you were on. I’ll save it directly for the product team."
+            ? "Tell me what happened, what you expected, and which page you were on. I’ll create a support task for the team."
             : feedbackCategory === "feature_request"
-              ? "What would you like CMB Lab to do, and how would it help you? I’ll save the idea directly for the product team."
-              : "What would you like us to know about your CMB Lab experience? I’ll save it directly for the product team.";
+              ? "What would you like CMB Lab to do, and how would it help you? I’ll create a support task for the team."
+              : "What would you like us to know about your CMB Lab experience? I’ll create a support task for the team.";
         return cannedResponse(prompt);
       }
 
-      try {
-        const record = dryRun
-          ? { id: "dry-run-feedback" }
-          : await storeBetaFeedback({
-              userId: user.id,
-              category: feedbackCategory,
-              message: latestUserText,
-              pagePath,
-              source: "chatbot",
-            });
+      if (dryRun) {
         return cannedResponse(
-          `Thanks — your ${feedbackCategory === "bug" ? "bug report" : feedbackCategory === "feature_request" ? "feature request" : "feedback"} is saved for the product team. Reference: ${record.id.slice(0, 8)}.`,
+          "Dry run: this feedback would be saved and sent to the support team as an assigned GHL task.",
         );
+      }
+
+      let record: Awaited<ReturnType<typeof storeBetaFeedback>>;
+      try {
+        record = await storeBetaFeedback({
+          userId: user.id,
+          category: feedbackCategory,
+          message: latestUserText,
+          pagePath,
+          source: "chatbot",
+        });
       } catch (error) {
         console.error("[Lab Assistant] Feedback capture failed:", error);
         return cannedResponse(
           `I couldn't save that just now. Please try again, or email ${SUPPORT_EMAIL} if the issue is blocking you.`,
+        );
+      }
+
+      const reference = record.id.slice(0, 8);
+      const label =
+        feedbackCategory === "bug"
+          ? "bug report"
+          : feedbackCategory === "feature_request"
+            ? "feature request"
+            : "feedback";
+      try {
+        const handoff = await createFeedbackTask({
+          user,
+          ghlContactId: studentContext.ghlContactId,
+          category: feedbackCategory,
+          message: latestUserText,
+          pagePath,
+          reference,
+          summary: handoffSummary,
+          transcript,
+        });
+
+        if (!handoff.ok) {
+          return cannedResponse(
+            `Your ${label} was saved with reference ${reference}, but I couldn't create the support task. Please email ${SUPPORT_EMAIL} so the team doesn't miss it.`,
+          );
+        }
+        return cannedResponse(
+          `Thanks — your ${label} is saved and has been sent to the support team as a task. Expect to hear back within ${HANDOFF_RESPONSE_WINDOW}. Reference: ${reference}.`,
+        );
+      } catch (error) {
+        console.error("[Lab Assistant] Feedback task creation failed:", error);
+        return cannedResponse(
+          `Your ${label} was saved with reference ${reference}, but I couldn't create the support task. Please email ${SUPPORT_EMAIL} so the team doesn't miss it.`,
         );
       }
     }

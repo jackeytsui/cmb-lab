@@ -24,12 +24,13 @@ interface Overview {
     resolutionRate: number | null;
     urgent: number;
     escalations: { total: number; failed: number };
+    feedbackTasks: { total: number; failed: number };
     testimonials: { total: number; failed: number };
   };
   intentBreakdown: Array<{ intent: string; count: number }>;
   recentHandovers: Array<{
     id: string;
-    type: "escalation" | "testimonial";
+    type: "escalation" | "testimonial" | "feedback";
     status: string;
     title: string;
     error: string | null;
@@ -141,7 +142,7 @@ export function LabAssistantAdminWidget() {
             </div>
           ) : overview ? (
             <>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <StatTile
                   label={`Chats (${overview.windowDays}d)`}
                   value={String(overview.stats.scans)}
@@ -165,6 +166,16 @@ export function LabAssistantAdminWidget() {
                   sub={
                     overview.stats.escalations.failed > 0
                       ? `${overview.stats.escalations.failed} failed`
+                      : undefined
+                  }
+                />
+                <StatTile
+                  label="Feedback tasks"
+                  value={String(overview.stats.feedbackTasks.total)}
+                  warn={overview.stats.feedbackTasks.failed > 0}
+                  sub={
+                    overview.stats.feedbackTasks.failed > 0
+                      ? `${overview.stats.feedbackTasks.failed} failed`
                       : undefined
                   }
                 />
