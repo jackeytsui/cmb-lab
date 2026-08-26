@@ -54,8 +54,8 @@ class GhlClient {
     return this.request<T>({ method: "PUT", path, body });
   }
 
-  async delete<T = unknown>(path: string): Promise<GhlResponse<T>> {
-    return this.request<T>({ method: "DELETE", path });
+  async delete<T = unknown>(path: string, body?: unknown): Promise<GhlResponse<T>> {
+    return this.request<T>({ method: "DELETE", path, body });
   }
 
   private async request<T = unknown>(
@@ -92,7 +92,12 @@ class GhlClient {
       headers,
     };
 
-    if (options.body && (options.method === "POST" || options.method === "PUT")) {
+    if (
+      options.body &&
+      (options.method === "POST" ||
+        options.method === "PUT" ||
+        options.method === "DELETE")
+    ) {
       fetchOptions.body = JSON.stringify(options.body);
     }
 

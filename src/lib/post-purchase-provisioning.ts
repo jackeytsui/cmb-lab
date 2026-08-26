@@ -253,15 +253,45 @@ async function applyCmbTags(params: {
 async function syncControlledTagsToSourceContact(params: {
   ghlContactId?: string | null;
   ghlLocationId?: string | null;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
   expectedTags: PostPurchaseControlledTag[];
 }) {
-  if (!params.ghlContactId || !params.ghlLocationId) return;
+  if (!params.ghlContactId || !params.ghlLocationId) {
+    return params.ghlContactId ?? null;
+  }
   const client = await getGhlClientForLocation(params.ghlLocationId);
   if (!client) throw new Error("Post-purchase GHL location is unavailable");
 
-  const response = await client.get<{
-    contact?: { tags?: string[] };
-  }>(`/contacts/${params.ghlContactId}`);
+  let contactId = params.ghlContactId;
+  let response;
+  try {
+    response = await client.get<{
+      contact?: { tags?: string[] };
+    }>(`/contacts/${contactId}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+    if (!message.includes("contact not found")) throw error;
+
+    const upsert = await client.post<{
+      contact?: { id?: string };
+    }>("/contacts/upsert", {
+      locationId: params.ghlLocationId,
+      email: params.email,
+      firstName: params.firstName?.trim() || undefined,
+      lastName: params.lastName?.trim() || undefined,
+      source: "CMB Lab post-purchase reconciliation",
+    });
+    const resolvedContactId = upsert.data.contact?.id;
+    if (!resolvedContactId) {
+      throw new Error("GHL contact upsert did not return a contact ID");
+    }
+    contactId = resolvedContactId;
+    response = await client.get<{
+      contact?: { tags?: string[] };
+    }>(`/contacts/${contactId}`);
+  }
   const currentTags = new Set(
     (response.data.contact?.tags ?? []).map((tag) => tag.toLowerCase()),
   );
@@ -269,17 +299,21 @@ async function syncControlledTagsToSourceContact(params: {
     (tag) => !currentTags.has(tag),
   );
   if (tagsToAdd.length > 0) {
-    await client.post(`/contacts/${params.ghlContactId}/tags`, {
+    await client.post(`/contacts/${contactId}/tags`, {
       tags: tagsToAdd,
     });
   }
   const expected = new Set(params.expectedTags);
-  for (const tagName of POST_PURCHASE_CONTROLLED_TAGS) {
-    if (expected.has(tagName) || !currentTags.has(tagName)) continue;
-    await client.delete(
-      `/contacts/${params.ghlContactId}/tags/${encodeURIComponent(tagName)}`,
-    );
+  const tagsToRemove = POST_PURCHASE_CONTROLLED_TAGS.filter(
+    (tagName) => !expected.has(tagName) && currentTags.has(tagName),
+  );
+  if (tagsToRemove.length > 0) {
+    await client.delete(`/contacts/${contactId}/tags`, {
+      tags: tagsToRemove,
+    });
   }
+
+  return contactId;
 }
 
 async function ensureSourceContactLink(params: {
@@ -349,14 +383,17 @@ export async function provisionPostPurchaseEntitlements(
     expectedTags,
   });
 
-  await syncControlledTagsToSourceContact({
+  const resolvedContactId = await syncControlledTagsToSourceContact({
     ghlContactId: input.ghlContactId,
     ghlLocationId: input.ghlLocationId,
+    email,
+    firstName: input.firstName,
+    lastName: input.lastName,
     expectedTags,
   });
   await ensureSourceContactLink({
     userId: ensured.dbUserId,
-    ghlContactId: input.ghlContactId,
+    ghlContactId: resolvedContactId,
     ghlLocationId: input.ghlLocationId,
   });
 
@@ -373,8 +410,10 @@ export async function provisionPostPurchaseEntitlements(
 export async function reconcilePostPurchaseEntitlements(params?: {
   dryRun?: boolean;
   limit?: number;
+  resyncGhl?: boolean;
 }) {
   const dryRun = params?.dryRun ?? false;
+  const resyncGhl = params?.resyncGhl ?? false;
   const limit = Math.min(Math.max(params?.limit ?? 500, 1), 500);
   const [courseLocation] = await db
     .select({ locationId: ghlLocations.ghlLocationId })
@@ -461,7 +500,12 @@ export async function reconcilePostPurchaseEntitlements(params?: {
       currentTags: existing?.tags ?? [],
       expectedTags,
     });
-    if (existing && plan.add.length === 0 && plan.remove.length === 0) {
+    if (
+      existing &&
+      plan.add.length === 0 &&
+      plan.remove.length === 0 &&
+      !resyncGhl
+    ) {
       stats.alreadyCorrect += 1;
       continue;
     }

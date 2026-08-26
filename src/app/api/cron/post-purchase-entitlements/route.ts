@@ -15,6 +15,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const dryRun = url.searchParams.get("dryRun") === "true";
-  const result = await reconcilePostPurchaseEntitlements({ dryRun });
+  const resyncGhl = url.searchParams.get("resyncGhl") === "true";
+  const result = await reconcilePostPurchaseEntitlements({ dryRun, resyncGhl });
   return NextResponse.json(result, { status: result.failed > 0 ? 207 : 200 });
 }

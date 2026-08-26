@@ -44,7 +44,8 @@ export async function syncTagToGhl(
         });
       } else {
         await client.delete(
-          `/contacts/${link.ghlContactId}/tags/${encodeURIComponent(tagName)}`
+          `/contacts/${link.ghlContactId}/tags`,
+          { tags: [tagName] },
         );
       }
 
