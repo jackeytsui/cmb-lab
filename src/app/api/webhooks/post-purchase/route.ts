@@ -19,6 +19,11 @@ const selectionSchema = z.union([
   z.string().trim().min(1).max(1000),
   z.array(z.string().trim().min(1).max(300)).min(1).max(20),
 ]);
+const optionalSelectionSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  selectionSchema.optional(),
+);
 
 const postPurchaseSchema = z.object({
   email: z.string().trim().email(),
@@ -26,7 +31,7 @@ const postPurchaseSchema = z.object({
   lastName: z.string().trim().max(120).optional(),
   name: z.string().trim().max(240).optional(),
   productLine: selectionSchema,
-  addOnPurchased: selectionSchema.optional(),
+  addOnPurchased: optionalSelectionSchema,
   contactId: z.string().trim().min(1).max(120),
   locationId: z.string().trim().min(1).max(120),
   idempotencyKey: z.string().trim().min(1).max(500).optional(),
