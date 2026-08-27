@@ -25,6 +25,7 @@ import { StudyTodayCard } from "@/components/dashboard/StudyTodayCard";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { getUserFeatureTagOverrides, applyFeatureTagOverrides } from "@/lib/tag-feature-access";
 import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
+import { getCurrentUser as getEffectiveDbUser } from "@/lib/auth";
 
 /**
  * Dashboard page - shows courses the authenticated user has access to.
@@ -77,6 +78,19 @@ export default async function DashboardPage() {
       if (!dbUser) {
         redirect("/sign-in");
       }
+    }
+
+    // Page navigation should follow the selected View As identity. The helper
+    // only honors the impersonation cookie for a real administrator, so the
+    // authorization boundary remains tied to the signed-in account while the
+    // landing page and dashboard data mirror the selected user.
+    const effectiveDbUser = await getEffectiveDbUser();
+    if (effectiveDbUser) {
+      dbUser = {
+        id: effectiveDbUser.id,
+        role: effectiveDbUser.role,
+        email: effectiveDbUser.email,
+      };
     }
 
     if (dbUser.role === "student") {

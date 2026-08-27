@@ -23,4 +23,24 @@ describe("student route access", () => {
     );
     expect(middleware).toContain("!isDashboardEntry");
   });
+
+  it("uses the selected View As identity for dashboard landing behavior", () => {
+    const dashboard = readFileSync(
+      path.join(
+        process.cwd(),
+        "src/app/(dashboard)/dashboard/page.tsx",
+      ),
+      "utf8",
+    );
+
+    expect(dashboard).toContain(
+      'getCurrentUser as getEffectiveDbUser',
+    );
+    expect(dashboard).toContain(
+      "const effectiveDbUser = await getEffectiveDbUser()",
+    );
+    expect(dashboard.indexOf("const effectiveDbUser")).toBeLessThan(
+      dashboard.indexOf('if (dbUser.role === "student")'),
+    );
+  });
 });
