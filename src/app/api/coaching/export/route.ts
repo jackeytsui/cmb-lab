@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { coachingSessions, coachingNotes } from "@/db/schema";
 import { eq, desc, inArray, ilike, and } from "drizzle-orm";
-import { getRealUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { isStaffRole } from "@/lib/platform-roles";
+import { getCoachingStudentAccess } from "@/lib/coaching-student-access";
 
 // Allow up to 60s for translation (Vercel serverless default is 10s)
 export const maxDuration = 60;
@@ -92,7 +93,7 @@ async function translateTexts(
 // ---------------------------------------------------------------------------
 
 export async function GET(request: Request) {
-  const dbUser = await getRealUser();
+  const dbUser = await getCurrentUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -129,13 +130,16 @@ export async function GET(request: Request) {
     if (!session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
-    // Students can only export their own 1:1 sessions; ICGC sessions are shared
-    if (
-      isStudent &&
-      session.type === "one_on_one" &&
-      session.studentEmail?.toLowerCase() !== dbUser.email?.toLowerCase()
-    ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // One-on-one exports follow the same learner/assigned-coach boundary as
+    // the coaching page. Inner Circle sessions remain shared.
+    if (session.type === "one_on_one") {
+      const access = await getCoachingStudentAccess(session.studentEmail);
+      if (!access.ok) {
+        return NextResponse.json(
+          { error: access.error },
+          { status: access.status },
+        );
+      }
     }
     sessionList = [session];
     allNotes = await db
@@ -146,12 +150,22 @@ export async function GET(request: Request) {
   } else {
     let whereClause;
     if (typeParam === "one_on_one") {
-      const normalizedEmail = (effectiveStudentEmail ?? "").trim();
+      let normalizedEmail = (effectiveStudentEmail ?? "").trim();
       if (normalizedEmail) {
+        const access = await getCoachingStudentAccess(normalizedEmail);
+        if (!access.ok) {
+          return NextResponse.json(
+            { error: access.error },
+            { status: access.status },
+          );
+        }
+        normalizedEmail = access.student.email;
         whereClause = and(
           eq(coachingSessions.type, "one_on_one"),
           ilike(coachingSessions.studentEmail, normalizedEmail),
         );
+      } else if (dbUser.role !== "admin") {
+        return NextResponse.json({ sessions: [] });
       } else {
         whereClause = eq(coachingSessions.type, "one_on_one");
       }

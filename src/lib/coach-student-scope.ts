@@ -15,6 +15,10 @@ type StaffStudentAccessInput = {
   assignedCoachId: string | null;
 };
 
+type CoachingStudentAccessInput = StaffStudentAccessInput & {
+  studentUserId: string;
+};
+
 /**
  * Resolve the only coach whose students may be returned.
  * `null` means an unfiltered administrator view.
@@ -52,4 +56,22 @@ export function canStaffAccessStudent({
   assignedCoachId,
 }: StaffStudentAccessInput): boolean {
   return actorRole === "admin" || assignedCoachId === actorUserId;
+}
+
+/**
+ * Student-facing coaching reads allow learners to see only themselves, while
+ * staff follow the same assigned-coach boundary as the coach workspace.
+ */
+export function canAccessCoachingStudent({
+  actorUserId,
+  actorRole,
+  studentUserId,
+  assignedCoachId,
+}: CoachingStudentAccessInput): boolean {
+  if (actorRole === "student") return actorUserId === studentUserId;
+  return canStaffAccessStudent({
+    actorUserId,
+    actorRole,
+    assignedCoachId,
+  });
 }

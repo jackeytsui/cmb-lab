@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, ilike } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
+import { getCoachingStudentAccess } from "@/lib/coaching-student-access";
 
 /**
  * GET /api/coaching/student-level?studentEmail=...
@@ -18,8 +19,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "studentEmail required" }, { status: 400 });
   }
 
+  const access = await getCoachingStudentAccess(email);
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
+
   const student = await db.query.users.findFirst({
-    where: ilike(users.email, email.trim()),
+    where: eq(users.id, access.student.id),
     columns: { coachingLevel: true, coachingLessonNumber: true },
   });
 
@@ -51,13 +60,21 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "studentEmail required" }, { status: 400 });
     }
 
+    const access = await getCoachingStudentAccess(studentEmail);
+    if (!access.ok) {
+      return NextResponse.json(
+        { error: access.error },
+        { status: access.status },
+      );
+    }
+
     const [updated] = await db
       .update(users)
       .set({
         coachingLevel: level?.trim() || null,
         coachingLessonNumber: lessonNumber?.trim() || null,
       })
-      .where(ilike(users.email, studentEmail.trim()))
+      .where(eq(users.id, access.student.id))
       .returning({
         id: users.id,
         coachingLevel: users.coachingLevel,

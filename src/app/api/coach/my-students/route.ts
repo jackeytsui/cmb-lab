@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, studentTags, tags } from "@/db/schema";
-import { and, eq, isNull, sql } from "drizzle-orm";
-import { hasMinimumRole, getRealUser } from "@/lib/auth";
+import { users } from "@/db/schema";
+import { and, eq, isNull } from "drizzle-orm";
 import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 
 /**
  * GET /api/coach/my-students
@@ -11,17 +11,13 @@ import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
  * Excludes whitelisted students.
  */
 export async function GET() {
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (access.status !== "authorized") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-
-  const currentUser = await getRealUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-
-  const isAdmin = currentUser.role === "admin";
 
   const conditions = [
     eq(users.role, "student"),
@@ -30,8 +26,8 @@ export async function GET() {
   ];
 
   // Coaches see only their assigned students; admins see all
-  if (!isAdmin) {
-    conditions.push(eq(users.assignedCoachId, currentUser.id));
+  if (access.actor.role !== "admin") {
+    conditions.push(eq(users.assignedCoachId, access.actor.id));
   }
 
   const studentRows = await db

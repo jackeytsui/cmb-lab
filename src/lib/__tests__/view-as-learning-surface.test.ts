@@ -52,8 +52,6 @@ describe("View As learning-surface fidelity", () => {
       .split("export async function POST")[0];
     const sessionMutation = sessions.split("export async function POST")[1];
     const selectedUserReads = [
-      "src/app/api/coaching/student-course-progress/route.ts",
-      "src/app/api/coaching/goals/route.ts",
       "src/app/api/coaching/sessions/[sessionId]/rating/route.ts",
       "src/app/api/coaching/rating-prompt/route.ts",
       "src/app/api/coaching/notes/[noteId]/star/route.ts",
@@ -73,6 +71,28 @@ describe("View As learning-surface fidelity", () => {
 
     for (const file of selectedUserReads) {
       expect(source(file), file).toContain("getCurrentUser");
+    }
+  });
+
+  it("keeps coach coaching-data reads inside assigned-student scope", () => {
+    const picker = source("src/app/api/coach/my-students/route.ts");
+    const scopedRoutes = [
+      "src/app/api/coaching/sessions/route.ts",
+      "src/app/api/coaching/student-course-progress/route.ts",
+      "src/app/api/coaching/goals/route.ts",
+      "src/app/api/coaching/student-end-date/route.ts",
+      "src/app/api/coaching/student-level/route.ts",
+      "src/app/api/coaching/export/route.ts",
+    ];
+
+    expect(picker).toContain("getStaffStudentAccessContext");
+    expect(picker).toContain(
+      "eq(users.assignedCoachId, access.actor.id)",
+    );
+    expect(picker).not.toContain("getRealUser");
+
+    for (const file of scopedRoutes) {
+      expect(source(file), file).toContain("getCoachingStudentAccess");
     }
   });
 

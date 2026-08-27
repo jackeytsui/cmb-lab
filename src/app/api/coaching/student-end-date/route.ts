@@ -8,11 +8,12 @@
 // always matches what the chatbot tells the student.
 
 import { NextRequest, NextResponse } from "next/server";
-import { eq, ilike } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { ghlContacts, users } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
 import { getStudentContext } from "@/lib/lab-assistant/student-context";
+import { getCoachingStudentAccess } from "@/lib/coaching-student-access";
 
 /**
  * Normalize a resolved end-date value to a calendar date string (YYYY-MM-DD).
@@ -50,10 +51,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "studentEmail required" }, { status: 400 });
   }
   const refresh = request.nextUrl.searchParams.get("refresh") === "true";
+  const access = await getCoachingStudentAccess(email);
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
 
   try {
     const student = await db.query.users.findFirst({
-      where: ilike(users.email, email),
+      where: eq(users.id, access.student.id),
     });
 
     if (!student) {

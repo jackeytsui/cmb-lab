@@ -3,8 +3,8 @@ import { auth } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { getCurrentUser, hasMinimumRole } from "@/lib/auth";
-import { isStaffRole } from "@/lib/platform-roles";
+import { hasMinimumRole } from "@/lib/auth";
+import { getCoachingStudentAccess } from "@/lib/coaching-student-access";
 
 /**
  * GET /api/coaching/goals?studentEmail=...
@@ -12,25 +12,18 @@ import { isStaffRole } from "@/lib/platform-roles";
  * Coaches/admins can query any student; students get their own.
  */
 export async function GET(request: NextRequest) {
-  const callerUser = await getCurrentUser();
-  if (!callerUser) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const studentEmail =
-    request.nextUrl.searchParams.get("studentEmail") || callerUser.email;
-
-  // Students can only see their own goals
-  const isCoachOrAdmin = isStaffRole(callerUser.role);
-  if (
-    !isCoachOrAdmin &&
-    studentEmail.toLocaleLowerCase() !== callerUser.email.toLocaleLowerCase()
-  ) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const access = await getCoachingStudentAccess(
+    request.nextUrl.searchParams.get("studentEmail"),
+  );
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
   }
 
   const student = await db.query.users.findFirst({
-    where: eq(users.email, studentEmail),
+    where: eq(users.id, access.student.id),
     columns: { coachingGoals: true, coachingLevel: true, coachingLessonNumber: true },
   });
 
@@ -72,6 +65,14 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  const access = await getCoachingStudentAccess(body.studentEmail);
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
+
   // Always update all three fields (null = no change from client means keep existing)
   const goalsValue = "goals" in body ? (body.goals?.trim() || null) : undefined;
   const levelValue = "level" in body ? (body.level?.trim() || null) : undefined;
@@ -95,7 +96,7 @@ export async function PATCH(request: NextRequest) {
     const [updated] = await db
       .update(users)
       .set(setClause)
-      .where(eq(users.email, body.studentEmail))
+      .where(eq(users.id, access.student.id))
       .returning({
         id: users.id,
         coachingGoals: users.coachingGoals,

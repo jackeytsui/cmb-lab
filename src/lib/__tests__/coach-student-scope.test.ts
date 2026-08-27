@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canAccessCoachingStudent,
   canStaffAccessStudent,
   resolveCoachStudentScope,
 } from "@/lib/coach-student-scope";
@@ -106,5 +107,48 @@ describe("coach student data scope", () => {
         }),
       ).toBe(false);
     }
+  });
+
+  it("limits coaching learner data to self, assigned staff, or administrators", () => {
+    expect(
+      canAccessCoachingStudent({
+        actorUserId: "student-a",
+        actorRole: "student",
+        studentUserId: "student-a",
+        assignedCoachId: "coach-a",
+      }),
+    ).toBe(true);
+    expect(
+      canAccessCoachingStudent({
+        actorUserId: "student-a",
+        actorRole: "student",
+        studentUserId: "student-b",
+        assignedCoachId: "coach-a",
+      }),
+    ).toBe(false);
+    expect(
+      canAccessCoachingStudent({
+        actorUserId: "coach-a",
+        actorRole: "coach",
+        studentUserId: "student-b",
+        assignedCoachId: "coach-a",
+      }),
+    ).toBe(true);
+    expect(
+      canAccessCoachingStudent({
+        actorUserId: "coach-a",
+        actorRole: "coach",
+        studentUserId: "student-b",
+        assignedCoachId: "coach-b",
+      }),
+    ).toBe(false);
+    expect(
+      canAccessCoachingStudent({
+        actorUserId: "admin-a",
+        actorRole: "admin",
+        studentUserId: "student-b",
+        assignedCoachId: null,
+      }),
+    ).toBe(true);
   });
 });

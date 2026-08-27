@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, asc, eq, ilike, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
   courseLibraryLessonProgress,
   courseLibraryLessons,
   courseLibraryModules,
-  users,
 } from "@/db/schema";
-import { getCurrentUser } from "@/lib/auth";
-import { isStaffRole } from "@/lib/platform-roles";
 import { selectCurrentCourseProgress } from "@/lib/course-library-progress-summary";
+import { getCoachingStudentAccess } from "@/lib/coaching-student-access";
 
 /**
  * GET /api/coaching/student-course-progress?studentEmail=...
@@ -19,27 +17,14 @@ import { selectCurrentCourseProgress } from "@/lib/course-library-progress-summa
  * records. Coaches/admins may query a student; students may query themselves.
  */
 export async function GET(request: NextRequest) {
-  const caller = await getCurrentUser();
-  if (!caller) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const requestedEmail =
-    request.nextUrl.searchParams.get("studentEmail")?.trim() || caller.email;
-  const canViewOtherStudents = isStaffRole(caller.role);
-  if (
-    !canViewOtherStudents &&
-    requestedEmail.toLocaleLowerCase() !== caller.email.toLocaleLowerCase()
-  ) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const student = await db.query.users.findFirst({
-    where: and(ilike(users.email, requestedEmail), isNull(users.deletedAt)),
-    columns: { id: true },
-  });
-  if (!student) {
-    return NextResponse.json({ error: "Student not found" }, { status: 404 });
+  const access = await getCoachingStudentAccess(
+    request.nextUrl.searchParams.get("studentEmail"),
+  );
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
   }
 
   const rows = await db
@@ -78,7 +63,7 @@ export async function GET(request: NextRequest) {
           courseLibraryLessonProgress.lessonId,
           courseLibraryLessons.id,
         ),
-        eq(courseLibraryLessonProgress.userId, student.id),
+        eq(courseLibraryLessonProgress.userId, access.student.id),
       ),
     )
     .where(

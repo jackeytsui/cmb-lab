@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { coachingSessions, coachingNotes, coachingNoteStars, users } from "@/db/schema";
+import { coachingSessions, coachingNotes, coachingNoteStars } from "@/db/schema";
 import { eq, and, desc, inArray, ilike } from "drizzle-orm";
 import { getCurrentUser, hasMinimumRole, getRealUser } from "@/lib/auth";
 import { isStaffRole } from "@/lib/platform-roles";
+import { getCoachingStudentAccess } from "@/lib/coaching-student-access";
 
 function getNextSessionTitle(existingTitles: string[]) {
   let maxSessionNumber = 0;
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
   // Use the effective user's role (respects View As impersonation)
   const isCoachOrAdmin = isStaffRole(dbUser.role);
   const isStudent = !isCoachOrAdmin;
-  const studentEmail = (dbUser.email ?? "").trim();
+  let studentEmail = (dbUser.email ?? "").trim();
   const normalizedStudentEmailParam = studentEmailParam?.trim() || "";
 
   let whereClause;
@@ -46,10 +47,22 @@ export async function GET(request: Request) {
         ilike(coachingSessions.studentEmail, studentEmail),
       );
     } else if (normalizedStudentEmailParam) {
+      const access = await getCoachingStudentAccess(
+        normalizedStudentEmailParam,
+      );
+      if (!access.ok) {
+        return NextResponse.json(
+          { error: access.error },
+          { status: access.status },
+        );
+      }
+      studentEmail = access.student.email;
       whereClause = and(
         eq(coachingSessions.type, "one_on_one"),
-        ilike(coachingSessions.studentEmail, normalizedStudentEmailParam),
+        ilike(coachingSessions.studentEmail, studentEmail),
       );
+    } else if (dbUser.role !== "admin") {
+      return NextResponse.json({ sessions: [] });
     } else {
       whereClause = eq(coachingSessions.type, "one_on_one");
     }
@@ -143,24 +156,18 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const normalizedStudentEmail =
+  let normalizedStudentEmail =
     type === "one_on_one" ? studentEmail!.trim().toLowerCase() : null;
 
   if (type === "one_on_one") {
-    const targetStudent = await db.query.users.findFirst({
-      where: and(
-        ilike(users.email, normalizedStudentEmail!),
-        eq(users.role, "student"),
-      ),
-      columns: { id: true },
-    });
-
-    if (!targetStudent) {
+    const access = await getCoachingStudentAccess(normalizedStudentEmail);
+    if (!access.ok) {
       return NextResponse.json(
-        { error: "No student notes found." },
-        { status: 404 },
+        { error: access.error },
+        { status: access.status },
       );
     }
+    normalizedStudentEmail = access.student.email.toLowerCase();
   }
 
   const now = new Date();
