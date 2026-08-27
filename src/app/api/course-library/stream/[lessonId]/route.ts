@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { issueSignedToken, presignUrl } from "@vercel/blob";
 import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
-import { proxyBlobMedia } from "@/lib/blob-media-proxy";
-import { verifySignedMediaPath } from "@/lib/signed-media-url";
+import {
+  SIGNED_MEDIA_TTL_SECONDS,
+  verifySignedMediaPath,
+} from "@/lib/signed-media-url";
 import { getCurrentUser } from "@/lib/auth";
 import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
@@ -14,11 +17,11 @@ export const maxDuration = 300;
 
 /**
  * GET /api/course-library/stream/[lessonId]
- * Authenticated chunked-range proxy for private Vercel Blob video lessons.
- * Open-ended Range requests are clamped to bounded chunks so a single
- * serverless invocation never has to stream the whole file (which previously
- * got killed at maxDuration mid-transfer, leaving players on an endless
- * spinner). Browsers follow up with sequential range requests automatically.
+ * Authenticated redirect to a path-scoped, short-lived private Blob URL.
+ * Keeping the serverless function in the byte-stream path caused some valid
+ * MP4 range requests to remain open indefinitely. After access is verified,
+ * the browser now talks directly to Blob storage, which handles Range requests
+ * without the extra function hop.
  */
 export async function GET(
   request: NextRequest,
@@ -86,8 +89,56 @@ export async function GET(
     );
   }
 
-  return proxyBlobMedia(request, videoUrl, {
-    fallbackContentType: "video/mp4",
-    label: "course-library/stream",
-  });
+  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  if (!token || /\s/.test(token)) {
+    console.error(
+      "[course-library/stream] BLOB_READ_WRITE_TOKEN is not configured",
+    );
+    return NextResponse.json(
+      { error: "Media storage is not configured" },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  let pathname: string;
+  try {
+    const blob = new URL(videoUrl);
+    if (!blob.hostname.endsWith(".private.blob.vercel-storage.com")) {
+      throw new Error("not a private Vercel Blob URL");
+    }
+    pathname = decodeURIComponent(blob.pathname.replace(/^\//, ""));
+  } catch {
+    return NextResponse.json(
+      { error: "Video storage URL is invalid" },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  try {
+    const validUntil = Date.now() + SIGNED_MEDIA_TTL_SECONDS * 1000;
+    const signedToken = await issueSignedToken({
+      token,
+      pathname,
+      operations: ["get"],
+      validUntil,
+    });
+    const { presignedUrl } = await presignUrl(signedToken, {
+      operation: "get",
+      pathname,
+      access: "private",
+      validUntil,
+    });
+    const response = NextResponse.redirect(presignedUrl, 307);
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  } catch (error) {
+    console.error(
+      "[course-library/stream] Failed to issue private playback URL:",
+      error instanceof Error ? error.name : "UnknownError",
+    );
+    return NextResponse.json(
+      { error: "Failed to prepare video playback" },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
+    );
+  }
 }

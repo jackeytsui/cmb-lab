@@ -21,6 +21,13 @@ const lessonPageSource = readFileSync(
   ),
   "utf8",
 );
+const streamRouteSource = readFileSync(
+  path.join(
+    process.cwd(),
+    "src/app/api/course-library/stream/[lessonId]/route.ts",
+  ),
+  "utf8",
+);
 
 describe("course-library media recovery", () => {
   it("gives a silent media stall an actionable recovery within 30 seconds", () => {
@@ -46,5 +53,14 @@ describe("course-library media recovery", () => {
     expect(lessonPageSource).toContain(
       "src={signMediaPath(`/api/course-library/stream/${lessonId}`)}",
     );
+  });
+
+  it("keeps authenticated video bytes out of the serverless proxy hop", () => {
+    expect(streamRouteSource).toContain("issueSignedToken");
+    expect(streamRouteSource).toContain("presignUrl");
+    expect(streamRouteSource).toContain(
+      "NextResponse.redirect(presignedUrl, 307)",
+    );
+    expect(streamRouteSource).not.toContain("proxyBlobMedia");
   });
 });
