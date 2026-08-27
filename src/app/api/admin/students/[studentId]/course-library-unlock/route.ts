@@ -9,7 +9,8 @@ import {
   courseLibraryModules,
   users,
 } from "@/db/schema";
-import { getRealUser } from "@/lib/auth";
+import { getCurrentUser, getRealUser } from "@/lib/auth";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
 import { planManualChapterUnlock } from "@/lib/course-library-manual-unlock";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 
@@ -80,7 +81,13 @@ function publicCourse(course: UnlockCourse) {
 async function getStudent(studentId: string) {
   return db.query.users.findFirst({
     where: and(eq(users.id, studentId), isNull(users.deletedAt)),
-    columns: { id: true, name: true, email: true, role: true },
+    columns: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      assignedCoachId: true,
+    },
   });
 }
 
@@ -168,25 +175,31 @@ async function loadUnlockCourses(student: {
 }
 
 async function authorizeManager() {
-  const actor = await getRealUser();
-  if (!actor) {
+  const realActor = await getRealUser();
+  if (!realActor) {
     return {
       error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
       actor: null,
+      realActor: null,
     };
   }
+  const actor =
+    realActor.role === "admin"
+      ? (await getCurrentUser()) ?? realActor
+      : realActor;
   if (!canManageProgress(actor.role)) {
     return {
       error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
       actor: null,
+      realActor: null,
     };
   }
-  return { error: null, actor };
+  return { error: null, actor, realActor };
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const authorization = await authorizeManager();
-  if (authorization.error) return authorization.error;
+  if (authorization.error || !authorization.actor) return authorization.error;
 
   const parsedParams = paramsSchema.safeParse(await context.params);
   if (!parsedParams.success) {
@@ -194,7 +207,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   const student = await getStudent(parsedParams.data.studentId);
-  if (!student || student.role !== "student") {
+  if (
+    !student ||
+    student.role !== "student" ||
+    !canStaffAccessStudent({
+      actorUserId: authorization.actor.id,
+      actorRole: authorization.actor.role,
+      assignedCoachId: student.assignedCoachId,
+    })
+  ) {
     return NextResponse.json({ error: "Student not found" }, { status: 404 });
   }
 
@@ -233,7 +254,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const student = await getStudent(parsedParams.data.studentId);
-  if (!student || student.role !== "student") {
+  if (
+    !student ||
+    student.role !== "student" ||
+    !canStaffAccessStudent({
+      actorUserId: authorization.actor.id,
+      actorRole: authorization.actor.role,
+      assignedCoachId: student.assignedCoachId,
+    })
+  ) {
     return NextResponse.json({ error: "Student not found" }, { status: 404 });
   }
 
@@ -281,11 +310,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
     const completedAt = new Date();
     const actor = authorization.actor;
+    const realActor = authorization.realActor;
     const auditPayload = {
       source: "staff_manual_unlock",
       actorUserId: actor.id,
       actorEmail: actor.email,
       actorRole: actor.role,
+      realActorUserId: realActor.id,
+      realActorEmail: realActor.email,
+      realActorRole: realActor.role,
       studentId: student.id,
       studentEmail: student.email,
       courseId: course.id,

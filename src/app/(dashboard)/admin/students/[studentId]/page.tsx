@@ -1,7 +1,8 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { clerkClient } from "@clerk/nextjs/server";
-import { getRealUser } from "@/lib/auth";
+import { getCurrentUser, getRealUser } from "@/lib/auth";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
 import { hasMinimumPlatformRole } from "@/lib/platform-roles";
 import { StudentProgressView } from "@/components/admin/StudentProgressView";
 import { StudentCourseLibraryUnlock } from "@/components/admin/StudentCourseLibraryUnlock";
@@ -202,11 +203,19 @@ async function getActivityTimeline(
  * and activity timeline.
  */
 export default async function AdminStudentDetailPage({ params }: PageProps) {
-  // Verify user has coach+ role
-  const actor = await getRealUser();
-  if (!actor || !hasMinimumPlatformRole(actor.role, "coach")) {
+  // Authorize with the real account, then apply a safe admin View As projection.
+  const realActor = await getRealUser();
+  if (!realActor || !hasMinimumPlatformRole(realActor.role, "coach")) {
     redirect("/dashboard");
   }
+  const actor =
+    realActor.role === "admin"
+      ? (await getCurrentUser()) ?? realActor
+      : realActor;
+  if (!hasMinimumPlatformRole(actor.role, "coach")) {
+    redirect("/dashboard");
+  }
+  const isAdmin = actor.role === "admin";
   const canManuallyUnlockCourseLibrary =
     actor.role === "admin" || actor.role === "coach";
 
@@ -252,6 +261,15 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
   }
 
   if (!student) {
+    notFound();
+  }
+  if (
+    !canStaffAccessStudent({
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      assignedCoachId: student.assignedCoachId ?? null,
+    })
+  ) {
     notFound();
   }
 
@@ -473,33 +491,38 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
       "Failed to load student progress data. Some sections may be incomplete.";
   }
 
-  try {
-    const clerk = await clerkClient();
-    const clerkUser = await clerk.users.getUser(student.clerkId);
-    const metadata = (clerkUser.publicMetadata ?? {}) as Record<string, unknown>;
-    portalAccessRevoked = metadata.cmbPortalAccessRevoked === true;
-    if (
-      metadata.cmbPortalAccessStatus === "active" ||
-      metadata.cmbPortalAccessStatus === "paused" ||
-      metadata.cmbPortalAccessStatus === "expired"
-    ) {
-      portalAccessStatus = metadata.cmbPortalAccessStatus;
-    } else if (portalAccessRevoked) {
-      portalAccessStatus = "paused";
-    }
-    if (typeof metadata.cmbPortalAccessRevokedReason === "string") {
-      portalAccessReason = metadata.cmbPortalAccessRevokedReason;
-    }
-    if (typeof metadata.cmbCourseEndDate === "string") {
-      const parsed = new Date(metadata.cmbCourseEndDate);
-      if (!Number.isNaN(parsed.getTime())) {
-        courseEndDate = parsed;
-        courseEndDateIso = metadata.cmbCourseEndDate.slice(0, 10);
-        courseEndDateLabel = format(parsed, "MMMM d, yyyy");
+  if (isAdmin) {
+    try {
+      const clerk = await clerkClient();
+      const clerkUser = await clerk.users.getUser(student.clerkId);
+      const metadata = (clerkUser.publicMetadata ?? {}) as Record<
+        string,
+        unknown
+      >;
+      portalAccessRevoked = metadata.cmbPortalAccessRevoked === true;
+      if (
+        metadata.cmbPortalAccessStatus === "active" ||
+        metadata.cmbPortalAccessStatus === "paused" ||
+        metadata.cmbPortalAccessStatus === "expired"
+      ) {
+        portalAccessStatus = metadata.cmbPortalAccessStatus;
+      } else if (portalAccessRevoked) {
+        portalAccessStatus = "paused";
       }
+      if (typeof metadata.cmbPortalAccessRevokedReason === "string") {
+        portalAccessReason = metadata.cmbPortalAccessRevokedReason;
+      }
+      if (typeof metadata.cmbCourseEndDate === "string") {
+        const parsed = new Date(metadata.cmbCourseEndDate);
+        if (!Number.isNaN(parsed.getTime())) {
+          courseEndDate = parsed;
+          courseEndDateIso = metadata.cmbCourseEndDate.slice(0, 10);
+          courseEndDateLabel = format(parsed, "MMMM d, yyyy");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load Clerk metadata for student detail:", error);
     }
-  } catch (error) {
-    console.error("Failed to load Clerk metadata for student detail:", error);
   }
 
   const lastActiveText = stats.lastActive
@@ -545,36 +568,43 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
             <p className="text-sm text-zinc-500 mt-2">
               Member since {memberSince}
             </p>
-            <div className="mt-3 space-y-1 text-sm">
-              <p className="text-zinc-300">
-                Portal access status:{" "}
-                <span
-                  className={
-                    portalAccessStatus === "active"
-                      ? "text-emerald-400"
-                      : portalAccessStatus === "paused"
-                        ? "text-amber-400"
-                        : "text-red-400"
-                  }
-                >
-                  {portalAccessStatus.charAt(0).toUpperCase() + portalAccessStatus.slice(1)}
-                </span>
-              </p>
-              <p className="text-zinc-300">
-                Course end date:{" "}
-                <span className="text-zinc-100">{courseEndDateLabel ?? "Not set"}</span>
-              </p>
-              {courseEndDate ? (
-                <p className="text-xs text-zinc-500">
-                  {isPast(courseEndDate)
-                    ? "Course end date has passed."
-                    : "Access remains active until this date."}
+            {isAdmin ? (
+              <div className="mt-3 space-y-1 text-sm">
+                <p className="text-zinc-300">
+                  Portal access status:{" "}
+                  <span
+                    className={
+                      portalAccessStatus === "active"
+                        ? "text-emerald-400"
+                        : portalAccessStatus === "paused"
+                          ? "text-amber-400"
+                          : "text-red-400"
+                    }
+                  >
+                    {portalAccessStatus.charAt(0).toUpperCase() +
+                      portalAccessStatus.slice(1)}
+                  </span>
                 </p>
-              ) : null}
-              {portalAccessReason ? (
-                <p className="text-xs text-zinc-500">Reason: {portalAccessReason}</p>
-              ) : null}
-            </div>
+                <p className="text-zinc-300">
+                  Course end date:{" "}
+                  <span className="text-zinc-100">
+                    {courseEndDateLabel ?? "Not set"}
+                  </span>
+                </p>
+                {courseEndDate ? (
+                  <p className="text-xs text-zinc-500">
+                    {isPast(courseEndDate)
+                      ? "Course end date has passed."
+                      : "Access remains active until this date."}
+                  </p>
+                ) : null}
+                {portalAccessReason ? (
+                  <p className="text-xs text-zinc-500">
+                    Reason: {portalAccessReason}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -606,18 +636,19 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         />
       </div>
 
-      {/* Tags section */}
-      <section className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">Student Profile</h2>
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
-          <StudentProfileEditor
-            studentId={studentId}
-            initialName={student.name}
-            initialEmail={student.email}
-            initialRole={student.role}
-          />
-        </div>
-      </section>
+      {isAdmin ? (
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">Student Profile</h2>
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+            <StudentProfileEditor
+              studentId={studentId}
+              initialName={student.name}
+              initialEmail={student.email}
+              initialRole={student.role}
+            />
+          </div>
+        </section>
+      ) : null}
 
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-4">Additional Roles</h2>
@@ -662,20 +693,21 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         <StudentTagsSection studentId={studentId} />
       </section>
 
-      {/* Access Attribution */}
-      <section className="mb-8">
-        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-          <Key className="w-5 h-5 text-cyan-400" />
-          Portal Access Controls
-        </h2>
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
-          <StudentPortalAccessControls
-            studentId={studentId}
-            initialStatus={portalAccessStatus}
-            initialCourseEndDate={courseEndDateIso}
-          />
-        </div>
-      </section>
+      {isAdmin ? (
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Key className="w-5 h-5 text-cyan-400" />
+            Portal Access Controls
+          </h2>
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+            <StudentPortalAccessControls
+              studentId={studentId}
+              initialStatus={portalAccessStatus}
+              initialCourseEndDate={courseEndDateIso}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {/* Access Attribution */}
       <section className="mb-8">

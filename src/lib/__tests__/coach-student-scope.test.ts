@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveCoachStudentScope } from "@/lib/coach-student-scope";
+import {
+  canStaffAccessStudent,
+  resolveCoachStudentScope,
+} from "@/lib/coach-student-scope";
 
 const base = {
   realUserId: "coach-real",
@@ -60,5 +63,48 @@ describe("coach student data scope", () => {
         requestedCoachId: "another-coach",
       }),
     ).toBe("coach-viewed");
+  });
+
+  it("allows administrators to open any student record", () => {
+    expect(
+      canStaffAccessStudent({
+        actorUserId: "admin",
+        actorRole: "admin",
+        assignedCoachId: null,
+      }),
+    ).toBe(true);
+    expect(
+      canStaffAccessStudent({
+        actorUserId: "admin",
+        actorRole: "admin",
+        assignedCoachId: "coach-a",
+      }),
+    ).toBe(true);
+  });
+
+  it("only allows non-admin staff to open their assigned students", () => {
+    for (const actorRole of ["coach", "operations", "consultant"] as const) {
+      expect(
+        canStaffAccessStudent({
+          actorUserId: "coach-a",
+          actorRole,
+          assignedCoachId: "coach-a",
+        }),
+      ).toBe(true);
+      expect(
+        canStaffAccessStudent({
+          actorUserId: "coach-a",
+          actorRole,
+          assignedCoachId: "coach-b",
+        }),
+      ).toBe(false);
+      expect(
+        canStaffAccessStudent({
+          actorUserId: "coach-a",
+          actorRole,
+          assignedCoachId: null,
+        }),
+      ).toBe(false);
+    }
   });
 });

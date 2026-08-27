@@ -9,6 +9,12 @@ type CoachStudentScopeInput = {
   requestedCoachId: string;
 };
 
+type StaffStudentAccessInput = {
+  actorUserId: string;
+  actorRole: PlatformRole;
+  assignedCoachId: string | null;
+};
+
 /**
  * Resolve the only coach whose students may be returned.
  * `null` means an unfiltered administrator view.
@@ -34,4 +40,16 @@ export function resolveCoachStudentScope({
     return requestedCoachId;
   }
   return null;
+}
+
+/**
+ * Administrators may open any student record. Other staff may only open
+ * students explicitly assigned to their own account.
+ */
+export function canStaffAccessStudent({
+  actorUserId,
+  actorRole,
+  assignedCoachId,
+}: StaffStudentAccessInput): boolean {
+  return actorRole === "admin" || assignedCoachId === actorUserId;
 }
