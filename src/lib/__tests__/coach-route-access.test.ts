@@ -155,4 +155,12 @@ describe("coach route access", () => {
     expect(submissionResponseApi).toContain("canStaffAccessStudent");
     expect(submissionResponseApi).toContain("coachId: access.realActor.id");
   });
+
+  it("reserves View As impersonation for the real administrator identity", () => {
+    const viewAsApi = source("src/app/api/admin/view-as/route.ts");
+
+    expect(viewAsApi).toContain("getRealUser");
+    expect(viewAsApi).not.toContain('hasMinimumRole("coach")');
+    expect(viewAsApi.match(/realUser\.role !== "admin"/g)).toHaveLength(3);
+  });
 });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
@@ -13,8 +13,11 @@ const COOKIE_NAME = "view_as_user_id";
  * Body: { email: string }
  */
 export async function POST(request: Request) {
-  const isAdmin = await hasMinimumRole("coach");
-  if (!isAdmin) {
+  const realUser = await getRealUser();
+  if (!realUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (realUser.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -60,8 +63,11 @@ export async function POST(request: Request) {
  * Stop impersonation.
  */
 export async function DELETE() {
-  const isAdmin = await hasMinimumRole("coach");
-  if (!isAdmin) {
+  const realUser = await getRealUser();
+  if (!realUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (realUser.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -76,8 +82,11 @@ export async function DELETE() {
  * Check current impersonation status.
  */
 export async function GET() {
-  const isAdmin = await hasMinimumRole("coach");
-  if (!isAdmin) {
+  const realUser = await getRealUser();
+  if (!realUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (realUser.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
