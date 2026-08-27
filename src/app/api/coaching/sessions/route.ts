@@ -77,13 +77,21 @@ export async function GET(request: Request) {
   const noteIds = notes.map((n) => n.id);
   let starredSet = new Set<string>();
   if (noteIds.length > 0) {
+    // Filter stars through the notes' sessions in SQL instead of expanding
+    // every note ID into an IN list. Inner Circle has tens of thousands of
+    // historical notes, which can exceed the database driver's bind limit.
     const stars = await db
       .select({ noteId: coachingNoteStars.noteId })
       .from(coachingNoteStars)
+      .innerJoin(coachingNotes, eq(coachingNoteStars.noteId, coachingNotes.id))
+      .innerJoin(
+        coachingSessions,
+        eq(coachingNotes.sessionId, coachingSessions.id),
+      )
       .where(
         and(
-          inArray(coachingNoteStars.noteId, noteIds),
           eq(coachingNoteStars.userId, dbUser.id),
+          whereClause,
         ),
       );
     starredSet = new Set(stars.map((s) => s.noteId));

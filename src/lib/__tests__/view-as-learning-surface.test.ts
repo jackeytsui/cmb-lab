@@ -63,6 +63,12 @@ describe("View As learning-surface fidelity", () => {
     expect(client).toContain("currentEmail ||");
     expect(sessionRead).toContain("getCurrentUser()");
     expect(sessionRead).not.toContain("getRealUser()");
+    expect(sessionRead).toContain(
+      ".innerJoin(coachingNotes, eq(coachingNoteStars.noteId, coachingNotes.id))",
+    );
+    expect(sessionRead).not.toContain(
+      "inArray(coachingNoteStars.noteId, noteIds)",
+    );
     expect(sessionMutation).toContain("getRealUser()");
 
     for (const file of selectedUserReads) {
