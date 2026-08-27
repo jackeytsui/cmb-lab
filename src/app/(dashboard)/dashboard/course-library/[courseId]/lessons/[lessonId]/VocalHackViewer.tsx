@@ -161,6 +161,23 @@ export function VocalHackViewer({
 
   return (
     <div className="space-y-5">
+      <div
+        role="note"
+        data-testid="vocal-hack-source-of-truth"
+        className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3.5 text-foreground"
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white">
+          <Info className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold">Video is the source of truth</p>
+          <p className="text-sm leading-5 text-muted-foreground">
+            If any wording, pronunciation, or meaning shown in CMB Lab differs
+            from the coach video, follow the coach video.
+          </p>
+        </div>
+      </div>
+
       {!locked && (
         <div
           role="note"
