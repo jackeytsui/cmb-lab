@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   derivePostPurchaseTags,
   planPostPurchaseTagReconciliation,
+  shouldReconcilePostPurchaseStudent,
   shouldApplyInboundPostPurchaseTagChange,
 } from "@/lib/post-purchase-entitlements";
 
@@ -67,5 +68,43 @@ describe("planPostPurchaseTagReconciliation", () => {
         expectedTags: ["cmb_student", "icgc_student"],
       }),
     ).toEqual({ add: ["icgc_student"], remove: ["1on1_student"] });
+  });
+});
+
+describe("shouldReconcilePostPurchaseStudent", () => {
+  const correct = {
+    userExists: true,
+    currentTags: ["cmb_student"],
+    expectedTags: ["cmb_student"] as const,
+    hasCourseContact: true,
+    resyncGhl: false,
+  };
+
+  it("skips only when the account, tags, and course-subaccount link are all healthy", () => {
+    expect(shouldReconcilePostPurchaseStudent(correct)).toBe(false);
+  });
+
+  it("repairs a missing course-subaccount contact even when local tags are correct", () => {
+    expect(
+      shouldReconcilePostPurchaseStudent({
+        ...correct,
+        hasCourseContact: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("reconciles missing users, tag drift, and explicit GHL resyncs", () => {
+    expect(
+      shouldReconcilePostPurchaseStudent({ ...correct, userExists: false }),
+    ).toBe(true);
+    expect(
+      shouldReconcilePostPurchaseStudent({
+        ...correct,
+        currentTags: [],
+      }),
+    ).toBe(true);
+    expect(
+      shouldReconcilePostPurchaseStudent({ ...correct, resyncGhl: true }),
+    ).toBe(true);
   });
 });

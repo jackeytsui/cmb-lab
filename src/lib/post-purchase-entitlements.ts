@@ -63,6 +63,23 @@ export function planPostPurchaseTagReconciliation(params: {
   };
 }
 
+export function shouldReconcilePostPurchaseStudent(params: {
+  userExists: boolean;
+  currentTags: Iterable<string>;
+  expectedTags: Iterable<PostPurchaseControlledTag>;
+  hasCourseContact: boolean;
+  resyncGhl: boolean;
+}) {
+  if (!params.userExists || params.resyncGhl || !params.hasCourseContact) {
+    return true;
+  }
+  const plan = planPostPurchaseTagReconciliation({
+    currentTags: params.currentTags,
+    expectedTags: params.expectedTags,
+  });
+  return plan.add.length > 0 || plan.remove.length > 0;
+}
+
 export function shouldApplyInboundPostPurchaseTagChange(params: {
   tagName: string;
   action: "add" | "remove";

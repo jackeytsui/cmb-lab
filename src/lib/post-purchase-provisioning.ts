@@ -19,6 +19,7 @@ import {
   derivePostPurchaseTags,
   planPostPurchaseTagReconciliation,
   POST_PURCHASE_CONTROLLED_TAGS,
+  shouldReconcilePostPurchaseStudent,
   type PostPurchaseControlledTag,
   type PostPurchaseEntitlementInput,
 } from "@/lib/post-purchase-entitlements";
@@ -250,7 +251,7 @@ async function applyCmbTags(params: {
   return plan;
 }
 
-async function syncControlledTagsToSourceContact(params: {
+async function syncControlledTagsToContact(params: {
   ghlContactId?: string | null;
   ghlLocationId?: string | null;
   email: string;
@@ -316,7 +317,61 @@ async function syncControlledTagsToSourceContact(params: {
   return contactId;
 }
 
-async function ensureSourceContactLink(params: {
+async function getCourseGhlLocation() {
+  const [courseLocation] = await db
+    .select({ locationId: ghlLocations.ghlLocationId })
+    .from(ghlLocations)
+    .where(
+      and(
+        eq(ghlLocations.isActive, true),
+        ilike(ghlLocations.name, "%course%"),
+      ),
+    )
+    .limit(1);
+  if (!courseLocation) {
+    throw new Error("Active course GHL location is unavailable");
+  }
+  return courseLocation;
+}
+
+async function syncControlledTagsToCourseContact(params: {
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  expectedTags: PostPurchaseControlledTag[];
+}) {
+  const courseLocation = await getCourseGhlLocation();
+  const client = await getGhlClientForLocation(courseLocation.locationId);
+  if (!client) {
+    throw new Error("Post-purchase course GHL location is unavailable");
+  }
+
+  const upsert = await client.post<{
+    contact?: { id?: string };
+  }>("/contacts/upsert", {
+    locationId: courseLocation.locationId,
+    email: params.email,
+    firstName: params.firstName?.trim() || undefined,
+    lastName: params.lastName?.trim() || undefined,
+    source: "CMB Lab post-purchase reconciliation",
+  });
+  const contactId = upsert.data.contact?.id;
+  if (!contactId) {
+    throw new Error("Course GHL contact upsert did not return a contact ID");
+  }
+
+  await syncControlledTagsToContact({
+    ghlContactId: contactId,
+    ghlLocationId: courseLocation.locationId,
+    email: params.email,
+    firstName: params.firstName,
+    lastName: params.lastName,
+    expectedTags: params.expectedTags,
+  });
+  return { contactId, locationId: courseLocation.locationId };
+}
+
+async function ensureGhlContactLink(params: {
   userId: string;
   ghlContactId?: string | null;
   ghlLocationId?: string | null;
@@ -332,8 +387,9 @@ async function ensureSourceContactLink(params: {
         .update(ghlContacts)
         .set({ syncStatus: "active", lastSyncedAt: new Date() })
         .where(eq(ghlContacts.id, byContact.id));
+      return;
     }
-    return;
+    throw new Error("GHL contact is already linked to a different CMB user");
   }
 
   const byUserLocation = await db.query.ghlContacts.findFirst({
@@ -383,18 +439,32 @@ export async function provisionPostPurchaseEntitlements(
     expectedTags,
   });
 
-  const resolvedContactId = await syncControlledTagsToSourceContact({
-    ghlContactId: input.ghlContactId,
-    ghlLocationId: input.ghlLocationId,
+  if (input.ghlContactId && input.ghlLocationId) {
+    const resolvedSourceContactId = await syncControlledTagsToContact({
+      ghlContactId: input.ghlContactId,
+      ghlLocationId: input.ghlLocationId,
+      email,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      expectedTags,
+    });
+    await ensureGhlContactLink({
+      userId: ensured.dbUserId,
+      ghlContactId: resolvedSourceContactId,
+      ghlLocationId: input.ghlLocationId,
+    });
+  }
+
+  const courseContact = await syncControlledTagsToCourseContact({
     email,
     firstName: input.firstName,
     lastName: input.lastName,
     expectedTags,
   });
-  await ensureSourceContactLink({
+  await ensureGhlContactLink({
     userId: ensured.dbUserId,
-    ghlContactId: resolvedContactId,
-    ghlLocationId: input.ghlLocationId,
+    ghlContactId: courseContact.contactId,
+    ghlLocationId: courseContact.locationId,
   });
 
   return {
@@ -415,19 +485,9 @@ export async function reconcilePostPurchaseEntitlements(params?: {
   const dryRun = params?.dryRun ?? false;
   const resyncGhl = params?.resyncGhl ?? false;
   const limit = Math.min(Math.max(params?.limit ?? 500, 1), 500);
-  const [courseLocation] = await db
-    .select({ locationId: ghlLocations.ghlLocationId })
-    .from(ghlLocations)
-    .where(
-      and(
-        eq(ghlLocations.isActive, true),
-        ilike(ghlLocations.name, "%course%"),
-      ),
-    )
-    .limit(1);
+  const courseLocation = await getCourseGhlLocation();
   const students = await db
     .select({
-      contactId: activeStudents.contactId,
       email: activeStudents.email,
       firstName: activeStudents.firstName,
       lastName: activeStudents.lastName,
@@ -453,15 +513,28 @@ export async function reconcilePostPurchaseEntitlements(params?: {
     .leftJoin(studentTags, eq(studentTags.userId, users.id))
     .leftJoin(tags, eq(tags.id, studentTags.tagId))
     .where(isNull(users.deletedAt));
+  const courseContactRows = await db
+    .select({ userId: ghlContacts.userId })
+    .from(ghlContacts)
+    .where(
+      and(
+        eq(ghlContacts.ghlLocationId, courseLocation.locationId),
+        eq(ghlContacts.syncStatus, "active"),
+      ),
+    );
+  const courseLinkedUserIds = new Set(
+    courseContactRows.map((row) => row.userId),
+  );
   const usersByEmail = new Map<
     string,
-    { userId: string; tags: Set<string> }
+    { userId: string; tags: Set<string>; hasCourseContact: boolean }
   >();
   for (const row of existingTagRows) {
     const email = normalizeEmail(row.email);
     const entry = usersByEmail.get(email) ?? {
       userId: row.userId,
       tags: new Set<string>(),
+      hasCourseContact: courseLinkedUserIds.has(row.userId),
     };
     if (row.tagName) entry.tags.add(row.tagName);
     usersByEmail.set(email, entry);
@@ -496,16 +569,13 @@ export async function reconcilePostPurchaseEntitlements(params?: {
       continue;
     }
     const existing = usersByEmail.get(email);
-    const plan = planPostPurchaseTagReconciliation({
+    if (!shouldReconcilePostPurchaseStudent({
+      userExists: Boolean(existing),
       currentTags: existing?.tags ?? [],
       expectedTags,
-    });
-    if (
-      existing &&
-      plan.add.length === 0 &&
-      plan.remove.length === 0 &&
-      !resyncGhl
-    ) {
+      hasCourseContact: existing?.hasCourseContact ?? false,
+      resyncGhl,
+    })) {
       stats.alreadyCorrect += 1;
       continue;
     }
@@ -519,8 +589,6 @@ export async function reconcilePostPurchaseEntitlements(params?: {
         lastName: student.lastName,
         productLine: student.productLine,
         addOnPurchased: student.addOnPurchased,
-        ghlContactId: student.contactId,
-        ghlLocationId: courseLocation?.locationId,
       });
       stats.provisioned += 1;
       if (result.action === "created_user") stats.usersCreated += 1;
