@@ -59,11 +59,15 @@ describe("platform role source of truth", () => {
   });
 
   it("passes the database role into the client-side account menu", () => {
+    const layout = source("src/app/(dashboard)/layout.tsx");
     const sidebar = source("src/components/layout/AppSidebar.tsx");
     const navUser = source("src/components/layout/NavUser.tsx");
 
-    expect(sidebar).toContain("<NavUser role={role} />");
-    expect(navUser).toContain("export function NavUser({ role }");
+    expect(layout).toContain("viewAsUser={viewAsUser}");
+    expect(sidebar).toContain("<NavUser role={role} viewAsUser={viewAsUser} />");
+    expect(navUser).toContain("viewAsUser?: ViewedUser | null");
+    expect(navUser).toContain("viewAsUser?.email || signedInEmail");
+    expect(navUser).toContain("Viewing as ${viewAsUser.name || viewAsUser.email}");
     expect(navUser).not.toContain("publicMetadata?.role");
   });
 });

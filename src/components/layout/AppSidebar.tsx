@@ -259,11 +259,17 @@ export function AppSidebar({
   role,
   enabledFeatures,
   assignmentFeedbackUnread = 0,
+  viewAsUser,
 }: {
   role: Roles;
   enabledFeatures?: string[];
   /** Unread reviewed-assignment count shown beside "Assignment Feedback". */
   assignmentFeedbackUnread?: number;
+  viewAsUser?: {
+    name: string | null;
+    email: string;
+    role: Roles;
+  } | null;
 }) {
   const featureSet = new Set(enabledFeatures ?? []);
 
@@ -342,7 +348,7 @@ export function AppSidebar({
           </Link>
         )}
       </div>
-      <NavUser role={role} />
+      <NavUser role={role} viewAsUser={viewAsUser} />
       <SidebarRail />
     </Sidebar>
   );

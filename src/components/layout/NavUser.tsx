@@ -17,16 +17,34 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { Roles } from "@/types/globals";
 
-export function NavUser({ role }: { role: Roles }) {
+type ViewedUser = {
+  name: string | null;
+  email: string;
+  role: Roles;
+};
+
+export function NavUser({
+  role,
+  viewAsUser,
+}: {
+  role: Roles;
+  viewAsUser?: ViewedUser | null;
+}) {
   const { user } = useUser();
-  const email =
+  const signedInEmail =
     user?.primaryEmailAddress?.emailAddress ||
     user?.emailAddresses?.[0]?.emailAddress ||
     "";
+  const email = viewAsUser?.email || signedInEmail;
   const showAdminMenu = role === "admin";
   const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
+  const viewedInitial = (viewAsUser?.name || viewAsUser?.email || "S")
+    .trim()
+    .charAt(0)
+    .toUpperCase();
 
   return (
     <SidebarFooter>
@@ -49,32 +67,38 @@ export function NavUser({ role }: { role: Roles }) {
         </SidebarMenuItem>
         <SidebarMenuItem>
           <div className="flex items-center gap-2 px-2 py-1.5">
-            <UserButton afterSignOutUrl="/sign-in">
-              {showAdminMenu ? (
-                <UserButton.MenuItems>
-                  <UserButton.Link
-                    label="Admin Portal"
-                    labelIcon={<LayoutDashboard className="h-4 w-4" />}
-                    href="/admin/manage"
-                  />
-                  <UserButton.Link
-                    label="API Keys"
-                    labelIcon={<KeyRound className="h-4 w-4" />}
-                    href="/admin/api-keys"
-                  />
-                  <UserButton.Link
-                    label="VideoAsk Import"
-                    labelIcon={<PlugZap className="h-4 w-4" />}
-                    href="/admin/integrations/videoask"
-                  />
-                  <UserButton.Link
-                    label="Dev Toolkit"
-                    labelIcon={<Wrench className="h-4 w-4" />}
-                    href="/admin/dev-toolkit"
-                  />
-                </UserButton.MenuItems>
-              ) : null}
-            </UserButton>
+            {viewAsUser ? (
+              <Avatar aria-label={`Viewing as ${viewAsUser.name || viewAsUser.email}`}>
+                <AvatarFallback>{viewedInitial}</AvatarFallback>
+              </Avatar>
+            ) : (
+              <UserButton afterSignOutUrl="/sign-in">
+                {showAdminMenu ? (
+                  <UserButton.MenuItems>
+                    <UserButton.Link
+                      label="Admin Portal"
+                      labelIcon={<LayoutDashboard className="h-4 w-4" />}
+                      href="/admin/manage"
+                    />
+                    <UserButton.Link
+                      label="API Keys"
+                      labelIcon={<KeyRound className="h-4 w-4" />}
+                      href="/admin/api-keys"
+                    />
+                    <UserButton.Link
+                      label="VideoAsk Import"
+                      labelIcon={<PlugZap className="h-4 w-4" />}
+                      href="/admin/integrations/videoask"
+                    />
+                    <UserButton.Link
+                      label="Dev Toolkit"
+                      labelIcon={<Wrench className="h-4 w-4" />}
+                      href="/admin/dev-toolkit"
+                    />
+                  </UserButton.MenuItems>
+                ) : null}
+              </UserButton>
+            )}
             <div className="min-w-0 group-data-[collapsible=icon]:hidden">
               <div className="truncate text-sm font-medium text-sidebar-foreground">
                 {displayRole}
