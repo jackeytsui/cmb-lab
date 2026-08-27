@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { hasMinimumRole } from "@/lib/auth";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import { db } from "@/db";
 import {
   conversations,
@@ -11,11 +12,12 @@ import {
   courses,
   users,
 } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { and, eq, asc } from "drizzle-orm";
 import { ChevronLeft, User, Book, Clock, Calendar, MessageSquare } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ConversationTranscript, type TranscriptTurn } from "@/components/voice/ConversationTranscript";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { z } from "zod";
 
 interface PageProps {
   params: Promise<{ conversationId: string }>;
@@ -46,10 +48,17 @@ function formatDuration(seconds: number | null): string {
  */
 export default async function ConversationDetailPage({ params }: PageProps) {
   const { conversationId } = await params;
+  if (!z.string().uuid().safeParse(conversationId).success) {
+    notFound();
+  }
 
   // Verify coach role
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
+    redirect("/dashboard");
+  }
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
     redirect("/dashboard");
   }
 
@@ -76,7 +85,14 @@ export default async function ConversationDetailPage({ params }: PageProps) {
       .innerJoin(modules, eq(lessons.moduleId, modules.id))
       .innerJoin(courses, eq(modules.courseId, courses.id))
       .innerJoin(users, eq(conversations.userId, users.id))
-      .where(eq(conversations.id, conversationId))
+      .where(
+        access.actor.role === "admin"
+          ? eq(conversations.id, conversationId)
+          : and(
+              eq(conversations.id, conversationId),
+              eq(users.assignedCoachId, access.actor.id),
+            ),
+      )
       .limit(1);
   } catch (err) {
     console.error("Failed to load conversation:", err);

@@ -77,4 +77,32 @@ describe("coach route access", () => {
     expect(notes).toContain("canAccessSubmission");
     expect(notes.match(/canAccessSubmission\(/g)?.length).toBeGreaterThanOrEqual(4);
   });
+
+  it("renders conversation review on the server without exposing other coaches' students", () => {
+    const conversationList = source(
+      "src/app/(dashboard)/coach/conversations/page.tsx",
+    );
+    const conversationDetail = source(
+      "src/app/(dashboard)/coach/conversations/[conversationId]/page.tsx",
+    );
+    const conversationListApi = source("src/app/api/conversations/route.ts");
+    const conversationDetailApi = source(
+      "src/app/api/conversations/[conversationId]/route.ts",
+    );
+
+    expect(conversationList).not.toContain("onChange=");
+    expect(conversationList).toContain("<h1");
+    expect(conversationList).toContain("Conversations");
+    expect(conversationList).toContain(
+      "eq(users.assignedCoachId, access.actor.id)",
+    );
+    expect(conversationDetail).toContain(
+      "eq(users.assignedCoachId, access.actor.id)",
+    );
+    expect(conversationListApi).toContain("canStaffAccessStudent");
+    expect(conversationDetailApi).toContain("canStaffAccessStudent");
+    expect(conversationDetailApi).toContain(
+      '{ error: "Conversation not found" }',
+    );
+  });
 });

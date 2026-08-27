@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import {
   conversations,
@@ -8,10 +8,13 @@ import {
   lessons,
   modules,
   courses,
+  users,
 } from "@/db/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { awardXP } from "@/lib/xp-service";
 import { z } from "zod";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 
 interface RouteParams {
   params: Promise<{ conversationId: string }>;
@@ -36,12 +39,14 @@ const updateConversationSchema = z
     "No conversation update provided",
   );
 
+const conversationIdSchema = z.string().uuid();
+
 /**
  * GET /api/conversations/[conversationId]
  * Get conversation with all turns.
  * Owner or coach/admin can access.
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   // 1. Verify user is authenticated
   const { userId } = await auth();
   if (!userId) {
@@ -50,6 +55,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { conversationId } = await params;
+    if (!conversationIdSchema.safeParse(conversationId).success) {
+      return NextResponse.json(
+        { error: "Conversation not found" },
+        { status: 404 },
+      );
+    }
 
     // 2. Get current user
     const currentUser = await getCurrentUser();
@@ -70,11 +81,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         lessonTitle: lessons.title,
         moduleTitle: modules.title,
         courseTitle: courses.title,
+        assignedCoachId: users.assignedCoachId,
       })
       .from(conversations)
       .innerJoin(lessons, eq(conversations.lessonId, lessons.id))
       .innerJoin(modules, eq(lessons.moduleId, modules.id))
       .innerJoin(courses, eq(modules.courseId, courses.id))
+      .innerJoin(users, eq(conversations.userId, users.id))
       .where(eq(conversations.id, conversationId))
       .limit(1);
 
@@ -87,12 +100,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const conversation = conversationData[0];
 
-    // 4. Check access: owner or coach/admin
+    // 4. Check access: owner, assigned coach, or administrator.
     const isOwner = conversation.userId === currentUser.id;
-    const hasAccess = isOwner || (await hasMinimumRole("coach"));
-
-    if (!hasAccess) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!isOwner) {
+      const access = await getStaffStudentAccessContext();
+      if (
+        access.status !== "authorized" ||
+        !canStaffAccessStudent({
+          actorUserId: access.actor.id,
+          actorRole: access.actor.role,
+          assignedCoachId: conversation.assignedCoachId,
+        })
+      ) {
+        return NextResponse.json(
+          { error: "Conversation not found" },
+          { status: 404 },
+        );
+      }
     }
 
     // 5. Fetch turns ordered by timestamp
@@ -143,6 +167,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { conversationId } = await params;
+    if (!conversationIdSchema.safeParse(conversationId).success) {
+      return NextResponse.json(
+        { error: "Conversation not found" },
+        { status: 404 },
+      );
+    }
 
     // 2. Get current user
     const currentUser = await getCurrentUser();

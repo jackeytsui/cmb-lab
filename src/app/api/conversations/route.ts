@@ -1,24 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
-import { conversations, lessons, modules, courses } from "@/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { conversations, lessons, modules, courses, users } from "@/db/schema";
+import { eq, desc, and, isNull } from "drizzle-orm";
 import { z } from "zod";
 import {
   canAccessLesson,
   resolvePermissions,
 } from "@/lib/permissions";
 import { hasFullFeatureAccess } from "@/lib/platform-roles";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 
 const createConversationSchema = z.object({
   lessonId: z.string().uuid(),
 });
 
+const listConversationsSchema = z.object({
+  studentId: z.string().uuid().optional(),
+  lessonId: z.string().uuid().optional(),
+});
+
 /**
  * GET /api/conversations
  * List conversations with optional filters.
- * Users see their own conversations. Coach/admin can view any student's.
+ * Users see their own conversations. Coaches see assigned students; admins
+ * may view any student.
  */
 export async function GET(request: NextRequest) {
   // 1. Verify user is authenticated
@@ -36,8 +44,14 @@ export async function GET(request: NextRequest) {
 
     // 3. Parse query params
     const { searchParams } = new URL(request.url);
-    const studentId = searchParams.get("studentId");
-    const lessonId = searchParams.get("lessonId");
+    const parsedFilters = listConversationsSchema.safeParse({
+      studentId: searchParams.get("studentId") || undefined,
+      lessonId: searchParams.get("lessonId") || undefined,
+    });
+    if (!parsedFilters.success) {
+      return NextResponse.json({ error: "Invalid query parameters" }, { status: 400 });
+    }
+    const { studentId, lessonId } = parsedFilters.data;
     const parsedLimit = Number.parseInt(searchParams.get("limit") || "20", 10);
     const parsedOffset = Number.parseInt(searchParams.get("offset") || "0", 10);
     const limit = Number.isFinite(parsedLimit)
@@ -51,10 +65,27 @@ export async function GET(request: NextRequest) {
     let targetUserId = currentUser.id;
 
     if (studentId) {
-      // Coach/admin can view any student's conversations
-      const hasAccess = await hasMinimumRole("coach");
-      if (!hasAccess) {
+      const access = await getStaffStudentAccessContext();
+      if (access.status !== "authorized") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      const student = await db.query.users.findFirst({
+        where: and(eq(users.id, studentId), isNull(users.deletedAt)),
+        columns: { id: true, role: true, assignedCoachId: true },
+      });
+      if (
+        !student ||
+        student.role !== "student" ||
+        !canStaffAccessStudent({
+          actorUserId: access.actor.id,
+          actorRole: access.actor.role,
+          assignedCoachId: student.assignedCoachId,
+        })
+      ) {
+        return NextResponse.json(
+          { error: "Student not found" },
+          { status: 404 },
+        );
       }
       targetUserId = studentId;
     }

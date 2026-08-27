@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasMinimumRole } from "@/lib/auth";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import { db } from "@/db";
 import { conversations, lessons, modules, courses, users } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { ChevronLeft, MessageSquare, Clock, User, ExternalLink } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { z } from "zod";
 
 import { ErrorAlert } from "@/components/ui/error-alert";
 
@@ -22,10 +24,10 @@ function formatDuration(seconds: number | null): string {
 }
 
 /**
- * Coach Conversations page - displays all student conversations for review.
+ * Coach Conversations page - displays assigned student conversations for review.
  *
  * Features:
- * - List of all student voice conversations
+ * - List of assigned student voice conversations
  * - Shows student name, lesson, date, and duration
  * - Click to view full transcript detail
  *
@@ -44,22 +46,43 @@ export default async function CoachConversationsPage({
     redirect("/dashboard");
   }
 
-  // Get current user
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    redirect("/sign-in");
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
+    redirect("/dashboard");
   }
 
   // Get search params
   const params = await searchParams;
-  const studentIdFilter = params.studentId;
+  const rawStudentIdFilter = params.studentId;
+  const parsedStudentIdFilter = z.string().uuid().safeParse(rawStudentIdFilter);
+  if (rawStudentIdFilter && !parsedStudentIdFilter.success) {
+    redirect("/coach/conversations");
+  }
+  const studentIdFilter = parsedStudentIdFilter.success
+    ? parsedStudentIdFilter.data
+    : undefined;
+  const conversationWhere =
+    access.actor.role === "admin"
+      ? studentIdFilter
+        ? eq(conversations.userId, studentIdFilter)
+        : undefined
+      : studentIdFilter
+        ? and(
+            eq(conversations.userId, studentIdFilter),
+            eq(users.assignedCoachId, access.actor.id),
+          )
+        : eq(users.assignedCoachId, access.actor.id);
+  const studentWhere =
+    access.actor.role === "admin"
+      ? undefined
+      : eq(users.assignedCoachId, access.actor.id);
 
   // Wrap DB queries in try/catch -- auth stays outside
   let conversationList;
   let studentsResult;
 
   try {
-    // Fetch all conversations with student and lesson info
+    // Fetch accessible conversations with student and lesson info.
     conversationList = await db
       .select({
         id: conversations.id,
@@ -80,7 +103,7 @@ export default async function CoachConversationsPage({
       .innerJoin(modules, eq(lessons.moduleId, modules.id))
       .innerJoin(courses, eq(modules.courseId, courses.id))
       .innerJoin(users, eq(conversations.userId, users.id))
-      .where(studentIdFilter ? eq(conversations.userId, studentIdFilter) : undefined)
+      .where(conversationWhere)
       .orderBy(desc(conversations.startedAt))
       .limit(100);
 
@@ -93,6 +116,7 @@ export default async function CoachConversationsPage({
       })
       .from(conversations)
       .innerJoin(users, eq(conversations.userId, users.id))
+      .where(studentWhere)
       .orderBy(users.name);
   } catch (err) {
     console.error("Failed to load conversations:", err);
@@ -124,9 +148,12 @@ export default async function CoachConversationsPage({
           Back to Coach Dashboard
         </Link>
 
-        {/* Page subtitle */}
+        {/* Page heading */}
         <div className="flex items-start justify-between mb-8">
           <div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+              Conversations
+            </h1>
             <p className="text-muted-foreground">
               Review voice practice sessions from your students
             </p>
@@ -144,10 +171,6 @@ export default async function CoachConversationsPage({
                 id="student-filter"
                 name="studentId"
                 defaultValue={studentIdFilter || ""}
-                onChange={(e) => {
-                  const form = e.target.closest('form');
-                  if (form) form.submit();
-                }}
                 className="w-full max-w-xs bg-muted border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-cyan-500"
               >
                 <option value="">All Students</option>
@@ -157,6 +180,12 @@ export default async function CoachConversationsPage({
                   </option>
                 ))}
               </select>
+              <button
+                type="submit"
+                className="ml-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500"
+              >
+                Apply filter
+              </button>
             </form>
           </div>
         )}
