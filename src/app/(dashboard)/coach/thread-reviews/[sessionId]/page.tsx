@@ -2,9 +2,12 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
-import { videoThreadSessions, videoThreadResponses } from "@/db/schema";
+import { users, videoThreadSessions, videoThreadResponses } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
+import { z } from "zod";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import {
   ChevronLeft,
   MessageSquare,
@@ -144,6 +147,36 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
     redirect("/dashboard");
+  }
+
+  if (!z.string().uuid().safeParse(sessionId).success) {
+    notFound();
+  }
+
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
+    redirect("/dashboard");
+  }
+
+  const [sessionAccess] = await db
+    .select({
+      id: videoThreadSessions.id,
+      assignedCoachId: users.assignedCoachId,
+    })
+    .from(videoThreadSessions)
+    .innerJoin(users, eq(videoThreadSessions.studentId, users.id))
+    .where(eq(videoThreadSessions.id, sessionId))
+    .limit(1);
+
+  if (
+    !sessionAccess ||
+    !canStaffAccessStudent({
+      actorUserId: access.actor.id,
+      actorRole: access.actor.role,
+      assignedCoachId: sessionAccess.assignedCoachId,
+    })
+  ) {
+    notFound();
   }
 
   const session = await db.query.videoThreadSessions.findFirst({

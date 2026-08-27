@@ -147,14 +147,22 @@ function buildWhereConditions(
 
 /**
  * Fetch practice results with combined attempt details and aggregate analytics.
- * Supports filtering by student name/email, practice set, date range, and score range.
+ * Supports filtering by student name/email, practice set, date range, score range,
+ * and (for coaches) assigned student ownership.
  */
 export async function getPracticeResults(
-  filters: PracticeResultsFilters
+  filters: PracticeResultsFilters,
+  assignedCoachId: string | null = null,
 ): Promise<PracticeResultsResponse> {
   const completedConditions = buildWhereConditions(filters, true);
   // Conditions without the completedAt IS NOT NULL filter (for completion rate calc)
   const allConditions = buildWhereConditions(filters, false);
+
+  if (assignedCoachId) {
+    const assignmentCondition = eq(users.assignedCoachId, assignedCoachId);
+    completedConditions.push(assignmentCondition);
+    allConditions.push(assignmentCondition);
+  }
 
   // Run queries in parallel
   const [rawAttempts, perSetAggregates, overallStats, allAttemptsCount, publishedSets] =

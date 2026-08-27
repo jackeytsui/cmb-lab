@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
-import { videoThreadSessions } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { users, videoThreads, videoThreadSessions } from "@/db/schema";
+import { desc, eq } from "drizzle-orm";
 import { ChevronLeft, ChevronRight, PlayCircle } from "lucide-react";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 
 /**
  * Format a date to a readable string.
@@ -58,13 +59,30 @@ export default async function ThreadReviewsPage() {
     redirect("/dashboard");
   }
 
-  const sessions = await db.query.videoThreadSessions.findMany({
-    with: {
-      student: true,
-      thread: true,
-    },
-    orderBy: [desc(videoThreadSessions.startedAt)],
-  });
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
+    redirect("/dashboard");
+  }
+
+  const sessions = await db
+    .select({
+      id: videoThreadSessions.id,
+      status: videoThreadSessions.status,
+      startedAt: videoThreadSessions.startedAt,
+      completedAt: videoThreadSessions.completedAt,
+      studentName: users.name,
+      studentEmail: users.email,
+      threadTitle: videoThreads.title,
+    })
+    .from(videoThreadSessions)
+    .innerJoin(users, eq(videoThreadSessions.studentId, users.id))
+    .innerJoin(videoThreads, eq(videoThreadSessions.threadId, videoThreads.id))
+    .where(
+      access.actor.role === "admin"
+        ? undefined
+        : eq(users.assignedCoachId, access.actor.id),
+    )
+    .orderBy(desc(videoThreadSessions.startedAt));
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -98,10 +116,10 @@ export default async function ThreadReviewsPage() {
         <div className="space-y-3">
           {sessions.map((session) => {
             const studentName =
-              session.student?.name ||
-              session.student?.email?.split("@")[0] ||
+              session.studentName ||
+              session.studentEmail.split("@")[0] ||
               "Unknown Student";
-            const threadTitle = session.thread?.title || "Untitled Thread";
+            const threadTitle = session.threadTitle || "Untitled Thread";
             const badge = getStatusBadge(session.status);
 
             return (

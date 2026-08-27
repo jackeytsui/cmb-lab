@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { hasMinimumRole } from "@/lib/auth";
 import { getPracticeResults } from "@/lib/coach-practice";
 import type { PracticeResultsFilters } from "@/lib/coach-practice";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 
 /**
  * GET /api/coach/practice-results
@@ -19,13 +18,11 @@ import type { PracticeResultsFilters } from "@/lib/coach-practice";
  *   scoreMax — maximum score (0-100)
  */
 export async function GET(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  if (access.status !== "authorized") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -77,7 +74,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const data = await getPracticeResults(filters);
+    const data = await getPracticeResults(
+      filters,
+      access.actor.role === "admin" ? null : access.actor.id,
+    );
     return NextResponse.json(data);
   } catch (error) {
     console.error("Error fetching practice results:", error);

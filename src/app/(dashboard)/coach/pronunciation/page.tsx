@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import {
   practiceAttempts,
@@ -12,6 +12,7 @@ import {
 import { eq, desc, isNotNull, gte, and, inArray } from "drizzle-orm";
 import { ChevronLeft, Mic, AlertCircle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 
 import type { PronunciationWordResult } from "@/types/pronunciation";
 
@@ -94,10 +95,9 @@ export default async function CoachPronunciationPage() {
     redirect("/dashboard");
   }
 
-  // Get current user
-  const currentUserData = await getCurrentUser();
-  if (!currentUserData) {
-    redirect("/sign-in");
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
+    redirect("/dashboard");
   }
 
   let pronunciationAttempts: PronunciationAttemptDisplay[] = [];
@@ -129,7 +129,10 @@ export default async function CoachPronunciationPage() {
       .where(
         and(
           isNotNull(practiceAttempts.completedAt),
-          gte(practiceAttempts.completedAt, thirtyDaysAgo)
+          gte(practiceAttempts.completedAt, thirtyDaysAgo),
+          access.actor.role === "admin"
+            ? undefined
+            : eq(users.assignedCoachId, access.actor.id)
         )
       )
       .orderBy(desc(practiceAttempts.completedAt))
@@ -199,8 +202,11 @@ export default async function CoachPronunciationPage() {
           Back to Coach Dashboard
         </Link>
 
-        {/* Page subtitle */}
+        {/* Page title and subtitle */}
         <div className="mb-8">
+          <h1 className="text-3xl font-bold text-foreground">
+            Pronunciation Review
+          </h1>
           <p className="text-muted-foreground">
             Review student pronunciation scores and per-character accuracy
           </p>

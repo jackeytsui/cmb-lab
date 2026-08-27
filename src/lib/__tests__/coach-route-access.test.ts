@@ -105,4 +105,54 @@ describe("coach route access", () => {
       '{ error: "Conversation not found" }',
     );
   });
+
+  it("confines pronunciation and practice analytics to assigned students", () => {
+    const pronunciation = source(
+      "src/app/(dashboard)/coach/pronunciation/page.tsx",
+    );
+    const practiceResultsApi = source(
+      "src/app/api/coach/practice-results/route.ts",
+    );
+    const practiceResultsQuery = source("src/lib/coach-practice.ts");
+
+    expect(pronunciation).toContain("getStaffStudentAccessContext");
+    expect(pronunciation).toContain(
+      "eq(users.assignedCoachId, access.actor.id)",
+    );
+    expect(pronunciation).toContain("<h1");
+    expect(practiceResultsApi).toContain("getStaffStudentAccessContext");
+    expect(practiceResultsApi).toContain("access.actor.id");
+    expect(practiceResultsQuery).toContain(
+      "eq(users.assignedCoachId, assignedCoachId)",
+    );
+  });
+
+  it("confines video-thread reads and feedback to assigned students", () => {
+    const threadList = source(
+      "src/app/(dashboard)/coach/thread-reviews/page.tsx",
+    );
+    const threadDetail = source(
+      "src/app/(dashboard)/coach/thread-reviews/[sessionId]/page.tsx",
+    );
+    const submissionsApi = source(
+      "src/app/api/admin/video-threads/[threadId]/submissions/route.ts",
+    );
+    const submissionDetailApi = source(
+      "src/app/api/admin/video-threads/[threadId]/submissions/[sessionId]/route.ts",
+    );
+    const submissionResponseApi = source(
+      "src/app/api/admin/video-threads/[threadId]/submissions/[sessionId]/respond/route.ts",
+    );
+
+    expect(threadList).toContain(
+      "eq(users.assignedCoachId, access.actor.id)",
+    );
+    expect(threadDetail).toContain("canStaffAccessStudent");
+    expect(submissionsApi).toContain(
+      "eq(users.assignedCoachId, access.actor.id)",
+    );
+    expect(submissionDetailApi).toContain("canStaffAccessStudent");
+    expect(submissionResponseApi).toContain("canStaffAccessStudent");
+    expect(submissionResponseApi).toContain("coachId: access.realActor.id");
+  });
 });
