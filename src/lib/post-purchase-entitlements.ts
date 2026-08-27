@@ -13,12 +13,73 @@ export type PostPurchaseEntitlementInput = {
   addOnPurchased?: string | string[] | null;
 };
 
+export type PostPurchaseSourceRow = PostPurchaseEntitlementInput & {
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+};
+
+export type AggregatedPostPurchaseStudent = {
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  productLine: string[];
+  addOnPurchased: string[];
+  sourceRows: number;
+};
+
 function normalizeValues(value: string | string[] | null | undefined) {
   const values = Array.isArray(value) ? value : value ? [value] : [];
   return values
     .flatMap((item) => item.split(","))
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
+}
+
+function uniqueRawValues(
+  values: Array<string | string[] | null | undefined>,
+) {
+  const result = new Map<string, string>();
+  for (const value of values) {
+    const items = Array.isArray(value) ? value : value ? [value] : [];
+    for (const item of items.flatMap((entry) => entry.split(","))) {
+      const trimmed = item.trim();
+      if (trimmed) result.set(trimmed.toLowerCase(), trimmed);
+    }
+  }
+  return [...result.values()];
+}
+
+/**
+ * A person can appear more than once in the synced GHL snapshot. Reconcile
+ * their union of purchases once so one row cannot remove an entitlement that
+ * another row grants.
+ */
+export function aggregatePostPurchaseStudents(
+  rows: PostPurchaseSourceRow[],
+): AggregatedPostPurchaseStudent[] {
+  const byEmail = new Map<string, PostPurchaseSourceRow[]>();
+  for (const row of rows) {
+    const email = row.email?.trim().toLowerCase();
+    if (!email) continue;
+    const entries = byEmail.get(email) ?? [];
+    entries.push(row);
+    byEmail.set(email, entries);
+  }
+
+  return [...byEmail.entries()].map(([email, entries]) => ({
+    email,
+    firstName:
+      entries.find((entry) => entry.firstName?.trim())?.firstName?.trim() ??
+      null,
+    lastName:
+      entries.find((entry) => entry.lastName?.trim())?.lastName?.trim() ?? null,
+    productLine: uniqueRawValues(entries.map((entry) => entry.productLine)),
+    addOnPurchased: uniqueRawValues(
+      entries.map((entry) => entry.addOnPurchased),
+    ),
+    sourceRows: entries.length,
+  }));
 }
 
 export function derivePostPurchaseTags(

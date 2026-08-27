@@ -1,11 +1,42 @@
 import { describe, expect, it } from "vitest";
 import {
+  aggregatePostPurchaseStudents,
   canReassignAuthoritativeGhlContact,
   derivePostPurchaseTags,
   planPostPurchaseTagReconciliation,
   shouldReconcilePostPurchaseStudent,
   shouldApplyInboundPostPurchaseTagChange,
 } from "@/lib/post-purchase-entitlements";
+
+describe("aggregatePostPurchaseStudents", () => {
+  it("unions duplicate-email purchases before entitlement reconciliation", () => {
+    expect(
+      aggregatePostPurchaseStudents([
+        {
+          email: " Student@Example.com ",
+          firstName: "Student",
+          productLine: "CMBP",
+          addOnPurchased: "1:1 coaching",
+        },
+        {
+          email: "student@example.com",
+          lastName: "Example",
+          productLine: "Improve Canto, CMBP",
+          addOnPurchased: "ICGC",
+        },
+      ]),
+    ).toEqual([
+      {
+        email: "student@example.com",
+        firstName: "Student",
+        lastName: "Example",
+        productLine: ["CMBP", "Improve Canto"],
+        addOnPurchased: ["1:1 coaching", "ICGC"],
+        sourceRows: 2,
+      },
+    ]);
+  });
+});
 
 describe("derivePostPurchaseTags", () => {
   it("unions both package selections instead of choosing the first branch", () => {

@@ -12,6 +12,7 @@ import {
 import { webhookSecretsMatch } from "@/lib/webhook-secret";
 import { provisionPostPurchaseEntitlements } from "@/lib/post-purchase-provisioning";
 import { canonicalizePostPurchasePayload } from "@/lib/ghl/post-purchase-webhook";
+import { logSyncEvent } from "@/lib/ghl/sync-logger";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -155,6 +156,24 @@ export async function POST(req: NextRequest) {
       })
       .onConflictDoNothing();
 
+    await logSyncEvent({
+      eventType: "post_purchase.entitlements_provisioned",
+      direction: "inbound",
+      entityType: "post_purchase",
+      entityId: result.userId,
+      ghlContactId: data.contactId,
+      payload: {
+        locationId: data.locationId,
+        action: result.action,
+        invitation: result.invitation,
+        expectedTags: result.expectedTags,
+        tagsAdded: result.tagsAdded,
+        tagsRemoved: result.tagsRemoved,
+      },
+    }).catch(() => {
+      console.error("[Post Purchase] Failed to log successful provisioning");
+    });
+
     return NextResponse.json({
       success: true,
       action: result.action,
@@ -168,6 +187,16 @@ export async function POST(req: NextRequest) {
       "[Post Purchase] Provisioning failed:",
       error instanceof Error ? error.message : error,
     );
+    await logSyncEvent({
+      eventType: "post_purchase.entitlements_provisioned",
+      direction: "inbound",
+      entityType: "post_purchase",
+      ghlContactId: data.contactId,
+      payload: { locationId: data.locationId },
+      status: "failed",
+    }).catch(() => {
+      console.error("[Post Purchase] Failed to log provisioning failure");
+    });
     return NextResponse.json(
       { error: "Provisioning failed" },
       { status: 500 },

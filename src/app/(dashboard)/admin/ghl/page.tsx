@@ -3,6 +3,7 @@ import { hasMinimumRole } from "@/lib/auth";
 import { LocationManager } from "./components/LocationManager";
 import { FieldMappingTable } from "./components/FieldMappingTable";
 import { SyncEventLog } from "./components/SyncEventLog";
+import { PostPurchaseHealth } from "./components/PostPurchaseHealth";
 import { AutoTagRuleEditor } from "@/components/tags/AutoTagRuleEditor";
 
 /**
@@ -31,6 +32,10 @@ export default async function GhlSettingsPage() {
           {/* Section 1: GHL Locations (Multi-Sub-Account) */}
           <section>
             <LocationManager />
+          </section>
+
+          <section>
+            <PostPurchaseHealth />
           </section>
 
           {/* Section 2: Custom Field Mappings */}

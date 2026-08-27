@@ -3,6 +3,7 @@ import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import { ghlLocations } from "@/db/schema";
 import { z } from "zod";
+import { toGhlLocationSummary } from "@/lib/ghl/location-summary";
 
 const createLocationSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -26,6 +27,7 @@ export async function GET() {
       id: ghlLocations.id,
       name: ghlLocations.name,
       ghlLocationId: ghlLocations.ghlLocationId,
+      apiToken: ghlLocations.apiToken,
       webhookSecret: ghlLocations.webhookSecret,
       isActive: ghlLocations.isActive,
       createdAt: ghlLocations.createdAt,
@@ -33,13 +35,9 @@ export async function GET() {
     })
     .from(ghlLocations);
 
-  // Don't expose full API tokens — just indicate if one is set
+  // Credentials are write-only. Only return configuration indicators.
   return NextResponse.json({
-    locations: locations.map((l) => ({
-      ...l,
-      hasApiToken: true,
-      hasWebhookSecret: !!l.webhookSecret,
-    })),
+    locations: locations.map(toGhlLocationSummary),
   });
 }
 

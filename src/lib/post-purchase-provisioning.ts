@@ -17,6 +17,7 @@ import { assignTag, removeTag } from "@/lib/tags";
 import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
 import {
   canReassignAuthoritativeGhlContact,
+  aggregatePostPurchaseStudents,
   derivePostPurchaseTags,
   planPostPurchaseTagReconciliation,
   POST_PURCHASE_CONTROLLED_TAGS,
@@ -530,9 +531,11 @@ export async function reconcilePostPurchaseEntitlements(params?: {
 }) {
   const dryRun = params?.dryRun ?? false;
   const resyncGhl = params?.resyncGhl ?? false;
-  const limit = Math.min(Math.max(params?.limit ?? 500, 1), 500);
+  const limit = params?.limit
+    ? Math.min(Math.max(params.limit, 1), 5000)
+    : null;
   const courseLocation = await getCourseGhlLocation();
-  const students = await db
+  const sourceRows = await db
     .select({
       email: activeStudents.email,
       firstName: activeStudents.firstName,
@@ -546,8 +549,14 @@ export async function reconcilePostPurchaseEntitlements(params?: {
         ilike(activeStudents.courseEligibility, "YES"),
         isNotNull(activeStudents.productLine),
       ),
-    )
-    .limit(limit);
+    );
+  const validSourceRows = sourceRows.filter(
+    (student) => student.email?.trim() && student.productLine?.trim(),
+  );
+  const aggregatedStudents = aggregatePostPurchaseStudents(validSourceRows);
+  const students = limit
+    ? aggregatedStudents.slice(0, limit)
+    : aggregatedStudents;
 
   const existingTagRows = await db
     .select({
@@ -587,6 +596,8 @@ export async function reconcilePostPurchaseEntitlements(params?: {
   }
 
   const stats = {
+    sourceRows: sourceRows.length,
+    duplicateSourceRows: validSourceRows.length - aggregatedStudents.length,
     checked: 0,
     alreadyCorrect: 0,
     wouldProvision: 0,
@@ -595,18 +606,11 @@ export async function reconcilePostPurchaseEntitlements(params?: {
     invitationsSent: 0,
     tagsAdded: 0,
     tagsRemoved: 0,
-    skippedInvalid: 0,
+    skippedInvalid: sourceRows.length - validSourceRows.length,
     failed: 0,
   };
 
   for (const student of students) {
-    if (
-      !student.email?.trim() ||
-      !student.productLine?.trim()
-    ) {
-      stats.skippedInvalid += 1;
-      continue;
-    }
     stats.checked += 1;
     const email = normalizeEmail(student.email);
     const expectedTags = derivePostPurchaseTags(student);

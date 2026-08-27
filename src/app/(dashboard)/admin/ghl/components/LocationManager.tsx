@@ -147,7 +147,7 @@ export function LocationManager() {
 
   function startEdit(location: GhlLocation) {
     setEditingId(location.id);
-    setEditFields({ name: location.name, webhookSecret: "" });
+    setEditFields({ name: location.name });
   }
 
   async function handleSaveEdit(locationId: string) {
@@ -156,8 +156,10 @@ export function LocationManager() {
     try {
       const updates: Record<string, unknown> = {};
       if (editFields.name) updates.name = editFields.name;
-      if (editFields.apiToken) updates.apiToken = editFields.apiToken;
-      if (editFields.webhookSecret !== undefined) updates.webhookSecret = editFields.webhookSecret;
+      if (editFields.apiToken?.trim()) updates.apiToken = editFields.apiToken.trim();
+      if (editFields.webhookSecret?.trim()) {
+        updates.webhookSecret = editFields.webhookSecret.trim();
+      }
 
       const res = await fetch(`/api/admin/ghl/locations/${locationId}`, {
         method: "PUT",
@@ -320,7 +322,7 @@ export function LocationManager() {
               {editingId === location.id ? (
                 /* Edit mode */
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-3 md:grid-cols-3">
                     <div>
                       <label className="block text-xs font-medium text-zinc-400 mb-1">
                         Display Name
@@ -349,6 +351,23 @@ export function LocationManager() {
                           setEditFields((prev) => ({
                             ...prev,
                             apiToken: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-zinc-400">
+                        New Webhook Secret (leave blank to keep current)
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="Leave blank to keep current secret"
+                        value={editFields.webhookSecret ?? ""}
+                        onChange={(e) =>
+                          setEditFields((prev) => ({
+                            ...prev,
+                            webhookSecret: e.target.value,
                           }))
                         }
                         className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500"
