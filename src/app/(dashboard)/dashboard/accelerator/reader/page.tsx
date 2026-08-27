@@ -1,21 +1,15 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { users, curatedPassages, passageReadStatus } from "@/db/schema";
+import { curatedPassages, passageReadStatus } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import Link from "next/link";
 import { BookOpen, CheckCircle2, ArrowRight, Trophy } from "lucide-react";
 import { AdminEditLink } from "../AdminEditLink";
+import { getCurrentUser } from "@/lib/auth";
 
 async function CuratedPassagesList() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) redirect("/sign-in");
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+  const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
   const passages = await db

@@ -1,26 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { users, passageReadStatus } from "@/db/schema";
+import { passageReadStatus } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
 
 /**
  * GET /api/accelerator/reader/progress
  * Fetch all read passage IDs for the current user.
  */
 export async function GET() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+  const user = await getCurrentUser();
   if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const statuses = await db
@@ -38,17 +30,9 @@ export async function GET() {
  * Mark a passage as read for the current user (upsert / no-op on re-read).
  */
 export async function POST(request: NextRequest) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+  const user = await getCurrentUser();
   if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();

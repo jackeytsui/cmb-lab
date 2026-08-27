@@ -1,7 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { users } from "@/db/schema";
 import {
   conversationScripts,
   scriptLines,
@@ -10,6 +8,7 @@ import {
 import { eq, asc, and, gt, lt, desc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import ScriptPracticeClient from "./ScriptPracticeClient";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function ScriptPracticePage({
   params,
@@ -62,35 +61,28 @@ async function ScriptPracticeContent({ scriptId }: { scriptId: string }) {
   if (!script) return notFound();
 
   // Fetch user progress
-  const { userId: clerkId } = await auth();
+  const user = await getCurrentUser();
   let initialRatings: Array<{ lineId: string; selfRating: string }> = [];
 
-  if (clerkId) {
-    const user = await db.query.users.findFirst({
-      where: eq(users.clerkId, clerkId),
-      columns: { id: true },
-    });
-
-    if (user) {
-      const progress = await db
-        .select({
-          lineId: scriptLineProgress.lineId,
-          selfRating: scriptLineProgress.selfRating,
-        })
-        .from(scriptLineProgress)
-        .innerJoin(
-          scriptLines,
-          eq(scriptLineProgress.lineId, scriptLines.id)
+  if (user) {
+    const progress = await db
+      .select({
+        lineId: scriptLineProgress.lineId,
+        selfRating: scriptLineProgress.selfRating,
+      })
+      .from(scriptLineProgress)
+      .innerJoin(
+        scriptLines,
+        eq(scriptLineProgress.lineId, scriptLines.id)
+      )
+      .where(
+        and(
+          eq(scriptLineProgress.userId, user.id),
+          eq(scriptLines.scriptId, scriptId)
         )
-        .where(
-          and(
-            eq(scriptLineProgress.userId, user.id),
-            eq(scriptLines.scriptId, scriptId)
-          )
-        );
+      );
 
-      initialRatings = progress;
-    }
+    initialRatings = progress;
   }
 
   // Find previous and next scripts

@@ -1,8 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
-import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import { canViewCourseLibrary } from "@/lib/tag-feature-access";
+import { getCurrentUser } from "@/lib/auth";
 import { Lock } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -10,8 +7,7 @@ import { Lock } from "lucide-react";
 //
 // Course Library visibility is tag-driven, replacing the old course_library
 // feature gate:
-// - admin/coach always pass (real user role, same as FeatureGate, so admin
-//   tools stay reachable during "View As")
+// - admin/coach always pass when they are the active learning-surface viewer
 // - students pass only with an explicit grant: a tag granting at least one
 //   library course, or a per-student grant on any course
 // ---------------------------------------------------------------------------
@@ -36,19 +32,11 @@ export async function CourseLibraryGate({
 }: {
   children: React.ReactNode;
 }) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const user = await getCurrentUser();
+  if (!user) {
     return <LockedFallback />;
   }
 
-  const realUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, role: true },
-  });
-  if (!realUser) {
-    return <LockedFallback />;
-  }
-
-  const allowed = await canViewCourseLibrary(realUser);
+  const allowed = await canViewCourseLibrary(user);
   return allowed ? <>{children}</> : <LockedFallback />;
 }

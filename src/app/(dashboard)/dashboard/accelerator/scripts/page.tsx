@@ -1,6 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { users } from "@/db/schema";
 import {
   conversationScripts,
   scriptLines,
@@ -11,6 +9,7 @@ import { FeatureGate } from "@/components/auth/FeatureGate";
 import Link from "next/link";
 import { MessageSquare } from "lucide-react";
 import { AdminEditLink } from "../AdminEditLink";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function ScriptsPage() {
   return (
@@ -34,16 +33,8 @@ async function loadScriptsData(): Promise<
   | { ok: false }
 > {
   try {
-    const { userId: clerkId } = await auth();
-    let dbUserId: string | null = null;
-
-    if (clerkId) {
-      const user = await db.query.users.findFirst({
-        where: eq(users.clerkId, clerkId),
-        columns: { id: true },
-      });
-      dbUserId = user?.id ?? null;
-    }
+    const user = await getCurrentUser();
+    const dbUserId = user?.id ?? null;
 
     // Fetch all scripts with line counts (only columns this page uses)
     const scripts = await db.query.conversationScripts.findMany({

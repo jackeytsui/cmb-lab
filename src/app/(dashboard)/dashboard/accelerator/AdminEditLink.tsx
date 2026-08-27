@@ -1,10 +1,11 @@
-import { hasMinimumRole } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { isStaffRole } from "@/lib/platform-roles";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
 
 export async function AdminEditLink({ href }: { href: string }) {
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) return null;
+  const user = await getCurrentUser();
+  if (!isStaffRole(user?.role)) return null;
 
   return (
     <Link

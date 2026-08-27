@@ -1,8 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import {
-  users,
   typingSentences,
   typingProgress,
   conversationScripts,
@@ -23,6 +21,7 @@ import {
   getUserFeatureTagOverrides,
   hasFeatureWithTagOverrides,
 } from "@/lib/tag-feature-access";
+import { getCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import {
   Keyboard,
@@ -100,13 +99,7 @@ function ProgressCard({ section }: { section: SectionProgress }) {
 }
 
 async function AcceleratorDashboard() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) redirect("/sign-in");
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+  const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
   // --- Typing Kit progress ---

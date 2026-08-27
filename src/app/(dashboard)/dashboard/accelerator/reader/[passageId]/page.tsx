@@ -1,12 +1,12 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect, notFound } from "next/navigation";
 import { db } from "@/db";
-import { users, curatedPassages, passageReadStatus } from "@/db/schema";
+import { curatedPassages, passageReadStatus } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { ReaderClient } from "@/app/(dashboard)/dashboard/reader/ReaderClient";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { getCurrentUser } from "@/lib/auth";
 
 interface PageProps {
   params: Promise<{ passageId: string }>;
@@ -15,13 +15,7 @@ interface PageProps {
 async function CuratedPassageReader({ params }: PageProps) {
   const { passageId } = await params;
 
-  const { userId: clerkId } = await auth();
-  if (!clerkId) redirect("/sign-in");
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+  const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
   // Fetch the passage

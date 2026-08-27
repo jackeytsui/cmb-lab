@@ -5,7 +5,8 @@ import { z } from "zod";
 import { db } from "@/db";
 import { listeningRecommendations, users } from "@/db/schema";
 import { extractVideoId, youtubeUrlSchema } from "@/lib/youtube";
-import { hasMinimumRole } from "@/lib/auth";
+import { getCurrentUser, hasMinimumRole } from "@/lib/auth";
+import { isStaffRole } from "@/lib/platform-roles";
 import { extractChineseCaptions } from "@/lib/captions";
 
 const createSchema = z.object({
@@ -39,7 +40,10 @@ export async function GET() {
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const canManage = await hasMinimumRole("coach");
+  // The response drives learning-surface controls, so mirror View As here.
+  // Mutations below continue to authorize against the real signed-in role.
+  const viewedUser = await getCurrentUser();
+  const canManage = isStaffRole(viewedUser?.role);
 
   const rows = await db
     .select({

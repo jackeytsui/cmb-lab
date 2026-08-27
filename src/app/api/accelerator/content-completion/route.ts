@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { users, acceleratorContentCompletion } from "@/db/schema";
+import { acceleratorContentCompletion } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
 
 const VALID_KEYS = ["practice_plan", "starter_pack"];
 
 async function getDbUser() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
-  return db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+  return getCurrentUser();
 }
 
 /**

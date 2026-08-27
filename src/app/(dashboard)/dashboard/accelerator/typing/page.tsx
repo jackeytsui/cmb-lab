@@ -1,22 +1,16 @@
 import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { users, typingSentences, typingProgress } from "@/db/schema";
+import { typingSentences, typingProgress } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import TypingDrillClient, { type PhrasePair } from "./TypingDrillClient";
 import { AdminEditLink } from "../AdminEditLink";
 import { ContentPageClient } from "../ContentPageClient";
 import { CompletionToggle } from "../CompletionToggle";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function TypingDrillPage() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) redirect("/sign-in");
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+  const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
   // Fetch all sentences ordered by sortOrder

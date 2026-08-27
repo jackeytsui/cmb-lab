@@ -1,10 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
-import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import type { FeatureKey } from "@/lib/permissions";
 import { Lock } from "lucide-react";
 import { userCanUseFeature } from "@/lib/feature-access";
+import { getCurrentUser } from "@/lib/auth";
 
 // ---------------------------------------------------------------------------
 // Human-readable labels for feature keys
@@ -73,22 +70,15 @@ export async function FeatureGate({
   children,
   fallback,
 }: FeatureGateProps) {
-  // Get Clerk user
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  // Learning-surface feature gates should mirror the selected View As user.
+  // getCurrentUser only applies impersonation for a real administrator, so
+  // authentication remains trustworthy while the preview stays faithful.
+  const user = await getCurrentUser();
+  if (!user) {
     return fallback ? <>{fallback}</> : null;
   }
 
-  // Look up internal user (real Clerk user)
-  const realUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, role: true },
-  });
-  if (!realUser) {
-    return fallback ? <>{fallback}</> : null;
-  }
-
-  if (await userCanUseFeature(realUser, feature)) {
+  if (await userCanUseFeature(user, feature)) {
     return <>{children}</>;
   }
 

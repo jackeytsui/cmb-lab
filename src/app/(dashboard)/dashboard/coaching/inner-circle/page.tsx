@@ -2,14 +2,14 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { CoachingMaterialClient } from "../CoachingMaterialClient";
-import { getRealUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function InnerCircleCoachingPage() {
   const { userId } = await auth();
   if (!userId) {
     redirect("/sign-in");
   }
-  const currentUser = await getRealUser();
+  const currentUser = await getCurrentUser();
 
   return (
     <FeatureGate feature="inner_circle_group_coaching">
