@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   selectCurrentCourseProgress,
+  summarizeCourseLibraryAccessProgress,
   type CourseLibraryProgressRow,
 } from "@/lib/course-library-progress-summary";
 
@@ -79,5 +80,42 @@ describe("selectCurrentCourseProgress", () => {
 
     expect(progress?.courseTitle).toBe("CMB Intermediate");
     expect(progress?.isComplete).toBe(true);
+  });
+});
+
+describe("summarizeCourseLibraryAccessProgress", () => {
+  it("counts accessible courses and their real lesson completions", () => {
+    expect(
+      summarizeCourseLibraryAccessProgress([
+        {
+          modules: [
+            {
+              lessonIds: ["lesson-1", "lesson-2"],
+              completedLessonIds: ["lesson-1"],
+            },
+          ],
+        },
+        {
+          modules: [
+            {
+              lessonIds: ["lesson-3", "lesson-4", "lesson-5"],
+              completedLessonIds: ["lesson-3", "lesson-4"],
+            },
+          ],
+        },
+      ]),
+    ).toEqual({
+      coursesAccessible: 2,
+      lessonsCompleted: 3,
+      lessonsTotal: 5,
+    });
+  });
+
+  it("returns zeroes when the student has no Course Library access", () => {
+    expect(summarizeCourseLibraryAccessProgress([])).toEqual({
+      coursesAccessible: 0,
+      lessonsCompleted: 0,
+      lessonsTotal: 0,
+    });
   });
 });

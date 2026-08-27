@@ -14,6 +14,8 @@ import { StudentProfileEditor } from "@/components/admin/StudentProfileEditor";
 import { StudentRoleAssignment } from "@/components/admin/StudentRoleAssignment";
 import { AssignCoachDropdown } from "@/components/admin/AssignCoachDropdown";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { loadStudentCourseLibraryProgress } from "@/lib/course-library-student-progress";
+import { summarizeCourseLibraryAccessProgress } from "@/lib/course-library-progress-summary";
 import {
   ChevronRight,
   ArrowLeft,
@@ -223,7 +225,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
 
   // Dynamic imports for main logic
   const { db } = await import("@/db");
-  const { users, courseAccess, lessonProgress } = await import(
+  const { users, lessonProgress } = await import(
     "@/db/schema"
   );
   const { eq, sql, max } = await import("drizzle-orm");
@@ -280,8 +282,8 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
 
   // Level 2: Fetch progress data (non-critical - student info card still renders)
   let stats = {
-    coursesEnrolled: 0,
-    lessonsCompleted: 0,
+    courseLibraryCourses: 0,
+    courseLibraryLessonsCompleted: 0,
     lastActive: null as Date | null,
   };
   let activityTimeline: ActivityEvent[] = [];
@@ -317,21 +319,14 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
   try {
     // Fetch summary stats and activity timeline in parallel
     const [
-      coursesEnrolledResult,
-      lessonsCompletedResult,
+      courseLibraryProgress,
       lastActiveResult,
       timeline,
     ] = await Promise.all([
-      db
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(courseAccess)
-        .where(eq(courseAccess.userId, studentId)),
-      db
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(lessonProgress)
-        .where(
-          sql`${lessonProgress.userId} = ${studentId} AND ${lessonProgress.completedAt} IS NOT NULL`
-        ),
+      loadStudentCourseLibraryProgress({
+        id: student.id,
+        role: student.role,
+      }),
       (async () => {
         const { featureEngagementEvents } = await import("@/db/schema");
         const [lessonLast] = await db
@@ -349,9 +344,13 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
       getActivityTimeline(studentId),
     ]);
 
+    const courseLibrarySummary = summarizeCourseLibraryAccessProgress(
+      courseLibraryProgress,
+    );
+
     stats = {
-      coursesEnrolled: Number(coursesEnrolledResult[0]?.count || 0),
-      lessonsCompleted: Number(lessonsCompletedResult[0]?.count || 0),
+      courseLibraryCourses: courseLibrarySummary.coursesAccessible,
+      courseLibraryLessonsCompleted: courseLibrarySummary.lessonsCompleted,
       lastActive: lastActiveResult[0]?.lastActive || null,
     };
     activityTimeline = timeline;
@@ -624,13 +623,13 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <StatCard
           icon={<BookOpen className="w-5 h-5 text-cyan-400" />}
-          label="Courses Enrolled"
-          value={stats.coursesEnrolled}
+          label="Course Library Courses"
+          value={stats.courseLibraryCourses}
         />
         <StatCard
           icon={<CheckCircle className="w-5 h-5 text-green-400" />}
-          label="Lessons Completed"
-          value={stats.lessonsCompleted}
+          label="Course Library Lessons Completed"
+          value={stats.courseLibraryLessonsCompleted}
         />
         <StatCard
           icon={<Clock className="w-5 h-5 text-yellow-400" />}
@@ -762,7 +761,11 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
 
       {/* Course progress */}
       <section>
-        <h2 className="text-xl font-semibold mb-4">Course Progress</h2>
+        <h2 className="text-xl font-semibold">Legacy Course Progress</h2>
+        <p className="mb-4 mt-1 text-sm text-zinc-400">
+          Historical course records from the legacy LMS. Current Course Library
+          access and completion are summarized above.
+        </p>
         <StudentProgressView courses={courses} studentId={studentId} />
       </section>
     </div>

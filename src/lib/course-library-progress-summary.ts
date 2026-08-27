@@ -23,6 +23,19 @@ export type CurrentCourseProgress = {
   nextModuleTitle: string | null;
 };
 
+export type CourseLibraryAccessProgress = {
+  coursesAccessible: number;
+  lessonsCompleted: number;
+  lessonsTotal: number;
+};
+
+type AccessibleCourseProgress = {
+  modules: Array<{
+    lessonIds: string[];
+    completedLessonIds: string[];
+  }>;
+};
+
 type CourseProgressCandidate = CurrentCourseProgress & {
   courseSortOrder: number;
   lastActivityAt: number;
@@ -103,4 +116,21 @@ export function selectCurrentCourseProgress(
     nextLessonTitle: current.nextLessonTitle,
     nextModuleTitle: current.nextModuleTitle,
   };
+}
+
+/** Aggregate the active Course Library access/progress shown on staff profiles. */
+export function summarizeCourseLibraryAccessProgress(
+  courses: AccessibleCourseProgress[],
+): CourseLibraryAccessProgress {
+  return courses.reduce<CourseLibraryAccessProgress>(
+    (summary, course) => {
+      summary.coursesAccessible += 1;
+      for (const chapter of course.modules) {
+        summary.lessonsTotal += chapter.lessonIds.length;
+        summary.lessonsCompleted += chapter.completedLessonIds.length;
+      }
+      return summary;
+    },
+    { coursesAccessible: 0, lessonsCompleted: 0, lessonsTotal: 0 },
+  );
 }

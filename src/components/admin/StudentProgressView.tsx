@@ -82,9 +82,9 @@ export function StudentProgressView({ courses, studentId }: StudentProgressViewP
     return (
       <div className="text-center py-12 bg-zinc-900/50 border border-zinc-800 rounded-lg">
         <BookOpen className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-        <p className="text-zinc-400">No course progress yet</p>
+        <p className="text-zinc-400">No legacy course progress</p>
         <p className="text-zinc-500 text-sm mt-1">
-          Student has not started any enrolled courses
+          No historical legacy course access records were found.
         </p>
       </div>
     );
