@@ -13,7 +13,7 @@ describe("platform role source of truth", () => {
     ).toBe(false);
 
     const files = [
-      "src/middleware.ts",
+      "src/proxy.ts",
       "src/lib/auth.ts",
       "src/app/(dashboard)/layout.tsx",
       "src/app/(dashboard)/dashboard/page.tsx",

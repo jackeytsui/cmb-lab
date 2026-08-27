@@ -55,7 +55,7 @@ function roleFromSessionClaims(sessionClaims: unknown) {
   );
 }
 
-export default clerkMiddleware(async (auth, req) => {
+export const proxy = clerkMiddleware(async (auth, req) => {
   if (isSignUpRoute(req)) {
     return NextResponse.redirect(new URL("/sign-in", req.url));
   }

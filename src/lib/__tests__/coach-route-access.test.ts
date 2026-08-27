@@ -16,7 +16,7 @@ function pageFiles(directory: string): string[] {
 
 describe("coach route access", () => {
   it("authenticates coach routes at the edge and defers roles to the database", () => {
-    const middleware = source("src/middleware.ts");
+    const middleware = source("src/proxy.ts");
 
     expect(middleware).toContain('"/coach(.*)"');
     expect(middleware).toContain(
