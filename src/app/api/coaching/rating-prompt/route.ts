@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { and, desc, eq, ilike, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { coachingSessionRatings, coachingSessions } from "@/db/schema";
-import { getRealUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { userCanUseFeature } from "@/lib/feature-access";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const user = await getRealUser();
+  const user = await getCurrentUser();
   if (!user || user.role !== "student") {
     return NextResponse.json({ prompt: null });
   }

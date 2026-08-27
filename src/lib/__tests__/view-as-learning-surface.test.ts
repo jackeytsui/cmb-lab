@@ -42,6 +42,34 @@ describe("View As learning-surface fidelity", () => {
     expect(recommendations.match(/hasMinimumRole\("coach"\)/g)).toHaveLength(3);
   });
 
+  it("loads coaching identity and progress for the selected learner", () => {
+    const client = source(
+      "src/app/(dashboard)/dashboard/coaching/CoachingMaterialClient.tsx",
+    );
+    const sessions = source("src/app/api/coaching/sessions/route.ts");
+    const sessionRead = sessions
+      .split("export async function GET")[1]
+      .split("export async function POST")[0];
+    const sessionMutation = sessions.split("export async function POST")[1];
+    const selectedUserReads = [
+      "src/app/api/coaching/student-course-progress/route.ts",
+      "src/app/api/coaching/goals/route.ts",
+      "src/app/api/coaching/sessions/[sessionId]/rating/route.ts",
+      "src/app/api/coaching/rating-prompt/route.ts",
+      "src/app/api/coaching/notes/[noteId]/star/route.ts",
+    ];
+
+    expect(client).toContain("currentEmail?: string");
+    expect(client).toContain("currentEmail ||");
+    expect(sessionRead).toContain("getCurrentUser()");
+    expect(sessionRead).not.toContain("getRealUser()");
+    expect(sessionMutation).toContain("getRealUser()");
+
+    for (const file of selectedUserReads) {
+      expect(source(file), file).toContain("getCurrentUser");
+    }
+  });
+
   it("keeps Accelerator progress and edit controls scoped to the selected user", () => {
     const selectedUserPages = [
       "src/app/(dashboard)/dashboard/accelerator/page.tsx",

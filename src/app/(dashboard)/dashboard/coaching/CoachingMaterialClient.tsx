@@ -1225,12 +1225,14 @@ function CoachingPanel({
   subtitle,
   sessionType,
   currentRole,
+  currentEmail,
   initialStudentEmail,
 }: {
   label: string;
   subtitle: string;
   sessionType: "one-on-one" | "inner-circle";
   currentRole?: Roles;
+  currentEmail?: string;
   initialStudentEmail?: string;
 }) {
   const fetchWithTimeout = useCallback(
@@ -1265,6 +1267,7 @@ function CoachingPanel({
   const canReorderNotes = isAdmin || isCoach || role === "student";
   const canStarNotes = isCoach || role === "student";
   const userEmail =
+    currentEmail ||
     user?.primaryEmailAddress?.emailAddress ||
     user?.emailAddresses?.[0]?.emailAddress ||
     "";
@@ -3575,12 +3578,14 @@ export function CoachingMaterialClient({
   subtitle,
   sessionType,
   currentRole,
+  currentEmail,
   initialStudentEmail,
 }: {
   title: string;
   subtitle: string;
   sessionType: "one-on-one" | "inner-circle";
   currentRole?: Roles;
+  currentEmail?: string;
   initialStudentEmail?: string;
 }) {
   return (
@@ -3593,6 +3598,7 @@ export function CoachingMaterialClient({
           subtitle={subtitle}
           sessionType={sessionType}
           currentRole={currentRole}
+          currentEmail={currentEmail}
           initialStudentEmail={initialStudentEmail}
         />
       </div>

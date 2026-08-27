@@ -3,7 +3,8 @@ import { auth } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { hasMinimumRole } from "@/lib/auth";
+import { getCurrentUser, hasMinimumRole } from "@/lib/auth";
+import { isStaffRole } from "@/lib/platform-roles";
 
 /**
  * GET /api/coaching/goals?studentEmail=...
@@ -11,25 +12,20 @@ import { hasMinimumRole } from "@/lib/auth";
  * Coaches/admins can query any student; students get their own.
  */
 export async function GET(request: NextRequest) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const callerUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, email: true, role: true },
-  });
+  const callerUser = await getCurrentUser();
   if (!callerUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const studentEmail =
     request.nextUrl.searchParams.get("studentEmail") || callerUser.email;
 
   // Students can only see their own goals
-  const isCoachOrAdmin = await hasMinimumRole("coach");
-  if (!isCoachOrAdmin && studentEmail !== callerUser.email) {
+  const isCoachOrAdmin = isStaffRole(callerUser.role);
+  if (
+    !isCoachOrAdmin &&
+    studentEmail.toLocaleLowerCase() !== callerUser.email.toLocaleLowerCase()
+  ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

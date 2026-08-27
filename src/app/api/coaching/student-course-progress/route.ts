@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { and, asc, eq, ilike, isNull } from "drizzle-orm";
 import { db } from "@/db";
@@ -9,7 +8,8 @@ import {
   courseLibraryModules,
   users,
 } from "@/db/schema";
-import { hasMinimumRole } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { isStaffRole } from "@/lib/platform-roles";
 import { selectCurrentCourseProgress } from "@/lib/course-library-progress-summary";
 
 /**
@@ -19,22 +19,14 @@ import { selectCurrentCourseProgress } from "@/lib/course-library-progress-summa
  * records. Coaches/admins may query a student; students may query themselves.
  */
 export async function GET(request: NextRequest) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const caller = await db.query.users.findFirst({
-    where: and(eq(users.clerkId, clerkId), isNull(users.deletedAt)),
-    columns: { email: true },
-  });
+  const caller = await getCurrentUser();
   if (!caller) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const requestedEmail =
     request.nextUrl.searchParams.get("studentEmail")?.trim() || caller.email;
-  const canViewOtherStudents = await hasMinimumRole("coach");
+  const canViewOtherStudents = isStaffRole(caller.role);
   if (
     !canViewOtherStudents &&
     requestedEmail.toLocaleLowerCase() !== caller.email.toLocaleLowerCase()

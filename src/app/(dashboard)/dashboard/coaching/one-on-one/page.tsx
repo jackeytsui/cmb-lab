@@ -24,6 +24,7 @@ export default async function OneOnOneCoachingPage({
         subtitle="Personalized materials for 1:1 coaching sessions."
         sessionType="one-on-one"
         currentRole={currentUser?.role}
+        currentEmail={currentUser?.email}
         initialStudentEmail={initialStudentEmail}
       />
     </FeatureGate>

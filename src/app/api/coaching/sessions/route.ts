@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { coachingSessions, coachingNotes, coachingNoteStars, users } from "@/db/schema";
 import { eq, and, desc, inArray, ilike } from "drizzle-orm";
-import { hasMinimumRole, getRealUser } from "@/lib/auth";
+import { getCurrentUser, hasMinimumRole, getRealUser } from "@/lib/auth";
 import { isStaffRole } from "@/lib/platform-roles";
 
 function getNextSessionTitle(existingTitles: string[]) {
@@ -19,7 +19,7 @@ function getNextSessionTitle(existingTitles: string[]) {
 }
 
 export async function GET(request: Request) {
-  const dbUser = await getRealUser();
+  const dbUser = await getCurrentUser();
   if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

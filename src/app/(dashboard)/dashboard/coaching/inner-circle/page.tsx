@@ -18,6 +18,7 @@ export default async function InnerCircleCoachingPage() {
         subtitle="Shared materials for group coaching sessions."
         sessionType="inner-circle"
         currentRole={currentUser?.role}
+        currentEmail={currentUser?.email}
       />
     </FeatureGate>
   );
