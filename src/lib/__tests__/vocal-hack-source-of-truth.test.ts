@@ -9,6 +9,13 @@ const viewer = readFileSync(
   ),
   "utf8",
 );
+const legacyAssignment = readFileSync(
+  path.join(
+    process.cwd(),
+    "src/components/assignments/VocalHackAssignment.tsx",
+  ),
+  "utf8",
+);
 const consensusMigration = readFileSync(
   path.join(
     process.cwd(),
@@ -50,6 +57,23 @@ describe("Vocal Hack video source-of-truth guidance", () => {
       "If any wording, pronunciation, or meaning shown in CMB Lab differs",
     );
     expect(viewer).toContain("from the coach video, follow the coach video.");
+  });
+
+  it("shows the same guidance in the legacy Vocal Hack assignment renderer", () => {
+    const notice = legacyAssignment.indexOf(
+      'data-testid="legacy-vocal-hack-source-of-truth"',
+    );
+    const sentenceCard = legacyAssignment.indexOf("{/* Sentence card */}");
+
+    expect(notice).toBeGreaterThan(-1);
+    expect(notice).toBeLessThan(sentenceCard);
+    expect(legacyAssignment).toContain("Video is the source of truth");
+    expect(legacyAssignment).toContain(
+      "If any wording, pronunciation, or meaning shown in CMB Lab differs",
+    );
+    expect(legacyAssignment).toContain(
+      "from the coach video, follow the coach video.",
+    );
   });
 
   it("keeps every consensus-backed video correction guarded and staged", () => {

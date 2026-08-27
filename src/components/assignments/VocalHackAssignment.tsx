@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight, CheckCircle2, Send } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  Info,
+  Send,
+} from "lucide-react";
 import { AudioRecorder } from "./AudioRecorder";
 import { InteractiveVideoPlayer } from "@/components/video/InteractiveVideoPlayer";
 import type { VocalHackConfig, VocalHackSubmissionData, AssignmentReviewData } from "@/lib/assignment-types";
@@ -90,6 +96,23 @@ export function VocalHackAssignment({ lessonId, config, confirmationMessage }: V
 
   return (
     <div className="mt-8 space-y-5">
+      <div
+        role="note"
+        data-testid="legacy-vocal-hack-source-of-truth"
+        className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3.5 text-white"
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white">
+          <Info className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold">Video is the source of truth</p>
+          <p className="text-sm leading-5 text-zinc-300">
+            If any wording, pronunciation, or meaning shown in CMB Lab differs
+            from the coach video, follow the coach video.
+          </p>
+        </div>
+      </div>
+
       {submitted && !isReviewed ? (
         // Submitted state
         <div className="space-y-4">
@@ -121,7 +144,6 @@ export function VocalHackAssignment({ lessonId, config, confirmationMessage }: V
                 <p className="text-xs text-zinc-500 italic">{s.english}</p>
               </div>
               {recordings[i] && (
-                /* eslint-disable-next-line jsx-a11y/media-has-caption */
                 <audio
                   controls
                   src={`/api/assignments/stream-recording?submissionId=${encodeURIComponent("")}&index=${i}`}
