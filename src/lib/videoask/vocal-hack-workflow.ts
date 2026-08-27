@@ -32,6 +32,9 @@ import {
   sourceResponseMediaTypes,
   sourceResponseTimeLimitSeconds,
 } from "./vocal-hack-content";
+import {
+  isVocalHackPlacementPublicationLocked,
+} from "./vocal-hack-workflow-guards";
 
 export const DEFAULT_VOCAL_HACK_INSTRUCTIONS =
   "<p>Watch each coach video, then record yourself imitating the sentence as closely as you can. Submit all recordings for personalized feedback from our coaching team.</p>";
@@ -152,6 +155,9 @@ export async function prepareVocalHackPlacements(input?: {
     PLACEMENT_WRITE_CONCURRENCY,
     async (form) => {
       const previous = existingByForm.get(form.formImportId);
+      if (previous && isVocalHackPlacementPublicationLocked(previous)) {
+        return previous;
+      }
       const values = placementValues(form);
       if (!previous) {
         const [created] = await db
@@ -195,11 +201,17 @@ export async function prepareVocalHackPlacements(input?: {
     },
   );
 
+  const writablePlacements = placements.filter(
+    (placement) => !isVocalHackPlacementPublicationLocked(placement),
+  );
   const placementByForm = new Map(
-    placements.map((placement) => [placement.formImportId, placement]),
+    writablePlacements.map((placement) => [placement.formImportId, placement]),
+  );
+  const writableFormIds = writablePlacements.map(
+    (placement) => placement.formImportId,
   );
   const sourceSteps =
-    formIds.length > 0
+    writableFormIds.length > 0
       ? await db
           .select({
             formImportId: videoaskStepImports.formImportId,
@@ -214,7 +226,9 @@ export async function prepareVocalHackPlacements(input?: {
             videoaskMediaImports,
             eq(videoaskMediaImports.id, videoaskStepImports.mediaImportId),
           )
-          .where(inArray(videoaskStepImports.formImportId, formIds))
+          .where(
+            inArray(videoaskStepImports.formImportId, writableFormIds),
+          )
           .orderBy(
             asc(videoaskStepImports.formImportId),
             asc(videoaskStepImports.sortOrder),
@@ -256,12 +270,16 @@ export async function prepareVocalHackPlacements(input?: {
   }
 
   return {
-    placements: placements.length,
+    placements: writablePlacements.length,
     sentences: sentenceValues.length,
-    manual: placements.filter((placement) => placement.action === "manual")
-      .length,
+    manual: writablePlacements.filter(
+      (placement) => placement.action === "manual",
+    ).length,
+    skippedPublished: placements.length - writablePlacements.length,
     missingMedia:
-      forms.reduce((total, form) => total + form.stepCount, 0) -
+      forms
+        .filter((form) => placementByForm.has(form.formImportId))
+        .reduce((total, form) => total + form.stepCount, 0) -
       sentenceValues.length,
   };
 }
