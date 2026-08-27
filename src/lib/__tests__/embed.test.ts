@@ -12,6 +12,16 @@ describe("embed normalization", () => {
     );
   });
 
+  it("preserves existing share parameters while making legacy Google Forms embeddable", () => {
+    expect(
+      extractEmbedUrl(
+        "https://docs.google.com/forms/d/e/1FAIpQLSc6MdqnEq7U-7pCUeuo_crNokXFmHcPGYOP3IU5VApLubXt2A/viewform?usp=header",
+      ),
+    ).toBe(
+      "https://docs.google.com/forms/d/e/1FAIpQLSc6MdqnEq7U-7pCUeuo_crNokXFmHcPGYOP3IU5VApLubXt2A/viewform?usp=header&embedded=true",
+    );
+  });
+
   it("keeps existing Google Forms embed URLs intact", () => {
     expect(
       extractEmbedUrl(

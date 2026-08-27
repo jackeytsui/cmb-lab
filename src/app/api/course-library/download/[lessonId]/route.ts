@@ -13,8 +13,8 @@ export const maxDuration = 60;
 
 /**
  * GET /api/course-library/download/[lessonId]
- * Authenticated proxy for download lessons. Adds Content-Disposition so
- * the browser prompts the user to save the file.
+ * Authenticated proxy for download lessons and uploaded lesson attachments.
+ * Adds Content-Disposition so the browser prompts the user to save the file.
  */
 export async function GET(
   request: NextRequest,
@@ -47,24 +47,59 @@ export async function GET(
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
-  if (lesson.lessonType !== "download") {
-    return NextResponse.json(
-      { error: "Not a download lesson" },
-      { status: 400 },
-    );
+  const content = lesson.content as Record<string, unknown>;
+  const attachmentParam = request.nextUrl.searchParams.get("attachment");
+  let fileUrl: string | undefined;
+  let fileName = "download";
+  let label = "course-library/download";
+
+  if (attachmentParam !== null) {
+    if (!/^\d+$/.test(attachmentParam)) {
+      return NextResponse.json(
+        { error: "Attachment not found" },
+        { status: 404 },
+      );
+    }
+    const attachments = Array.isArray(content.attachments)
+      ? (content.attachments as Array<Record<string, unknown>>)
+      : [];
+    const attachment = attachments[Number(attachmentParam)];
+    fileUrl =
+      typeof attachment?.url === "string" ? attachment.url : undefined;
+    fileName =
+      typeof attachment?.filename === "string"
+        ? attachment.filename
+        : "attachment";
+    label = "course-library/attachment";
+  } else {
+    if (lesson.lessonType !== "download") {
+      return NextResponse.json(
+        { error: "Not a download lesson" },
+        { status: 400 },
+      );
+    }
+    fileUrl =
+      typeof content.fileUrl === "string" ? content.fileUrl : undefined;
+    fileName =
+      typeof content.fileName === "string" ? content.fileName : "download";
   }
 
-  const content = lesson.content as Record<string, unknown>;
-  const fileUrl = content.fileUrl as string | undefined;
-  const fileName = (content.fileName as string | undefined) ?? "download";
   if (!fileUrl || !isPrivateVercelBlobUrl(fileUrl)) {
-    return NextResponse.json({ error: "No file uploaded" }, { status: 404 });
+    return NextResponse.json(
+      {
+        error:
+          attachmentParam === null
+            ? "No file uploaded"
+            : "Attachment not found",
+      },
+      { status: 404 },
+    );
   }
 
   const safeName = fileName.replace(/[^a-zA-Z0-9 ._-]/g, "");
   return proxyBlobMedia(request, fileUrl, {
     fallbackContentType: "application/octet-stream",
-    label: "course-library/download",
+    label,
     extraHeaders: {
       "Content-Disposition": `attachment; filename="${safeName || "download"}"`,
     },

@@ -1,5 +1,12 @@
 import { notFound } from "next/navigation";
-import { ChevronLeft, Download as DownloadIcon, Paperclip, Music, ExternalLink } from "lucide-react";
+import {
+  ChevronLeft,
+  Download as DownloadIcon,
+  Paperclip,
+  Music,
+  ExternalLink,
+  Info,
+} from "lucide-react";
 import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
 import { FlashcardSaveButton } from "@/components/flashcards/FlashcardSaveButton";
 import { QuizLessonViewer } from "./QuizLessonViewer";
@@ -46,6 +53,8 @@ import {
 } from "@/lib/lesson-language";
 import { studentFacingSourcePrompt } from "@/lib/videoask/vocal-hack-content";
 import { userCanReceiveAssignmentFeedback } from "@/lib/assignment-review";
+import { extractEmbedUrl } from "@/lib/embed";
+import { legacyVideoAskUrl } from "@/lib/legacy-vocal-hack";
 
 interface Attachment {
   url: string;
@@ -53,7 +62,13 @@ interface Attachment {
   sizeBytes: number;
 }
 
-function LessonAttachments({ attachments }: { attachments?: Attachment[] }) {
+function LessonAttachments({
+  lessonId,
+  attachments,
+}: {
+  lessonId: string;
+  attachments?: Attachment[];
+}) {
   if (!attachments || attachments.length === 0) return null;
   return (
     <div className="rounded-lg border border-border bg-card p-5 space-y-2">
@@ -61,10 +76,10 @@ function LessonAttachments({ attachments }: { attachments?: Attachment[] }) {
         <Paperclip className="w-4 h-4" />
         Attachments
       </h3>
-      {attachments.map((att) => (
+      {attachments.map((att, index) => (
         <a
           key={att.url}
-          href={att.url}
+          href={`/api/course-library/download/${lessonId}?attachment=${index}`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 rounded-md border border-border bg-background p-2 hover:bg-muted/50 transition-colors"
@@ -182,6 +197,17 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   const content = (row.content ?? {}) as Record<string, unknown>;
   const lessonType = row.lessonType as string;
+  const formEmbedUrl =
+    lessonType === "form" &&
+    typeof content.embedUrl === "string" &&
+    content.embedUrl.trim()
+      ? extractEmbedUrl(content.embedUrl)
+      : null;
+  const legacyVocalHackUrl = legacyVideoAskUrl({
+    lessonType,
+    title: row.lessonTitle,
+    html: content.body,
+  });
   // Cantonese variants share every code path; only romanisation/English/TTS
   // differ, keyed off this language.
   const lang = lessonLanguage(lessonType);
@@ -485,7 +511,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               initialCompleted={!!progress?.completedAt}
               nextHref={nextHref}
             />
-            <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
+            <LessonAttachments
+              lessonId={lessonId}
+              attachments={content.attachments as Attachment[] | undefined}
+            />
           </div>
         )}
 
@@ -501,18 +530,64 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
                 />
               </div>
             )}
-            <div className="rounded-lg border border-border bg-card p-6">
-              <div
-                className="prose prose-invert max-w-none text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
-                dangerouslySetInnerHTML={{ __html: (content.body as string) ?? "<p>(empty)</p>" }}
-              />
-            </div>
+            {legacyVocalHackUrl ? (
+              <div className="space-y-4">
+                <div
+                  role="note"
+                  className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3.5 text-foreground"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white">
+                    <Info className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-semibold">
+                      Video is the source of truth
+                    </p>
+                    <p className="text-sm leading-5 text-muted-foreground">
+                      If any wording, pronunciation, or meaning shown in CMB
+                      Lab differs from the coach video, follow the coach video.
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <h2 className="text-lg font-semibold text-foreground">
+                    Complete this Vocal Hack in VideoAsk
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    Watch each coach video and submit your audio or video
+                    response in VideoAsk. When you finish, return here and mark
+                    this lesson complete.
+                  </p>
+                  <a
+                    href={legacyVocalHackUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                  >
+                    Open Vocal Hack in VideoAsk
+                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border bg-card p-6">
+                <div
+                  className="prose prose-invert max-w-none text-foreground prose-headings:text-foreground prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-headings:font-semibold"
+                  dangerouslySetInnerHTML={{
+                    __html: (content.body as string) ?? "<p>(empty)</p>",
+                  }}
+                />
+              </div>
+            )}
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
               nextHref={nextHref}
             />
-            <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
+            <LessonAttachments
+              lessonId={lessonId}
+              attachments={content.attachments as Attachment[] | undefined}
+            />
           </div>
         )}
 
@@ -593,7 +668,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               initialCompleted={!!progress?.completedAt}
               nextHref={nextHref}
             />
-            <LessonAttachments attachments={content.attachments as Attachment[] | undefined} />
+            <LessonAttachments
+              lessonId={lessonId}
+              attachments={content.attachments as Attachment[] | undefined}
+            />
           </div>
         )}
 
@@ -607,19 +685,32 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               />
               </div>
             )}
-            {typeof content.embedUrl === "string" && content.embedUrl ? (
+            {formEmbedUrl ? (
               <div className="rounded-lg border border-border bg-card overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/20">
-                  <ExternalLink className="w-3.5 h-3.5 text-pink-500" />
-                  <span className="text-xs text-muted-foreground">Embedded content</span>
+                <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border bg-muted/20">
+                  <div className="flex items-center gap-2">
+                    <ExternalLink className="w-3.5 h-3.5 text-pink-500" />
+                    <span className="text-xs text-muted-foreground">
+                      Embedded content
+                    </span>
+                  </div>
+                  <a
+                    href={formEmbedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Open in a new tab
+                  </a>
                 </div>
                 <iframe
-                  src={content.embedUrl as string}
+                  src={formEmbedUrl}
                   style={{ height: `${typeof content.embedHeight === "number" ? content.embedHeight : 600}px` }}
                   className="w-full"
                   title={row.lessonTitle}
                   loading="lazy"
                   allow="camera; microphone; geolocation"
+                  allowFullScreen
                 />
               </div>
             ) : (
