@@ -183,6 +183,26 @@ describe("synthesizeSpeechMiniMax", () => {
       /MiniMax TTS error: 1002/,
     );
   });
+
+  it("normalizes fetch TypeErrors into a provider error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("invalid header value containing a secret");
+    }));
+
+    await expect(synthesizeSpeechMiniMax("你好嗎？", "medium")).rejects.toThrow(
+      "MiniMax TTS error: network request failed",
+    );
+  });
+
+  it("rejects malformed response bodies without throwing a TypeError", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response("null", { status: 200 }),
+    ));
+
+    await expect(synthesizeSpeechMiniMax("你好嗎？", "medium")).rejects.toThrow(
+      "MiniMax TTS error: invalid response",
+    );
+  });
 });
 
 describe("buildCacheKey", () => {

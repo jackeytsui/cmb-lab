@@ -18,24 +18,23 @@ import {
   synthesizeSpeechElevenLabs,
   synthesizeSpeechMiniMax,
   escapeXml,
+  getHeaderCredential,
   MINIMAX_DEFAULT_CANTONESE_VOICE,
 } from "@/lib/tts";
 import type { TTSLanguage, TTSRate } from "@/lib/tts";
 
-// Safely initialize Redis or fallback to mock
-let redis: Redis;
-try {
-  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+// Audio caching is optional. A missing or unhealthy cache must never take TTS
+// down; rate limiting has its own durable Neon fallback.
+let redis: Redis | null = null;
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  try {
     redis = Redis.fromEnv();
-  } else {
-    throw new Error("Missing Upstash credentials");
+  } catch (error) {
+    console.warn(
+      "Redis init failed in TTS route; bypassing cache:",
+      error instanceof Error ? error.name : "UnknownError",
+    );
   }
-} catch (error) {
-  console.warn("Redis init failed in TTS route, using mock:", error);
-  redis = {
-    get: async () => null,
-    set: async () => "OK",
-  } as unknown as Redis;
 }
 
 const VALID_LANGUAGES: TTSLanguage[] = ["zh-CN", "zh-HK", "mandarin", "cantonese"];
@@ -43,16 +42,39 @@ const VALID_RATES: TTSRate[] = ["x-slow", "slow", "medium", "fast"];
 const OPENAI_TTS_MODEL = "gpt-4o-mini-tts";
 const OPENAI_TTS_VOICE = "alloy";
 const TTS_PROVIDER = (process.env.TTS_PROVIDER || "").toLowerCase();
+let warnedAboutCacheFailure = false;
 
-/**
- * Header credentials must be a single non-whitespace token. Treat malformed
- * values as unconfigured so fetch never echoes a secret inside a header
- * validation error (and therefore into production logs).
- */
-function getHeaderCredential(value: string | undefined): string | null {
-  const credential = value?.trim();
-  if (!credential || /\s/.test(credential)) return null;
-  return credential;
+function warnCacheFailure(error: unknown): void {
+  if (warnedAboutCacheFailure) return;
+  warnedAboutCacheFailure = true;
+  console.warn(
+    "TTS cache unavailable; bypassing cache:",
+    error instanceof Error ? error.name : "UnknownError",
+  );
+}
+
+async function readCachedAudio(cacheKey: string): Promise<Buffer | null> {
+  if (!redis) return null;
+  try {
+    const cached = await redis.get<string>(cacheKey);
+    return cached ? Buffer.from(cached, "base64") : null;
+  } catch (error) {
+    warnCacheFailure(error);
+    return null;
+  }
+}
+
+async function writeCachedAudio(
+  cacheKey: string,
+  audioBuffer: Buffer,
+  ttl: number,
+): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.set(cacheKey, audioBuffer.toString("base64"), { ex: ttl });
+  } catch (error) {
+    warnCacheFailure(error);
+  }
 }
 
 function mapOpenAiSpeed(rate: TTSRate): number {
@@ -173,7 +195,8 @@ export async function POST(request: NextRequest) {
       getHeaderCredential(process.env.OPENAI_API_KEY),
     );
     const hasAzure = Boolean(
-      process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION,
+      getHeaderCredential(process.env.AZURE_SPEECH_KEY) &&
+        process.env.AZURE_SPEECH_REGION?.trim(),
     );
 
     // 4. Resolve provider.
@@ -184,9 +207,12 @@ export async function POST(request: NextRequest) {
     //   produces Mandarin-inflected Cantonese.
     // Mandarin: TTS_PROVIDER env > OpenAI > Azure
     const isCantonese = language === "zh-HK" || language === "cantonese";
-    const hasMiniMax = Boolean(process.env.MINIMAX_API_KEY);
+    const hasMiniMax = Boolean(
+      getHeaderCredential(process.env.MINIMAX_API_KEY),
+    );
     const hasElevenLabs = Boolean(
-      process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_CANTONESE_VOICE_ID
+      getHeaderCredential(process.env.ELEVENLABS_API_KEY) &&
+        process.env.ELEVENLABS_CANTONESE_VOICE_ID?.trim()
     );
 
     if (!hasOpenAI && !hasAzure && !hasElevenLabs && !hasMiniMax) {
@@ -221,10 +247,9 @@ export async function POST(request: NextRequest) {
     const cacheKey = buildCacheKey(text, voice.lang, voice.voiceName, rate);
 
     // 6. Check Redis cache
-    const cached = await redis.get<string>(cacheKey);
-    if (cached) {
-      const audioBuffer = Buffer.from(cached, "base64");
-      return new NextResponse(new Uint8Array(audioBuffer), {
+    const cachedAudio = await readCachedAudio(cacheKey);
+    if (cachedAudio) {
+      return new NextResponse(new Uint8Array(cachedAudio), {
         headers: {
           "Content-Type": "audio/mpeg",
           "Cache-Control": "public, max-age=86400",
@@ -237,17 +262,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 7. Preprocess text — replace bracketed placeholders with pauses
-    let spokenText = text;
-    if (hasBracketedPlaceholders) {
-      if (provider === "openai") {
-        // OpenAI: replace with ellipsis which creates a natural ~1.5s pause
-        spokenText = text.replace(/\[[^\]]+\]/g, "，……，");
-      }
-      // Azure: handled via SSML break element below
-    }
+    // 7. Preprocess text — non-SSML providers use punctuation as a pause.
+    const plainSpokenText = hasBracketedPlaceholders
+      ? text.replace(/\[[^\]]+\]/g, "，……，")
+      : text;
+    const spokenText = provider === "openai" ? plainSpokenText : text;
 
-    // 8. Synthesize via selected provider only (no per-request provider mixing)
+    // 8. Synthesize. MiniMax is the Cantonese-quality primary; if its network
+    // path fails, OpenAI receives an explicit Hong Kong Cantonese instruction
+    // so students still get audio instead of a dead request.
     if (isCantonese) {
       // Cantonese quality regressions have bitten twice — keep an explicit
       // trail of which provider/voice served each fresh synthesis, plus which
@@ -259,19 +282,31 @@ export async function POST(request: NextRequest) {
           `[configured: minimax=${hasMiniMax} azure=${hasAzure} elevenlabs=${hasElevenLabs} openai=${hasOpenAI}]`,
       );
     }
+    let servedProvider = provider;
+    let servedVoice = voice;
     let audioBuffer: Buffer;
     if (provider === "minimax") {
-      // MiniMax: no SSML — strip bracketed placeholders to pauses.
-      const mmText = hasBracketedPlaceholders
-        ? text.replace(/\[[^\]]+\]/g, "，……，")
-        : text;
-      audioBuffer = await synthesizeSpeechMiniMax(mmText, rate);
+      try {
+        audioBuffer = await synthesizeSpeechMiniMax(plainSpokenText, rate);
+      } catch (error) {
+        if (!hasOpenAI) throw error;
+        console.warn(
+          "TTS: MiniMax failed; using instructed Cantonese OpenAI fallback:",
+          error instanceof Error ? error.name : "UnknownError",
+        );
+        servedProvider = "openai";
+        servedVoice = {
+          voiceName: `openai-${OPENAI_TTS_VOICE}`,
+          lang: "zh-HK",
+        };
+        audioBuffer = await synthesizeSpeechOpenAI(
+          plainSpokenText,
+          language,
+          rate,
+        );
+      }
     } else if (provider === "elevenlabs") {
-      // ElevenLabs: strip brackets for spoken text (no SSML support)
-      const elText = hasBracketedPlaceholders
-        ? text.replace(/\[[^\]]+\]/g, "，……，")
-        : text;
-      audioBuffer = await synthesizeSpeechElevenLabs(elText, rate);
+      audioBuffer = await synthesizeSpeechElevenLabs(plainSpokenText, rate);
     } else if (provider === "openai") {
       audioBuffer = await synthesizeSpeechOpenAI(spokenText, language, rate);
     } else {
@@ -294,17 +329,24 @@ export async function POST(request: NextRequest) {
       audioBuffer = await synthesizeSpeech(ssml);
     }
 
-    // 9. Cache in Redis with tiered TTL
+    // 9. Cache under the provider that actually served the audio. This avoids
+    // poisoning a MiniMax cache key with fallback audio.
     const ttl = getCacheTTL(text.length);
-    await redis.set(cacheKey, audioBuffer.toString("base64"), { ex: ttl });
+    const servedCacheKey = buildCacheKey(
+      text,
+      servedVoice.lang,
+      servedVoice.voiceName,
+      rate,
+    );
+    await writeCachedAudio(servedCacheKey, audioBuffer, ttl);
 
     // 10. Return MP3 audio
     return new NextResponse(new Uint8Array(audioBuffer), {
       headers: {
         "Content-Type": "audio/mpeg",
         "Cache-Control": "public, max-age=86400",
-        "X-Cache": "MISS",
-        "X-TTS-Provider": provider,
+        "X-Cache": redis ? "MISS" : "BYPASS",
+        "X-TTS-Provider": servedProvider,
       },
     });
   } catch (error) {

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { characterData, dictionaryEntries } from "@/db/schema";
-import { eq, or, and, ne, asc, sql } from "drizzle-orm";
+import { eq, or, and, ne, sql } from "drizzle-orm";
+import { dictionaryFrequencyOrder } from "@/lib/dictionary-query";
 
 /**
  * GET /api/dictionary/character?char=X
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
           )
         )
       )
-      .orderBy(asc(sql`${dictionaryEntries.frequencyRank} NULLS LAST`))
+      .orderBy(dictionaryFrequencyOrder())
       .limit(20);
 
     return NextResponse.json({

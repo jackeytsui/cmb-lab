@@ -22,6 +22,13 @@ export interface TTSRequest {
   phoneme?: string;
 }
 
+/** Return a header-safe credential without ever logging its value. */
+export function getHeaderCredential(value: string | undefined): string | null {
+  const credential = value?.trim();
+  if (!credential || /\s/.test(credential)) return null;
+  return credential;
+}
+
 // --- Voice Resolution ---
 
 interface VoiceInfo {
@@ -100,10 +107,13 @@ export interface CantoneseProviderEnv {
 export function resolveCantoneseProvider(
   env: CantoneseProviderEnv = process.env,
 ): CantoneseProvider {
-  const hasMiniMax = Boolean(env.MINIMAX_API_KEY);
-  const hasAzure = Boolean(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION);
+  const hasMiniMax = Boolean(getHeaderCredential(env.MINIMAX_API_KEY));
+  const hasAzure = Boolean(
+    getHeaderCredential(env.AZURE_SPEECH_KEY) && env.AZURE_SPEECH_REGION?.trim(),
+  );
   const hasElevenLabs = Boolean(
-    env.ELEVENLABS_API_KEY && env.ELEVENLABS_CANTONESE_VOICE_ID,
+    getHeaderCredential(env.ELEVENLABS_API_KEY) &&
+      env.ELEVENLABS_CANTONESE_VOICE_ID?.trim(),
   );
   const preference = (env.CANTONESE_TTS_PROVIDER || "").trim().toLowerCase();
 
@@ -278,7 +288,7 @@ export async function synthesizeSpeechMiniMax(
   text: string,
   rate: TTSRate = "medium",
 ): Promise<Buffer> {
-  const apiKey = process.env.MINIMAX_API_KEY;
+  const apiKey = getHeaderCredential(process.env.MINIMAX_API_KEY);
   if (!apiKey) {
     throw new Error("MiniMax credentials not configured");
   }
@@ -329,7 +339,11 @@ export async function synthesizeSpeechMiniMax(
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error("MiniMax TTS request timed out");
     }
-    throw error;
+    console.error(
+      "MiniMax TTS request failed:",
+      error instanceof Error ? error.name : "UnknownError",
+    );
+    throw new Error("MiniMax TTS error: network request failed");
   } finally {
     clearTimeout(timeoutId);
   }
@@ -343,20 +357,29 @@ export async function synthesizeSpeechMiniMax(
     );
   }
 
-  const payload = (await response.json()) as {
-    data?: { audio?: string };
-    base_resp?: { status_code?: number; status_msg?: string };
+  const payload: unknown = await response.json();
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("MiniMax TTS error: invalid response");
+  }
+  const responseBody = payload as {
+    data?: { audio?: unknown } | null;
+    base_resp?: { status_code?: number | string; status_msg?: string } | null;
   };
 
-  const statusCode = payload.base_resp?.status_code;
+  const statusCode = Number(responseBody.base_resp?.status_code);
   if (statusCode !== 0) {
-    const msg = payload.base_resp?.status_msg || "unknown error";
+    const msg = responseBody.base_resp?.status_msg || "unknown error";
     console.error(`MiniMax TTS: API status ${statusCode}: ${msg}`);
     throw new Error(`MiniMax TTS error: ${statusCode} — ${msg}`);
   }
 
-  const hexAudio = payload.data?.audio;
-  if (!hexAudio || !/^[0-9a-fA-F]+$/.test(hexAudio)) {
+  const hexAudio = responseBody.data?.audio;
+  if (
+    typeof hexAudio !== "string" ||
+    hexAudio.length === 0 ||
+    hexAudio.length % 2 !== 0 ||
+    !/^[0-9a-fA-F]+$/.test(hexAudio)
+  ) {
     throw new Error("MiniMax TTS error: response contained no audio");
   }
 
@@ -374,8 +397,8 @@ export async function synthesizeSpeechElevenLabs(
   text: string,
   rate: TTSRate = "medium"
 ): Promise<Buffer> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_CANTONESE_VOICE_ID;
+  const apiKey = getHeaderCredential(process.env.ELEVENLABS_API_KEY);
+  const voiceId = process.env.ELEVENLABS_CANTONESE_VOICE_ID?.trim();
   if (!apiKey || !voiceId) {
     throw new Error("ElevenLabs credentials not configured");
   }
@@ -489,8 +512,8 @@ export async function synthesizeSpeechElevenLabs(
  * @throws Error if Azure credentials are missing, request times out, or API returns error
  */
 export async function synthesizeSpeech(ssml: string): Promise<Buffer> {
-  const key = process.env.AZURE_SPEECH_KEY;
-  const region = process.env.AZURE_SPEECH_REGION;
+  const key = getHeaderCredential(process.env.AZURE_SPEECH_KEY);
+  const region = process.env.AZURE_SPEECH_REGION?.trim();
   if (!key || !region) {
     throw new Error("Azure Speech credentials not configured");
   }

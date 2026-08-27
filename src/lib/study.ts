@@ -29,24 +29,15 @@ export async function getStudyPreferences(userId: string) {
 }
 
 export async function upsertStudyPreferences(userId: string, dailyMinutes: number) {
-  const existing = await db.query.studyPreferences.findFirst({
-    where: eq(studyPreferences.userId, userId),
-  });
-
-  if (existing) {
-    const [updated] = await db
-      .update(studyPreferences)
-      .set({ dailyMinutes })
-      .where(eq(studyPreferences.userId, userId))
-      .returning();
-    return updated;
-  }
-
-  const [created] = await db
+  const [preference] = await db
     .insert(studyPreferences)
     .values({ userId, dailyMinutes })
+    .onConflictDoUpdate({
+      target: studyPreferences.userId,
+      set: { dailyMinutes, updatedAt: new Date() },
+    })
     .returning();
-  return created;
+  return preference;
 }
 
 export async function getStudyToday(userId: string) {

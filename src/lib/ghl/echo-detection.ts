@@ -1,6 +1,7 @@
 // src/lib/ghl/echo-detection.ts
-// Prevents infinite webhook loops by marking outbound changes in Redis
-// with short TTL markers, then checking inbound webhooks against them.
+// Prevents infinite webhook loops by marking outbound changes with short TTL
+// markers, then checking inbound webhooks against them. Redis is preferred
+// when configured; Neon is the durable production fallback.
 //
 // Flow:
 // 1. LMS updates GHL contact field -> markOutboundChange("contact123", "email", "new@example.com")
@@ -8,26 +9,25 @@
 // 3. Returns true (echo detected), deletes the marker, and skips processing
 
 import { Redis } from "@upstash/redis";
+import { createHash } from "node:crypto";
+import { getNeonSql } from "@/db";
 
-// Safely initialize Redis or fallback to mock
-let redis: Redis;
-try {
-  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+let redis: Redis | null = null;
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  try {
     redis = Redis.fromEnv();
-  } else {
-    throw new Error("Missing Upstash credentials");
+  } catch (error) {
+    console.warn(
+      "Redis init failed in echo-detection; using Neon:",
+      error instanceof Error ? error.name : "UnknownError",
+    );
   }
-} catch (error) {
-  console.warn("Redis init failed in echo-detection, using mock:", error);
-  redis = {
-    set: async () => "OK",
-    get: async () => null,
-    del: async () => 0,
-  } as unknown as Redis;
 }
 
 // TTL for echo markers (seconds) -- 60s is enough for GHL webhook round-trip
 const ECHO_TTL_SECONDS = 60;
+const localMarkers = new Map<string, number>();
+let warnedAboutDatabaseFallback = false;
 
 /**
  * Build a deterministic Redis key for an outbound change marker.
@@ -37,7 +37,27 @@ function echoKey(
   changeType: string,
   changeValue: string
 ): string {
-  return `ghl:echo:${contactId}:${changeType}:${changeValue}`;
+  const valueHash = createHash("sha256").update(changeValue).digest("hex");
+  return `ghl:echo:${contactId}:${changeType}:${valueHash}`;
+}
+
+function markLocally(key: string): void {
+  localMarkers.set(key, Date.now() + ECHO_TTL_SECONDS * 1000);
+}
+
+function consumeLocalMarker(key: string): boolean {
+  const expiresAt = localMarkers.get(key);
+  localMarkers.delete(key);
+  return typeof expiresAt === "number" && expiresAt > Date.now();
+}
+
+function warnDatabaseFallback(error: unknown): void {
+  if (warnedAboutDatabaseFallback) return;
+  warnedAboutDatabaseFallback = true;
+  console.warn(
+    "Neon echo detection failed; using process-local protection:",
+    error instanceof Error ? error.name : "UnknownError",
+  );
 }
 
 /**
@@ -54,7 +74,27 @@ export async function markOutboundChange(
   changeValue: string
 ): Promise<void> {
   const key = echoKey(contactId, changeType, changeValue);
-  await redis.set(key, "1", { ex: ECHO_TTL_SECONDS });
+  if (redis) {
+    await redis.set(key, "1", { ex: ECHO_TTL_SECONDS });
+    return;
+  }
+
+  try {
+    const sql = getNeonSql();
+    const expiresAt = new Date(Date.now() + ECHO_TTL_SECONDS * 1000);
+    await sql`
+      WITH cleanup AS (
+        DELETE FROM "ghl_echo_markers" WHERE "expires_at" <= now()
+      )
+      INSERT INTO "ghl_echo_markers" ("key", "expires_at")
+      VALUES (${key}, ${expiresAt})
+      ON CONFLICT ("key") DO UPDATE
+      SET "expires_at" = EXCLUDED."expires_at"
+    `;
+  } catch (error) {
+    warnDatabaseFallback(error);
+    markLocally(key);
+  }
 }
 
 /**
@@ -73,13 +113,27 @@ export async function isEchoWebhook(
   changeValue: string
 ): Promise<boolean> {
   const key = echoKey(contactId, changeType, changeValue);
-  const exists = await redis.get(key);
-
-  if (exists) {
-    // This is our own change echoing back -- delete the marker and signal skip
-    await redis.del(key);
-    return true;
+  if (redis) {
+    const exists = await redis.get(key);
+    if (exists) {
+      await redis.del(key);
+      return true;
+    }
+    return false;
   }
 
-  return false;
+  try {
+    const sql = getNeonSql();
+    // Delete and test in one statement so simultaneous webhook deliveries
+    // cannot both consume the same marker.
+    const rows = (await sql`
+      DELETE FROM "ghl_echo_markers"
+      WHERE "key" = ${key}
+      RETURNING "expires_at" > now() AS "active"
+    `) as Array<{ active: boolean }>;
+    return rows[0]?.active === true;
+  } catch (error) {
+    warnDatabaseFallback(error);
+    return consumeLocalMarker(key);
+  }
 }

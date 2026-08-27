@@ -3,6 +3,8 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
+import { getNeonSql } from "@/db";
 import { isStaffRole } from "@/lib/platform-roles";
 
 // Safely initialize Redis (returns undefined if env vars are missing)
@@ -15,85 +17,182 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   }
 }
 
-// Helper to create a limiter or a mock fallback
-function createLimiter(config: Omit<ConstructorParameters<typeof Ratelimit>[0], "redis">): Ratelimit {
-  if (!redis) {
-    // Mock limiter that allows everything
-    return {
-      limit: async () => ({ success: true, limit: 100, remaining: 100, reset: 0 }),
-      blockUntilReady: async () => ({ success: true, limit: 100, remaining: 100, reset: 0 }),
-    } as unknown as Ratelimit;
+type WindowDuration = "1 m" | "10 s";
+
+interface LimiterDefinition {
+  requests: number;
+  window: WindowDuration;
+  windowMs: number;
+  prefix: string;
+}
+
+interface RateLimitResult {
+  success: boolean;
+  limit: number;
+  remaining: number;
+  reset: number;
+}
+
+const localWindows = new Map<string, { count: number; reset: number }>();
+let warnedAboutDatabaseFallback = false;
+
+function resultForCount(
+  count: number,
+  maxRequests: number,
+  reset: number,
+): RateLimitResult {
+  return {
+    success: count <= maxRequests,
+    limit: maxRequests,
+    remaining: Math.max(0, maxRequests - count),
+    reset,
+  };
+}
+
+function consumeLocalWindow(
+  key: string,
+  maxRequests: number,
+  reset: number,
+): RateLimitResult {
+  const existing = localWindows.get(key);
+  const count = existing && existing.reset === reset ? existing.count + 1 : 1;
+  localWindows.set(key, { count, reset });
+  return resultForCount(count, maxRequests, reset);
+}
+
+export async function consumeDatabaseRateLimit(
+  definition: Pick<LimiterDefinition, "requests" | "windowMs" | "prefix">,
+  identifier: string,
+  nowMs = Date.now(),
+): Promise<RateLimitResult> {
+  const windowStart = Math.floor(nowMs / definition.windowMs) * definition.windowMs;
+  const reset = windowStart + definition.windowMs;
+  const identifierHash = createHash("sha256").update(identifier).digest("hex");
+  const key = `${definition.prefix}:${windowStart}:${identifierHash}`;
+
+  try {
+    const sql = getNeonSql();
+    const rows = (await sql`
+      WITH cleanup AS (
+        DELETE FROM "api_rate_limit_windows" WHERE "expires_at" <= now()
+      ), bumped AS (
+        INSERT INTO "api_rate_limit_windows" ("key", "request_count", "expires_at")
+        VALUES (${key}, 1, ${new Date(reset)})
+        ON CONFLICT ("key") DO UPDATE
+        SET "request_count" = "api_rate_limit_windows"."request_count" + 1
+        RETURNING "request_count"
+      )
+      SELECT "request_count" FROM bumped
+    `) as Array<{ request_count: number | string }>;
+    const count = Number(rows[0]?.request_count ?? 1);
+    return resultForCount(count, definition.requests, reset);
+  } catch (error) {
+    if (!warnedAboutDatabaseFallback) {
+      warnedAboutDatabaseFallback = true;
+      console.warn(
+        "Database rate limiting failed; using process-local protection:",
+        error instanceof Error ? error.name : "UnknownError",
+      );
+    }
+    return consumeLocalWindow(key, definition.requests, reset);
   }
-  return new Ratelimit({ redis, ...config });
+}
+
+function createLimiter(definition: LimiterDefinition): Ratelimit {
+  if (redis) {
+    return new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(definition.requests, definition.window),
+      prefix: definition.prefix,
+      analytics: true,
+    });
+  }
+
+  const limit = (identifier: string) =>
+    consumeDatabaseRateLimit(definition, identifier);
+  return {
+    limit,
+    blockUntilReady: limit,
+  } as unknown as Ratelimit;
 }
 
 // --- Limiter Instances ---
 
 // AI Chat: 20/min students, 60/min elevated (coaches/admins)
 export const aiChatLimiter = createLimiter({
-  limiter: Ratelimit.slidingWindow(20, "1 m"),
+  requests: 20,
+  window: "1 m",
+  windowMs: 60_000,
   prefix: "ratelimit:chat",
-  analytics: true,
 });
 
 export const aiChatLimiterElevated = createLimiter({
-  limiter: Ratelimit.slidingWindow(60, "1 m"),
+  requests: 60,
+  window: "1 m",
+  windowMs: 60_000,
   prefix: "ratelimit:chat:elevated",
-  analytics: true,
 });
 
 // Lab Assistant (support bot): 15/min students, 45/min elevated
 export const labAssistantLimiter = createLimiter({
-  limiter: Ratelimit.slidingWindow(15, "1 m"),
+  requests: 15,
+  window: "1 m",
+  windowMs: 60_000,
   prefix: "ratelimit:lab-assistant",
-  analytics: true,
 });
 
 export const labAssistantLimiterElevated = createLimiter({
-  limiter: Ratelimit.slidingWindow(45, "1 m"),
+  requests: 45,
+  window: "1 m",
+  windowMs: 60_000,
   prefix: "ratelimit:lab-assistant:elevated",
-  analytics: true,
 });
 
 // Grading: 10/min students, 30/min elevated (coaches/admins)
 export const gradingLimiter = createLimiter({
-  limiter: Ratelimit.slidingWindow(10, "1 m"),
+  requests: 10,
+  window: "1 m",
+  windowMs: 60_000,
   prefix: "ratelimit:grade",
-  analytics: true,
 });
 
 export const gradingLimiterElevated = createLimiter({
-  limiter: Ratelimit.slidingWindow(30, "1 m"),
+  requests: 30,
+  window: "1 m",
+  windowMs: 60_000,
   prefix: "ratelimit:grade:elevated",
-  analytics: true,
 });
 
 // GHL outbound API: 80/10s (leaves 20% headroom from 100/10s burst limit)
 export const ghlBurstLimiter = createLimiter({
-  limiter: Ratelimit.slidingWindow(80, "10 s"),
+  requests: 80,
+  window: "10 s",
+  windowMs: 10_000,
   prefix: "ratelimit:ghl:burst",
-  analytics: true,
 });
 
 // TTS: 30/min students, 90/min elevated (coaches/admins)
 // Higher than grading (10/min) because hover-to-hear generates rapid requests
 export const ttsLimiter = createLimiter({
-  limiter: Ratelimit.slidingWindow(30, "1 m"),
+  requests: 30,
+  window: "1 m",
+  windowMs: 60_000,
   prefix: "ratelimit:tts",
-  analytics: true,
 });
 
 export const ttsLimiterElevated = createLimiter({
-  limiter: Ratelimit.slidingWindow(90, "1 m"),
+  requests: 90,
+  window: "1 m",
+  windowMs: 60_000,
   prefix: "ratelimit:tts:elevated",
-  analytics: true,
 });
 
 // Webhooks: 10/min per IP (no auth, IP-based)
 export const webhookLimiter = createLimiter({
-  limiter: Ratelimit.slidingWindow(10, "1 m"),
+  requests: 10,
+  window: "1 m",
+  windowMs: 60_000,
   prefix: "ratelimit:webhook",
-  analytics: true,
 });
 
 // --- Helpers ---
