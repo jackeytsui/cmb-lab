@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import {
   getRolesWithActiveStudentCounts,
   getExpiringAssignments,
@@ -14,13 +17,11 @@ import {
  * With ?studentId={id}: returns access attribution for a specific student.
  */
 export async function GET(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  if (access.status !== "authorized") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -28,8 +29,29 @@ export async function GET(request: NextRequest) {
     // If studentId is provided, return attribution data for that student
     const studentId = request.nextUrl.searchParams.get("studentId");
     if (studentId) {
+      const student = await db.query.users.findFirst({
+        where: and(eq(users.id, studentId), isNull(users.deletedAt)),
+        columns: { assignedCoachId: true },
+      });
+      if (
+        !student ||
+        !canStaffAccessStudent({
+          actorUserId: access.actor.id,
+          actorRole: access.actor.role,
+          assignedCoachId: student.assignedCoachId,
+        })
+      ) {
+        return NextResponse.json(
+          { error: "Student not found" },
+          { status: 404 },
+        );
+      }
       const attribution = await getAccessAttribution(studentId);
       return NextResponse.json({ attribution });
+    }
+
+    if (access.actor.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Otherwise return the dashboard analytics

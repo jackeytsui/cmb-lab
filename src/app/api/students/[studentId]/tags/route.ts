@@ -12,7 +12,7 @@ const tagBodySchema = z.object({
 /**
  * GET /api/students/[studentId]/tags
  * List all tags for a student.
- * Requires coach role.
+ * Requires administrator role.
  */
 export async function GET(
   _request: NextRequest,
@@ -23,7 +23,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -45,7 +45,7 @@ export async function GET(
  * POST /api/students/[studentId]/tags
  * Assign a tag to a student.
  * Body: { tagId: string }
- * Requires coach role.
+ * Requires administrator role.
  */
 export async function POST(
   request: NextRequest,
@@ -56,7 +56,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -101,7 +101,7 @@ export async function POST(
  * DELETE /api/students/[studentId]/tags
  * Remove a tag from a student.
  * Body: { tagId: string }
- * Requires coach role.
+ * Requires administrator role.
  */
 export async function DELETE(
   request: NextRequest,
@@ -112,7 +112,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

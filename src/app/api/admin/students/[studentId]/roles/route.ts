@@ -14,7 +14,7 @@ interface RouteContext {
 /**
  * GET /api/admin/students/[studentId]/roles
  * Returns assigned roles and available (unassigned) roles for the student.
- * Requires coach+ role.
+ * Requires administrator role.
  */
 export async function GET(request: NextRequest, context: RouteContext) {
   const { userId: clerkId } = await auth();
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -65,7 +65,7 @@ const assignSchema = z.object({
 /**
  * POST /api/admin/students/[studentId]/roles
  * Assign a role to a student with optional expiration date.
- * Requires coach+ role.
+ * Requires administrator role.
  */
 export async function POST(request: NextRequest, context: RouteContext) {
   const { userId: clerkId } = await auth();
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -136,7 +136,7 @@ const removeSchema = z.object({
 /**
  * DELETE /api/admin/students/[studentId]/roles
  * Remove a role from a student.
- * Requires coach+ role.
+ * Requires administrator role.
  */
 export async function DELETE(request: NextRequest, context: RouteContext) {
   const { userId: clerkId } = await auth();
@@ -144,7 +144,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

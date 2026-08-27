@@ -14,10 +14,10 @@ const createTagSchema = z.object({
 /**
  * GET /api/admin/tags
  * List all tags. Accepts optional ?type=coach|system query param.
- * Requires coach role.
+ * Requires administrator role.
  */
 export async function GET(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -40,10 +40,10 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/admin/tags
  * Create a new tag.
- * Requires coach role.
+ * Requires administrator role.
  */
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

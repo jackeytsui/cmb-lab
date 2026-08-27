@@ -235,13 +235,15 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
     student = await db.query.users.findFirst({
       where: eq(users.id, studentId),
     });
-    // Fetch coaches for the assign coach dropdown
-    const { and: andFn, isNull: isNullFn } = await import("drizzle-orm");
-    coaches = await db
-      .select({ id: users.id, name: users.name, email: users.email })
-      .from(users)
-      .where(andFn(isNullFn(users.deletedAt), eq(users.role, "coach")))
-      .orderBy(users.name);
+    if (isAdmin) {
+      // Only administrators can reassign a student's coach.
+      const { and: andFn, isNull: isNullFn } = await import("drizzle-orm");
+      coaches = await db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .where(andFn(isNullFn(users.deletedAt), eq(users.role, "coach")))
+        .orderBy(users.name);
+    }
   } catch {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -528,17 +530,19 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
   const lastActiveText = stats.lastActive
     ? formatDistanceToNow(new Date(stats.lastActive), { addSuffix: true })
     : "Never";
+  const staffHomeHref = isAdmin ? "/admin" : "/coach";
+  const usersHref = isAdmin ? "/admin/users" : "/coach/students";
 
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-zinc-400 mb-6">
-        <Link href="/admin" className="hover:text-white transition-colors">
-          Admin
+        <Link href={staffHomeHref} className="hover:text-white transition-colors">
+          {isAdmin ? "Admin" : "Coach"}
         </Link>
         <ChevronRight className="w-4 h-4" />
         <Link
-          href="/admin/users"
+          href={usersHref}
           className="hover:text-white transition-colors"
         >
           Users
@@ -549,11 +553,11 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
 
       {/* Back button */}
       <Link
-        href="/admin/users"
+        href={usersHref}
         className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back to Users
+        Back to Students
       </Link>
 
       {/* Student info card */}
@@ -650,18 +654,20 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         </section>
       ) : null}
 
-      <section className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">Additional Roles</h2>
-        <p className="mb-3 text-sm text-zinc-400">
-          Base role is single-select (Student, Coach, Admin). Add extra access roles here as separate tags.
-        </p>
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
-          <StudentRoleAssignment studentId={studentId} />
-        </div>
-      </section>
+      {isAdmin ? (
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">Additional Roles</h2>
+          <p className="mb-3 text-sm text-zinc-400">
+            Base role is single-select (Student, Coach, Admin). Add extra access roles here as separate tags.
+          </p>
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+            <StudentRoleAssignment studentId={studentId} />
+          </div>
+        </section>
+      ) : null}
 
       {/* Assigned Coach — only for students */}
-      {student.role === "student" && (
+      {isAdmin && student.role === "student" && (
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
           <UserCheck className="w-5 h-5 text-cyan-400" />
@@ -688,10 +694,12 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
       )}
 
       {/* Tags section */}
-      <section className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">Tags</h2>
-        <StudentTagsSection studentId={studentId} />
-      </section>
+      {isAdmin ? (
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">Tags</h2>
+          <StudentTagsSection studentId={studentId} />
+        </section>
+      ) : null}
 
       {isAdmin ? (
         <section className="mb-8">

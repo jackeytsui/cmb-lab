@@ -22,7 +22,7 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ tagId: string }> }
 ) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

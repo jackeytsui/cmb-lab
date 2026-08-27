@@ -3,8 +3,11 @@
 // freshness timestamp, and deep link to GHL contact page.
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import { getGhlContactId, getLocationForContact } from "@/lib/ghl/contacts";
 import {
   fetchGhlContactData,
@@ -16,24 +19,36 @@ import {
  * GET /api/students/[studentId]/ghl-profile
  * Fetch GHL contact data for a student.
  * Supports ?refresh=true to force cache refresh.
- * Requires coach role.
+ * Requires an administrator or the student's assigned coach.
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ studentId: string }> }
 ) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  if (access.status !== "authorized") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     const { studentId } = await params;
+    const student = await db.query.users.findFirst({
+      where: and(eq(users.id, studentId), isNull(users.deletedAt)),
+      columns: { assignedCoachId: true },
+    });
+    if (
+      !student ||
+      !canStaffAccessStudent({
+        actorUserId: access.actor.id,
+        actorRole: access.actor.role,
+        assignedCoachId: student.assignedCoachId,
+      })
+    ) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
     const refresh = request.nextUrl.searchParams.get("refresh") === "true";
 
     // Get the GHL contact ID for deep link generation

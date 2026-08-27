@@ -12,13 +12,13 @@ const updateTagSchema = z.object({
 /**
  * PATCH /api/admin/tags/[tagId]
  * Update a tag's name, color, or description.
- * Requires coach role.
+ * Requires administrator role.
  */
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ tagId: string }> }
 ) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -52,13 +52,13 @@ export async function PATCH(
 /**
  * DELETE /api/admin/tags/[tagId]
  * Delete a tag (cascades to student_tags and auto_tag_rules).
- * Requires coach role.
+ * Requires administrator role.
  */
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ tagId: string }> }
 ) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
