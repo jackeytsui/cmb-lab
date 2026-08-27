@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { studentTags, tagFeatureGrants, tags, users } from "@/db/schema";
+import { tagFeatureGrants, tags } from "@/db/schema";
 
 export const BASELINE_STUDENT_COACHING_TAGS = [
   {
@@ -55,37 +55,4 @@ export async function ensureBaselineStudentCoachingTags() {
   }
 
   return configured;
-}
-
-/**
- * Add baseline coaching tags to student accounts only. Existing tags are never
- * removed, and coach/admin accounts are excluded even if their IDs are passed.
- */
-export async function assignBaselineCoachingTagsToStudents(userIds: string[]) {
-  if (userIds.length === 0) return { eligibleCount: 0, assignmentsAdded: 0 };
-
-  const eligible = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(
-      and(
-        inArray(users.id, userIds),
-        eq(users.role, "student"),
-        isNull(users.deletedAt),
-      ),
-    );
-  if (eligible.length === 0) return { eligibleCount: 0, assignmentsAdded: 0 };
-
-  const configuredTags = await ensureBaselineStudentCoachingTags();
-  const inserted = await db
-    .insert(studentTags)
-    .values(
-      eligible.flatMap((user) =>
-        configuredTags.map((tag) => ({ userId: user.id, tagId: tag.id })),
-      ),
-    )
-    .onConflictDoNothing()
-    .returning({ id: studentTags.id });
-
-  return { eligibleCount: eligible.length, assignmentsAdded: inserted.length };
 }

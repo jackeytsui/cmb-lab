@@ -10,6 +10,12 @@ import {
   getMultiRoleStudents,
   getAccessAttribution,
 } from "@/lib/role-analytics";
+import { resolvePermissions } from "@/lib/permissions";
+import {
+  applyFeatureTagOverrides,
+  canViewCourseLibrary,
+  getUserFeatureTagOverrides,
+} from "@/lib/tag-feature-access";
 
 /**
  * GET /api/admin/roles/analytics
@@ -31,7 +37,7 @@ export async function GET(request: NextRequest) {
     if (studentId) {
       const student = await db.query.users.findFirst({
         where: and(eq(users.id, studentId), isNull(users.deletedAt)),
-        columns: { assignedCoachId: true },
+        columns: { assignedCoachId: true, role: true },
       });
       if (
         !student ||
@@ -46,8 +52,28 @@ export async function GET(request: NextRequest) {
           { status: 404 },
         );
       }
-      const attribution = await getAccessAttribution(studentId);
-      return NextResponse.json({ attribution });
+      const [attribution, permissions, tagOverrides, showCourseLibrary] =
+        await Promise.all([
+          getAccessAttribution(studentId),
+          resolvePermissions(studentId),
+          getUserFeatureTagOverrides(studentId),
+          canViewCourseLibrary({ id: studentId, role: student.role }),
+        ]);
+      const effectiveFeatures = applyFeatureTagOverrides(
+        permissions.features,
+        tagOverrides,
+      );
+      if (showCourseLibrary) effectiveFeatures.add("course_library");
+      else effectiveFeatures.delete("course_library");
+
+      return NextResponse.json({
+        attribution,
+        effectiveFeatures: [...effectiveFeatures].sort(),
+        tagOverrides: {
+          additive: [...tagOverrides.allow].sort(),
+          denied: [...tagOverrides.deny].sort(),
+        },
+      });
     }
 
     if (access.actor.role !== "admin") {

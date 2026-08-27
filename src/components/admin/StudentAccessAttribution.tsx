@@ -32,6 +32,11 @@ export function StudentAccessAttribution({
   studentId,
 }: StudentAccessAttributionProps) {
   const [roles, setRoles] = useState<AttributionRole[]>([]);
+  const [effectiveFeatures, setEffectiveFeatures] = useState<string[]>([]);
+  const [tagOverrides, setTagOverrides] = useState<{
+    additive: string[];
+    denied: string[];
+  }>({ additive: [], denied: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedRoles, setExpandedRoles] = useState<Set<string>>(new Set());
@@ -45,6 +50,8 @@ export function StudentAccessAttribution({
         if (!res.ok) throw new Error("Failed to load attribution data");
         const data = await res.json();
         setRoles(data.attribution ?? []);
+        setEffectiveFeatures(data.effectiveFeatures ?? []);
+        setTagOverrides(data.tagOverrides ?? { additive: [], denied: [] });
         // Expand all roles by default
         setExpandedRoles(
           new Set((data.attribution ?? []).map((r: AttributionRole) => r.roleId))
@@ -82,7 +89,7 @@ export function StudentAccessAttribution({
     return <p className="text-sm text-red-400">{error}</p>;
   }
 
-  if (roles.length === 0) {
+  if (roles.length === 0 && effectiveFeatures.length === 0) {
     return (
       <p className="text-sm text-zinc-500">No roles assigned to this student</p>
     );
@@ -90,6 +97,44 @@ export function StudentAccessAttribution({
 
   return (
     <div className="space-y-3">
+      <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-4">
+        <h3 className="text-sm font-semibold text-zinc-100">
+          Effective feature access
+        </h3>
+        <p className="mt-1 text-xs text-zinc-400">
+          What this student can use now, after role and tag rules are applied.
+        </p>
+        {effectiveFeatures.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {effectiveFeatures.map((key) => (
+              <Badge
+                key={key}
+                variant="outline"
+                className="border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0 text-[10px] text-cyan-100"
+              >
+                {FEATURE_LABELS[key] ?? key}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-zinc-500">No effective feature access</p>
+        )}
+        {(tagOverrides.additive.length > 0 || tagOverrides.denied.length > 0) && (
+          <div className="mt-3 space-y-1 text-[11px] text-zinc-400">
+            {tagOverrides.additive.length > 0 && (
+              <p>
+                Added by tags: {tagOverrides.additive.map((key) => FEATURE_LABELS[key] ?? key).join(", ")}
+              </p>
+            )}
+            {tagOverrides.denied.length > 0 && (
+              <p>
+                Removed by tags: {tagOverrides.denied.map((key) => FEATURE_LABELS[key] ?? key).join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
       {roles.map((role) => {
         const isExpanded = expandedRoles.has(role.roleId);
         const Chevron = isExpanded ? ChevronDown : ChevronRight;

@@ -724,7 +724,8 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
           Access Attribution
         </h2>
         <p className="mb-3 text-sm text-zinc-400">
-          Access is grouped by role. Student grants cover learner tools, while Coach/Admin roles unlock management features.
+          Effective access is shown first. Role grants explain the base access,
+          while tag rules can add or remove individual features.
         </p>
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
           <StudentAccessAttribution studentId={studentId} />

@@ -25,7 +25,6 @@ import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 import { LabAssistantWidget } from "@/components/lab-assistant/LabAssistantWidget";
 import { StudentContentGuard } from "@/components/layout/StudentContentGuard";
 import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
-import { assignBaselineCoachingTagsToStudents } from "@/lib/coaching-access";
 import {
   DEFAULT_PLATFORM_ROLE,
   hasFullFeatureAccess,
@@ -157,7 +156,6 @@ export default async function DashboardLayout({
       // Ensure default role is assigned BEFORE resolving permissions
       // so the first request for a new student picks up features correctly
       await ensureDefaultStudentRoleAssignment(dbUser.id);
-      await assignBaselineCoachingTagsToStudents([dbUser.id]);
       const permissions = await resolvePermissions(dbUser.id);
       enabledFeatures = forcedStudent
         ? [...DEFAULT_STUDENT_FEATURES]
