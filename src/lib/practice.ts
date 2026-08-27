@@ -205,6 +205,7 @@ export async function getOrCreateLessonPracticeSet(
         eq(practiceSetAssignments.targetId, lessonId),
       ),
     )
+    .orderBy(asc(practiceSetAssignments.createdAt))
     .limit(1);
 
   if (existing.length > 0) {
@@ -249,6 +250,7 @@ export async function getLessonPracticeSet(lessonId: string) {
         eq(practiceSetAssignments.targetId, lessonId),
       ),
     )
+    .orderBy(asc(practiceSetAssignments.createdAt))
     .limit(1);
 
   if (assignment.length === 0) return null;
@@ -294,4 +296,3 @@ export async function duplicatePracticeSet(
 
   return { practiceSet: newSet, exercises: newExercises };
 }
-

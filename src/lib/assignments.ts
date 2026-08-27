@@ -20,6 +20,7 @@ import {
 } from "drizzle-orm";
 import { getStudentAssignmentTargets } from "@/lib/student-assignment-targets";
 import { hasFullFeatureAccess } from "@/lib/platform-roles";
+import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
 
 // ============================================================
 // Types
@@ -319,9 +320,50 @@ export async function canUserAccessPracticeSet(
   if (hasFullFeatureAccess(user.role)) return true;
 
   const assignments = await getStudentAssignments(userId);
-  return assignments.some(
+  if (assignments.some(
     (assignment) => assignment.practiceSetId === practiceSetId,
-  );
+  )) {
+    return true;
+  }
+
+  // Audio-course exercises are linked directly to legacy audio lesson rows,
+  // while package access is feature/tag based rather than a legacy course
+  // enrollment. Apply the same audio entitlement used by the player.
+  const [audioAssignment] = await db
+    .select({
+      courseId: courses.id,
+      courseTitle: courses.title,
+      courseDescription: courses.description,
+    })
+    .from(practiceSetAssignments)
+    .innerJoin(
+      lessons,
+      eq(practiceSetAssignments.targetId, lessons.id),
+    )
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .innerJoin(courses, eq(modules.courseId, courses.id))
+    .where(
+      and(
+        eq(practiceSetAssignments.practiceSetId, practiceSetId),
+        eq(practiceSetAssignments.targetType, "lesson"),
+        isNull(lessons.deletedAt),
+        isNull(modules.deletedAt),
+        isNull(courses.deletedAt),
+        eq(courses.isPublished, true),
+      ),
+    )
+    .limit(1);
+
+  return audioAssignment
+    ? userCanAccessAudioCourse(
+        { id: userId, role: user.role },
+        {
+          id: audioAssignment.courseId,
+          title: audioAssignment.courseTitle,
+          description: audioAssignment.courseDescription,
+        },
+      )
+    : false;
 }
 
 // ============================================================

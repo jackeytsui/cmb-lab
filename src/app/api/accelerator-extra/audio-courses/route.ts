@@ -1,25 +1,23 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { courses, lessons, modules, users } from "@/db/schema";
+import { courses, lessons, modules } from "@/db/schema";
 import { and, asc, inArray, isNull, eq } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
+import { isExtraPackAudioCourse } from "@/lib/audio-course-access";
+import { loadAudioLessonExerciseSummaries } from "@/lib/audio-course-exercise-summary";
+import { userCanUseFeature } from "@/lib/feature-access";
 
 /**
  * GET /api/accelerator-extra/audio-courses
  * Returns published audio courses marked as extraPack for the Audio Accelerator Edition.
  */
 export async function GET() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const dbUser = await getCurrentUser();
+  if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, role: true },
-  });
-  if (!dbUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (!(await userCanUseFeature(dbUser, "audio_accelerator_edition"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const courseRows = await db
@@ -29,14 +27,7 @@ export async function GET() {
     .orderBy(asc(courses.sortOrder), asc(courses.createdAt));
 
   // Filter to audio courses with extraPack flag
-  const extraPackCourses = courseRows.filter((course) => {
-    try {
-      const meta = JSON.parse(course.description ?? "{}");
-      return meta.audioCourse === true && meta.extraPack === true;
-    } catch {
-      return false;
-    }
-  });
+  const extraPackCourses = courseRows.filter(isExtraPackAudioCourse);
 
   if (extraPackCourses.length === 0) {
     return NextResponse.json({ courses: [] });
@@ -58,6 +49,10 @@ export async function GET() {
           .where(and(inArray(lessons.moduleId, moduleIds), isNull(lessons.deletedAt)))
           .orderBy(asc(lessons.sortOrder), asc(lessons.createdAt))
       : [];
+  const exerciseSummaries = await loadAudioLessonExerciseSummaries(
+    dbUser.id,
+    lessonRows.map((lesson) => lesson.id),
+  );
 
   const moduleByCourseId = new Map<string, (typeof moduleRows)[number][]>();
   for (const m of moduleRows) {
@@ -110,12 +105,17 @@ export async function GET() {
           id: lesson.id,
           title: lesson.title,
           description: lesson.description ?? "",
-          audioUrl,
+          hasAudio: Boolean(audioUrl),
           transcript,
           durationMinutes: lesson.durationSeconds
             ? Math.ceil(lesson.durationSeconds / 60)
             : null,
           sortOrder: lesson.sortOrder,
+          hasExercises:
+            exerciseSummaries.get(lesson.id)?.hasExercises ?? false,
+          practiceSetId:
+            exerciseSummaries.get(lesson.id)?.practiceSetId ?? null,
+          bestScore: exerciseSummaries.get(lesson.id)?.bestScore ?? null,
         };
       }),
     };

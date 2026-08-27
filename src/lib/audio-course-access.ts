@@ -32,6 +32,11 @@ export function isStandardAudioCourse(course: AudioCourseRecord): boolean {
   return metadata.audioCourse === true && metadata.extraPack !== true;
 }
 
+export function isExtraPackAudioCourse(course: AudioCourseRecord): boolean {
+  const metadata = parseAudioCourseMetadata(course.description);
+  return metadata.audioCourse === true && metadata.extraPack === true;
+}
+
 export function audioCourseAllowedUserIds(
   course: AudioCourseRecord,
 ): string[] {
@@ -68,8 +73,15 @@ export async function userCanAccessAudioCourse(
   user: { id: string; role?: string | null },
   course: AudioCourseRecord,
 ): Promise<boolean> {
-  if (!isStandardAudioCourse(course)) return false;
+  const isStandard = isStandardAudioCourse(course);
+  const isExtraPack = isExtraPackAudioCourse(course);
+  if (!isStandard && !isExtraPack) return false;
   if (hasFullFeatureAccess(user.role)) return true;
+
+  if (isExtraPack) {
+    return userCanUseFeature(user, "audio_accelerator_edition");
+  }
+
   if (!(await userCanUseFeature(user, "audio_courses"))) return false;
 
   const [grantedIds, restrictedIds] = await Promise.all([

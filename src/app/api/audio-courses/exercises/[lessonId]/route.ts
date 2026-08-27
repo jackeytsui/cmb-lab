@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { users, practiceAttempts } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { practiceAttempts } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { getLessonPracticeSet, listExercises } from "@/lib/practice";
-import { lessons } from "@/db/schema";
+import { getCurrentUser } from "@/lib/auth";
+import { getAccessibleAudioLesson } from "@/lib/audio-course-lesson-access";
 
 /**
  * GET /api/audio-courses/exercises/[lessonId]
@@ -14,19 +14,13 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const dbUser = await getCurrentUser();
+  if (!dbUser || dbUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { lessonId } = await params;
-
-  // Verify lesson exists
-  const lesson = await db.query.lessons.findFirst({
-    where: and(eq(lessons.id, lessonId), isNull(lessons.deletedAt)),
-    columns: { id: true },
-  });
-  if (!lesson) {
+  if (!(await getAccessibleAudioLesson(dbUser, lessonId))) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
@@ -53,35 +47,27 @@ export async function GET(
     });
   }
 
-  // Get student's attempt info
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
-
   let bestScore: number | null = null;
   let attemptCount = 0;
 
-  if (dbUser) {
-    const attempts = await db
-      .select({
-        score: practiceAttempts.score,
-        completedAt: practiceAttempts.completedAt,
-      })
-      .from(practiceAttempts)
-      .where(
-        and(
-          eq(practiceAttempts.practiceSetId, practiceSet.id),
-          eq(practiceAttempts.userId, dbUser.id),
-        ),
-      );
+  const attempts = await db
+    .select({
+      score: practiceAttempts.score,
+      completedAt: practiceAttempts.completedAt,
+    })
+    .from(practiceAttempts)
+    .where(
+      and(
+        eq(practiceAttempts.practiceSetId, practiceSet.id),
+        eq(practiceAttempts.userId, dbUser.id),
+      ),
+    );
 
-    attemptCount = attempts.length;
-    for (const attempt of attempts) {
-      if (attempt.completedAt && attempt.score !== null) {
-        if (bestScore === null || attempt.score > bestScore) {
-          bestScore = attempt.score;
-        }
+  attemptCount = attempts.length;
+  for (const attempt of attempts) {
+    if (attempt.completedAt && attempt.score !== null) {
+      if (bestScore === null || attempt.score > bestScore) {
+        bestScore = attempt.score;
       }
     }
   }

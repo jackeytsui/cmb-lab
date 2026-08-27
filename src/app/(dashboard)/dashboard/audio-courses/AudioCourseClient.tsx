@@ -32,10 +32,13 @@ type AudioLesson = {
   id: string;
   title: string;
   description: string;
-  audioUrl: string;
+  hasAudio: boolean;
   transcript: string;
   durationMinutes: number | null;
   sortOrder: number;
+  hasExercises: boolean;
+  practiceSetId: string | null;
+  bestScore: number | null;
 };
 
 type AudioCourse = {
@@ -249,35 +252,25 @@ export function AudioCourseClient({
     fetch(apiBaseUrl)
       .then((res) => res.json())
       .then((data) => {
-        setCourses(data.courses ?? []);
-        if (data.courses?.length === 1) {
-          setExpandedCourseId(data.courses[0].id);
+        const incomingCourses = (data.courses ?? []) as AudioCourse[];
+        const incomingExerciseInfo: typeof lessonExerciseInfo = {};
+        for (const lesson of incomingCourses.flatMap((course) => course.lessons)) {
+          incomingExerciseInfo[lesson.id] = {
+            hasExercises: lesson.hasExercises,
+            bestScore: lesson.bestScore,
+            practiceSetId: lesson.practiceSetId,
+          };
+        }
+
+        setCourses(incomingCourses);
+        setLessonExerciseInfo(incomingExerciseInfo);
+        if (incomingCourses.length === 1) {
+          setExpandedCourseId(incomingCourses[0].id);
         }
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [apiBaseUrl]);
-
-  // Load exercise info for all lessons
-  useEffect(() => {
-    if (courses.length === 0) return;
-    const allLessons = courses.flatMap((c) => c.lessons);
-    for (const lesson of allLessons) {
-      fetch(`/api/audio-courses/exercises/${lesson.id}`)
-        .then((r) => r.json())
-        .then((d) => {
-          setLessonExerciseInfo((prev) => ({
-            ...prev,
-            [lesson.id]: {
-              hasExercises: d.hasExercises ?? false,
-              bestScore: d.bestScore ?? null,
-              practiceSetId: d.practiceSetId ?? null,
-            },
-          }));
-        })
-        .catch(() => {});
-    }
-  }, [courses]);
 
   // Load notes when lesson changes
   useEffect(() => {
@@ -562,7 +555,7 @@ export function AudioCourseClient({
                   ) : (
                     course.lessons.map((lesson, idx) => {
                       const isActive = currentLesson?.id === lesson.id;
-                      const hasAudio = Boolean(lesson.audioUrl);
+                      const hasAudio = lesson.hasAudio;
                       return (
                         <div
                           key={lesson.id}
@@ -711,6 +704,7 @@ export function AudioCourseClient({
                 value={noteLoaded ? noteContent : ""}
                 onChange={(e) => handleNoteChange(e.target.value)}
                 disabled={!noteLoaded}
+                maxLength={20_000}
                 placeholder={noteLoaded ? "Type your notes here… They save automatically." : "Loading…"}
                 className="h-full min-h-[300px] w-full resize-none rounded-lg border border-input bg-background p-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary"
               />

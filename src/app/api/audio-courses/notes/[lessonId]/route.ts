@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
-import { audioLessonNotes, users } from "@/db/schema";
-import { auth } from "@clerk/nextjs/server";
+import { audioLessonNotes } from "@/db/schema";
+import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
+import { getAccessibleAudioLesson } from "@/lib/audio-course-lesson-access";
+
+const noteSchema = z
+  .object({ content: z.string().max(20_000) })
+  .strict();
 
 /**
  * GET /api/audio-courses/notes/[lessonId]
@@ -12,20 +18,15 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const dbUser = await getCurrentUser();
+  if (!dbUser || dbUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
-  if (!dbUser) {
-    return NextResponse.json({ content: "" });
-  }
-
   const { lessonId } = await params;
+  if (!(await getAccessibleAudioLesson(dbUser, lessonId))) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
   const note = await db.query.audioLessonNotes.findFirst({
     where: and(
       eq(audioLessonNotes.userId, dbUser.id),
@@ -45,22 +46,20 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const dbUser = await getCurrentUser();
+  if (!dbUser || dbUser.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
-  if (!dbUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-
   const { lessonId } = await params;
-  const body = (await request.json()) as { content?: string };
-  const content = typeof body.content === "string" ? body.content : "";
+  if (!(await getAccessibleAudioLesson(dbUser, lessonId))) {
+    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+  }
+  const parsed = noteSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid note" }, { status: 400 });
+  }
+  const { content } = parsed.data;
 
   await db
     .insert(audioLessonNotes)

@@ -9,6 +9,8 @@ import {
   isRestrictedAudioCourse,
   isStandardAudioCourse,
 } from "@/lib/audio-course-access";
+import { loadAudioLessonExerciseSummaries } from "@/lib/audio-course-exercise-summary";
+import { userCanUseFeature } from "@/lib/feature-access";
 import { isStaffRole } from "@/lib/platform-roles";
 
 /**
@@ -36,6 +38,9 @@ export async function GET() {
 
   // Filter by visibility using tag_content_grants
   const isStaff = isStaffRole(dbUser.role);
+  if (!isStaff && !(await userCanUseFeature(dbUser, "audio_courses"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   let visibleCourses = audioCourses;
 
   if (!isStaff) {
@@ -74,6 +79,10 @@ export async function GET() {
           .where(and(inArray(lessons.moduleId, moduleIds), isNull(lessons.deletedAt)))
           .orderBy(asc(lessons.sortOrder), asc(lessons.createdAt))
       : [];
+  const exerciseSummaries = await loadAudioLessonExerciseSummaries(
+    dbUser.id,
+    lessonRows.map((lesson) => lesson.id),
+  );
 
   const moduleByCourseId = new Map<string, (typeof moduleRows)[number][]>();
   for (const m of moduleRows) {
@@ -126,12 +135,17 @@ export async function GET() {
           id: lesson.id,
           title: lesson.title,
           description: lesson.description ?? "",
-          audioUrl,
+          hasAudio: Boolean(audioUrl),
           transcript,
           durationMinutes: lesson.durationSeconds
             ? Math.ceil(lesson.durationSeconds / 60)
             : null,
           sortOrder: lesson.sortOrder,
+          hasExercises:
+            exerciseSummaries.get(lesson.id)?.hasExercises ?? false,
+          practiceSetId:
+            exerciseSummaries.get(lesson.id)?.practiceSetId ?? null,
+          bestScore: exerciseSummaries.get(lesson.id)?.bestScore ?? null,
         };
       }),
     };

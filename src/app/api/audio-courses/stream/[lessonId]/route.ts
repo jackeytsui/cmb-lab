@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, isNull, and } from "drizzle-orm";
-import { db } from "@/db";
-import { courses, lessons, modules } from "@/db/schema";
-import { getRealUser } from "@/lib/auth";
-import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
+import { getCurrentUser } from "@/lib/auth";
+import { getAccessibleAudioLesson } from "@/lib/audio-course-lesson-access";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 
@@ -18,7 +15,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const user = await getRealUser();
+  const user = await getCurrentUser();
   if (!user || user.deletedAt) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -27,36 +24,8 @@ export async function GET(
 
   const isDownload = request.nextUrl.searchParams.get("download") === "1";
 
-  const [lesson] = await db
-    .select({
-      content: lessons.content,
-      title: lessons.title,
-      courseId: courses.id,
-      courseTitle: courses.title,
-      courseDescription: courses.description,
-    })
-    .from(lessons)
-    .innerJoin(modules, eq(lessons.moduleId, modules.id))
-    .innerJoin(courses, eq(modules.courseId, courses.id))
-    .where(
-      and(
-        eq(lessons.id, lessonId),
-        isNull(lessons.deletedAt),
-        isNull(modules.deletedAt),
-        isNull(courses.deletedAt),
-        eq(courses.isPublished, true),
-      ),
-    )
-    .limit(1);
-
-  if (
-    !lesson ||
-    !(await userCanAccessAudioCourse(user, {
-      id: lesson.courseId,
-      title: lesson.courseTitle,
-      description: lesson.courseDescription,
-    }))
-  ) {
+  const lesson = await getAccessibleAudioLesson(user, lessonId);
+  if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
