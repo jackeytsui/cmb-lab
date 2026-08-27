@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import {
   createThreadAssignment,
   listCoachThreadAssignments,
@@ -13,20 +13,21 @@ const VALID_TARGET_TYPES = ["course", "module", "lesson", "student", "tag"];
  * Requires coach role.
  */
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (access.status !== "authorized") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (access.actor.id !== access.realActor.id) {
+    return NextResponse.json(
+      { error: "Exit View As before creating an assignment" },
+      { status: 409 },
+    );
   }
 
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const { threadId, targetType, targetId, notes, dueDate } = body;
 
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
       threadId,
       targetType,
       targetId,
-      assignedBy: user.id,
+      assignedBy: access.realActor.id,
       notes: notes || undefined,
       dueDate: parsedDueDate,
     });
@@ -99,21 +100,18 @@ export async function POST(request: NextRequest) {
  * Requires coach role.
  */
 export async function GET() {
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (access.status !== "authorized") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 401 }
-      );
-    }
-
-    const assignments = await listCoachThreadAssignments(user.id);
+    const assignments = await listCoachThreadAssignments(
+      access.actor.role === "admin" ? null : access.actor.id,
+    );
 
     return NextResponse.json({ assignments });
   } catch (error) {

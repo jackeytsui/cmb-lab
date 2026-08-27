@@ -128,14 +128,15 @@ export async function deleteVideoAssignment(
 }
 
 /**
- * List all video assignments created by a specific coach.
+ * List video assignments visible to a staff member.
+ * Administrators pass null to review every assignment; coaches pass their id.
  * Ordered by createdAt desc (newest first).
  */
-export async function listCoachVideoAssignments(coachId: string) {
+export async function listCoachVideoAssignments(coachId: string | null) {
   return db
     .select()
     .from(videoAssignments)
-    .where(eq(videoAssignments.assignedBy, coachId))
+    .where(coachId ? eq(videoAssignments.assignedBy, coachId) : undefined)
     .orderBy(desc(videoAssignments.createdAt));
 }
 

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasMinimumRole } from "@/lib/auth";
 import { listCoachVideoAssignments } from "@/lib/video-assignments";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import { VideoAssignmentsClient } from "./VideoAssignmentsClient";
 
 import type { VideoAssignment } from "@/db/schema/video";
@@ -15,12 +16,14 @@ export default async function CoachVideoAssignmentsPage() {
     redirect("/dashboard");
   }
 
-  const user = await getCurrentUser();
-  if (!user) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
     redirect("/dashboard");
   }
 
-  const assignments = await listCoachVideoAssignments(user.id);
+  const assignments = await listCoachVideoAssignments(
+    access.actor.role === "admin" ? null : access.actor.id,
+  );
 
   return (
     <div className="container mx-auto px-4 py-8">

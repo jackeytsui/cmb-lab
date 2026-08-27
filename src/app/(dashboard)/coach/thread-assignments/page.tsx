@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasMinimumRole } from "@/lib/auth";
 import { listCoachThreadAssignments } from "@/lib/thread-assignments";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import { ThreadAssignmentsClient } from "./ThreadAssignmentsClient";
 
 /**
@@ -13,12 +14,14 @@ export default async function CoachThreadAssignmentsPage() {
     redirect("/dashboard");
   }
 
-  const user = await getCurrentUser();
-  if (!user) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
     redirect("/dashboard");
   }
 
-  const assignments = await listCoachThreadAssignments(user.id);
+  const assignments = await listCoachThreadAssignments(
+    access.actor.role === "admin" ? null : access.actor.id,
+  );
 
   return (
     <div className="container mx-auto px-4 py-8">

@@ -149,10 +149,11 @@ export async function deleteThreadAssignment(
 }
 
 /**
- * List all thread assignments created by a specific coach.
+ * List thread assignments visible to a staff member.
+ * Administrators pass null to review every assignment; coaches pass their id.
  * JOINs videoThreads for title. Ordered by createdAt desc.
  */
-export async function listCoachThreadAssignments(coachId: string) {
+export async function listCoachThreadAssignments(coachId: string | null) {
   return db
     .select({
       id: threadAssignments.id,
@@ -166,7 +167,7 @@ export async function listCoachThreadAssignments(coachId: string) {
     })
     .from(threadAssignments)
     .innerJoin(videoThreads, eq(videoThreads.id, threadAssignments.threadId))
-    .where(eq(threadAssignments.assignedBy, coachId))
+    .where(coachId ? eq(threadAssignments.assignedBy, coachId) : undefined)
     .orderBy(desc(threadAssignments.createdAt));
 }
 

@@ -165,6 +165,18 @@ describe("coach route access", () => {
   });
 
   it("confines assignment progress and deletion to the creating coach", () => {
+    const videoList = source(
+      "src/app/(dashboard)/coach/video-assignments/page.tsx",
+    );
+    const threadList = source(
+      "src/app/(dashboard)/coach/thread-assignments/page.tsx",
+    );
+    const videoCollectionApi = source(
+      "src/app/api/admin/video-assignments/route.ts",
+    );
+    const threadCollectionApi = source(
+      "src/app/api/admin/thread-assignments/route.ts",
+    );
     const videoDetail = source(
       "src/app/(dashboard)/coach/video-assignments/[assignmentId]/page.tsx",
     );
@@ -181,6 +193,10 @@ describe("coach route access", () => {
     const threadQueries = source("src/lib/thread-assignments.ts");
 
     for (const route of [
+      videoList,
+      threadList,
+      videoCollectionApi,
+      threadCollectionApi,
       videoDetail,
       threadDetail,
       videoDeleteApi,
@@ -189,6 +205,15 @@ describe("coach route access", () => {
       expect(route).toContain("getStaffStudentAccessContext");
       expect(route).toContain(
         'access.actor.role === "admin" ? null : access.actor.id',
+      );
+    }
+    for (const collectionApi of [videoCollectionApi, threadCollectionApi]) {
+      expect(collectionApi).toContain("assignedBy: access.realActor.id");
+      expect(collectionApi).toContain(
+        "access.actor.id !== access.realActor.id",
+      );
+      expect(collectionApi).toContain(
+        "Exit View As before creating an assignment",
       );
     }
     expect(videoDetail).toContain("notFound()");
