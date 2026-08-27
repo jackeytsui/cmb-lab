@@ -58,11 +58,17 @@ export default async function CourseLibraryStudentPage() {
       .from(courseLibraryCourses)
       .leftJoin(
         courseLibraryModules,
-        eq(courseLibraryModules.courseId, courseLibraryCourses.id),
+        and(
+          eq(courseLibraryModules.courseId, courseLibraryCourses.id),
+          isNull(courseLibraryModules.deletedAt),
+        ),
       )
       .leftJoin(
         courseLibraryLessons,
-        eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
+        and(
+          eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
+          isNull(courseLibraryLessons.deletedAt),
+        ),
       )
       .leftJoin(
         courseLibraryLessonProgress,
