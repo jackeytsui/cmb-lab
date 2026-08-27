@@ -34,7 +34,9 @@ export function VideoPromptsClient() {
     setPrompts((prev) => prev.filter((p) => p.id !== id));
     // Actually delete
     try {
-      const res = await fetch(`/api/coach/video-prompts?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/coach/video-prompts/${id}`, {
+        method: "DELETE",
+      });
       if (!res.ok) throw new Error("Delete failed");
     } catch {
       toast.error("Failed to delete prompt");

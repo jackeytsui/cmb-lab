@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { mux } from "@/lib/mux";
 import { db } from "@/db";
 import { videoUploads } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { isStaffRole } from "@/lib/platform-roles";
+import { z } from "zod";
+
+const checkStatusSchema = z.object({
+  uploadId: z.string().trim().min(1).max(255),
+}).strict();
 
 /**
  * POST /api/admin/mux/check-status
@@ -14,19 +20,37 @@ import { eq } from "drizzle-orm";
  * Returns: { status, muxAssetId?, muxPlaybackId?, durationSeconds? }
  */
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const currentUser = await getRealUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
-    const { uploadId } = await request.json();
-
-    if (!uploadId || typeof uploadId !== "string") {
+    const parsed = checkStatusSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!parsed.success) {
       return NextResponse.json(
         { error: "uploadId is required" },
         { status: 400 }
       );
+    }
+    const { uploadId } = parsed.data;
+
+    const uploadRecord = await db.query.videoUploads.findFirst({
+      where: and(
+        eq(videoUploads.muxUploadId, uploadId),
+        currentUser.role === "admin"
+          ? undefined
+          : eq(videoUploads.uploadedBy, currentUser.clerkId),
+      ),
+      columns: { id: true },
+    });
+    if (!uploadRecord) {
+      return NextResponse.json({ error: "Upload not found" }, { status: 404 });
     }
 
     // Check upload status on Mux
@@ -40,7 +64,7 @@ export async function POST(request: NextRequest) {
       await db
         .update(videoUploads)
         .set({ status: "errored", errorMessage: "Upload failed on Mux" })
-        .where(eq(videoUploads.muxUploadId, uploadId));
+        .where(eq(videoUploads.id, uploadRecord.id));
       return NextResponse.json({ status: "errored" });
     }
 
@@ -63,7 +87,7 @@ export async function POST(request: NextRequest) {
           durationSeconds: duration,
           status: "ready",
         })
-        .where(eq(videoUploads.muxUploadId, uploadId));
+        .where(eq(videoUploads.id, uploadRecord.id));
 
       return NextResponse.json({
         status: "ready",
@@ -83,7 +107,7 @@ export async function POST(request: NextRequest) {
           status: "errored",
           errorMessage,
         })
-        .where(eq(videoUploads.muxUploadId, uploadId));
+        .where(eq(videoUploads.id, uploadRecord.id));
       return NextResponse.json({ status: "errored", errorMessage });
     }
 
@@ -91,7 +115,7 @@ export async function POST(request: NextRequest) {
     await db
       .update(videoUploads)
       .set({ muxAssetId: assetId, status: "processing" })
-      .where(eq(videoUploads.muxUploadId, uploadId));
+      .where(eq(videoUploads.id, uploadRecord.id));
 
     return NextResponse.json({ status: "processing" });
   } catch (error) {

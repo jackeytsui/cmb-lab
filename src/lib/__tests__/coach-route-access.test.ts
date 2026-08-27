@@ -198,4 +198,33 @@ describe("coach route access", () => {
     expect(threadQueries.match(/eq\(threadAssignments\.assignedBy, assignedById\)/g))
       .toHaveLength(2);
   });
+
+  it("protects the coach video-prompt library and its uploaded media", () => {
+    const promptCollection = source(
+      "src/app/api/coach/video-prompts/route.ts",
+    );
+    const promptDelete = source(
+      "src/app/api/coach/video-prompts/[promptId]/route.ts",
+    );
+    const promptClient = source(
+      "src/app/(dashboard)/coach/video-prompts/VideoPromptsClient.tsx",
+    );
+    const muxStatus = source("src/app/api/admin/mux/check-status/route.ts");
+
+    expect(promptCollection).toContain("getStaffStudentAccessContext");
+    expect(promptCollection).toContain(
+      "eq(videoUploads.uploadedBy, access.realActor.clerkId)",
+    );
+    expect(promptCollection).toContain("coachId: access.realActor.id");
+    expect(promptDelete).toContain("getStaffStudentAccessContext");
+    expect(promptDelete).toContain(
+      "eq(videoPrompts.coachId, access.actor.id)",
+    );
+    expect(promptClient).toContain("/api/coach/video-prompts/${id}");
+    expect(promptClient).not.toContain("/api/coach/video-prompts?id=");
+    expect(muxStatus).toContain(
+      "eq(videoUploads.uploadedBy, currentUser.clerkId)",
+    );
+    expect(muxStatus).toContain("eq(videoUploads.id, uploadRecord.id)");
+  });
 });

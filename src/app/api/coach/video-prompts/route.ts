@@ -1,42 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
-import { videoPrompts, users } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { videoPrompts, videoUploads } from "@/db/schema";
+import { and, eq, desc } from "drizzle-orm";
 import { z } from "zod";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 
-const createPromptSchema = z.object({
-  title: z.string().min(1).max(100),
-  description: z.string().optional(),
-  videoUrl: z.string().optional(), // Now optional if uploadId is provided
-  uploadId: z.string().uuid().optional(),
-  transcript: z.string().optional(),
-}).refine(data => data.videoUrl || data.uploadId, {
-  message: "Either videoUrl or uploadId must be provided",
-  path: ["videoUrl"],
-});
+const createPromptSchema = z
+  .object({
+    title: z.string().trim().min(1).max(100),
+    description: z.string().trim().max(2_000).optional(),
+    videoUrl: z.string().trim().url().max(2_000).optional(),
+    uploadId: z.string().uuid().optional(),
+    transcript: z.string().trim().max(100_000).optional(),
+  })
+  .strict()
+  .refine((data) => data.videoUrl || data.uploadId, {
+    message: "Either videoUrl or uploadId must be provided",
+    path: ["videoUrl"],
+  });
 
 // GET /api/coach/video-prompts
 // List all video prompts created by the current coach
-export async function GET(request: NextRequest) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+export async function GET() {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const currentUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-  });
-
-  if (!currentUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (access.status !== "authorized") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     const prompts = await db
       .select()
       .from(videoPrompts)
-      .where(eq(videoPrompts.coachId, currentUser.id))
+      .where(
+        access.actor.role === "admin"
+          ? undefined
+          : eq(videoPrompts.coachId, access.actor.id),
+      )
       .orderBy(desc(videoPrompts.createdAt));
 
     return NextResponse.json({ prompts });
@@ -52,32 +54,46 @@ export async function GET(request: NextRequest) {
 // POST /api/coach/video-prompts
 // Create a new video prompt
 export async function POST(request: NextRequest) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const currentUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-  });
-
-  if (!currentUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (access.status !== "authorized") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     const json = await request.json();
     const { title, description, videoUrl, uploadId, transcript } = createPromptSchema.parse(json);
 
+    if (uploadId) {
+      const upload = await db.query.videoUploads.findFirst({
+        where: and(
+          eq(videoUploads.id, uploadId),
+          eq(videoUploads.category, "prompt"),
+          access.realActor.role === "admin"
+            ? undefined
+            : eq(videoUploads.uploadedBy, access.realActor.clerkId),
+        ),
+        columns: { id: true },
+      });
+      if (!upload) {
+        return NextResponse.json(
+          { error: "Prompt upload not found" },
+          { status: 404 },
+        );
+      }
+    }
+
     const [newPrompt] = await db
       .insert(videoPrompts)
       .values({
-        coachId: currentUser.id,
+        coachId: access.realActor.id,
         title,
         description,
         videoUrl: videoUrl || null,
         uploadId: uploadId || null,
-        transcript,
+        transcript: transcript || null,
       })
       .returning();
 
