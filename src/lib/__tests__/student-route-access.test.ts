@@ -12,6 +12,30 @@ describe("student route access", () => {
     expect(middleware).toContain('"/dashboard/assignment-feedback(.*)"');
   });
 
+  it("allows every learning destination linked by the study plan", () => {
+    const middleware = readFileSync(
+      path.join(process.cwd(), "src/proxy.ts"),
+      "utf8",
+    );
+    const study = readFileSync(
+      path.join(process.cwd(), "src/lib/study.ts"),
+      "utf8",
+    );
+
+    for (const route of [
+      "/dashboard/grammar",
+      "/dashboard/practice",
+      "/dashboard/srs",
+      "/dashboard/tone",
+    ]) {
+      expect(study).toContain(`href: "${route}"`);
+      expect(middleware).toContain(`"${route}(.*)"`);
+    }
+
+    // Practice cards leave /dashboard for the interactive quiz player.
+    expect(middleware).toContain('"/practice(.*)"');
+  });
+
   it("defers the dashboard landing route to the database-backed page", () => {
     const middleware = readFileSync(
       path.join(process.cwd(), "src/proxy.ts"),
