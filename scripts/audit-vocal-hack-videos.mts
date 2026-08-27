@@ -1,4 +1,9 @@
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { neon } from "@neondatabase/serverless";
 import { config as loadEnv } from "dotenv";
 
@@ -29,6 +34,8 @@ type TranscriptResult = {
   transcript?: string;
   error?: string;
 };
+
+const execFileAsync = promisify(execFile);
 
 function argument(name: string) {
   const index = process.argv.indexOf(name);
@@ -81,20 +88,60 @@ async function transcribe(row: AuditRow, blobToken: string, apiKey: string) {
   const contentType =
     mediaResponse.headers.get("content-type")?.split(";", 1)[0] ??
     "video/mp4";
-  const media = await mediaResponse.blob();
+  const model =
+    process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() || "gpt-4o-transcribe";
+  let media = await mediaResponse.blob();
+  let uploadContentType = contentType;
+  let uploadExtension = extensionForContentType(contentType);
+  let cleanup: (() => Promise<void>) | null = null;
+  if (model === "whisper-1" && contentType.startsWith("video/")) {
+    const ffmpegPath = process.env.FFMPEG_PATH?.trim();
+    if (!ffmpegPath) {
+      throw new Error(
+        "FFMPEG_PATH is required to extract audio for whisper-1 video audits",
+      );
+    }
+    const workDir = await mkdtemp(join(tmpdir(), "cmb-vocal-audit-"));
+    const inputPath = join(workDir, `input.${uploadExtension}`);
+    const outputPath = join(workDir, "audio.mp3");
+    cleanup = () => rm(workDir, { recursive: true, force: true });
+    try {
+      await writeFile(inputPath, new Uint8Array(await media.arrayBuffer()));
+      await execFileAsync(ffmpegPath, [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        inputPath,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-b:a",
+        "64k",
+        outputPath,
+      ]);
+      media = new Blob([new Uint8Array(await readFile(outputPath))], {
+        type: "audio/mpeg",
+      });
+      uploadContentType = "audio/mpeg";
+      uploadExtension = "mp3";
+    } catch (error) {
+      await cleanup();
+      throw error;
+    }
+  }
   const formData = new FormData();
   formData.append(
     "file",
     new File(
       [media],
-      `coach-sentence.${extensionForContentType(contentType)}`,
-      { type: contentType },
+      `coach-sentence.${uploadExtension}`,
+      { type: uploadContentType },
     ),
   );
-  formData.append(
-    "model",
-    process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() || "gpt-4o-transcribe",
-  );
+  formData.append("model", model);
   formData.append("language", "zh");
   formData.append("response_format", "json");
   formData.append(
@@ -104,12 +151,17 @@ async function transcribe(row: AuditRow, blobToken: string, apiKey: string) {
       : "请用简体中文逐字准确转写教练说的普通话。同一句重复示范时只写一次；不要翻译或改写。",
   );
 
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: formData,
-    signal: AbortSignal.timeout(75_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: formData,
+      signal: AbortSignal.timeout(75_000),
+    });
+  } finally {
+    await cleanup?.();
+  }
   const payload = (await response.json().catch(() => null)) as
     | { text?: string; error?: { message?: string } }
     | null;
@@ -213,6 +265,15 @@ if (!flag("--transcribe")) process.exit(0);
 const output = argument("--output") || "/tmp/cmb-vocal-hack-video-audit.jsonl";
 const language = argument("--language");
 const courseId = argument("--course");
+const sentenceIdsPath = argument("--sentence-ids");
+const sentenceIds = sentenceIdsPath
+  ? new Set(
+      readFileSync(sentenceIdsPath, "utf8")
+        .split(/\s+/)
+        .map((value) => value.trim())
+        .filter(Boolean),
+    )
+  : null;
 const requestedLimit = Number(argument("--limit") || "0");
 const concurrency = Math.max(1, Number(argument("--concurrency") || "8"));
 const completed = loadCompleted(output);
@@ -221,7 +282,8 @@ let pending = rows.filter(
     row.video_url &&
     !completed.has(row.sentence_id) &&
     (!language || row.language === language) &&
-    (!courseId || row.course_id === courseId),
+    (!courseId || row.course_id === courseId) &&
+    (!sentenceIds || sentenceIds.has(row.sentence_id)),
 );
 if (requestedLimit > 0) pending = pending.slice(0, requestedLimit);
 

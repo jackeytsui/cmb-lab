@@ -9,6 +9,13 @@ const viewer = readFileSync(
   ),
   "utf8",
 );
+const consensusMigration = readFileSync(
+  path.join(
+    process.cwd(),
+    "src/db/migrations/0097_vocal_hack_consensus_alignment.sql",
+  ),
+  "utf8",
+);
 
 describe("Vocal Hack video source-of-truth guidance", () => {
   it("shows the guidance before every Vocal Hack sentence list", () => {
@@ -22,5 +29,28 @@ describe("Vocal Hack video source-of-truth guidance", () => {
       "If any wording, pronunciation, or meaning shown in CMB Lab differs",
     );
     expect(viewer).toContain("from the coach video, follow the coach video.");
+  });
+
+  it("keeps every consensus-backed video correction guarded and staged", () => {
+    const confirmedSentenceIds = [
+      "c8f92c5b-db28-4f23-9501-9512a8c66228",
+      "17dfa53c-1bbb-4dbb-9e62-acd33647170b",
+      "95477360-45f4-42cc-8cea-123d5c89723f",
+      "abfa15b8-d45e-4c52-a8ce-0961524e87c8",
+      "9fbe9898-5389-4482-88e1-9a85e72f4c5c",
+      "0da0f1b1-9a98-40f3-8c05-43c2b238aeed",
+      "cb17c681-c6c7-4f05-a92b-3888fbfc9f07",
+      "bea8a3e7-5d4a-4470-9a07-28e6bf2c6fcb",
+      "3120c8f4-8dfb-4c05-9625-0f33302617f1",
+    ];
+
+    for (const sentenceId of confirmedSentenceIds) {
+      expect(consensusMigration.match(new RegExp(sentenceId, "g"))).toHaveLength(2);
+    }
+    expect(consensusMigration).toContain("GET DIAGNOSTICS changed_count");
+    expect(consensusMigration).toContain("RAISE EXCEPTION");
+    expect(consensusMigration).toContain(
+      'UPDATE "videoask_vocal_hack_sentences" AS staged',
+    );
   });
 });
