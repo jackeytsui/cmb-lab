@@ -19,6 +19,7 @@
 // the Vercel logs and the on-screen message.
 
 import { NextRequest, NextResponse } from "next/server";
+import { get } from "@vercel/blob";
 
 /** Max bytes served per invocation for range requests. Small chunks finish
  * well inside the function timeout even on slow connections; a timeout would
@@ -143,94 +144,100 @@ export async function proxyBlobMedia(
     );
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-  };
+  const headers: Record<string, string> = {};
   const range = request.headers.get("range");
   if (range) headers["Range"] = clampRangeHeader(range);
 
-  let blobResponse: Response;
+  let blobResult: Awaited<ReturnType<typeof get>>;
   try {
-    blobResponse = await fetch(blobUrl, { headers });
+    // Use the Blob SDK's Undici-backed private read rather than Next's
+    // enhanced global fetch. The latter can leave larger authenticated range
+    // reads pending indefinitely even though tiny probes succeed.
+    blobResult = await get(blobUrl, {
+      access: "private",
+      token,
+      useCache: false,
+      headers,
+    });
   } catch (err) {
-    // Fetch can include an invalid Authorization value verbatim in its error.
-    // Log the error class only so storage credentials never reach telemetry.
+    const upstreamStatus =
+      err instanceof Error
+        ? Number(/Failed to fetch blob: (\d{3})/.exec(err.message)?.[1]) || null
+        : null;
+    if (upstreamStatus === 416) {
+      return new NextResponse(null, {
+        status: 416,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
     console.error(
       `[${options.label}] Blob fetch failed:`,
-      err instanceof Error ? err.name : "UnknownError",
+      upstreamStatus ? `upstream ${upstreamStatus}` : "UnknownError",
     );
     return NextResponse.json(
-      { error: "Failed to reach media storage" },
+      {
+        error: "Failed to reach media storage",
+        ...(upstreamStatus ? { upstreamStatus } : {}),
+      },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
 
-  // 416 Range Not Satisfiable must be forwarded so the browser can recover
-  // (it re-requests without a range or with a corrected one).
-  if (blobResponse.status === 416) {
-    const responseHeaders = new Headers({ "Cache-Control": "no-store" });
-    const contentRange = blobResponse.headers.get("content-range");
-    if (contentRange) responseHeaders.set("Content-Range", contentRange);
-    return new NextResponse(null, { status: 416, headers: responseHeaders });
-  }
-
-  if (!blobResponse.ok) {
-    // Log the real upstream status (403 = bad/rotated token, 404 = blob
-    // deleted, 5xx = storage outage) so production logs pinpoint the cause,
-    // but return 502 to the client: an upstream 403 is NOT the student's
-    // permission problem.
-    const snippet = (await blobResponse.text().catch(() => ""))
-      .slice(0, 300)
-      .replace(/\s+/g, " ");
+  if (!blobResult || blobResult.statusCode === 304 || !blobResult.stream) {
+    const upstreamStatus = blobResult ? blobResult.statusCode : 404;
     console.error(
-      `[${options.label}] Blob storage returned ${blobResponse.status} for ${blobUrl.split("?")[0]}: ${snippet}`,
+      `[${options.label}] Blob storage returned ${upstreamStatus} for ${blobUrl.split("?")[0]}`,
     );
     return NextResponse.json(
-      { error: "Failed to fetch media", upstreamStatus: blobResponse.status },
+      { error: "Failed to fetch media", upstreamStatus },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
+
+  // @vercel/blob currently reports statusCode 200 for successful range reads;
+  // the raw Content-Range header is the authoritative 206 signal.
+  const blobStatus = blobResult.headers.has("content-range") ? 206 : 200;
 
   const responseHeaders = new Headers();
   responseHeaders.set(
     "Content-Type",
-    blobResponse.headers.get("content-type") ?? options.fallbackContentType,
+    blobResult.headers.get("content-type") ?? options.fallbackContentType,
   );
-  const rawContentRange = blobResponse.headers.get("content-range");
+  const rawContentRange = blobResult.headers.get("content-range");
   const normalizedContentRange = normalizeContentRange(rawContentRange);
   const contentRange = normalizedContentRange?.value ?? rawContentRange;
   const contentLength =
-    blobResponse.headers.get("content-length") ??
-    (blobResponse.status === 206 && normalizedContentRange
+    blobResult.headers.get("content-length") ??
+    (blobStatus === 206 && normalizedContentRange
       ? String(normalizedContentRange.contentLength)
       : null);
   if (contentLength) responseHeaders.set("Content-Length", contentLength);
   if (contentRange) responseHeaders.set("Content-Range", contentRange);
   responseHeaders.set(
     "Accept-Ranges",
-    blobResponse.headers.get("accept-ranges") ?? "bytes",
+    blobResult.headers.get("accept-ranges") ?? "bytes",
   );
-  const etag = blobResponse.headers.get("etag");
+  const etag = blobResult.headers.get("etag");
   if (etag) responseHeaders.set("ETag", etag);
-  const lastModified = blobResponse.headers.get("last-modified");
+  const lastModified = blobResult.headers.get("last-modified");
   if (lastModified) responseHeaders.set("Last-Modified", lastModified);
   // Never cache partial windows. A stale window replayed for another byte
   // offset corrupts the media stream; complete responses remain cacheable.
   responseHeaders.set(
     "Cache-Control",
-    blobResponse.status === 206 ? "no-store" : "private, max-age=3600",
+    blobStatus === 206 ? "no-store" : "private, max-age=3600",
   );
   for (const [key, value] of Object.entries(options.extraHeaders ?? {})) {
     responseHeaders.set(key, value);
   }
 
   console.log(
-    `[${options.label}] range=${range ?? "none"} -> ${blobResponse.status}` +
+    `[${options.label}] range=${range ?? "none"} -> ${blobStatus}` +
       ` content-range=${contentRange ?? "none"} content-length=${contentLength ?? "none"}`,
   );
 
-  return new NextResponse(blobResponse.body, {
-    status: blobResponse.status,
+  return new NextResponse(blobResult.stream, {
+    status: blobStatus,
     headers: responseHeaders,
   });
 }

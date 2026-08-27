@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, it, expect, vi } from "vitest";
+import { get } from "@vercel/blob";
 import {
   clampRangeHeader,
   CHUNK_BYTES,
@@ -8,8 +9,35 @@ import {
   proxyBlobMedia,
 } from "@/lib/blob-media-proxy";
 
+vi.mock("@vercel/blob", () => ({ get: vi.fn() }));
+
+function blobGetResult(
+  body: string,
+  headers: Record<string, string>,
+) {
+  const response = new Response(body, { headers });
+  return {
+    statusCode: 200 as const,
+    stream: response.body!,
+    headers: response.headers,
+    blob: {
+      url: "https://store.private.blob.vercel-storage.com/video.mp4",
+      downloadUrl:
+        "https://store.private.blob.vercel-storage.com/video.mp4?download=1",
+      pathname: "video.mp4",
+      contentType: headers["Content-Type"] ?? "application/octet-stream",
+      contentDisposition: "",
+      cacheControl: "",
+      size: Number(headers["Content-Length"] ?? body.length),
+      uploadedAt: new Date(0),
+      etag: "",
+    },
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.mocked(get).mockReset();
   delete process.env.BLOB_READ_WRITE_TOKEN;
 });
 
@@ -77,15 +105,12 @@ describe("normalizeContentRange", () => {
 describe("proxyBlobMedia", () => {
   it("forwards a clamped range and prevents partial-response caching", async () => {
     process.env.BLOB_READ_WRITE_TOKEN = "test-token";
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("chunk", {
-        status: 206,
-        headers: {
-          "Content-Type": "video/mp4",
-          "Content-Length": "5",
-          "Content-Range": "bytes 0-4/100",
-          "Accept-Ranges": "bytes",
-        },
+    const getMock = vi.mocked(get).mockResolvedValue(
+      blobGetResult("chunk", {
+        "Content-Type": "video/mp4",
+        "Content-Length": "5",
+        "Content-Range": "bytes 0-4/100",
+        "Accept-Ranges": "bytes",
       }),
     );
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -99,11 +124,13 @@ describe("proxyBlobMedia", () => {
       { fallbackContentType: "video/mp4", label: "test" },
     );
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(getMock).toHaveBeenCalledWith(
       "https://store.private.blob.vercel-storage.com/video.mp4",
       {
+        access: "private",
+        token: "test-token",
+        useCache: false,
         headers: {
-          Authorization: "Bearer test-token",
           Range: `bytes=0-${INITIAL_CHUNK_BYTES - 1}`,
         },
       },
@@ -116,11 +143,8 @@ describe("proxyBlobMedia", () => {
 
   it("keeps a complete response privately cacheable", async () => {
     process.env.BLOB_READ_WRITE_TOKEN = "test-token";
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("complete", {
-        status: 200,
-        headers: { "Content-Type": "video/mp4" },
-      }),
+    vi.mocked(get).mockResolvedValue(
+      blobGetResult("complete", { "Content-Type": "video/mp4" }),
     );
     vi.spyOn(console, "log").mockImplementation(() => {});
 
@@ -138,13 +162,10 @@ describe("proxyBlobMedia", () => {
 
   it("repairs a relative tail Content-Range before returning it", async () => {
     process.env.BLOB_READ_WRITE_TOKEN = "test-token";
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("tail", {
-        status: 206,
-        headers: {
-          "Content-Type": "video/mp4",
-          "Content-Range": "bytes 193069056-797056/797057",
-        },
+    vi.mocked(get).mockResolvedValue(
+      blobGetResult("tail", {
+        "Content-Type": "video/mp4",
+        "Content-Range": "bytes 193069056-797056/797057",
       }),
     );
     vi.spyOn(console, "log").mockImplementation(() => {});
