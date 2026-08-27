@@ -29,6 +29,10 @@ import {
   matchesVideoAskDestination,
   type VideoAskDestinationFocus,
 } from "@/lib/videoask/vocal-hack-routing";
+import {
+  getUnpreparedStrongVocalHackForms,
+  getVocalHackPreviewReadiness,
+} from "@/lib/videoask/vocal-hack-admin-status";
 
 function formatVideoAskDateTime(value: string) {
   const date = new Date(value);
@@ -146,6 +150,7 @@ type VocalHackPlacementPreview = {
 type VocalHackWorkflowStatus = {
   placements: Array<{
     id: string;
+    formImportId: string;
     sourceTitle: string;
     sourceGroup: string;
     language: string;
@@ -305,13 +310,6 @@ export function VideoAskIntegrationClient(props: Props) {
       ),
     );
   }, [destinationFocused, placementPreview, props.destinationFocus]);
-  const strongPlacementForms = useMemo(
-    () =>
-      (placementPreview?.forms ?? []).filter(
-        (form) => form.confidence === "exact" || form.confidence === "high",
-      ),
-    [placementPreview],
-  );
   const displayedWorkflowPlacements = useMemo(() => {
     const allPlacements = workflow?.placements ?? [];
     if (!destinationFocused) return allPlacements;
@@ -319,6 +317,34 @@ export function VideoAskIntegrationClient(props: Props) {
       matchesVideoAskDestination(placement, props.destinationFocus),
     );
   }, [destinationFocused, props.destinationFocus, workflow]);
+  const workflowByFormImportId = useMemo(
+    () =>
+      new Map(
+        (workflow?.placements ?? []).map((placement) => [
+          placement.formImportId,
+          placement,
+        ]),
+      ),
+    [workflow],
+  );
+  const formsToPrepare = useMemo(() => {
+    if (!workflow) return [];
+    if (destinationFocused) {
+      return displayedPlacementForms.filter(
+        (form) => !workflowByFormImportId.has(form.formImportId),
+      );
+    }
+    return getUnpreparedStrongVocalHackForms(
+      placementPreview?.forms ?? [],
+      workflow.placements,
+    );
+  }, [
+    destinationFocused,
+    displayedPlacementForms,
+    placementPreview,
+    workflow,
+    workflowByFormImportId,
+  ]);
   const displayedWorkflowSummary = useMemo(
     () => ({
       placements: displayedWorkflowPlacements.length,
@@ -510,19 +536,9 @@ export function VideoAskIntegrationClient(props: Props) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            destinationFocused
-              ? {
-                  formImportIds: displayedPlacementForms.map(
-                    (form) => form.formImportId,
-                  ),
-                }
-              : {
-                  formImportIds: strongPlacementForms.map(
-                    (form) => form.formImportId,
-                  ),
-                },
-          ),
+          body: JSON.stringify({
+            formImportIds: formsToPrepare.map((form) => form.formImportId),
+          }),
         },
       );
       await jsonResponse<{ result: { placements: number; sentences: number } }>(
@@ -1102,42 +1118,64 @@ export function VideoAskIntegrationClient(props: Props) {
               </dl>
             )}
 
-            <div className="rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-700 dark:text-blue-300">
-              Existing VideoAsk transcripts are English phonetic guesses, so the
-              {" "}
-              {placementPreview.summary.aiTranscriptionRequired} coach videos
-              need fresh Mandarin/Cantonese speech-to-text. Their private Blob
-              copies will be reused—nothing needs to be uploaded again.
+            <div
+              className={
+                workflow &&
+                displayedWorkflowPlacements.length > 0 &&
+                displayedWorkflowSummary.awaiting === 0 &&
+                displayedWorkflowSummary.needsAttention === 0
+                  ? "rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300"
+                  : "rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-700 dark:text-blue-300"
+              }
+            >
+              {!workflow
+                ? "Checking the live review and publication status…"
+                : displayedWorkflowSummary.needsAttention > 0
+                  ? `${displayedWorkflowSummary.needsAttention} placement${displayedWorkflowSummary.needsAttention === 1 ? " needs" : "s need"} attention before publication.`
+                  : displayedWorkflowSummary.awaiting > 0
+                    ? `${displayedWorkflowSummary.awaiting} staged coach video${displayedWorkflowSummary.awaiting === 1 ? " still needs" : "s still need"} Mandarin/Cantonese speech-to-text. Their private Blob copies will be reused.`
+                    : displayedWorkflowPlacements.length > 0
+                      ? `Live workflow is current: ${displayedWorkflowSummary.ready} sentence rows ready and ${displayedWorkflowSummary.published} native lessons published. No AI transcription is pending.`
+                      : `${placementPreview.summary.aiTranscriptionRequired} coach videos will need Mandarin/Cantonese speech-to-text after their review drafts are prepared.`}
             </div>
 
             <div className="flex flex-wrap items-center gap-3 rounded-md border p-3">
-              <Button
-                type="button"
-                onClick={prepareReviewDrafts}
-                disabled={
-                  preparingWorkflow ||
-                  transcription.running ||
-                  (destinationFocused && displayedPlacementForms.length === 0)
-                }
-              >
-                {preparingWorkflow ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <BookOpenCheck />
-                )}
-                {preparingWorkflow
-                  ? "Preparing review drafts…"
-                  : destinationFocused
-                    ? displayedPlacementForms.length === 1
-                      ? "Prepare this review draft"
-                      : `Prepare ${displayedPlacementForms.length} review drafts`
-                    : `Prepare ${strongPlacementForms.length} strong review drafts`}
-              </Button>
-              <p className="max-w-2xl text-xs text-muted-foreground">
-                {destinationFocused
-                  ? "Only the match shown below will be staged. The selected Course Library lesson remains unchanged until you review and publish it."
-                  : "Only exact and high-confidence matches are staged. Review and manual matches remain untouched, and existing CMB Lab course lessons remain unchanged."}
-              </p>
+              {!workflow ? (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Reconciling this plan with the live workflow…
+                </p>
+              ) : formsToPrepare.length > 0 ? (
+                <>
+                  <Button
+                    type="button"
+                    onClick={prepareReviewDrafts}
+                    disabled={preparingWorkflow || transcription.running}
+                  >
+                    {preparingWorkflow ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <BookOpenCheck />
+                    )}
+                    {preparingWorkflow
+                      ? "Preparing review drafts…"
+                      : destinationFocused && formsToPrepare.length === 1
+                        ? "Prepare this review draft"
+                        : `Prepare ${formsToPrepare.length} review drafts`}
+                  </Button>
+                  <p className="max-w-2xl text-xs text-muted-foreground">
+                    {destinationFocused
+                      ? "Only the unprepared match shown below will be staged. The selected Course Library lesson remains unchanged until you review and publish it."
+                      : "Only unprepared exact and high-confidence matches are staged. Existing review or published records are left untouched."}
+                  </p>
+                </>
+              ) : (
+                <p className="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="size-4" />
+                  All mapped forms already exist in the live workflow. No review
+                  drafts need preparation.
+                </p>
+              )}
             </div>
 
             <div className="max-h-[38rem] overflow-auto rounded-md border">
@@ -1154,8 +1192,17 @@ export function VideoAskIntegrationClient(props: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {displayedPlacementForms.map((form) => (
-                    <tr key={form.formImportId} className="border-t align-top">
+                  {displayedPlacementForms.map((form) => {
+                    const workflowPlacement =
+                      workflowByFormImportId.get(form.formImportId) ?? null;
+                    const readiness =
+                      getVocalHackPreviewReadiness(workflowPlacement);
+
+                    return (
+                      <tr
+                        key={form.formImportId}
+                        className="border-t align-top"
+                      >
                       <td className="px-3 py-3">
                         <p className="font-medium">{form.sourceTitle}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
@@ -1208,21 +1255,20 @@ export function VideoAskIntegrationClient(props: Props) {
                       <td className="px-3 py-3">
                         <span
                           className={
-                            form.mediaComplete
+                            readiness.complete
                               ? "text-emerald-600 dark:text-emerald-400"
                               : "text-amber-600 dark:text-amber-400"
                           }
                         >
-                          {form.mediaComplete
-                            ? `${form.mediaReady}/${form.stepCount} media ready`
-                            : `${form.mediaReady}/${form.stepCount} media ready`}
+                          {readiness.headline}
                         </span>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          AI transcript pending
+                          {readiness.detail}
                         </p>
                       </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    );
+                  })}
                   {displayedPlacementForms.length === 0 ? (
                     <tr className="border-t">
                       <td
