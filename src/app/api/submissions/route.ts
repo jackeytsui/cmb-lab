@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { getRealUser, hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import { db } from "@/db";
 import {
   interactions,
@@ -44,15 +44,11 @@ function studentUploadId(url: string): string | null {
  * Requires coach or admin role.
  */
 export async function GET(request: NextRequest) {
-  // 1. Verify user is authenticated
-  const { userId } = await auth();
-  if (!userId) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  // 2. Verify user has coach role or higher
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  if (access.status !== "authorized") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -69,6 +65,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid query parameters" }, { status: 400 });
     }
     const { status, studentId, limit, offset } = parsed.data;
+
+    const conditions = [eq(submissions.status, status)];
+    if (studentId) conditions.push(eq(submissions.userId, studentId));
+    if (access.actor.role !== "admin") {
+      conditions.push(eq(users.assignedCoachId, access.actor.id));
+    }
 
     // 4. Build and execute query with joins
     const query = db
@@ -99,21 +101,10 @@ export async function GET(request: NextRequest) {
       .innerJoin(users, eq(submissions.userId, users.id))
       .innerJoin(lessons, eq(submissions.lessonId, lessons.id))
       .innerJoin(interactions, eq(submissions.interactionId, interactions.id))
+      .where(and(...conditions))
       .orderBy(desc(submissions.createdAt))
       .limit(limit)
       .offset(offset);
-
-    // Apply filters conditionally
-    if (studentId) {
-      query.where(
-        and(
-          eq(submissions.userId, studentId),
-          eq(submissions.status, status)
-        )
-      );
-    } else {
-      query.where(eq(submissions.status, status));
-    }
 
     const submissionList = await query;
 

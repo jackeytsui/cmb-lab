@@ -1,15 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { submissions, coachNotes } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
-import { isStaffRole } from "@/lib/platform-roles";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 
 const noteSchema = z.object({
   content: z.string().trim().min(1).max(20_000),
   visibility: z.enum(["internal", "shared"]),
 }).strict();
+
+async function canAccessSubmission(
+  submissionId: string,
+  actor: { id: string; role: Parameters<typeof canStaffAccessStudent>[0]["actorRole"] },
+) {
+  const submission = await db.query.submissions.findFirst({
+    where: eq(submissions.id, submissionId),
+    columns: { id: true, userId: true },
+    with: { user: { columns: { assignedCoachId: true } } },
+  });
+  if (
+    !submission ||
+    !canStaffAccessStudent({
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      assignedCoachId: submission.user.assignedCoachId,
+    })
+  ) {
+    return null;
+  }
+  return submission;
+}
 
 /**
  * POST /api/submissions/[submissionId]/notes
@@ -19,17 +41,17 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
-  // 1. Verify user has coach role minimum
-  const currentUser = await getRealUser();
-  if (!currentUser || currentUser.deletedAt) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isStaffRole(currentUser.role)) {
+  if (access.status !== "authorized") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
     );
   }
+  const currentUser = access.realActor;
 
   const { submissionId } = await params;
   if (!z.string().uuid().safeParse(submissionId).success) {
@@ -46,11 +68,8 @@ export async function POST(
     }
     const { content, visibility } = parsed.data;
 
-    // 3. Verify submission exists and get student ID
-    const submission = await db.query.submissions.findFirst({
-      where: eq(submissions.id, submissionId),
-      columns: { id: true, userId: true },
-    });
+    // 3. Verify the submission belongs to an assigned student.
+    const submission = await canAccessSubmission(submissionId, access.actor);
 
     if (!submission) {
       return NextResponse.json(
@@ -99,12 +118,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
-  // 1. Verify user has coach role minimum
-  const currentUser = await getRealUser();
-  if (!currentUser || currentUser.deletedAt) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isStaffRole(currentUser.role)) {
+  if (access.status !== "authorized") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
@@ -117,6 +135,10 @@ export async function GET(
   }
 
   try {
+    if (!(await canAccessSubmission(submissionId, access.actor))) {
+      return NextResponse.json([], { status: 404 });
+    }
+
     // 2. Get all notes for this submission
     const notes = await db.query.coachNotes.findMany({
       where: eq(coachNotes.submissionId, submissionId),
@@ -146,17 +168,17 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
-  // 1. Verify user has coach role minimum
-  const currentUser = await getRealUser();
-  if (!currentUser || currentUser.deletedAt) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isStaffRole(currentUser.role)) {
+  if (access.status !== "authorized") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
     );
   }
+  const currentUser = access.realActor;
 
   const { submissionId } = await params;
   const noteId = request.nextUrl.searchParams.get("noteId");
@@ -171,6 +193,10 @@ export async function DELETE(
   }
 
   try {
+    if (!(await canAccessSubmission(submissionIdResult.data, access.actor))) {
+      return NextResponse.json({ error: "Note not found" }, { status: 404 });
+    }
+
     // 2. Find the note and verify ownership
     const note = await db.query.coachNotes.findFirst({
       where: and(

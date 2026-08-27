@@ -1,6 +1,8 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasMinimumRole } from "@/lib/auth";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
+import type { PlatformRole } from "@/lib/platform-roles";
 import { ChevronLeft, User, Book, MessageSquare, Mic, CheckCircle, Clock, Bot, Video } from "lucide-react";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { CoachFeedbackForm } from "@/components/coach/CoachFeedbackForm";
@@ -72,7 +74,8 @@ interface SubmissionDetail {
  */
 async function getSubmission(
   submissionId: string,
-  coachUserId: string
+  coachUserId: string,
+  coachRole: PlatformRole,
 ): Promise<{ data: SubmissionDetail | null; error: boolean }> {
   try {
     const submissionData = await db
@@ -104,7 +107,14 @@ async function getSubmission(
       .innerJoin(users, eq(submissions.userId, users.id))
       .innerJoin(lessons, eq(submissions.lessonId, lessons.id))
       .innerJoin(interactions, eq(submissions.interactionId, interactions.id))
-      .where(eq(submissions.id, submissionId))
+      .where(
+        coachRole === "admin"
+          ? eq(submissions.id, submissionId)
+          : and(
+              eq(submissions.id, submissionId),
+              eq(users.assignedCoachId, coachUserId),
+            ),
+      )
       .limit(1);
 
     if (submissionData.length === 0) return { data: null, error: false };
@@ -215,11 +225,17 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
     redirect("/dashboard");
   }
 
-  // Get current user for notes panel and DB query
-  const currentUser = await getCurrentUser();
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
+    redirect("/dashboard");
+  }
 
   // Query submission directly from DB (replaces broken self-fetch pattern)
-  const result = await getSubmission(submissionId, currentUser?.id ?? "");
+  const result = await getSubmission(
+    submissionId,
+    access.actor.id,
+    access.actor.role,
+  );
 
   // DB error: show styled error with back link
   if (result.error) {
@@ -446,7 +462,7 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
             <CoachNotesPanel
               submissionId={submission.id}
               studentId={student.id}
-              currentUserId={currentUser?.id}
+              currentUserId={access.actor.id}
             />
           </div>
         </div>

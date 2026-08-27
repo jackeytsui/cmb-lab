@@ -52,4 +52,29 @@ describe("coach route access", () => {
     expect(dashboard).toContain("<h1");
     expect(dashboard).toContain("Coach Dashboard");
   });
+
+  it("confines submission review data and mutations to assigned students", () => {
+    const dashboard = source("src/app/(dashboard)/coach/page.tsx");
+    const submissionList = source("src/app/api/submissions/route.ts");
+    const submissionDetail = source(
+      "src/app/(dashboard)/coach/submissions/[submissionId]/page.tsx",
+    );
+    const feedback = source(
+      "src/app/api/submissions/[submissionId]/feedback/route.ts",
+    );
+    const notes = source(
+      "src/app/api/submissions/[submissionId]/notes/route.ts",
+    );
+
+    expect(dashboard).toContain("getStaffStudentAccessContext");
+    expect(submissionList).toContain(
+      "eq(users.assignedCoachId, access.actor.id)",
+    );
+    expect(submissionDetail).toContain(
+      "eq(users.assignedCoachId, coachUserId)",
+    );
+    expect(feedback.match(/canStaffAccessStudent\(/g)).toHaveLength(2);
+    expect(notes).toContain("canAccessSubmission");
+    expect(notes.match(/canAccessSubmission\(/g)?.length).toBeGreaterThanOrEqual(4);
+  });
 });

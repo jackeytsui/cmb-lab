@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { currentUser } from "@clerk/nextjs/server";
 import { hasMinimumRole } from "@/lib/auth";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import { SubmissionQueue } from "@/components/coach/SubmissionQueue";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -29,9 +29,11 @@ export default async function CoachDashboardPage() {
     redirect("/dashboard");
   }
 
-  // Get current user for personalized greeting
-  const user = await currentUser();
-  const displayName = user?.firstName || "Coach";
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
+    redirect("/dashboard");
+  }
+  const displayName = access.actor.name?.trim().split(/\s+/)[0] || "Coach";
 
   return (
     <div className="container mx-auto px-4 py-8">

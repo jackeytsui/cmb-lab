@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { submissions, coachFeedback } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -7,7 +6,8 @@ import { createNotification } from "@/lib/notifications";
 import { dispatchWebhook } from "@/lib/ghl/webhooks";
 import { sendCoachFeedbackNotification } from "@/lib/coach-feedback-notification";
 import { z } from "zod";
-import { isStaffRole } from "@/lib/platform-roles";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 
 const feedbackSchema = z.object({
   loomUrl: z.string().trim().max(2_000).optional(),
@@ -41,17 +41,17 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
-  // 1. Verify user has coach role minimum
-  const currentUser = await getRealUser();
-  if (!currentUser || currentUser.deletedAt) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isStaffRole(currentUser.role)) {
+  if (access.status !== "authorized") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
     );
   }
+  const currentUser = access.realActor;
 
   const { submissionId } = await params;
   if (!z.string().uuid().safeParse(submissionId).success) {
@@ -80,12 +80,25 @@ export async function POST(
     const submission = await db.query.submissions.findFirst({
       where: eq(submissions.id, submissionId),
       with: {
-        user: { columns: { email: true, name: true } },
+        user: {
+          columns: {
+            email: true,
+            name: true,
+            assignedCoachId: true,
+          },
+        },
         lesson: { columns: { title: true } },
       },
     });
 
-    if (!submission) {
+    if (
+      !submission ||
+      !canStaffAccessStudent({
+        actorUserId: access.actor.id,
+        actorRole: access.actor.role,
+        assignedCoachId: submission.user.assignedCoachId,
+      })
+    ) {
       return NextResponse.json(
         { error: "Submission not found" },
         { status: 404 }
@@ -206,12 +219,11 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ submissionId: string }> }
 ) {
-  // 1. Verify user has coach role minimum
-  const currentUser = await getRealUser();
-  if (!currentUser || currentUser.deletedAt) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isStaffRole(currentUser.role)) {
+  if (access.status !== "authorized") {
     return NextResponse.json(
       { error: "Coach access required" },
       { status: 403 }
@@ -224,6 +236,25 @@ export async function GET(
   }
 
   try {
+    const submission = await db.query.submissions.findFirst({
+      where: eq(submissions.id, submissionId),
+      columns: { id: true },
+      with: { user: { columns: { assignedCoachId: true } } },
+    });
+    if (
+      !submission ||
+      !canStaffAccessStudent({
+        actorUserId: access.actor.id,
+        actorRole: access.actor.role,
+        assignedCoachId: submission.user.assignedCoachId,
+      })
+    ) {
+      return NextResponse.json(
+        { error: "No feedback found for this submission" },
+        { status: 404 },
+      );
+    }
+
     // 2. Get feedback with coach info
     const feedback = await db.query.coachFeedback.findFirst({
       where: eq(coachFeedback.submissionId, submissionId),
