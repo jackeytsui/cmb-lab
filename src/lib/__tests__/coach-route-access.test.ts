@@ -209,6 +209,7 @@ describe("coach route access", () => {
     const promptClient = source(
       "src/app/(dashboard)/coach/video-prompts/VideoPromptsClient.tsx",
     );
+    const muxUpload = source("src/app/api/admin/mux/upload-url/route.ts");
     const muxStatus = source("src/app/api/admin/mux/check-status/route.ts");
 
     expect(promptCollection).toContain("getStaffStudentAccessContext");
@@ -222,6 +223,11 @@ describe("coach route access", () => {
     );
     expect(promptClient).toContain("/api/coach/video-prompts/${id}");
     expect(promptClient).not.toContain("/api/coach/video-prompts?id=");
+    expect(muxUpload).toContain("getRealUser");
+    expect(muxUpload).toContain("isStaffRole(currentUser.role)");
+    expect(muxUpload).toContain("createUploadSchema.safeParse");
+    expect(muxUpload).toContain('z.enum(["lesson", "prompt", "other"])');
+    expect(muxUpload).toContain("uploadedBy: currentUser.clerkId");
     expect(muxStatus).toContain(
       "eq(videoUploads.uploadedBy, currentUser.clerkId)",
     );

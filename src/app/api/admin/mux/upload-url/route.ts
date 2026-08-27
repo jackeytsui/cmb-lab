@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { mux } from "@/lib/mux";
 import { db } from "@/db";
 import { videoUploads } from "@/db/schema";
+import { isStaffRole } from "@/lib/platform-roles";
+import { z } from "zod";
+
+const createUploadSchema = z
+  .object({
+    filename: z.string().trim().min(1).max(255),
+    category: z.enum(["lesson", "prompt", "other"]).default("lesson"),
+    tags: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
+  })
+  .strict();
 
 function getMuxCorsOrigin(request: NextRequest): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -24,26 +33,25 @@ function getMuxCorsOrigin(request: NextRequest): string {
  * Returns: { uploadUrl: string, uploadId: string }
  */
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const currentUser = await getRealUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { filename, category, tags } = body;
-
-    if (!filename || typeof filename !== "string") {
+    const parsed = createUploadSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "filename is required" },
-        { status: 400 }
+        { error: "Invalid upload metadata", details: parsed.error.flatten() },
+        { status: 400 },
       );
     }
+    const { filename, category, tags } = parsed.data;
 
     // Create Mux direct upload
     const upload = await mux.video.uploads.create({
@@ -60,10 +68,10 @@ export async function POST(request: NextRequest) {
     const [record] = await db.insert(videoUploads).values({
       muxUploadId: upload.id,
       filename,
-      category: category || "lesson",
-      tags: tags || [],
+      category,
+      tags,
       status: "pending",
-      uploadedBy: userId,
+      uploadedBy: currentUser.clerkId,
     }).returning({ id: videoUploads.id });
 
     return NextResponse.json({
