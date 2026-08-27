@@ -14,7 +14,7 @@ import {
   Output,
   stepCountIs,
   streamText,
-  type UIMessage,
+  type FinishReason,
 } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
@@ -57,6 +57,11 @@ import {
   HANDOFF_RESPONSE_WINDOW,
   normalizeHandoffSummary,
 } from "@/lib/lab-assistant/handoff-policy";
+import {
+  type LabAssistantCaseOutcome,
+  type LabAssistantMessage,
+} from "@/lib/lab-assistant/message";
+import { answerNeedsAutomaticHandoff } from "@/lib/lab-assistant/case-resolution";
 
 export const maxDuration = 30;
 
@@ -115,7 +120,7 @@ const intentSchema = z.object({
 type IntentScan = z.infer<typeof intentSchema>;
 
 /** Extract plain text from a UI message's parts. */
-function messageText(message: UIMessage): string {
+function messageText(message: LabAssistantMessage): string {
   return message.parts
     .filter(
       (part): part is Extract<typeof part, { type: "text" }> =>
@@ -127,7 +132,7 @@ function messageText(message: UIMessage): string {
 }
 
 /** Full transcript for GHL task bodies (student-facing text only). */
-function buildTranscript(messages: UIMessage[]): string {
+function buildTranscript(messages: LabAssistantMessage[]): string {
   return messages
     .map((message) => {
       const text = messageText(message);
@@ -139,7 +144,7 @@ function buildTranscript(messages: UIMessage[]): string {
 }
 
 /** True once this conversation has already produced an escalation task. */
-function alreadyEscalated(messages: UIMessage[]): boolean {
+function alreadyEscalated(messages: LabAssistantMessage[]): boolean {
   return messages.some(
     (message) => {
       if (message.role !== "assistant") return false;
@@ -158,7 +163,9 @@ function alreadyEscalated(messages: UIMessage[]): boolean {
  * On classifier failure returns null → treated as unresolved → escalate,
  * never guess.
  */
-async function scanIntent(messages: UIMessage[]): Promise<IntentScan | null> {
+async function scanIntent(
+  messages: LabAssistantMessage[],
+): Promise<IntentScan | null> {
   const recent = messages
     .slice(-6)
     .map((message) => {
@@ -221,15 +228,23 @@ function logIntentScan(user: User, scan: IntentScan | null, resolved: boolean) {
   });
 }
 
-/** Stream a fixed reply in the UI message protocol (no model call). */
-function cannedResponse(text: string): Response {
-  const stream = createUIMessageStream({
+/** Stream a fixed reply and its server-owned case outcome (no model call). */
+function cannedResponse(
+  text: string,
+  outcome: LabAssistantCaseOutcome = "none",
+  caseId = crypto.randomUUID(),
+): Response {
+  const stream = createUIMessageStream<LabAssistantMessage>({
     execute: ({ writer }) => {
       const id = "lab-assistant-canned";
       writer.write({ type: "start" });
       writer.write({ type: "text-start", id });
       writer.write({ type: "text-delta", id, delta: text });
       writer.write({ type: "text-end", id });
+      writer.write({
+        type: "data-caseOutcome",
+        data: { caseId, outcome },
+      });
       writer.write({ type: "finish" });
     },
   });
@@ -249,11 +264,15 @@ export async function POST(request: Request) {
     return Response.json({ error: "User not found" }, { status: 401 });
   }
 
+  let fallbackMessages: LabAssistantMessage[] = [];
+  let fallbackDryRun = false;
+
   try {
     const body = await request.json();
-    const messages: UIMessage[] = Array.isArray(body.messages)
+    const messages: LabAssistantMessage[] = Array.isArray(body.messages)
       ? body.messages
       : [];
+    fallbackMessages = messages;
     if (messages.length === 0) {
       return Response.json({ error: "No messages provided" }, { status: 400 });
     }
@@ -265,6 +284,7 @@ export async function POST(request: Request) {
     const dryRun =
       body.dryRun === true &&
       (verifiedRole === "coach" || verifiedRole === "admin");
+    fallbackDryRun = dryRun;
 
     // Admin QA traffic gets its own per-user bucket. Intensive dry-run tests
     // must not consume or inherit the quota used by the real support widget.
@@ -314,9 +334,34 @@ export async function POST(request: Request) {
         urgent: false,
         handoffSummary: "Student is asking who their assigned coach is.",
       };
-      if (!dryRun) logIntentScan(user, coachScan, true);
+      if (!dryRun) {
+        logIntentScan(
+          user,
+          coachScan,
+          studentContext.coach.status !== "unavailable",
+        );
+      }
+      if (studentContext.coach.status === "unavailable") {
+        const result = dryRun
+          ? { ok: true, taskId: null }
+          : await createEscalationTask({
+              user,
+              ghlContactId: studentContext.ghlContactId,
+              intent: "my_coach",
+              confidence: 1,
+              summary:
+                "Student asked who their coach is, but the verified assignment could not be read.",
+              transcript,
+              urgent: false,
+            });
+        return cannedResponse(
+          result.ok ? ESCALATION_CONFIRMATION : ESCALATION_FALLBACK_REPLY,
+          result.ok ? "handoff_created" : "handoff_failed",
+        );
+      }
       return cannedResponse(
         coachAssignmentReply(studentContext.coach, latestUserText),
+        "awaiting_confirmation",
       );
     }
 
@@ -354,6 +399,7 @@ export async function POST(request: Request) {
       if (dryRun) {
         return cannedResponse(
           "Dry run: this feedback would be saved and sent to the support team as an assigned GHL task.",
+          "none",
         );
       }
 
@@ -370,6 +416,7 @@ export async function POST(request: Request) {
         console.error("[Lab Assistant] Feedback capture failed:", error);
         return cannedResponse(
           `I couldn't save that just now. Please try again, or email ${SUPPORT_EMAIL} if the issue is blocking you.`,
+          "handoff_failed",
         );
       }
 
@@ -395,15 +442,18 @@ export async function POST(request: Request) {
         if (!handoff.ok) {
           return cannedResponse(
             `Your ${label} was saved with reference ${reference}, but I couldn't create the support task. Please email ${SUPPORT_EMAIL} so the team doesn't miss it.`,
+            "handoff_failed",
           );
         }
         return cannedResponse(
           `Thanks — your ${label} is saved and has been sent to the support team as a task. Expect to hear back within ${HANDOFF_RESPONSE_WINDOW}. Reference: ${reference}.`,
+          "handoff_created",
         );
       } catch (error) {
         console.error("[Lab Assistant] Feedback task creation failed:", error);
         return cannedResponse(
           `Your ${label} was saved with reference ${reference}, but I couldn't create the support task. Please email ${SUPPORT_EMAIL} so the team doesn't miss it.`,
+          "handoff_failed",
         );
       }
     }
@@ -413,7 +463,7 @@ export async function POST(request: Request) {
       if (!dryRun) logIntentScan(user, scan, false);
 
       if (alreadyEscalated(messages)) {
-        return cannedResponse(ALREADY_ESCALATED_REPLY);
+        return cannedResponse(ALREADY_ESCALATED_REPLY, "handoff_created");
       }
 
       const result = dryRun
@@ -429,11 +479,16 @@ export async function POST(request: Request) {
           });
 
       return cannedResponse(
-        result.ok ? ESCALATION_CONFIRMATION : ESCALATION_FALLBACK_REPLY
+        result.ok ? ESCALATION_CONFIRMATION : ESCALATION_FALLBACK_REPLY,
+        result.ok ? "handoff_created" : "handoff_failed",
       );
     }
 
     if (!dryRun) logIntentScan(user, scan, true);
+
+    // Server-owned outcome state is attached to the response after all model
+    // tools finish. The client never guesses resolution from response text.
+    let handoffOutcome: "none" | "created" | "failed" = "none";
 
     // Intent 5: always create the testimonial task, then confirm.
     let testimonialNote = "";
@@ -446,6 +501,7 @@ export async function POST(request: Request) {
             summary: handoffSummary,
             transcript,
           });
+      handoffOutcome = result.ok ? "created" : "failed";
       testimonialNote = result.ok
         ? `\n\nSERVER NOTE: A "Testimonial interview request" task was just created for the team. Confirm warmly to the student that their testimonial interview with Sheldon has been requested and the team will reach out to schedule it. Do not create any further escalation.`
         : `\n\nSERVER NOTE: Creating the testimonial request failed. Apologise briefly and ask the student to email ${SUPPORT_EMAIL} to set up their testimonial interview with Sheldon.`;
@@ -465,6 +521,7 @@ export async function POST(request: Request) {
             transcript,
             urgent: true,
           });
+      handoffOutcome = result.ok ? "created" : "failed";
       urgentNote = result.ok
         ? `\n\nSERVER NOTE: This message was flagged urgent — a same-day task was already created for the team. Answer the question if you can, mention the team has been notified, and point the student to ${SUPPORT_EMAIL} for anything time-critical. Do not call escalateToTeam again.`
         : `\n\nSERVER NOTE: This message was flagged urgent but the team task could not be created. Point the student to ${SUPPORT_EMAIL} directly.`;
@@ -486,74 +543,200 @@ export async function POST(request: Request) {
       `\n\nDetected intent for the latest message: ${intent}` +
       talkTrackNote +
       testimonialNote +
-      urgentNote;
+      urgentNote +
+      `\n\nRESOLUTION SAFETY RULE: Only finish with an answer when it is fully supported by the verified student context, the team-authored talk track, or a successful knowledge-base search. If information is missing, uncertain, unsupported, or the student asks for a human, you MUST call escalateToTeam before finishing. Never merely tell the student to contact support without creating the task.`;
 
-    const result = streamText({
-      model: openai("gpt-4o"),
-      system: systemPrompt,
-      messages: await convertToModelMessages(messages.slice(-20)),
-      tools: {
-        searchKnowledgeBase: {
-          description:
-            "Search published CMB Lab guidance for platform navigation, courses, access rules, learning tools, coaching, and FAQs. Use this before answering faq_navigation questions.",
-          inputSchema: z.object({
-            query: z
-              .string()
-              .describe("A short search phrase using the student's key topic"),
-          }),
-          execute: async ({ query }) => searchKnowledgeBase(query),
-        },
-        escalateToTeam: {
-          description:
-            "Hand the conversation to the human team by creating a follow-up task. Use for account-specific access problems, billing, security, unsupported requests, requests for a human, or urgent issues.",
-          inputSchema: z.object({
-            reason: z
-              .string()
-              .describe("One line on why this needs the team"),
-            urgent: z
-              .boolean()
-              .describe("True if the student needs same-day follow-up"),
-          }),
-          execute: async ({ reason, urgent: toolUrgent }) => {
-            const escalation = dryRun
-              ? { ok: true, taskId: null }
-              : await createEscalationTask({
-                  user,
-                  ghlContactId: studentContext.ghlContactId,
-                  intent,
-                  confidence: scan?.confidence ?? null,
-                  summary: normalizeHandoffSummary(
-                    scan?.handoffSummary,
-                    latestUserText,
-                    reason,
+    const modelMessages = await convertToModelMessages(messages.slice(-20));
+    const caseId = crypto.randomUUID();
+    const responseStream = createUIMessageStream<LabAssistantMessage>({
+      execute: async ({ writer }) => {
+        const result = streamText({
+          model: openai("gpt-4o"),
+          system: systemPrompt,
+          messages: modelMessages,
+          tools: {
+            searchKnowledgeBase: {
+              description:
+                "Search published CMB Lab guidance for platform navigation, courses, access rules, learning tools, coaching, and FAQs. Use this before answering faq_navigation questions.",
+              inputSchema: z.object({
+                query: z
+                  .string()
+                  .describe(
+                    "A short search phrase using the student's key topic",
                   ),
-                  transcript: `${transcript}\n\n[Bot escalation reason: ${reason}]`,
-                  urgent: toolUrgent || urgent,
-                });
-            return escalation.ok
-              ? {
-                  ok: true,
-                  message:
-                    `Task created. Tell the student it's been passed to the support team and they'll hear back within ${HANDOFF_RESPONSE_WINDOW}; urgent issues should go to ` +
-                    SUPPORT_EMAIL +
-                    ".",
-                }
-              : {
-                  ok: false,
-                  message:
-                    "Task creation failed. Ask the student to email " +
-                    SUPPORT_EMAIL +
-                    " directly.",
-                };
+              }),
+              execute: async ({ query }) => searchKnowledgeBase(query),
+            },
+            escalateToTeam: {
+              description:
+                "Hand the conversation to the human team by creating a follow-up task. Use for missing or uncertain information, account-specific access problems, billing, security, unsupported requests, requests for a human, or urgent issues.",
+              inputSchema: z.object({
+                reason: z
+                  .string()
+                  .describe("One line on why this needs the team"),
+                urgent: z
+                  .boolean()
+                  .describe("True if the student needs same-day follow-up"),
+              }),
+              execute: async ({ reason, urgent: toolUrgent }) => {
+                const escalation = dryRun
+                  ? { ok: true, taskId: null }
+                  : await createEscalationTask({
+                      user,
+                      ghlContactId: studentContext.ghlContactId,
+                      intent,
+                      confidence: scan?.confidence ?? null,
+                      summary: normalizeHandoffSummary(
+                        scan?.handoffSummary,
+                        latestUserText,
+                        reason,
+                      ),
+                      transcript: `${transcript}\n\n[Bot escalation reason: ${reason}]`,
+                      urgent: toolUrgent || urgent,
+                    });
+                handoffOutcome = escalation.ok ? "created" : "failed";
+                return escalation.ok
+                  ? {
+                      ok: true,
+                      message:
+                        `Task created. Tell the student it's been passed to the support team and they'll hear back within ${HANDOFF_RESPONSE_WINDOW}; urgent issues should go to ` +
+                        SUPPORT_EMAIL +
+                        ".",
+                    }
+                  : {
+                      ok: false,
+                      message:
+                        "Task creation failed. Ask the student to email " +
+                        SUPPORT_EMAIL +
+                        " directly.",
+                    };
+              },
+            },
           },
-        },
+          stopWhen: stepCountIs(3),
+        });
+
+        // Hold the protocol finish until the final answer has passed the
+        // fail-safe. Model stream errors and incomplete answers are converted
+        // into a human task before the case outcome reaches the client.
+        writer.merge(result.toUIMessageStream({ sendFinish: false }));
+
+        let finalText = "";
+        let finishReason: FinishReason = "other";
+        try {
+          [finalText, finishReason] = await Promise.all([
+            result.text,
+            result.finishReason,
+          ]);
+        } catch (error) {
+          console.error(
+            "[Lab Assistant] Model stream failed:",
+            error instanceof Error ? error.message : error,
+          );
+        }
+
+        if (
+          handoffOutcome === "none" &&
+          intent !== "smalltalk" &&
+          answerNeedsAutomaticHandoff(finalText, finishReason)
+        ) {
+          const reason = finalText.trim()
+            ? "The AI answer was incomplete or explicitly uncertain."
+            : "The AI did not produce a complete answer.";
+          const escalation = dryRun
+            ? { ok: true, taskId: null }
+            : await createEscalationTask({
+                user,
+                ghlContactId: studentContext.ghlContactId,
+                intent,
+                confidence: scan?.confidence ?? null,
+                summary: normalizeHandoffSummary(
+                  scan?.handoffSummary,
+                  latestUserText,
+                  reason,
+                ),
+                transcript: [
+                  transcript,
+                  ...(finalText.trim()
+                    ? [`Assistant: ${finalText.trim()}`]
+                    : []),
+                  `[Automatic handoff reason: ${reason}]`,
+                ].join("\n"),
+                urgent,
+              });
+          handoffOutcome = escalation.ok ? "created" : "failed";
+        }
+
+        const outcome: LabAssistantCaseOutcome =
+          handoffOutcome === "created"
+            ? "handoff_created"
+            : handoffOutcome === "failed"
+              ? "handoff_failed"
+              : intent === "smalltalk"
+                ? "none"
+                : "awaiting_confirmation";
+
+        if (!dryRun) {
+          await logSyncEvent({
+            eventType: "lab_assistant.case_outcome",
+            direction: "outbound",
+            entityType: "lab_assistant",
+            entityId: user.id,
+            payload: { caseId, outcome, intent },
+          }).catch(() => {
+            console.error("[Lab Assistant] Failed to log case outcome");
+          });
+        }
+
+        writer.write({
+          type: "data-caseOutcome",
+          data: { caseId, outcome },
+        });
+        writer.write({ type: "finish", finishReason });
       },
-      stopWhen: stepCountIs(3),
     });
 
-    return result.toUIMessageStreamResponse();
+    return createUIMessageStreamResponse({ stream: responseStream });
   } catch (error) {
     console.error("[Lab Assistant] API error:", error);
+    const latestUserMessage = [...fallbackMessages]
+      .reverse()
+      .find((message) => message.role === "user");
+    const latestUserText = latestUserMessage
+      ? messageText(latestUserMessage)
+      : "";
+
+    // A server/model setup failure after a valid student message is itself an
+    // unanswered case. Attempt the normal GHL + Discord handoff instead of
+    // returning a dead-end error that somebody has to notice manually.
+    if (latestUserText && !fallbackDryRun) {
+      try {
+        const studentContext = await getStudentContext(user);
+        const transcript = buildTranscript(fallbackMessages);
+        const handoff = alreadyEscalated(fallbackMessages)
+          ? { ok: true, taskId: null }
+          : await createEscalationTask({
+              user,
+              ghlContactId: studentContext.ghlContactId,
+              intent: null,
+              confidence: null,
+              summary: normalizeHandoffSummary(
+                null,
+                latestUserText,
+                "The Lab Assistant encountered an internal error before it could answer.",
+              ),
+              transcript: `${transcript}\n[Automatic handoff reason: assistant internal error]`,
+              urgent: false,
+            });
+        return cannedResponse(
+          handoff.ok ? ESCALATION_CONFIRMATION : ESCALATION_FALLBACK_REPLY,
+          handoff.ok ? "handoff_created" : "handoff_failed",
+        );
+      } catch (handoffError) {
+        console.error("[Lab Assistant] Error fallback handoff failed:", handoffError);
+        return cannedResponse(ESCALATION_FALLBACK_REPLY, "handoff_failed");
+      }
+    }
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }
 }

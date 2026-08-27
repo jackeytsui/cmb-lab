@@ -2,6 +2,7 @@
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
+import type { LabAssistantMessage } from '@/lib/lab-assistant/message';
 
 /**
  * Chat state for the CMB Lab Assistant support widget.
@@ -9,7 +10,7 @@ import { DefaultChatTransport } from 'ai';
  * so the client sends only the messages.
  */
 export function useLabAssistant() {
-  return useChat({
+  return useChat<LabAssistantMessage>({
     transport: new DefaultChatTransport({
       api: '/api/lab-assistant',
     }),

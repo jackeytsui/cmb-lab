@@ -126,8 +126,8 @@ export function coachAssignmentReply(
 
   if (assignment.status === "unassigned") {
     return chinese
-      ? "你目前還未分配教練。教練配對可能仍在處理中；如果你想，我可以幫你通知團隊查詢進度。"
-      : "You don't have a coach assigned yet. Coach matching may still be in progress; if you'd like, I can ask the team for an update.";
+      ? "你目前還未分配教練。教練配對可能仍在處理中。請在下方告訴我這是否已解答你的問題；如果沒有，我會立即通知支援團隊跟進。"
+      : "You don't have a coach assigned yet. Coach matching may still be in progress. Use the check below to tell me whether that resolves your question; if not, I'll notify the support team right away.";
   }
 
   return chinese

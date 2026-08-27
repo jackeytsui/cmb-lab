@@ -214,7 +214,8 @@ describe("coach assignment replies", () => {
       "Do I have a coach?",
     );
     expect(reply).toContain("don't have a coach assigned yet");
-    expect(reply).toContain("ask the team for an update");
+    expect(reply).toContain("don't have a coach assigned yet");
+    expect(reply).toContain("notify the support team right away");
   });
 
   it("does not claim no coach when verification failed", () => {

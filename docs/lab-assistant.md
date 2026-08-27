@@ -4,10 +4,7 @@ AI support chatbot embedded in CMB Lab. Gorgias-style pipeline: **identify → i
 
 ## Who sees the widget
 
-Access is tag-driven (no env flag):
-
-- **Admins and coaches** always see the launcher (bottom-right, CMB brand blue, chat icon; light/dark aware).
-- **Students** see it when whitelisted: any tag that gives them Course Library access also shows the assistant (one whitelist covers both), or grant the **Lab Assistant (Support Chat)** feature on a tag in **Admin → Tag Management** to show the assistant on its own.
+Every active signed-in CMB Lab user sees the launcher (bottom-right, CMB brand blue, chat icon; light/dark aware). There is no student tag or feature gate that can hide it.
 
 The widget mounts in the dashboard layout, so it appears across the student app (dashboard, lessons, practice).
 
@@ -17,9 +14,9 @@ Requires the existing GHL integration to be configured: at least one active loca
 
 | Layer | Where | Notes |
 |---|---|---|
-| Widget | `src/components/lab-assistant/` | Header (title + BETA badge + session email), 5 FAQ chips pinned at top, footer `mailto:contact@thecmblueprint.com` |
+| Widget | `src/components/lab-assistant/` | Compact header, scrollable conversation, 5 starter questions, direct feedback actions, resolution check, and resolved-only CSAT |
 | Chat API | `src/app/api/lab-assistant/route.ts` | Clerk auth → rate limit (15/min) → intent scan → resolve or escalate |
-| Intent scan | same route (`gpt-4o-mini`, structured output) | 5 launch intents + `smalltalk`/`other`; confidence < 0.6 → unresolved → escalate |
+| Intent scan | same route (`gpt-4o-mini`, structured output) | Launch intents + feedback + `smalltalk`/`other`; confidence < 0.6 → unresolved → escalate |
 | Guidance | `ai_prompts` slug `lab-assistant-guidance` | Team-editable in **Admin → AI Prompts**, no code change. Fallback default in `src/lib/lab-assistant/guidance.ts` |
 | Data gatekeeper | `src/lib/lab-assistant/student-context.ts` | See below |
 | Handover | `src/lib/lab-assistant/escalation.ts` + `src/lib/ghl/tasks.ts` | GHL tasks on the student's contact |
@@ -42,13 +39,13 @@ Values resolve through **Admin → GHL → Field Mappings**. Map these `lmsConce
 
 `start_date`, `end_date`, `assigned_coach`, `referral_source`, `referral_status`
 
-Unmapped/empty fields degrade to friendly null phrasing (e.g. "no coach assigned yet") plus an escalation offer — internal field names are never exposed.
+Unmapped/empty fields degrade to friendly null phrasing (e.g. "no coach assigned yet") plus the resolution check — internal field names are never exposed. An unreadable coach assignment is escalated automatically rather than guessed.
 
 ## Intents (launch scope)
 
 1. **Start date** — student's own start date
 2. **End date** — student's own end date
-3. **My coach** — name, or null-state phrasing + escalation offer
+3. **My coach** — verified name or explicit unassigned state; unreadable assignments escalate automatically
 4. **Referral info** — program explainer + student's own status only
 5. **Testimonial w/ Sheldon** — always creates the GHL task `Testimonial interview request`, then confirms
 
@@ -61,7 +58,9 @@ Created on the student's GHL contact:
 - Due: 48h (4h when urgent signals are detected)
 - Bot reply: "passed to the support team, expect a reply within 48 hours; urgent → contact@thecmblueprint.com"
 
-Triggered when: intent is `other`/unclassified, confidence is below threshold, the model calls its `escalateToTeam` tool (student asks for a human, accepts an offer, off-scope follow-up), or urgency is detected (task created *and* the inbox is surfaced). Repeat unresolved messages in an already-escalated conversation do not create duplicate tasks.
+Triggered when: intent is `other`/unclassified, confidence is below threshold, the model calls its `escalateToTeam` tool, the model produces an empty/incomplete/explicitly uncertain answer, the request fails internally after a valid student message, the student clicks **No, I need help**, or urgency is detected. Repeat unresolved messages in an already-escalated conversation do not create duplicate tasks.
+
+After a supported AI answer, the student sees **Did this answer your question?**. **No** immediately creates the summarized GHL + Discord handoff with the full transcript. **Yes** records a resolved case and only then reveals the 1–5 star CSAT control. The CSAT endpoint rejects ratings unless that resolved confirmation exists, so unresolved cases never receive a satisfaction survey.
 
 Bug reports, feature requests, and general feedback follow the same operational route whether submitted through the three feedback buttons or written naturally in chat. CMB Lab retains the submission in **Feedback history** for product tracking, but an assigned 48-hour GHL task and Discord alert are created immediately so the internal view does not need to be monitored.
 
@@ -69,7 +68,7 @@ Every task begins with a concise AI-generated conversation summary, followed by 
 
 **Handover always lands in GHL** (like the team's operations form): first choice is a task on the student's own contact; if they have no linked contact — or that call fails — the task is created on a dedicated **CMB Lab Operations** contact instead (upserted automatically; email configurable via `GHL_OPS_CONTACT_EMAIL`, default `contact@thecmblueprint.com`) with the requester's email appended to the title. The audit log records which route was used (`via: student|ops`). Only if both routes fail does the bot point to the support inbox. If the support assignee cannot be resolved in a sub-account, that attempt fails rather than creating an unassigned task, and the normal operations fallback is used.
 
-**Discord alerts**: every handover and feedback submission also pings the issue-escalation channel — student, intent/category, summary, relative due time, where the task landed (student contact / ops contact / a FAILED alert for manual follow-up), and the student's last message. The full transcript stays in the GHL task. Configure it in the admin block's Config health section: paste the channel's webhook URL (Discord channel → Integrations → Webhooks); it's verified with a test ping before saving (stored in `app_settings`; the `DISCORD_WEBHOOK_URL` env var works as a fallback). A "Send test" button re-verifies any time.
+**Discord alerts**: every handover and feedback submission also pings the issue-escalation channel — student, intent/category, summary, relative due time, where the task landed (student contact / ops contact / a FAILED alert for manual follow-up), and the student's last message. Delivery is retried up to three times and every result is audit-logged as `lab_assistant.discord_notification`, so a missing or broken webhook is visible instead of silent. The full transcript stays in the GHL task. Configure it in the admin block's Config health section: paste the channel's webhook URL (Discord channel → Integrations → Webhooks); it's verified with a test ping before saving (stored in `app_settings`; the `DISCORD_WEBHOOK_URL` env var works as a fallback). A "Send test" button re-verifies any time.
 
 **GHL credentials**: all Lab Assistant GHL calls (contact linking, field reads, task creation, the ops fallback contact, the field catalog) use the active location in **Admin → GHL → Locations**; when that table is empty they fall back to the legacy `GHL_API_TOKEN` + `GHL_LOCATION_ID` env vars, so either configuration works.
 
@@ -77,7 +76,7 @@ Every task begins with a concise AI-generated conversation summary, followed by 
 
 Everything sits in one block on **Admin → Manage Portal** ("CMB Lab Assistant", admin-only):
 
-- **Stats (30d)** — chats, in-scope resolution rate (amber below the 60% gate), escalations, feedback tasks, testimonial requests, and failures
+- **Stats (30d)** — chats, student-confirmed resolution rate, resolved-case CSAT, escalations, Discord delivery/failures, feedback tasks, and testimonial requests
 - **Config health** — widget access rule, OpenAI key, active GHL location, saved guidance prompt, missing field mappings
 - **Recent handovers** — last 5 escalation/feedback/testimonial tasks with failure reasons, linking to the full sync log
 - **Feedback history** — searchable product record for every bug, idea, and feedback submission; GHL tasks are the actionable inbox
@@ -90,4 +89,4 @@ Deeper edits link out: prompt version history in **Admin → AI Prompts**, field
 
 ## Success gate (P3)
 
-≥60% in-scope resolution, zero data-scope incidents. Resolution/escalation rates are visible in the admin block and queryable from `sync_events` (`lab_assistant.intent_scan` payloads carry `intent`, `confidence`, `resolved`, `urgent`).
+≥60% student-confirmed resolution, zero data-scope incidents. Resolution, CSAT, escalation, and Discord delivery are visible in the admin block and queryable from `sync_events` (`lab_assistant.resolution`, `lab_assistant.csat`, `lab_assistant.escalation`, and `lab_assistant.discord_notification`).

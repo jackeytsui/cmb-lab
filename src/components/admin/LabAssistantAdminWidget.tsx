@@ -22,6 +22,9 @@ interface Overview {
     scans: number;
     resolved: number;
     resolutionRate: number | null;
+    resolutionResponses: number;
+    csat: { responses: number; average: number | null };
+    discordAlerts: { total: number; failed: number };
     urgent: number;
     escalations: { total: number; failed: number };
     feedbackTasks: { total: number; failed: number };
@@ -158,6 +161,16 @@ export function LabAssistantAdminWidget() {
                     overview.stats.resolutionRate !== null &&
                     overview.stats.resolutionRate < 60
                   }
+                  sub={`${overview.stats.resolutionResponses} student confirmations`}
+                />
+                <StatTile
+                  label="CSAT"
+                  value={
+                    overview.stats.csat.average !== null
+                      ? `${overview.stats.csat.average}/5`
+                      : "—"
+                  }
+                  sub={`${overview.stats.csat.responses} resolved-case ratings`}
                 />
                 <StatTile
                   label="Escalations"
@@ -182,6 +195,16 @@ export function LabAssistantAdminWidget() {
                 <StatTile
                   label="Testimonials"
                   value={String(overview.stats.testimonials.total)}
+                />
+                <StatTile
+                  label="Discord alerts"
+                  value={String(overview.stats.discordAlerts.total)}
+                  warn={overview.stats.discordAlerts.failed > 0}
+                  sub={
+                    overview.stats.discordAlerts.failed > 0
+                      ? `${overview.stats.discordAlerts.failed} failed`
+                      : "All delivered"
+                  }
                 />
               </div>
 

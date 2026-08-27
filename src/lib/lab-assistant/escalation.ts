@@ -80,6 +80,7 @@ export interface EscalationParams {
 export interface HandoverResult {
   ok: boolean;
   taskId: string | null;
+  discordNotified: boolean;
 }
 
 const FEEDBACK_TASK_DETAILS: Record<
@@ -270,9 +271,12 @@ async function createHandoverTask(params: {
     params;
 
   // Every handover pings the ops Discord channel (mirrors the GHL form
-  // automation). Never throws; no-op when DISCORD_WEBHOOK_URL is unset.
-  const notifyDiscord = (taskVia: "student" | "ops" | "failed") =>
-    sendDiscordHandoverNotification({
+  // automation). Delivery is retried and independently audited so a broken
+  // or missing webhook cannot fail silently.
+  const notifyDiscord = async (
+    taskVia: "student" | "ops" | "failed",
+  ): Promise<boolean> => {
+    const result = await sendDiscordHandoverNotification({
       kind: notify.kind,
       studentName: studentDisplayName(user),
       studentEmail: user.email,
@@ -283,6 +287,25 @@ async function createHandoverTask(params: {
       summary: notify.summary,
       lastMessage: notify.lastMessage,
     });
+    await logSyncEvent({
+      eventType: "lab_assistant.discord_notification",
+      direction: "outbound",
+      entityType: "lab_assistant",
+      entityId: user.id,
+      payload: {
+        kind: notify.kind,
+        intent: notify.intent,
+        taskVia,
+        configured: result.configured,
+        delivered: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      },
+      ...(result.ok ? {} : { status: "failed" }),
+    }).catch(() => {
+      console.error("[Lab Assistant] Failed to log Discord delivery outcome");
+    });
+    return result.ok;
+  };
 
   const logOutcome = (
     payload: Record<string, unknown>,
@@ -316,8 +339,8 @@ async function createHandoverTask(params: {
         undefined,
         ghlContactId
       );
-      await notifyDiscord("student");
-      return { ok: true, taskId };
+      const discordNotified = await notifyDiscord("student");
+      return { ok: true, taskId, discordNotified };
     } catch (error) {
       console.error(
         "[Lab Assistant] Handover on student contact failed, trying ops fallback:",
@@ -354,8 +377,8 @@ async function createHandoverTask(params: {
         undefined,
         ops.contactId
       );
-      await notifyDiscord("ops");
-      return { ok: true, taskId };
+      const discordNotified = await notifyDiscord("ops");
+      return { ok: true, taskId, discordNotified };
     } catch (error) {
       console.error(
         "[Lab Assistant] Ops fallback task creation failed:",
@@ -369,8 +392,8 @@ async function createHandoverTask(params: {
         "failed",
         ops.contactId
       );
-      await notifyDiscord("failed");
-      return { ok: false, taskId: null };
+      const discordNotified = await notifyDiscord("failed");
+      return { ok: false, taskId: null, discordNotified };
     }
   }
 
@@ -381,6 +404,6 @@ async function createHandoverTask(params: {
     },
     "failed"
   );
-  await notifyDiscord("failed");
-  return { ok: false, taskId: null };
+  const discordNotified = await notifyDiscord("failed");
+  return { ok: false, taskId: null, discordNotified };
 }

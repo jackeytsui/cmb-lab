@@ -107,3 +107,18 @@ describe("GHL support assignee resolution", () => {
     expect(selectExactGhlUserId(users, "contact@thecmblueprint.co")).toBeNull();
   });
 });
+
+describe("Discord handoff delivery", () => {
+  it("retries delivery and records every outcome in the audit trail", () => {
+    const notifications = source(
+      "src/lib/lab-assistant/notifications.ts",
+    );
+    const escalation = source("src/lib/lab-assistant/escalation.ts");
+
+    expect(notifications).toContain("attempt <= 3");
+    expect(escalation).toContain(
+      'eventType: "lab_assistant.discord_notification"',
+    );
+    expect(escalation).toContain("delivered: result.ok");
+  });
+});

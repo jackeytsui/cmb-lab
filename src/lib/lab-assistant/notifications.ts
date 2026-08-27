@@ -70,15 +70,23 @@ export interface HandoverNotification {
   lastMessage: string | null;
 }
 
+export interface DiscordNotificationResult {
+  ok: boolean;
+  configured: boolean;
+  error?: string;
+}
+
 /**
  * Fire-and-forget Discord ping for a handover. Safe to call unconditionally:
  * no-ops when the webhook isn't configured, and never throws.
  */
 export async function sendDiscordHandoverNotification(
   notification: HandoverNotification
-): Promise<void> {
+): Promise<DiscordNotificationResult> {
   const webhookUrl = await getDiscordWebhookUrl();
-  if (!webhookUrl) return;
+  if (!webhookUrl) {
+    return { ok: false, configured: false, error: "No webhook configured" };
+  }
 
   const {
     kind,
@@ -145,33 +153,44 @@ export async function sendDiscordHandoverNotification(
     });
   }
 
-  try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        embeds: [
-          {
-            title,
-            color,
-            fields,
-            footer: { text: "CMB Lab Assistant — full transcript in the GHL task" },
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      }),
-    });
-    if (!response.ok) {
+  const body = JSON.stringify({
+    embeds: [
+      {
+        title,
+        color,
+        fields,
+        footer: { text: "CMB Lab Assistant — full transcript in the GHL task" },
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  });
+
+  let lastError = "Discord notification failed";
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      if (response.ok) return { ok: true, configured: true };
+
+      lastError = `Discord returned ${response.status}`;
+      console.error(`[Lab Assistant] ${lastError} (attempt ${attempt}/3)`);
+      if (response.status < 500 && response.status !== 429) break;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Request failed";
       console.error(
-        `[Lab Assistant] Discord webhook returned ${response.status}`
+        `[Lab Assistant] Discord notification failed (attempt ${attempt}/3):`,
+        lastError,
       );
     }
-  } catch (error) {
-    console.error(
-      "[Lab Assistant] Discord notification failed:",
-      error instanceof Error ? error.message : error
-    );
+    if (attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 200));
+    }
   }
+
+  return { ok: false, configured: true, error: lastError };
 }
 
 /**

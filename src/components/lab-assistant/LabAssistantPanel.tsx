@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { AlertTriangle, Bug, CheckCircle2, Lightbulb, MessageSquarePlus, Send, Square, Star, X } from 'lucide-react';
 import { useLabAssistant } from '@/hooks/useLabAssistant';
+import type { LabAssistantCaseOutcome } from '@/lib/lab-assistant/message';
 
 const SUPPORT_EMAIL = 'contact@thecmblueprint.com';
 
@@ -45,6 +46,24 @@ const FEEDBACK_PROMPTS: Record<FeedbackMode, string> = {
 interface LabAssistantPanelProps {
   onClose: () => void;
 }
+
+type ResolutionStatus =
+  | 'idle'
+  | 'confirming'
+  | 'rating'
+  | 'rating-sending'
+  | 'rated'
+  | 'handoff-sending'
+  | 'handoff-sent'
+  | 'handoff-error'
+  | 'error';
+
+interface ResolutionState {
+  status: ResolutionStatus;
+  rating?: number;
+  responseWindow?: string;
+}
+
 export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
   const { messages, sendMessage, status, error, clearError, stop } =
     useLabAssistant();
@@ -54,7 +73,7 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
   const [feedbackState, setFeedbackState] = useState<'idle' | 'sending' | 'sent' | 'handoff-error' | 'error'>('idle');
   const [feedbackReference, setFeedbackReference] = useState('');
   const [feedbackResponseWindow, setFeedbackResponseWindow] = useState('48 hours');
-  const [ratingPrompt, setRatingPrompt] = useState<{ title: string; href: string } | null>(null);
+  const [resolutionStates, setResolutionStates] = useState<Record<string, ResolutionState>>({});
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -71,7 +90,7 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [messages, status]);
+  }, [messages, resolutionStates, status]);
 
   useEffect(() => {
     // Move keyboard focus into the newly opened dialog without summoning the
@@ -86,21 +105,6 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
     input.style.height = `${Math.min(input.scrollHeight, 112)}px`;
   }, [input]);
 
-  useEffect(() => {
-    const storageKey = 'cmb-session-rating-prompted-at';
-    const lastPromptedAt = Number(window.localStorage.getItem(storageKey) || 0);
-    const fourteenDays = 14 * 24 * 60 * 60 * 1000;
-    if (Date.now() - lastPromptedAt < fourteenDays) return;
-    fetch('/api/coaching/rating-prompt')
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (!data?.prompt) return;
-        setRatingPrompt(data.prompt);
-        window.localStorage.setItem(storageKey, String(Date.now()));
-      })
-      .catch(() => {});
-  }, []);
-
   const isStreaming = status === 'streaming';
   // 'error' stays sendable so the student can retry after a failed request.
   const canSend = status === 'ready' || status === 'error';
@@ -114,6 +118,81 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
       { body: { pagePath: window.location.pathname + window.location.search } },
     );
     return true;
+  }
+
+  function updateResolution(caseId: string, state: ResolutionState) {
+    setResolutionStates((current) => ({ ...current, [caseId]: state }));
+  }
+
+  async function confirmResolution(caseId: string, resolved: boolean) {
+    updateResolution(caseId, {
+      status: resolved ? 'confirming' : 'handoff-sending',
+    });
+
+    const transcriptMessages = messages
+      .map((message) => {
+        const text = message.parts
+          .filter((part) => part.type === 'text')
+          .map((part) => ('text' in part ? part.text : ''))
+          .join('')
+          .trim();
+        return text ? { role: message.role, text } : null;
+      })
+      .filter(
+        (message): message is { role: 'user' | 'assistant'; text: string } =>
+          message !== null &&
+          (message.role === 'user' || message.role === 'assistant'),
+      )
+      .slice(-30);
+
+    try {
+      const response = await fetch('/api/lab-assistant/resolution', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          resolved
+            ? { action: 'resolved', caseId }
+            : {
+                action: 'unresolved',
+                caseId,
+                messages: transcriptMessages,
+                pagePath: window.location.pathname + window.location.search,
+              },
+        ),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        updateResolution(caseId, {
+          status: resolved ? 'error' : 'handoff-error',
+        });
+        return;
+      }
+      updateResolution(caseId, resolved
+        ? { status: 'rating' }
+        : {
+            status: 'handoff-sent',
+            responseWindow: data?.responseWindow || '48 hours',
+          });
+    } catch {
+      updateResolution(caseId, {
+        status: resolved ? 'error' : 'handoff-error',
+      });
+    }
+  }
+
+  async function submitCsat(caseId: string, rating: number) {
+    updateResolution(caseId, { status: 'rating-sending', rating });
+    try {
+      const response = await fetch('/api/lab-assistant/resolution', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'rate', caseId, rating }),
+      });
+      if (!response.ok) throw new Error('Could not save rating');
+      updateResolution(caseId, { status: 'rated', rating });
+    } catch {
+      updateResolution(caseId, { status: 'rating', rating });
+    }
   }
 
   async function submitFeedback(e: FormEvent) {
@@ -156,6 +235,11 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
       if (send(input)) setInput('');
     }
   }
+
+  const latestAssistantId =
+    messages[messages.length - 1]?.role === 'assistant'
+      ? messages[messages.length - 1].id
+      : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -270,6 +354,9 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
               .filter((part) => part.type === 'text')
               .map((part) => ('text' in part ? part.text : ''))
               .join('');
+            const caseOutcome = message.parts.find(
+              (part) => part.type === 'data-caseOutcome',
+            );
             if (!text) return null;
             return message.role === 'user' ? (
               <div key={message.id} className="flex justify-end">
@@ -281,10 +368,26 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
                 </div>
               </div>
             ) : (
-              <div key={message.id} className="flex justify-start">
-                <div className="max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5 text-sm leading-6 text-foreground">
-                  {text}
+              <div key={message.id} className="space-y-2">
+                <div className="flex justify-start">
+                  <div className="max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5 text-sm leading-6 text-foreground">
+                    {text}
+                  </div>
                 </div>
+                {caseOutcome?.type === 'data-caseOutcome' && (
+                  <CaseOutcomeCard
+                    caseId={caseOutcome.data.caseId}
+                    outcome={caseOutcome.data.outcome}
+                    state={
+                      resolutionStates[caseOutcome.data.caseId] ?? {
+                        status: 'idle',
+                      }
+                    }
+                    active={message.id === latestAssistantId}
+                    onConfirm={confirmResolution}
+                    onRate={submitCsat}
+                  />
+                )}
               </div>
             );
           })}
@@ -295,24 +398,6 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
             </p>
           )}
         </div>
-
-        {ratingPrompt && (
-          <div className="rounded-xl border border-amber-400/40 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/25 dark:text-amber-100">
-            <div className="flex items-start gap-2">
-              <Star className="mt-0.5 size-4 shrink-0 fill-amber-400 text-amber-500" />
-              <div>
-                <p className="font-medium">How was {ratingPrompt.title}?</p>
-                <p className="mt-0.5 text-xs opacity-80">A quick rating helps us improve coaching.</p>
-                <a href={ratingPrompt.href} className="mt-2 inline-block text-xs font-semibold underline">
-                  Rate this session
-                </a>
-              </div>
-              <button type="button" onClick={() => setRatingPrompt(null)} className="ml-auto opacity-60 hover:opacity-100" aria-label="Dismiss rating prompt">
-                <X className="size-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
 
       </div>
 
@@ -414,6 +499,138 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
           </form>
         </div>
       )}
+    </div>
+  );
+}
+
+function CaseOutcomeCard({
+  caseId,
+  outcome,
+  state,
+  active,
+  onConfirm,
+  onRate,
+}: {
+  caseId: string;
+  outcome: LabAssistantCaseOutcome;
+  state: ResolutionState;
+  active: boolean;
+  onConfirm: (caseId: string, resolved: boolean) => void;
+  onRate: (caseId: string, rating: number) => void;
+}) {
+  if (outcome === 'none') return null;
+
+  if (outcome === 'handoff_created') {
+    return (
+      <div role="status" className="max-w-[92%] rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs leading-5 text-emerald-700 dark:text-emerald-300">
+        <span className="font-semibold">Support follow-up created.</span>{' '}
+        Expect to hear back within 48 hours.
+      </div>
+    );
+  }
+
+  if (outcome === 'handoff_failed') {
+    return (
+      <div role="alert" className="max-w-[92%] rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-800 dark:text-amber-300">
+        The support task could not be created. Please email{' '}
+        <a className="font-semibold underline" href={`mailto:${SUPPORT_EMAIL}`}>
+          {SUPPORT_EMAIL}
+        </a>{' '}
+        so the team doesn’t miss this.
+      </div>
+    );
+  }
+
+  if (state.status === 'handoff-sent') {
+    return (
+      <div role="status" className="max-w-[92%] rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs leading-5 text-emerald-700 dark:text-emerald-300">
+        <span className="font-semibold">Thanks — our support team has it.</span>{' '}
+        Expect to hear back within {state.responseWindow || '48 hours'}.
+      </div>
+    );
+  }
+
+  if (state.status === 'handoff-error') {
+    return (
+      <div role="alert" className="max-w-[92%] rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-800 dark:text-amber-300">
+        <p>The support task could not be created. Please email <a className="font-semibold underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> so the team doesn’t miss this.</p>
+        {active && (
+          <button type="button" onClick={() => onConfirm(caseId, false)} className="mt-2 font-semibold underline">
+            Retry handoff
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (state.status === 'rated') {
+    return (
+      <div role="status" className="max-w-[92%] rounded-xl border border-[#3a49b8]/25 bg-[#3a49b8]/5 px-3 py-2 text-xs text-foreground">
+        Thanks for your {state.rating}-star rating — it helps us improve the assistant.
+      </div>
+    );
+  }
+
+  if (state.status === 'rating' || state.status === 'rating-sending') {
+    return (
+      <div className="max-w-[92%] rounded-xl border border-[#3a49b8]/25 bg-[#3a49b8]/5 p-3">
+        <p className="text-xs font-semibold text-foreground">
+          How satisfied are you with this answer?
+        </p>
+        <div className="mt-2 flex gap-1" role="group" aria-label="Rate this resolved answer">
+          {[1, 2, 3, 4, 5].map((rating) => (
+            <button
+              key={rating}
+              type="button"
+              onClick={() => onRate(caseId, rating)}
+              disabled={state.status === 'rating-sending'}
+              className="inline-flex size-10 items-center justify-center rounded-lg text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 disabled:opacity-50"
+              aria-label={`${rating} out of 5 stars`}
+            >
+              <Star className={`size-5 ${state.rating && rating <= state.rating ? 'fill-current' : ''}`} />
+            </button>
+          ))}
+        </div>
+        {state.status === 'rating-sending' && (
+          <p className="mt-1 text-[11px] text-muted-foreground">Saving your rating…</p>
+        )}
+      </div>
+    );
+  }
+
+  if (!active && state.status === 'idle') return null;
+
+  return (
+    <div className="max-w-[92%] rounded-xl border border-border bg-background p-3">
+      <p className="text-xs font-semibold text-foreground">
+        Did this answer your question?
+      </p>
+      <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+        If not, we’ll create a support task with this conversation.
+      </p>
+      {state.status === 'error' && (
+        <p role="alert" className="mt-1 text-[11px] text-red-500">
+          We couldn’t save that yet. Please try again.
+        </p>
+      )}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => onConfirm(caseId, true)}
+          disabled={state.status === 'confirming' || state.status === 'handoff-sending'}
+          className="min-h-10 rounded-lg bg-[#2e3a97] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          {state.status === 'confirming' ? 'Saving…' : 'Yes, resolved'}
+        </button>
+        <button
+          type="button"
+          onClick={() => onConfirm(caseId, false)}
+          disabled={state.status === 'confirming' || state.status === 'handoff-sending'}
+          className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-50"
+        >
+          {state.status === 'handoff-sending' ? 'Creating task…' : 'No, I need help'}
+        </button>
+      </div>
     </div>
   );
 }

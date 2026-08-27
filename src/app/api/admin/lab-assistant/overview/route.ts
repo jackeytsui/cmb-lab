@@ -60,6 +60,9 @@ export async function GET() {
 
   const [
     scanStats,
+    resolutionStats,
+    csatStats,
+    discordStats,
     intentBreakdown,
     handoverStats,
     recentHandovers,
@@ -81,6 +84,48 @@ export async function GET() {
             gte(syncEvents.createdAt, windowStart)
           )
         )
+    ),
+    section("resolution stats", errors, [{ total: 0, resolved: 0 }], () =>
+      db
+        .select({
+          total: sql<number>`count(*)::int`,
+          resolved: sql<number>`count(*) filter (where ${syncEvents.payload}->>'resolved' = 'true')::int`,
+        })
+        .from(syncEvents)
+        .where(
+          and(
+            eq(syncEvents.eventType, "lab_assistant.resolution"),
+            gte(syncEvents.createdAt, windowStart),
+          ),
+        ),
+    ),
+    section("CSAT stats", errors, [{ responses: 0, average: null as number | null }], () =>
+      db
+        .select({
+          responses: sql<number>`count(*)::int`,
+          average: sql<number | null>`round(avg((${syncEvents.payload}->>'rating')::numeric), 1)::float`,
+        })
+        .from(syncEvents)
+        .where(
+          and(
+            eq(syncEvents.eventType, "lab_assistant.csat"),
+            gte(syncEvents.createdAt, windowStart),
+          ),
+        ),
+    ),
+    section("Discord delivery stats", errors, [{ total: 0, failed: 0 }], () =>
+      db
+        .select({
+          total: sql<number>`count(*)::int`,
+          failed: sql<number>`count(*) filter (where ${syncEvents.status} = 'failed')::int`,
+        })
+        .from(syncEvents)
+        .where(
+          and(
+            eq(syncEvents.eventType, "lab_assistant.discord_notification"),
+            gte(syncEvents.createdAt, windowStart),
+          ),
+        ),
     ),
     section(
       "intent breakdown",
@@ -183,6 +228,9 @@ export async function GET() {
         );
 
   const stats = scanStats[0] ?? { total: 0, resolved: 0, urgent: 0 };
+  const resolutions = resolutionStats[0] ?? { total: 0, resolved: 0 };
+  const csat = csatStats[0] ?? { responses: 0, average: null };
+  const discord = discordStats[0] ?? { total: 0, failed: 0 };
   const tally = (eventType: string) =>
     handoverStats
       .filter((row) => row.eventType === eventType)
@@ -199,11 +247,14 @@ export async function GET() {
     windowDays: STATS_WINDOW_DAYS,
     stats: {
       scans: stats.total,
-      resolved: stats.resolved,
+      resolved: resolutions.resolved,
       resolutionRate:
-        stats.total > 0
-          ? Math.round((stats.resolved / stats.total) * 100)
+        resolutions.total > 0
+          ? Math.round((resolutions.resolved / resolutions.total) * 100)
           : null,
+      resolutionResponses: resolutions.total,
+      csat,
+      discordAlerts: discord,
       urgent: stats.urgent,
       escalations: tally("lab_assistant.escalation"),
       feedbackTasks: tally("lab_assistant.feedback_handoff"),
