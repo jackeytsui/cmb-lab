@@ -21,6 +21,8 @@ import {
   ClipboardList,
   ArrowUp,
   ArrowDown,
+  ChevronDown,
+  ChevronUp,
   Headphones,
   Mic,
   MapPinned,
@@ -429,6 +431,11 @@ export function CourseLibraryEditorClient({
   const [studentSearch, setStudentSearch] = useState("");
   const [searchingStudents, setSearchingStudents] = useState(false);
   const [savingStudents, setSavingStudents] = useState(false);
+  const [showManualExceptions, setShowManualExceptions] = useState(false);
+  const allowedStudentsById = useMemo(
+    () => new Map(allowedStudents.map((student) => [student.id, student])),
+    [allowedStudents],
+  );
 
   useEffect(() => {
     const query = studentSearch.trim();
@@ -1298,34 +1305,82 @@ export function CourseLibraryEditorClient({
             </p>
           )}
           {allowedUserIds.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {allowedUserIds.map((uid) => {
-                const student = allowedStudents.find((s) => s.id === uid);
-                return (
-                  <span
-                    key={uid}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
-                  >
-                    {student ? student.name : "Unknown student"}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        saveAllowedUsers(
-                          allowedUserIds.filter((id) => id !== uid),
-                          allowedStudents.filter((entry) => entry.id !== uid),
-                        )
-                      }
-                      disabled={savingStudents}
-                      className="hover:text-red-500 transition-colors"
-                      aria-label="Remove student"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+            <div className="mb-3 max-w-xl overflow-hidden rounded-md border border-border bg-background">
+              <button
+                type="button"
+                onClick={() => setShowManualExceptions((current) => !current)}
+                aria-expanded={showManualExceptions}
+                aria-controls="manual-course-access-list"
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/40"
+              >
+                <span>
+                  <span className="block text-xs font-medium text-foreground">
+                    {allowedUserIds.length} manual access exception
+                    {allowedUserIds.length === 1 ? "" : "s"}
                   </span>
-                );
-              })}
+                  <span className="block text-[10px] text-muted-foreground">
+                    Kept compact so large courses stay manageable.
+                  </span>
+                </span>
+                {showManualExceptions ? (
+                  <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                )}
+              </button>
+              {showManualExceptions && (
+                <div
+                  id="manual-course-access-list"
+                  className="max-h-64 divide-y divide-border/60 overflow-y-auto border-t border-border"
+                >
+                  {allowedUserIds.map((uid) => {
+                    const student = allowedStudentsById.get(uid);
+                    const studentName = student?.name || "Unknown student";
+                    return (
+                      <div
+                        key={uid}
+                        className="flex items-center justify-between gap-3 px-3 py-2"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-medium text-foreground">
+                            {studentName}
+                          </span>
+                          {student?.email && (
+                            <span className="block truncate text-[10px] text-muted-foreground">
+                              {student.email}
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            saveAllowedUsers(
+                              allowedUserIds.filter((id) => id !== uid),
+                              allowedStudents.filter(
+                                (entry) => entry.id !== uid,
+                              ),
+                            )
+                          }
+                          disabled={savingStudents}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                          aria-label={`Remove ${studentName}'s manual course access`}
+                        >
+                          <X className="h-3 w-3" />
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
+          <label
+            htmlFor="course-student-search"
+            className="mb-1 block text-[10px] font-medium text-muted-foreground"
+          >
+            Add a student exception
+          </label>
           <input
             id="course-student-search"
             aria-label="Search students by name or email"
