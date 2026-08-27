@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Loader2, BookOpen, Trash2, X } from "lucide-react";
+import { Plus, Loader2, BookOpen, Search, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { courseCoverImagePath } from "@/lib/course-cover-image";
+import { filterCourseLibraryCourses } from "@/lib/course-library-search";
 
 type CourseStatus = "draft" | "preview" | "published";
 
@@ -47,6 +48,13 @@ export function CourseLibraryListClient({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const filteredCourses = useMemo(
+    () => filterCourseLibraryCourses(courses, deferredSearchQuery),
+    [courses, deferredSearchQuery],
+  );
+  const hasSearchQuery = searchQuery.trim().length > 0;
 
   const handleCreate = async () => {
     if (!title.trim()) {
@@ -98,9 +106,43 @@ export function CourseLibraryListClient({
 
   return (
     <div className="space-y-5">
+      <div className="relative">
+        <label htmlFor="course-library-search" className="sr-only">
+          Search courses by title or description
+        </label>
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <input
+          id="course-library-search"
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search courses by title or description..."
+          autoComplete="off"
+          className="h-11 w-full rounded-xl border border-border bg-card pl-10 pr-11 text-sm shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
+        />
+        {hasSearchQuery ? (
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            aria-label="Clear course search"
+            className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm font-medium text-muted-foreground">
-          {courses.length} course{courses.length === 1 ? "" : "s"}
+        <p
+          className="text-sm font-medium text-muted-foreground"
+          aria-live="polite"
+        >
+          {hasSearchQuery
+            ? `${filteredCourses.length} of ${courses.length} courses`
+            : `${courses.length} course${courses.length === 1 ? "" : "s"}`}
         </p>
         <button
           type="button"
@@ -178,9 +220,26 @@ export function CourseLibraryListClient({
             No courses yet. Click &ldquo;New Course&rdquo; to create your first one.
           </p>
         </div>
+      ) : filteredCourses.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center">
+          <Search className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
+          <p className="text-sm font-medium text-foreground">
+            No courses match &ldquo;{searchQuery.trim()}&rdquo;
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Try another title or description.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="mt-4 text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            Clear search
+          </button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {courses.map((course) => (
+          {filteredCourses.map((course) => (
             <div
               key={course.id}
               className="group overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md"
