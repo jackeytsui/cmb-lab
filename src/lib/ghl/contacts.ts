@@ -11,6 +11,7 @@ import {
   getGhlClientForLocation,
 } from "@/lib/ghl/client";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
+import { extractGhlDuplicateEmailContact } from "@/lib/ghl/contact-email-repair";
 
 interface GhlSearchResponse {
   contacts: Array<{
@@ -299,15 +300,24 @@ export async function getContactMapping(
 export async function updateGhlContactEmail(
   userId: string,
   newEmail: string
-): Promise<void> {
+): Promise<{
+  updated: number;
+  relinked: number;
+  disconnected: number;
+  failed: number;
+}> {
   const links = await getGhlContactLinks(userId);
+  const result = { updated: 0, relinked: 0, disconnected: 0, failed: 0 };
 
-  if (links.length === 0) return;
+  if (links.length === 0) return result;
 
   for (const link of links) {
     try {
       const client = await getGhlClientForLocation(link.ghlLocationId);
-      if (!client) continue;
+      if (!client) {
+        result.failed += 1;
+        continue;
+      }
 
       await client.put(`/contacts/${link.ghlContactId}`, {
         email: newEmail,
@@ -327,9 +337,55 @@ export async function updateGhlContactEmail(
         ghlContactId: link.ghlContactId,
         payload: { newEmail, locationId: link.ghlLocationId },
       });
+      result.updated += 1;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
+
+      const duplicate = extractGhlDuplicateEmailContact(errorMessage);
+      if (duplicate) {
+        const existingOwner = await db.query.ghlContacts.findFirst({
+          where: eq(ghlContacts.ghlContactId, duplicate.contactId),
+          columns: { userId: true },
+        });
+        if (!existingOwner) {
+          const [relinked] = await db
+            .update(ghlContacts)
+            .set({
+              ghlContactId: duplicate.contactId,
+              syncStatus: "active",
+              lastSyncedAt: new Date(),
+              cachedData: null,
+              lastFetchedAt: null,
+            })
+            .where(
+              and(
+                eq(ghlContacts.ghlContactId, link.ghlContactId),
+                eq(ghlContacts.ghlLocationId, link.ghlLocationId),
+                eq(ghlContacts.userId, userId),
+              ),
+            )
+            .returning({ id: ghlContacts.id });
+
+          if (relinked) {
+            await logSyncEvent({
+              eventType: "contact.email_relinked",
+              direction: "outbound",
+              entityType: "contact",
+              entityId: userId,
+              ghlContactId: duplicate.contactId,
+              payload: {
+                newEmail,
+                locationId: link.ghlLocationId,
+                previousContactId: link.ghlContactId,
+                reason: "duplicate_email_contact",
+              },
+            });
+            result.relinked += 1;
+            continue;
+          }
+        }
+      }
 
       // A deleted/moved GHL contact leaves a stale local mapping. Disconnect
       // it once so future Clerk webhook deliveries do not retry the same
@@ -363,6 +419,7 @@ export async function updateGhlContactEmail(
               reason: "contact_not_found",
             },
           });
+          result.disconnected += 1;
         } catch {
           console.error("[GHL] Failed to disconnect or log a stale contact mapping");
         }
@@ -385,6 +442,9 @@ export async function updateGhlContactEmail(
       }).catch(() => {
         console.error("[GHL] Failed to log sync event for email update failure");
       });
+      result.failed += 1;
     }
   }
+
+  return result;
 }
