@@ -95,8 +95,20 @@ export const proxy = clerkMiddleware(async (auth, req) => {
     return NextResponse.next();
   }
 
+  // Always let the database-backed dashboard page choose the landing page.
+  // Clerk role claims are only an edge hint and can be missing or stale; if we
+  // intercept the dashboard index here, a valid admin/coach can be mistaken for
+  // a student and sent to the reader before the database role is consulted.
+  const isDashboardEntry =
+    req.nextUrl.pathname === "/dashboard" || req.nextUrl.pathname === "/dashboard/";
+
   // Student routes are intentionally limited to the core learning paths.
-  if (role === "student" && isProtectedRoute(req) && !isStudentAllowedRoute(req)) {
+  if (
+    role === "student" &&
+    isProtectedRoute(req) &&
+    !isDashboardEntry &&
+    !isStudentAllowedRoute(req)
+  ) {
     return NextResponse.redirect(new URL("/dashboard/reader", req.url));
   }
 

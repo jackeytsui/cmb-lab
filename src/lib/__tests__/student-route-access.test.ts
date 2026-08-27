@@ -11,4 +11,16 @@ describe("student route access", () => {
 
     expect(middleware).toContain('"/dashboard/assignment-feedback(.*)"');
   });
+
+  it("defers the dashboard landing route to the database-backed page", () => {
+    const middleware = readFileSync(
+      path.join(process.cwd(), "src/proxy.ts"),
+      "utf8",
+    );
+
+    expect(middleware).toContain(
+      'req.nextUrl.pathname === "/dashboard" || req.nextUrl.pathname === "/dashboard/"',
+    );
+    expect(middleware).toContain("!isDashboardEntry");
+  });
 });
