@@ -14,6 +14,7 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { getCurrentCourseLibraryModuleIndex } from "@/lib/course-library-progression";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
@@ -120,9 +121,7 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
   });
 
   // The stop the student should do next: first stop with unfinished subpages.
-  const currentIndex = stops.findIndex(
-    (stop) => stop.lessonCount > 0 && !stop.isComplete,
-  );
+  const currentIndex = getCurrentCourseLibraryModuleIndex(stops);
   const completedStops = stops.filter((stop) => stop.isComplete).length;
   const totalTrackedStops = stops.filter((stop) => stop.lessonCount > 0).length;
   const percentComplete =

@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import {
   courseLibraryLessons,
   courseLibraryModules,
   courseLibraryCourses,
-  users,
 } from "@/db/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { CourseLibraryListeningPracticeSentence } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { isListeningPracticeLesson } from "@/lib/lesson-language";
-import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+import { getCurrentUser } from "@/lib/auth";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
 // Match the 60s used by the other blob-proxy routes so long audio isn't cut
 // off mid-transfer by the default function timeout.
@@ -32,14 +31,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const viewer = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, role: true },
-  });
+  const viewer = await getCurrentUser();
   if (!viewer) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -54,7 +46,6 @@ export async function GET(
     .select({
       content: courseLibraryLessons.content,
       lessonType: courseLibraryLessons.lessonType,
-      courseId: courseLibraryCourses.id,
     })
     .from(courseLibraryLessons)
     .innerJoin(
@@ -82,8 +73,7 @@ export async function GET(
   if (!lesson || !isListeningPracticeLesson(lesson.lessonType)) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
-  const canSeeCourse = await getCourseLibraryCourseAccess(viewer);
-  if (!canSeeCourse(lesson.courseId)) {
+  if (!(await canUserAccessCourseLibraryLesson(viewer, lessonId))) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 

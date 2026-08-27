@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
-  courseLibraryLessons,
-  courseLibraryModules,
-  courseLibraryCourses,
   courseLibraryLessonProgress,
-  users,
 } from "@/db/schema";
-import { visibleCourseStatuses } from "@/lib/course-library-access";
-import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { getCurrentUser } from "@/lib/auth";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
 interface RouteParams {
   params: Promise<{ lessonId: string }>;
@@ -23,40 +18,7 @@ const bodySchema = z.object({
 });
 
 async function getCourseLibraryUser() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
-
-  return db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, role: true },
-  });
-}
-
-async function getLessonAccess(lessonId: string, role: string) {
-  return db
-    .select({
-      lessonId: courseLibraryLessons.id,
-      courseId: courseLibraryCourses.id,
-    })
-    .from(courseLibraryLessons)
-    .innerJoin(
-      courseLibraryModules,
-      eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
-    )
-    .innerJoin(
-      courseLibraryCourses,
-      eq(courseLibraryModules.courseId, courseLibraryCourses.id),
-    )
-    .where(
-      and(
-        eq(courseLibraryLessons.id, lessonId),
-        isNull(courseLibraryLessons.deletedAt),
-        isNull(courseLibraryModules.deletedAt),
-        isNull(courseLibraryCourses.deletedAt),
-        inArray(courseLibraryCourses.status, visibleCourseStatuses(role)),
-      ),
-    )
-    .limit(1);
+  return getCurrentUser();
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
@@ -66,13 +28,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   }
 
   const { lessonId } = await params;
-  const [access] = await getLessonAccess(lessonId, user.role);
-  if (!access) {
-    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
-  }
-
-  const canSeeCourse = await getCourseLibraryCourseAccess(user);
-  if (!canSeeCourse(access.courseId)) {
+  if (!(await canUserAccessCourseLibraryLesson(user, lessonId))) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
@@ -98,13 +54,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const { lessonId } = await params;
-  const [access] = await getLessonAccess(lessonId, user.role);
-  if (!access) {
-    return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
-  }
-
-  const canSeeCourse = await getCourseLibraryCourseAccess(user);
-  if (!canSeeCourse(access.courseId)) {
+  if (!(await canUserAccessCourseLibraryLesson(user, lessonId))) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 

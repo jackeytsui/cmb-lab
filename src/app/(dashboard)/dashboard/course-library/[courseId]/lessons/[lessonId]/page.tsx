@@ -36,6 +36,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { signMediaPath } from "@/lib/signed-media-url";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 import {
   isDiaryLesson,
   isListeningPracticeLesson,
@@ -132,6 +133,12 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
   if (!canSeeCourse(courseId)) notFound();
+  if (
+    !currentUser ||
+    !(await canUserAccessCourseLibraryLesson(currentUser, lessonId))
+  ) {
+    notFound();
+  }
 
   const orderedLessons = await db
     .select({

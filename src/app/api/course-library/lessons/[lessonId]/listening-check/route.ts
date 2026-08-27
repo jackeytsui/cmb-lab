@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -8,7 +7,6 @@ import {
   courseLibraryModules,
   courseLibraryCourses,
   courseLibraryLessonProgress,
-  users,
 } from "@/db/schema";
 import type { CourseLibraryListeningPracticeSentence } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
@@ -18,7 +16,8 @@ import {
 } from "@/lib/pinyin-normalize";
 import { isListeningPracticeLesson, lessonLanguage } from "@/lib/lesson-language";
 import { convertScript } from "@/lib/chinese-convert";
-import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { getCurrentUser } from "@/lib/auth";
+import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
 // ---------------------------------------------------------------------------
 // POST /api/course-library/lessons/[lessonId]/listening-check
@@ -71,12 +70,7 @@ async function chineseAnswerMatches(
 }
 
 async function getCourseLibraryUser() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
-  return db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true, role: true },
-  });
+  return getCurrentUser();
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -91,7 +85,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     .select({
       content: courseLibraryLessons.content,
       lessonType: courseLibraryLessons.lessonType,
-      courseId: courseLibraryCourses.id,
     })
     .from(courseLibraryLessons)
     .innerJoin(
@@ -116,8 +109,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (!lesson || !isListeningPracticeLesson(lesson.lessonType)) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
-  const canSeeCourse = await getCourseLibraryCourseAccess(user);
-  if (!canSeeCourse(lesson.courseId)) {
+  if (!(await canUserAccessCourseLibraryLesson(user, lessonId))) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
