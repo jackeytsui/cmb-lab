@@ -25,6 +25,15 @@ import { NextRequest, NextResponse } from "next/server";
  * otherwise deliver a truncated 206 body and Chromium reports that as an
  * FFmpegDemuxer data-source error. */
 export const CHUNK_BYTES = 4 * 1024 * 1024;
+/** Keep the first metadata probe small. Chromium waits for this response to
+ * finish before it asks for an MP4's tail `moov` atom; a multi-megabyte first
+ * window can therefore leave the player at readyState=0 even though the
+ * endpoint itself is returning a healthy 206. */
+export const INITIAL_CHUNK_BYTES = 512 * 1024;
+
+function chunkBytesForStart(start: number) {
+  return start === 0 ? INITIAL_CHUNK_BYTES : CHUNK_BYTES;
+}
 
 interface ProxyOptions {
   /** Content-Type to use when upstream doesn't send one. */
@@ -46,7 +55,7 @@ export function clampRangeHeader(range: string): string {
   if (open) {
     const start = Number(open[1]);
     if (!Number.isFinite(start)) return range;
-    return `bytes=${start}-${start + CHUNK_BYTES - 1}`;
+    return `bytes=${start}-${start + chunkBytesForStart(start) - 1}`;
   }
 
   const bounded = /^bytes=(\d+)-(\d+)$/.exec(trimmed);
@@ -56,7 +65,10 @@ export function clampRangeHeader(range: string): string {
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
       return range;
     }
-    return `bytes=${start}-${Math.min(end, start + CHUNK_BYTES - 1)}`;
+    return `bytes=${start}-${Math.min(
+      end,
+      start + chunkBytesForStart(start) - 1,
+    )}`;
   }
 
   return range;

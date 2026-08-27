@@ -80,6 +80,23 @@ export function shouldReconcilePostPurchaseStudent(params: {
   return plan.add.length > 0 || plan.remove.length > 0;
 }
 
+/**
+ * A contact returned by an email-based upsert is authoritative for that email,
+ * but only inside the exact GHL location that handled the upsert. This lets the
+ * reconciler repair legacy cross-user contact mappings without making webhook
+ * contact IDs eligible for reassignment.
+ */
+export function canReassignAuthoritativeGhlContact(params: {
+  authoritativeEmailUpsert: boolean;
+  existingLocationId: string;
+  requestedLocationId: string;
+}) {
+  return (
+    params.authoritativeEmailUpsert &&
+    params.existingLocationId === params.requestedLocationId
+  );
+}
+
 export function shouldApplyInboundPostPurchaseTagChange(params: {
   tagName: string;
   action: "add" | "remove";

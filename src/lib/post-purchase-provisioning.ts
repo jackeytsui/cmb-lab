@@ -16,6 +16,7 @@ import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { assignTag, removeTag } from "@/lib/tags";
 import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
 import {
+  canReassignAuthoritativeGhlContact,
   derivePostPurchaseTags,
   planPostPurchaseTagReconciliation,
   POST_PURCHASE_CONTROLLED_TAGS,
@@ -375,6 +376,7 @@ async function ensureGhlContactLink(params: {
   userId: string;
   ghlContactId?: string | null;
   ghlLocationId?: string | null;
+  authoritativeEmailUpsert?: boolean;
 }) {
   if (!params.ghlContactId || !params.ghlLocationId) return;
 
@@ -389,7 +391,48 @@ async function ensureGhlContactLink(params: {
         .where(eq(ghlContacts.id, byContact.id));
       return;
     }
-    throw new Error("GHL contact is already linked to a different CMB user");
+    if (
+      !canReassignAuthoritativeGhlContact({
+        authoritativeEmailUpsert: params.authoritativeEmailUpsert ?? false,
+        existingLocationId: byContact.ghlLocationId,
+        requestedLocationId: params.ghlLocationId,
+      })
+    ) {
+      throw new Error("GHL contact is already linked to a different CMB user");
+    }
+
+    const targetLocationLink = await db.query.ghlContacts.findFirst({
+      where: and(
+        eq(ghlContacts.userId, params.userId),
+        eq(ghlContacts.ghlLocationId, params.ghlLocationId),
+      ),
+    });
+    await db.transaction(async (tx) => {
+      if (targetLocationLink && targetLocationLink.id !== byContact.id) {
+        await tx.delete(ghlContacts).where(eq(ghlContacts.id, byContact.id));
+        await tx
+          .update(ghlContacts)
+          .set({
+            ghlContactId: params.ghlContactId!,
+            syncStatus: "active",
+            lastSyncedAt: new Date(),
+          })
+          .where(eq(ghlContacts.id, targetLocationLink.id));
+      } else {
+        await tx
+          .update(ghlContacts)
+          .set({
+            userId: params.userId,
+            syncStatus: "active",
+            lastSyncedAt: new Date(),
+          })
+          .where(eq(ghlContacts.id, byContact.id));
+      }
+    });
+    console.warn(
+      "[Post Purchase] Repaired a legacy course-contact ownership mismatch",
+    );
+    return;
   }
 
   const byUserLocation = await db.query.ghlContacts.findFirst({
@@ -465,6 +508,7 @@ export async function provisionPostPurchaseEntitlements(
     userId: ensured.dbUserId,
     ghlContactId: courseContact.contactId,
     ghlLocationId: courseContact.locationId,
+    authoritativeEmailUpsert: true,
   });
 
   return {

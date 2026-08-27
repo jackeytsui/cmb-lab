@@ -3,6 +3,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   clampRangeHeader,
   CHUNK_BYTES,
+  INITIAL_CHUNK_BYTES,
   normalizeContentRange,
   proxyBlobMedia,
 } from "@/lib/blob-media-proxy";
@@ -14,7 +15,9 @@ afterEach(() => {
 
 describe("clampRangeHeader", () => {
   it("clamps open-ended ranges to one chunk", () => {
-    expect(clampRangeHeader("bytes=0-")).toBe(`bytes=0-${CHUNK_BYTES - 1}`);
+    expect(clampRangeHeader("bytes=0-")).toBe(
+      `bytes=0-${INITIAL_CHUNK_BYTES - 1}`,
+    );
     expect(clampRangeHeader("bytes=1000-")).toBe(
       `bytes=1000-${1000 + CHUNK_BYTES - 1}`,
     );
@@ -28,6 +31,9 @@ describe("clampRangeHeader", () => {
   it("clamps large bounded ranges to one chunk", () => {
     expect(clampRangeHeader(`bytes=100-${100 + CHUNK_BYTES * 2}`)).toBe(
       `bytes=100-${100 + CHUNK_BYTES - 1}`,
+    );
+    expect(clampRangeHeader(`bytes=0-${CHUNK_BYTES * 2}`)).toBe(
+      `bytes=0-${INITIAL_CHUNK_BYTES - 1}`,
     );
   });
 
@@ -98,7 +104,7 @@ describe("proxyBlobMedia", () => {
       {
         headers: {
           Authorization: "Bearer test-token",
-          Range: `bytes=0-${CHUNK_BYTES - 1}`,
+          Range: `bytes=0-${INITIAL_CHUNK_BYTES - 1}`,
         },
       },
     );

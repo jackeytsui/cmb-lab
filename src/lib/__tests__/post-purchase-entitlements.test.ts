@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canReassignAuthoritativeGhlContact,
   derivePostPurchaseTags,
   planPostPurchaseTagReconciliation,
   shouldReconcilePostPurchaseStudent,
@@ -106,5 +107,31 @@ describe("shouldReconcilePostPurchaseStudent", () => {
     expect(
       shouldReconcilePostPurchaseStudent({ ...correct, resyncGhl: true }),
     ).toBe(true);
+  });
+});
+
+describe("canReassignAuthoritativeGhlContact", () => {
+  it("allows reassignment only for an email upsert in the same location", () => {
+    expect(
+      canReassignAuthoritativeGhlContact({
+        authoritativeEmailUpsert: true,
+        existingLocationId: "course-location",
+        requestedLocationId: "course-location",
+      }),
+    ).toBe(true);
+    expect(
+      canReassignAuthoritativeGhlContact({
+        authoritativeEmailUpsert: false,
+        existingLocationId: "course-location",
+        requestedLocationId: "course-location",
+      }),
+    ).toBe(false);
+    expect(
+      canReassignAuthoritativeGhlContact({
+        authoritativeEmailUpsert: true,
+        existingLocationId: "sales-location",
+        requestedLocationId: "course-location",
+      }),
+    ).toBe(false);
   });
 });
