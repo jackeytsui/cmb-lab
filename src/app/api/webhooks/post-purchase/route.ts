@@ -11,6 +11,7 @@ import {
 } from "@/lib/rate-limit";
 import { webhookSecretsMatch } from "@/lib/webhook-secret";
 import { provisionPostPurchaseEntitlements } from "@/lib/post-purchase-provisioning";
+import { canonicalizePostPurchasePayload } from "@/lib/ghl/post-purchase-webhook";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -46,24 +47,6 @@ async function parseBody(req: NextRequest) {
     return Object.fromEntries((await req.formData()).entries());
   }
   return req.json();
-}
-
-function canonicalPayload(body: Record<string, unknown>) {
-  return {
-    email: body.email ?? body.contact_email,
-    firstName: body.firstName ?? body.first_name,
-    lastName: body.lastName ?? body.last_name,
-    name: body.name ?? body.contact_name,
-    productLine:
-      body.productLine ?? body.product_line ?? body["Product line?"],
-    addOnPurchased:
-      body.addOnPurchased ??
-      body.add_on_purchased ??
-      body["Add-on purchased"],
-    contactId: body.contactId ?? body.contact_id ?? body.id,
-    locationId: body.locationId ?? body.location_id,
-    idempotencyKey: body.idempotencyKey ?? body.idempotency_key,
-  };
 }
 
 function splitName(name?: string) {
@@ -105,7 +88,7 @@ export async function POST(req: NextRequest) {
   }
 
   const parsed = postPurchaseSchema.safeParse(
-    canonicalPayload(body as Record<string, unknown>),
+    canonicalizePostPurchasePayload(body as Record<string, unknown>),
   );
   if (!parsed.success) {
     return NextResponse.json(
