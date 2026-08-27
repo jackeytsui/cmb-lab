@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -10,6 +10,10 @@ import {
 } from "@/db/schema";
 import { FEATURE_KEYS, type FeatureKey } from "@/lib/permissions";
 import { isStaffRole } from "@/lib/platform-roles";
+import {
+  getPerStudentGrantedCourseIds,
+  hasPerStudentCourseGrant,
+} from "@/lib/course-library-access-grants";
 
 type FeatureOverrideState = {
   allow: Set<FeatureKey>;
@@ -189,7 +193,7 @@ export const GROUP_COACHING_EVENT_CONTENT_TYPE = "group_coaching_event";
  * Access is tag-driven, not feature/role-plan-driven:
  * - admin/coach: always
  * - student: only with an explicit grant — a tag that grants at least one
- *   library course, or a per-student grant (allowedUserIds) on any course.
+ *   library course, or a manual/system per-student grant on any course.
  */
 export async function canViewCourseLibrary(
   user: { id: string; role?: string | null } | null | undefined
@@ -203,21 +207,25 @@ export async function canViewCourseLibrary(
   );
   if (granted.size > 0) return true;
 
-  // Per-student manual grants (customized-course flow)
+  // Manual exceptions and GHL-managed access are stored separately so an
+  // automated progress import never pollutes the admin's exception editor.
   const rows = await db
-    .select({ allowedUserIds: courseLibraryCourses.allowedUserIds })
+    .select({
+      allowedUserIds: courseLibraryCourses.allowedUserIds,
+      systemAccessUserIds: courseLibraryCourses.systemAccessUserIds,
+    })
     .from(courseLibraryCourses)
     .where(
       and(
         isNull(courseLibraryCourses.deletedAt),
-        sql`jsonb_array_length(${courseLibraryCourses.allowedUserIds}) > 0`
+        or(
+          sql`jsonb_array_length(${courseLibraryCourses.allowedUserIds}) > 0`,
+          sql`jsonb_array_length(${courseLibraryCourses.systemAccessUserIds}) > 0`
+        )
       )
     );
 
-  return rows.some(
-    (row) =>
-      Array.isArray(row.allowedUserIds) && row.allowedUserIds.includes(user.id)
-  );
+  return rows.some((row) => hasPerStudentCourseGrant(row, user.id));
 }
 
 /**
@@ -228,8 +236,7 @@ export async function canViewCourseLibrary(
  *   granting tags.
  * - Customized courses ("Customized ..." titles) are ALWAYS restricted, even
  *   with no grants configured — default deny. Access comes from a tag grant
- *   or the per-student allowedUserIds list managed in the course editor's
- *   Visibility section.
+ *   or a per-student manual/system grant.
  * - Staff (admin/coach) always see everything.
  */
 export async function getCourseLibraryCourseAccess(
@@ -239,7 +246,7 @@ export async function getCourseLibraryCourseAccess(
     return () => true;
   }
 
-  const [grantedIds, restrictedIds, customCourses] = await Promise.all([
+  const [grantedIds, restrictedIds, courses] = await Promise.all([
     user
       ? getUserContentGrants(user.id, COURSE_LIBRARY_COURSE_CONTENT_TYPE)
       : Promise.resolve(new Set<string>()),
@@ -247,21 +254,25 @@ export async function getCourseLibraryCourseAccess(
     db
       .select({
         id: courseLibraryCourses.id,
+        title: courseLibraryCourses.title,
         allowedUserIds: courseLibraryCourses.allowedUserIds,
+        systemAccessUserIds: courseLibraryCourses.systemAccessUserIds,
       })
       .from(courseLibraryCourses)
-      .where(ilike(courseLibraryCourses.title, "%customized%")),
+      .where(isNull(courseLibraryCourses.deletedAt)),
   ]);
 
-  const customIds = new Set(customCourses.map((c) => c.id));
+  const customIds = new Set(
+    courses
+      .filter((course) => /customized/i.test(course.title))
+      .map((course) => course.id)
+  );
   if (user) {
-    // Per-student manual grants count as access for customized courses.
-    for (const course of customCourses) {
-      const userIds = Array.isArray(course.allowedUserIds)
-        ? (course.allowedUserIds as string[])
-        : [];
-      if (userIds.includes(user.id)) grantedIds.add(course.id);
-    }
+    // Per-student grants apply to every restricted course. Previously these
+    // were only checked on customized courses, so migrated students without a
+    // matching tag could open Course Library but not their granted course.
+    for (const courseId of getPerStudentGrantedCourseIds(courses, user.id))
+      grantedIds.add(courseId);
   }
 
   return (courseId: string) => {

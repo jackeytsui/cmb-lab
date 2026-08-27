@@ -155,13 +155,13 @@ async function loadProgressFieldIds(): Promise<{
 
 async function loadCourseStructures(): Promise<{
   courses: CourseStructure[];
-  allowedUserIdsByCourse: Map<string, Set<string>>;
+  systemAccessUserIdsByCourse: Map<string, Set<string>>;
 }> {
   const rows = await db
     .select({
       courseId: courseLibraryCourses.id,
       courseTitle: courseLibraryCourses.title,
-      allowedUserIds: courseLibraryCourses.allowedUserIds,
+      systemAccessUserIds: courseLibraryCourses.systemAccessUserIds,
       moduleId: courseLibraryModules.id,
       moduleTitle: courseLibraryModules.title,
       lessonId: courseLibraryLessons.id,
@@ -194,7 +194,7 @@ async function loadCourseStructures(): Promise<{
     );
 
   const courses: CourseStructure[] = [];
-  const allowedUserIdsByCourse = new Map<string, Set<string>>();
+  const systemAccessUserIdsByCourse = new Map<string, Set<string>>();
   for (const [level, title] of Object.entries(
     BLUEPRINT_COURSE_TITLES,
   ) as Array<[BlueprintLevel, string]>) {
@@ -218,12 +218,12 @@ async function loadCourseStructures(): Promise<{
       level,
       modules: [...moduleMap.values()],
     });
-    allowedUserIdsByCourse.set(
+    systemAccessUserIdsByCourse.set(
       courseRows[0].courseId,
-      new Set(courseRows[0].allowedUserIds ?? []),
+      new Set(courseRows[0].systemAccessUserIds ?? []),
     );
   }
-  return { courses, allowedUserIdsByCourse };
+  return { courses, systemAccessUserIdsByCourse };
 }
 
 export async function syncGhlCourseProgress({
@@ -409,7 +409,9 @@ export async function syncGhlCourseProgress({
       incrementCount(result.planStatuses, plan.status);
       for (const courseId of plan.accessCourseIds) {
         const key = `${courseId}:${user.id}`;
-        if (!courseData.allowedUserIdsByCourse.get(courseId)?.has(user.id)) {
+        if (
+          !courseData.systemAccessUserIdsByCourse.get(courseId)?.has(user.id)
+        ) {
           accessToAdd.set(key, { courseId, userId: user.id });
         }
       }
@@ -514,12 +516,12 @@ export async function syncGhlCourseProgress({
   for (const [courseId, userIds] of accessByCourse) {
     await sql`
       UPDATE course_library_courses
-      SET allowed_user_ids = (
+      SET system_access_user_ids = (
         SELECT COALESCE(jsonb_agg(user_id), '[]'::jsonb)
         FROM (
           SELECT DISTINCT user_id
           FROM jsonb_array_elements_text(
-            COALESCE(allowed_user_ids, '[]'::jsonb) ||
+            COALESCE(system_access_user_ids, '[]'::jsonb) ||
             ${JSON.stringify(userIds)}::jsonb
           ) AS ids(user_id)
         ) AS unique_ids

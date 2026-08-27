@@ -9,6 +9,7 @@ import {
   courseLibraryLessons,
   tagContentGrants,
   tags,
+  users,
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { COURSE_LIBRARY_COURSE_CONTENT_TYPE } from "@/lib/tag-feature-access";
@@ -81,7 +82,10 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
     isVideoAskVocalHackDestination,
   ).length;
 
-  const [allTags, grantRows] = await Promise.all([
+  const manualUserIds = Array.isArray(course.allowedUserIds)
+    ? course.allowedUserIds
+    : [];
+  const [allTags, grantRows, manualStudents] = await Promise.all([
     db
       .select({ id: tags.id, name: tags.name, color: tags.color })
       .from(tags)
@@ -95,6 +99,12 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
           eq(tagContentGrants.contentId, courseId),
         ),
       ),
+    manualUserIds.length > 0
+      ? db
+          .select({ id: users.id, name: users.name, email: users.email })
+          .from(users)
+          .where(inArray(users.id, manualUserIds))
+      : Promise.resolve([]),
   ]);
 
   const hydrated = {
@@ -169,8 +179,15 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
         initialCourse={hydrated}
         allTags={allTags}
         initialAllowedTagIds={grantRows.map((g) => g.tagId)}
-        initialAllowedUserIds={
-          Array.isArray(course.allowedUserIds) ? course.allowedUserIds : []
+        initialAllowedUserIds={manualUserIds}
+        initialAllowedStudents={manualStudents.map((student) => ({
+          ...student,
+          name: student.name || student.email,
+        }))}
+        initialSystemAccessCount={
+          Array.isArray(course.systemAccessUserIds)
+            ? course.systemAccessUserIds.length
+            : 0
         }
       />
     </div>

@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     .select({
       courseId: courseLibraryCourses.id,
       courseTitle: courseLibraryCourses.title,
-      allowedUserIds: courseLibraryCourses.allowedUserIds,
+      systemAccessUserIds: courseLibraryCourses.systemAccessUserIds,
       moduleId: courseLibraryModules.id,
       moduleTitle: courseLibraryModules.title,
       lessonId: courseLibraryLessons.id,
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
     CourseLevel,
     {
       id: string;
-      allowedUserIds: Set<string>;
+      systemAccessUserIds: Set<string>;
       moduleList: Array<{ id: string; title: string; lessonIds: string[] }>;
       modules: Map<string, { id: string; title: string; lessonIds: string[] }>;
     }
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
     }
     courses.set(level, {
       id: rows[0].courseId,
-      allowedUserIds: new Set(rows[0].allowedUserIds ?? []),
+      systemAccessUserIds: new Set(rows[0].systemAccessUserIds ?? []),
       moduleList: [...modules.values()],
       modules,
     });
@@ -264,7 +264,7 @@ export async function POST(request: NextRequest) {
     const course = [...courses.values()].find(
       (candidate) => candidate.id === pair.courseId,
     );
-    return !course?.allowedUserIds.has(pair.userId);
+    return !course?.systemAccessUserIds.has(pair.userId);
   });
   const completionCandidates = [...completionPairs.values()];
   const existingProgress = completionCandidates.length
@@ -302,12 +302,12 @@ export async function POST(request: NextRequest) {
     for (const [courseId, userIds] of accessByCourse) {
       await sql`
         UPDATE course_library_courses
-        SET allowed_user_ids = (
+        SET system_access_user_ids = (
           SELECT COALESCE(jsonb_agg(user_id), '[]'::jsonb)
           FROM (
             SELECT DISTINCT user_id
             FROM jsonb_array_elements_text(
-              COALESCE(allowed_user_ids, '[]'::jsonb) ||
+              COALESCE(system_access_user_ids, '[]'::jsonb) ||
               ${JSON.stringify(userIds)}::jsonb
             ) AS ids(user_id)
           ) AS unique_ids

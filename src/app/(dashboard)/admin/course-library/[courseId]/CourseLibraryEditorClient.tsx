@@ -378,11 +378,15 @@ export function CourseLibraryEditorClient({
   allTags,
   initialAllowedTagIds,
   initialAllowedUserIds,
+  initialAllowedStudents,
+  initialSystemAccessCount,
 }: {
   initialCourse: CourseData;
   allTags: AccessTag[];
   initialAllowedTagIds: string[];
   initialAllowedUserIds: string[];
+  initialAllowedStudents: StudentOption[];
+  initialSystemAccessCount: number;
 }) {
   const router = useRouter();
   const [course, setCourse] = useState<CourseData>(initialCourse);
@@ -418,29 +422,65 @@ export function CourseLibraryEditorClient({
   const [allowedUserIds, setAllowedUserIds] = useState<string[]>(
     initialAllowedUserIds,
   );
-  const [allStudents, setAllStudents] = useState<StudentOption[]>([]);
+  const [allowedStudents, setAllowedStudents] = useState<StudentOption[]>(
+    initialAllowedStudents,
+  );
+  const [studentResults, setStudentResults] = useState<StudentOption[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
+  const [searchingStudents, setSearchingStudents] = useState(false);
   const [savingStudents, setSavingStudents] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/students?limit=500")
-      .then((r) => r.json())
-      .then((d) => {
-        const students = (d.students ?? []).map(
-          (s: { id: string; name?: string; email?: string }) => ({
-            id: s.id,
-            name: s.name || s.email || "Unknown",
-            email: s.email || "",
-          }),
-        );
-        setAllStudents(students);
-      })
-      .catch(() => {});
-  }, []);
+    const query = studentSearch.trim();
+    if (query.length < 2) {
+      setStudentResults([]);
+      setSearchingStudents(false);
+      return;
+    }
 
-  const saveAllowedUsers = async (next: string[]) => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      setSearchingStudents(true);
+      fetch(
+        `/api/admin/students?pageSize=8&search=${encodeURIComponent(query)}&sortBy=name&sortOrder=asc`,
+        { signal: controller.signal },
+      )
+        .then((r) => {
+          if (!r.ok) throw new Error("Student search failed");
+          return r.json();
+        })
+        .then((d) => {
+          const students = (d.students ?? []).map(
+            (s: { id: string; name?: string; email?: string }) => ({
+              id: s.id,
+              name: s.name || s.email || "Unknown",
+              email: s.email || "",
+            }),
+          );
+          setStudentResults(students);
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError")
+            return;
+          setStudentResults([]);
+        })
+        .finally(() => setSearchingStudents(false));
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [studentSearch]);
+
+  const saveAllowedUsers = async (
+    next: string[],
+    nextStudents: StudentOption[],
+  ) => {
     const prev = allowedUserIds;
+    const prevStudents = allowedStudents;
     setAllowedUserIds(next);
+    setAllowedStudents(nextStudents);
     setSavingStudents(true);
     try {
       const res = await fetch(
@@ -451,9 +491,13 @@ export function CourseLibraryEditorClient({
           body: JSON.stringify({ allowedUserIds: next }),
         },
       );
-      if (!res.ok) setAllowedUserIds(prev);
+      if (!res.ok) {
+        setAllowedUserIds(prev);
+        setAllowedStudents(prevStudents);
+      }
     } catch {
       setAllowedUserIds(prev);
+      setAllowedStudents(prevStudents);
     } finally {
       setSavingStudents(false);
     }
@@ -1232,7 +1276,7 @@ export function CourseLibraryEditorClient({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <label className="block text-xs font-medium text-muted-foreground">
-              Student Access (individual students)
+              Manual access exceptions
             </label>
             {savingStudents && (
               <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
@@ -1242,24 +1286,33 @@ export function CourseLibraryEditorClient({
             {isCustomized
               ? "Customized course — hidden from ALL students by default. Only the students added here (or granted via a tag above) can see it."
               : allowedUserIds.length === 0
-                ? "No individual students added. Add students to grant them access regardless of tags."
-                : "These students can see this course regardless of tags."}
+                ? "No manual exceptions. Search below only when a student needs access outside the assigned tags."
+                : "These deliberate exceptions can see this course regardless of tags."}
           </p>
+          {initialSystemAccessCount > 0 && (
+            <p className="text-[10px] text-muted-foreground mb-2">
+              {initialSystemAccessCount} imported student
+              {initialSystemAccessCount === 1 ? "" : "s"} retain system-managed
+              access from GHL progress. They are kept separate and updated
+              automatically.
+            </p>
+          )}
           {allowedUserIds.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">
               {allowedUserIds.map((uid) => {
-                const student = allStudents.find((s) => s.id === uid);
+                const student = allowedStudents.find((s) => s.id === uid);
                 return (
                   <span
                     key={uid}
                     className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
                   >
-                    {student ? student.name : uid.slice(0, 8)}
+                    {student ? student.name : "Unknown student"}
                     <button
                       type="button"
                       onClick={() =>
                         saveAllowedUsers(
                           allowedUserIds.filter((id) => id !== uid),
+                          allowedStudents.filter((entry) => entry.id !== uid),
                         )
                       }
                       disabled={savingStudents}
@@ -1282,26 +1335,19 @@ export function CourseLibraryEditorClient({
             placeholder="Search students by name or email…"
             className="w-full max-w-sm rounded-md border border-border bg-background px-3 py-1.5 text-xs"
           />
-          {studentSearch.trim() && (
+          {studentSearch.trim().length >= 2 && (
             <div className="mt-1 max-w-sm rounded-md border border-border bg-card divide-y divide-border/60 overflow-hidden">
-              {allStudents
-                .filter(
-                  (s) =>
-                    !allowedUserIds.includes(s.id) &&
-                    (s.name
-                      .toLowerCase()
-                      .includes(studentSearch.toLowerCase()) ||
-                      s.email
-                        .toLowerCase()
-                        .includes(studentSearch.toLowerCase())),
-                )
-                .slice(0, 8)
+              {studentResults
+                .filter((s) => !allowedUserIds.includes(s.id))
                 .map((s) => (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => {
-                      saveAllowedUsers([...allowedUserIds, s.id]);
+                      saveAllowedUsers(
+                        [...allowedUserIds, s.id],
+                        [...allowedStudents, s],
+                      );
                       setStudentSearch("");
                     }}
                     disabled={savingStudents}
@@ -1313,6 +1359,20 @@ export function CourseLibraryEditorClient({
                     </span>
                   </button>
                 ))}
+              {searchingStudents && (
+                <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Searching students…
+                </div>
+              )}
+              {!searchingStudents &&
+                studentResults.filter(
+                  (student) => !allowedUserIds.includes(student.id),
+                ).length === 0 && (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">
+                    No matching students found.
+                  </div>
+                )}
             </div>
           )}
         </div>

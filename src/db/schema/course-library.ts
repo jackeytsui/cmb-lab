@@ -83,6 +83,13 @@ export const courseLibraryCourses = pgTable(
       .$type<string[]>()
       .notNull()
       .default([]),
+    // Access preserved automatically by GHL/progress imports. Keeping it
+    // separate prevents system enrollment records from polluting the manual
+    // exception editor.
+    systemAccessUserIds: jsonb("system_access_user_ids")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
     sortOrder: integer("sort_order").notNull().default(0),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: timestamp("created_at").notNull().defaultNow(),
