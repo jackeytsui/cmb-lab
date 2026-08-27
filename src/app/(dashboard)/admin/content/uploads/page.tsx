@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { videoUploads } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { isStaffRole } from "@/lib/platform-roles";
 
 export default async function UploadsPage() {
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const currentUser = await getRealUser();
+  if (!currentUser || !isStaffRole(currentUser.role)) {
     redirect("/dashboard");
   }
 
@@ -19,6 +20,11 @@ export default async function UploadsPage() {
     uploads = await db
       .select()
       .from(videoUploads)
+      .where(
+        currentUser.role === "admin"
+          ? undefined
+          : eq(videoUploads.uploadedBy, currentUser.clerkId),
+      )
       .orderBy(desc(videoUploads.createdAt))
       .limit(100);
   } catch (err) {

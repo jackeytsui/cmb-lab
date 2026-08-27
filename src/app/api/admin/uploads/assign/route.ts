@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { videoUploads, lessons } from "@/db/schema";
 import { eq, inArray, and, isNull } from "drizzle-orm";
+import { isStaffRole } from "@/lib/platform-roles";
+import { z } from "zod";
 
-interface AssignmentPair {
-  uploadId: string;
-  lessonId: string;
-}
+const assignUploadsSchema = z
+  .object({
+    assignments: z
+      .array(
+        z
+          .object({
+            uploadId: z.string().uuid(),
+            lessonId: z.string().uuid(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(100),
+  })
+  .strict();
 
 /**
  * POST /api/admin/uploads/assign
@@ -17,35 +30,38 @@ interface AssignmentPair {
  * Body: { assignments: [{ uploadId, lessonId }] }
  */
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const currentUser = await getRealUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
-    const body = await request.json();
-    const assignments: AssignmentPair[] = body.assignments;
-
-    if (!Array.isArray(assignments) || assignments.length === 0) {
+    const parsed = assignUploadsSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "assignments array is required" },
-        { status: 400 }
+        { error: "Invalid assignments", details: parsed.error.flatten() },
+        { status: 400 },
       );
     }
-
-    // Validate all assignments have required fields
-    for (const { uploadId, lessonId } of assignments) {
-      if (!uploadId || !lessonId) {
-        return NextResponse.json(
-          { error: "Each assignment must have uploadId and lessonId" },
-          { status: 400 }
-        );
-      }
-    }
+    const { assignments } = parsed.data;
 
     // Get upload IDs and lesson IDs
     const uploadIds = assignments.map((a) => a.uploadId);
     const lessonIds = assignments.map((a) => a.lessonId);
+    if (
+      new Set(uploadIds).size !== uploadIds.length ||
+      new Set(lessonIds).size !== lessonIds.length
+    ) {
+      return NextResponse.json(
+        { error: "Each upload and lesson may appear only once" },
+        { status: 400 },
+      );
+    }
 
     // Verify uploads exist and are ready
     const uploads = await db
@@ -54,8 +70,11 @@ export async function POST(request: NextRequest) {
       .where(
         and(
           inArray(videoUploads.id, uploadIds),
-          eq(videoUploads.status, "ready")
-        )
+          eq(videoUploads.status, "ready"),
+          currentUser.role === "admin"
+            ? undefined
+            : eq(videoUploads.uploadedBy, currentUser.clerkId),
+        ),
       );
 
     if (uploads.length !== uploadIds.length) {

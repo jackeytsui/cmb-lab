@@ -211,6 +211,11 @@ describe("coach route access", () => {
     );
     const muxUpload = source("src/app/api/admin/mux/upload-url/route.ts");
     const muxStatus = source("src/app/api/admin/mux/check-status/route.ts");
+    const uploadsList = source("src/app/api/admin/uploads/route.ts");
+    const uploadsAssign = source("src/app/api/admin/uploads/assign/route.ts");
+    const uploadsPage = source(
+      "src/app/(dashboard)/admin/content/uploads/page.tsx",
+    );
 
     expect(promptCollection).toContain("getStaffStudentAccessContext");
     expect(promptCollection).toContain(
@@ -232,5 +237,13 @@ describe("coach route access", () => {
       "eq(videoUploads.uploadedBy, currentUser.clerkId)",
     );
     expect(muxStatus).toContain("eq(videoUploads.id, uploadRecord.id)");
+    for (const uploadSurface of [uploadsList, uploadsAssign, uploadsPage]) {
+      expect(uploadSurface).toContain("getRealUser");
+      expect(uploadSurface).toContain(
+        "eq(videoUploads.uploadedBy, currentUser.clerkId)",
+      );
+    }
+    expect(uploadsAssign).toContain("assignUploadsSchema.safeParse");
+    expect(uploadsAssign).toContain("Each upload and lesson may appear only once");
   });
 });

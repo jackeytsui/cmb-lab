@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { videoUploads } from "@/db/schema";
 import { desc, eq, and } from "drizzle-orm";
+import { isStaffRole } from "@/lib/platform-roles";
 
 /**
  * GET /api/admin/uploads
@@ -14,8 +15,11 @@ import { desc, eq, and } from "drizzle-orm";
  *   category - Filter by category (lesson, prompt, other)
  */
 export async function GET(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const currentUser = await getRealUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isStaffRole(currentUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -24,7 +28,11 @@ export async function GET(request: NextRequest) {
     const statusFilter = searchParams.get("status");
     const categoryFilter = searchParams.get("category");
 
-    const conditions = [];
+    const conditions = [
+      currentUser.role === "admin"
+        ? undefined
+        : eq(videoUploads.uploadedBy, currentUser.clerkId),
+    ];
 
     if (
       statusFilter &&
