@@ -30,6 +30,13 @@ const residualRomanisationMigration = readFileSync(
   ),
   "utf8",
 );
+const toneSandhiMigration = readFileSync(
+  path.join(
+    process.cwd(),
+    "src/db/migrations/0100_vocal_hack_one_tone_sandhi.sql",
+  ),
+  "utf8",
+);
 
 describe("Vocal Hack video source-of-truth guidance", () => {
   it("shows the guidance before every Vocal Hack sentence list", () => {
@@ -96,6 +103,14 @@ describe("Vocal Hack video source-of-truth guidance", () => {
       ).toHaveLength(2);
     }
     expect(residualRomanisationMigration).toContain(
+      'UPDATE "videoask_vocal_hack_sentences" AS staged',
+    );
+    expect(
+      toneSandhiMigration.match(
+        new RegExp("68978898-8df4-4a40-a6b9-03ab9ba9c6cf", "g"),
+      ),
+    ).toHaveLength(4);
+    expect(toneSandhiMigration).toContain(
       'UPDATE "videoask_vocal_hack_sentences" AS staged',
     );
   });
