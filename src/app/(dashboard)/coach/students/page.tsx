@@ -32,19 +32,21 @@ export default async function CoachStudentsPage() {
 
   // Fetch coaches list for the filter/assign dropdown
   let coaches: { id: string; name: string | null; email: string }[] = [];
-  try {
-    coaches = await db
-      .select({ id: users.id, name: users.name, email: users.email })
-      .from(users)
-      .where(
-        and(
-          isNull(users.deletedAt),
-          or(eq(users.role, "coach"), eq(users.role, "admin")),
-        ),
-      )
-      .orderBy(users.name);
-  } catch (err) {
-    console.error("Failed to fetch coaches:", err);
+  if (isAdmin) {
+    try {
+      coaches = await db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .where(
+          and(
+            isNull(users.deletedAt),
+            or(eq(users.role, "coach"), eq(users.role, "admin")),
+          ),
+        )
+        .orderBy(users.name);
+    } catch (err) {
+      console.error("Failed to fetch coaches:", err);
+    }
   }
 
   return (

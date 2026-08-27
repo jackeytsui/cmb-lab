@@ -1,11 +1,12 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, coachingSessions, coachingSessionRatings } from "@/db/schema";
 import { and, eq, avg, count, isNull, or, ilike, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getRealUser } from "@/lib/auth";
 import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
+import { isStaffRole } from "@/lib/platform-roles";
+import { resolveCoachStudentScope } from "@/lib/coach-student-scope";
 
 /**
  * GET /api/coach/students/with-ratings
@@ -19,20 +20,16 @@ import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
  * Access: coach+ role required
  */
 export async function GET(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
+  const realUser = await getRealUser();
+  if (!realUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const isCoach = await hasMinimumRole("coach");
-  if (!isCoach) {
+  if (!isStaffRole(realUser.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const currentDbUser = await getCurrentUser();
-  if (!currentDbUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
+  const viewedUser = (await getCurrentUser()) ?? realUser;
 
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") || "";
@@ -55,9 +52,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Coach filter: either specific coach or "my students"
-  if (myStudents || (coachIdFilter && coachIdFilter !== "all")) {
-    const targetCoachId = myStudents ? currentDbUser.id : coachIdFilter;
+  const targetCoachId = resolveCoachStudentScope({
+    realUserId: realUser.id,
+    realRole: realUser.role,
+    viewedUserId: viewedUser.id,
+    viewedRole: viewedUser.role,
+    myStudents,
+    requestedCoachId: coachIdFilter,
+  });
+  if (targetCoachId) {
     conditions.push(eq(users.assignedCoachId, targetCoachId));
   }
 
