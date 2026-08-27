@@ -407,28 +407,30 @@ async function ensureGhlContactLink(params: {
         eq(ghlContacts.ghlLocationId, params.ghlLocationId),
       ),
     });
-    await db.transaction(async (tx) => {
-      if (targetLocationLink && targetLocationLink.id !== byContact.id) {
-        await tx.delete(ghlContacts).where(eq(ghlContacts.id, byContact.id));
-        await tx
-          .update(ghlContacts)
-          .set({
-            ghlContactId: params.ghlContactId!,
-            syncStatus: "active",
-            lastSyncedAt: new Date(),
-          })
-          .where(eq(ghlContacts.id, targetLocationLink.id));
-      } else {
-        await tx
-          .update(ghlContacts)
-          .set({
-            userId: params.userId,
-            syncStatus: "active",
-            lastSyncedAt: new Date(),
-          })
-          .where(eq(ghlContacts.id, byContact.id));
-      }
-    });
+    if (targetLocationLink && targetLocationLink.id !== byContact.id) {
+      // Neon HTTP does not support interactive transaction callbacks. Remove
+      // the conflicting legacy row first, then promote the target's existing
+      // location row. If the second statement is interrupted, the next cron
+      // safely retries this same email-upsert repair.
+      await db.delete(ghlContacts).where(eq(ghlContacts.id, byContact.id));
+      await db
+        .update(ghlContacts)
+        .set({
+          ghlContactId: params.ghlContactId!,
+          syncStatus: "active",
+          lastSyncedAt: new Date(),
+        })
+        .where(eq(ghlContacts.id, targetLocationLink.id));
+    } else {
+      await db
+        .update(ghlContacts)
+        .set({
+          userId: params.userId,
+          syncStatus: "active",
+          lastSyncedAt: new Date(),
+        })
+        .where(eq(ghlContacts.id, byContact.id));
+    }
     console.warn(
       "[Post Purchase] Repaired a legacy course-contact ownership mismatch",
     );
