@@ -248,6 +248,7 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     label: "Coach Tools",
     minRole: "coach",
     items: [
+      { title: "Coach Dashboard", url: "/coach", icon: LayoutDashboard },
       { title: "Students", url: "/coach/students", icon: Users },
       { title: "Internal Docs", url: "/coach/internal-docs", icon: FileText },
     ],

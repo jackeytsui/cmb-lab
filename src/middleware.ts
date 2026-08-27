@@ -2,7 +2,6 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import {
   DEFAULT_PLATFORM_ROLE,
-  hasMinimumPlatformRole,
   normalizePlatformRole,
 } from "@/lib/platform-roles";
 
@@ -22,6 +21,7 @@ const isStudentAllowedRoute = createRouteMatcher([
 ]);
 const isProtectedRoute = createRouteMatcher([
   "/dashboard(.*)",
+  "/coach(.*)",
   "/courses(.*)",
   "/lessons(.*)",
   "/practice(.*)",
@@ -88,9 +88,11 @@ export default clerkMiddleware(async (auth, req) => {
   // Admin route protection is enforced in server layouts/pages where full user context is available.
   // Avoid edge false negatives when session claims are missing email/role fields.
 
-  // Coach routes are available to every staff role.
-  if (isCoachRoute(req) && !hasMinimumPlatformRole(role, "coach")) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+  // Coach pages authorize against the database, which is the role source of
+  // truth. Clerk metadata is only an edge hint and can lag behind a database
+  // role change; let the server page decide instead of rejecting valid staff.
+  if (isCoachRoute(req)) {
+    return NextResponse.next();
   }
 
   // Student routes are intentionally limited to the core learning paths.

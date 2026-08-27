@@ -37,6 +37,9 @@ export default async function CoachDashboardPage() {
     <div className="container mx-auto px-4 py-8">
         {/* Page header with personalized greeting */}
         <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Coach Dashboard
+          </h1>
           <p className="text-muted-foreground mt-2">
             Welcome back, {displayName}. Review student submissions and provide feedback.
           </p>
