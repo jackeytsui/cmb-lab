@@ -28,6 +28,10 @@ const streamRouteSource = readFileSync(
   ),
   "utf8",
 );
+const nextConfigSource = readFileSync(
+  path.join(process.cwd(), "next.config.ts"),
+  "utf8",
+);
 
 describe("course-library media recovery", () => {
   it("gives a silent media stall an actionable recovery within 30 seconds", () => {
@@ -62,5 +66,11 @@ describe("course-library media recovery", () => {
       "NextResponse.redirect(presignedUrl, 307)",
     );
     expect(streamRouteSource).not.toContain("proxyBlobMedia");
+  });
+
+  it("allows signed private Blob redirects to load in the video element", () => {
+    const mediaSource = nextConfigSource.match(/media-src[^;]+;/)?.[0];
+
+    expect(mediaSource).toContain("https://*.vercel-storage.com");
   });
 });
