@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { format } from "date-fns";
@@ -6,6 +6,8 @@ import { ArrowLeft, Calendar, ExternalLink } from "lucide-react";
 import { hasMinimumRole } from "@/lib/auth";
 import { getVideoAssignmentProgress } from "@/lib/video-assignments";
 import { VideoAssignmentProgress } from "@/components/coach/VideoAssignmentProgress";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
+import { z } from "zod";
 
 /**
  * Coach progress detail page for a single video assignment.
@@ -20,10 +22,22 @@ export default async function CoachVideoAssignmentProgressPage(props: {
   }
 
   const { assignmentId } = await props.params;
-  const data = await getVideoAssignmentProgress(assignmentId);
+  if (!z.string().uuid().safeParse(assignmentId).success) {
+    notFound();
+  }
+
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
+    redirect("/dashboard");
+  }
+
+  const data = await getVideoAssignmentProgress(
+    assignmentId,
+    access.actor.role === "admin" ? null : access.actor.id,
+  );
 
   if (!data) {
-    redirect("/coach/video-assignments");
+    notFound();
   }
 
   const displayTitle = data.assignment.title || "Untitled Video";

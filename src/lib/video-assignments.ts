@@ -104,13 +104,24 @@ export async function createVideoAssignment(data: {
 }
 
 /**
- * Hard delete a video assignment.
+ * Hard delete a video assignment within an explicit creator scope.
+ * A null assignedById is reserved for an unrestricted administrator action.
  * Returns the deleted row or null if not found.
  */
-export async function deleteVideoAssignment(id: string) {
+export async function deleteVideoAssignment(
+  id: string,
+  assignedById: string | null,
+) {
   const [deleted] = await db
     .delete(videoAssignments)
-    .where(eq(videoAssignments.id, id))
+    .where(
+      and(
+        eq(videoAssignments.id, id),
+        assignedById
+          ? eq(videoAssignments.assignedBy, assignedById)
+          : undefined,
+      ),
+    )
     .returning();
 
   return deleted ?? null;
@@ -249,7 +260,8 @@ export async function getStudentVideoAssignments(
  * Resolves target students based on targetType, LEFT JOINs videoSessions.
  */
 export async function getVideoAssignmentProgress(
-  assignmentId: string
+  assignmentId: string,
+  assignedById: string | null,
 ): Promise<VideoAssignmentProgressResult | null> {
   // Step 1: Get the assignment details
   const [assignment] = await db
@@ -263,7 +275,14 @@ export async function getVideoAssignmentProgress(
       targetId: videoAssignments.targetId,
     })
     .from(videoAssignments)
-    .where(eq(videoAssignments.id, assignmentId));
+    .where(
+      and(
+        eq(videoAssignments.id, assignmentId),
+        assignedById
+          ? eq(videoAssignments.assignedBy, assignedById)
+          : undefined,
+      ),
+    );
 
   if (!assignment) {
     return null;

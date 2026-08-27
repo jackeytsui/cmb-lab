@@ -125,13 +125,24 @@ export async function createThreadAssignment(data: {
 }
 
 /**
- * Hard delete a thread assignment.
+ * Hard delete a thread assignment within an explicit creator scope.
+ * A null assignedById is reserved for an unrestricted administrator action.
  * Returns the deleted row or null if not found.
  */
-export async function deleteThreadAssignment(id: string) {
+export async function deleteThreadAssignment(
+  id: string,
+  assignedById: string | null,
+) {
   const [deleted] = await db
     .delete(threadAssignments)
-    .where(eq(threadAssignments.id, id))
+    .where(
+      and(
+        eq(threadAssignments.id, id),
+        assignedById
+          ? eq(threadAssignments.assignedBy, assignedById)
+          : undefined,
+      ),
+    )
     .returning();
 
   return deleted ?? null;
@@ -280,7 +291,8 @@ export async function getStudentThreadAssignments(
  * and counts videoThreadResponses per session.
  */
 export async function getThreadAssignmentProgress(
-  assignmentId: string
+  assignmentId: string,
+  assignedById: string | null,
 ): Promise<ThreadAssignmentProgressResult | null> {
   // Step 1: Get the assignment details
   const [assignment] = await db
@@ -294,7 +306,14 @@ export async function getThreadAssignmentProgress(
     })
     .from(threadAssignments)
     .innerJoin(videoThreads, eq(videoThreads.id, threadAssignments.threadId))
-    .where(eq(threadAssignments.id, assignmentId));
+    .where(
+      and(
+        eq(threadAssignments.id, assignmentId),
+        assignedById
+          ? eq(threadAssignments.assignedBy, assignedById)
+          : undefined,
+      ),
+    );
 
   if (!assignment) {
     return null;

@@ -1,10 +1,12 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { ArrowLeft, Calendar, GitBranch } from "lucide-react";
 import { hasMinimumRole } from "@/lib/auth";
 import { getThreadAssignmentProgress } from "@/lib/thread-assignments";
 import { ThreadAssignmentProgress } from "@/components/coach/ThreadAssignmentProgress";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
+import { z } from "zod";
 
 /**
  * Coach progress detail page for a single thread assignment.
@@ -19,10 +21,22 @@ export default async function CoachThreadAssignmentProgressPage(props: {
   }
 
   const { assignmentId } = await props.params;
-  const data = await getThreadAssignmentProgress(assignmentId);
+  if (!z.string().uuid().safeParse(assignmentId).success) {
+    notFound();
+  }
+
+  const access = await getStaffStudentAccessContext();
+  if (access.status !== "authorized") {
+    redirect("/dashboard");
+  }
+
+  const data = await getThreadAssignmentProgress(
+    assignmentId,
+    access.actor.role === "admin" ? null : access.actor.id,
+  );
 
   if (!data) {
-    redirect("/coach/thread-assignments");
+    notFound();
   }
 
   const displayTitle = data.assignment.threadTitle || "Untitled Thread";

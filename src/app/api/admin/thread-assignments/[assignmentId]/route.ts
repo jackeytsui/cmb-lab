@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
 import {
   deleteThreadAssignment,
   getThreadAssignmentProgress,
 } from "@/lib/thread-assignments";
+import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
+import { z } from "zod";
 
 interface RouteParams {
   params: Promise<{ assignmentId: string }>;
@@ -15,18 +16,30 @@ interface RouteParams {
  * Requires coach role.
  */
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: RouteParams
 ) {
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (access.status !== "authorized") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     const { assignmentId } = await params;
+    if (!z.string().uuid().safeParse(assignmentId).success) {
+      return NextResponse.json(
+        { error: "Thread assignment not found" },
+        { status: 404 },
+      );
+    }
 
-    const deleted = await deleteThreadAssignment(assignmentId);
+    const deleted = await deleteThreadAssignment(
+      assignmentId,
+      access.actor.role === "admin" ? null : access.actor.id,
+    );
 
     if (!deleted) {
       return NextResponse.json(
@@ -51,18 +64,30 @@ export async function DELETE(
  * Requires coach role.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: RouteParams
 ) {
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  const access = await getStaffStudentAccessContext();
+  if (access.status === "unauthenticated") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (access.status !== "authorized") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     const { assignmentId } = await params;
+    if (!z.string().uuid().safeParse(assignmentId).success) {
+      return NextResponse.json(
+        { error: "Thread assignment not found" },
+        { status: 404 },
+      );
+    }
 
-    const progress = await getThreadAssignmentProgress(assignmentId);
+    const progress = await getThreadAssignmentProgress(
+      assignmentId,
+      access.actor.role === "admin" ? null : access.actor.id,
+    );
 
     if (!progress) {
       return NextResponse.json(

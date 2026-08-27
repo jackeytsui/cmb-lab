@@ -163,4 +163,39 @@ describe("coach route access", () => {
     expect(viewAsApi).not.toContain('hasMinimumRole("coach")');
     expect(viewAsApi.match(/realUser\.role !== "admin"/g)).toHaveLength(3);
   });
+
+  it("confines assignment progress and deletion to the creating coach", () => {
+    const videoDetail = source(
+      "src/app/(dashboard)/coach/video-assignments/[assignmentId]/page.tsx",
+    );
+    const threadDetail = source(
+      "src/app/(dashboard)/coach/thread-assignments/[assignmentId]/page.tsx",
+    );
+    const videoDeleteApi = source(
+      "src/app/api/admin/video-assignments/[assignmentId]/route.ts",
+    );
+    const threadAssignmentApi = source(
+      "src/app/api/admin/thread-assignments/[assignmentId]/route.ts",
+    );
+    const videoQueries = source("src/lib/video-assignments.ts");
+    const threadQueries = source("src/lib/thread-assignments.ts");
+
+    for (const route of [
+      videoDetail,
+      threadDetail,
+      videoDeleteApi,
+      threadAssignmentApi,
+    ]) {
+      expect(route).toContain("getStaffStudentAccessContext");
+      expect(route).toContain(
+        'access.actor.role === "admin" ? null : access.actor.id',
+      );
+    }
+    expect(videoDetail).toContain("notFound()");
+    expect(threadDetail).toContain("notFound()");
+    expect(videoQueries.match(/eq\(videoAssignments\.assignedBy, assignedById\)/g))
+      .toHaveLength(2);
+    expect(threadQueries.match(/eq\(threadAssignments\.assignedBy, assignedById\)/g))
+      .toHaveLength(2);
+  });
 });
