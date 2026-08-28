@@ -18,7 +18,6 @@ export const coachingSessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     recordingUrl: text("recording_url"),
-    fathomLink: text("fathom_link"),
     goals: text("goals"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at")
