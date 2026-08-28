@@ -133,7 +133,6 @@ type CoachingSession = {
   type: "one_on_one" | "inner_circle";
   studentEmail?: string | null;
   recordingUrl?: string | null;
-  fathomLink?: string | null;
   goals?: string | null;
   createdAt: string | number;
   updatedAt: string | number;
@@ -198,17 +197,10 @@ export function shouldCommitCoachingDraft({
 
 export function getCoachingSessionRecordingUrl(session: {
   recordingUrl?: string | null;
-  fathomLink?: string | null;
 } | null): string | null {
-  if (!session) return null;
-
-  for (const candidate of [session.recordingUrl, session.fathomLink]) {
-    if (!candidate) continue;
-    const sanitized = sanitizeRecordingUrl(candidate);
-    if (sanitized) return sanitized;
-  }
-
-  return null;
+  return session?.recordingUrl
+    ? sanitizeRecordingUrl(session.recordingUrl)
+    : null;
 }
 
 export function useProcessedText({
@@ -1439,10 +1431,7 @@ function CoachingPanel({
       const res = await fetch(`/api/coaching/sessions/${activeSessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        // `fathomLink` is a legacy duplicate of the recording link field.
-        // Clear it whenever the consolidated link is edited so old sessions
-        // are migrated without a destructive database-wide backfill.
-        body: JSON.stringify({ recordingUrl: normalizedUrl, fathomLink: null }),
+        body: JSON.stringify({ recordingUrl: normalizedUrl }),
       });
       if (!res.ok) {
         setRecordingUrlError(
@@ -1454,7 +1443,7 @@ function CoachingPanel({
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSessionId
-            ? { ...s, recordingUrl: normalizedUrl, fathomLink: null }
+            ? { ...s, recordingUrl: normalizedUrl }
             : s,
         ),
       );
@@ -1582,22 +1571,14 @@ function CoachingPanel({
     [sessions, activeSessionId],
   );
   const safeRecordingUrl = getCoachingSessionRecordingUrl(activeSession);
-  const hasSavedRecordingUrl = Boolean(
-    activeSession?.recordingUrl || activeSession?.fathomLink,
-  );
+  const hasSavedRecordingUrl = Boolean(activeSession?.recordingUrl);
 
   // Sync link editors when the active session or its persisted links change.
   useEffect(() => {
-    setRecordingUrlDraft(
-      activeSession?.recordingUrl ?? activeSession?.fathomLink ?? "",
-    );
+    setRecordingUrlDraft(activeSession?.recordingUrl ?? "");
     setIsEditingRecordingUrl(false);
     setRecordingUrlError(null);
-  }, [
-    activeSession?.id,
-    activeSession?.recordingUrl,
-    activeSession?.fathomLink,
-  ]);
+  }, [activeSession?.id, activeSession?.recordingUrl]);
   const mandarinNotes = useMemo(() => {
     const notes = (activeSession?.notes ?? []).filter((n) => n.pane === "mandarin");
     return [...notes].sort((a, b) =>
@@ -2119,10 +2100,9 @@ function CoachingPanel({
         }
         const data = await res.json();
         const exportSessions = (data.sessions ?? []).map(
-          (s: { title: string; studentEmail?: string; fathomLink?: string; recordingUrl?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string; explanation?: string | null }> }) => ({
+          (s: { title: string; studentEmail?: string; recordingUrl?: string; notes: Array<{ text: string; pane: string; textOverride?: string; romanizationOverride?: string; translationOverride?: string; explanation?: string | null }> }) => ({
             title: s.title,
             studentEmail: s.studentEmail,
-            fathomLink: s.fathomLink,
             recordingUrl: s.recordingUrl,
             notes: s.notes.map((n) => ({
               text: n.text,
@@ -2703,9 +2683,7 @@ function CoachingPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    setRecordingUrlDraft(
-                      activeSession.recordingUrl ?? activeSession.fathomLink ?? "",
-                    );
+                    setRecordingUrlDraft(activeSession.recordingUrl ?? "");
                     setRecordingUrlError(null);
                     setIsEditingRecordingUrl(true);
                   }}

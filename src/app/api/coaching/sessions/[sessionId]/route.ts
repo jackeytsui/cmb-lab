@@ -22,9 +22,8 @@ const optionalHttpUrlSchema = z
 const updateSessionSchema = z.object({
   title: z.string().trim().max(200).optional(),
   recordingUrl: optionalHttpUrlSchema,
-  fathomLink: optionalHttpUrlSchema,
   goals: z.union([z.string().trim().max(50_000), z.null()]).optional(),
-});
+}).strict();
 
 export async function PATCH(
   request: Request,
@@ -48,7 +47,7 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  const { title, recordingUrl, fathomLink, goals } = parsed.data;
+  const { title, recordingUrl, goals } = parsed.data;
 
   const updates: Record<string, unknown> = {};
   if (title !== undefined) updates.title = title || "Session";
@@ -56,9 +55,6 @@ export async function PATCH(
     updates.recordingUrl = recordingUrl
       ? sanitizeRecordingUrl(recordingUrl)
       : null;
-  }
-  if (fathomLink !== undefined) {
-    updates.fathomLink = fathomLink ? sanitizeRecordingUrl(fathomLink) : null;
   }
   if (goals !== undefined) updates.goals = goals || null;
 

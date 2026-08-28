@@ -15,7 +15,6 @@ type ExportNote = {
 type ExportSession = {
   title: string;
   studentEmail?: string | null;
-  fathomLink?: string | null;
   recordingUrl?: string | null;
   notes: ExportNote[];
 };
@@ -41,8 +40,8 @@ export async function exportCoachingNotes(
   const isMultiSession = sessions.length > 1;
 
   // Collect all notes separated by pane
-  const mandarinNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string; fathomLink: string }> = [];
-  const cantoneseNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string; fathomLink: string }> = [];
+  const mandarinNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string }> = [];
+  const cantoneseNotes: Array<ExportNote & { sessionTitle: string; studentEmail: string }> = [];
 
   for (const session of sessions) {
     for (const note of session.notes) {
@@ -50,7 +49,6 @@ export async function exportCoachingNotes(
         ...note,
         sessionTitle: session.title,
         studentEmail: session.studentEmail ?? "",
-        fathomLink: session.fathomLink ?? "",
       };
       if (note.pane === "mandarin") {
         mandarinNotes.push(entry);
@@ -141,7 +139,7 @@ export async function exportCoachingNotes(
   }
 
   for (const session of sessions) {
-    const url = session.recordingUrl || session.fathomLink || null;
+    const url = session.recordingUrl || null;
     const label = isMultiSession ? session.title : "Recording Link";
     const row = isMultiSession
       ? linkSheet.addRow([session.title, url ?? "Not added yet"])
