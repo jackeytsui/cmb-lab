@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExerciseForm } from "@/components/admin/exercises/ExerciseForm";
+import { AudioCourseWalkthroughAdmin } from "@/components/admin/AudioCourseWalkthroughAdmin";
 import type { PracticeExercise } from "@/db/schema";
 
 // ---------------------------------------------------------------------------
@@ -682,6 +683,8 @@ export function AudioCourseManager() {
           </button>
         </div>
       )}
+
+      <AudioCourseWalkthroughAdmin />
 
       {/* Create new series */}
       <section className="rounded-xl border border-border bg-card p-5">
