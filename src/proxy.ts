@@ -114,7 +114,7 @@ export const proxy = clerkMiddleware(async (auth, req) => {
     !isDashboardEntry &&
     !isStudentAllowedRoute(req)
   ) {
-    return NextResponse.redirect(new URL("/dashboard/reader", req.url));
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   return NextResponse.next();

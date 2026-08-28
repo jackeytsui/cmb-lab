@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("student route access", () => {
-  it("allows assignment feedback instead of redirecting students to the reader", () => {
+  it("allows assignment feedback as a first-class dashboard destination", () => {
     const middleware = readFileSync(
       path.join(process.cwd(), "src/proxy.ts"),
       "utf8",
@@ -48,7 +48,7 @@ describe("student route access", () => {
     expect(middleware).toContain("!isDashboardEntry");
   });
 
-  it("uses the selected View As identity for dashboard landing behavior", () => {
+  it("uses the selected View As identity for dashboard access and data", () => {
     const dashboard = readFileSync(
       path.join(
         process.cwd(),
@@ -64,7 +64,22 @@ describe("student route access", () => {
       "const effectiveDbUser = await getEffectiveDbUser()",
     );
     expect(dashboard.indexOf("const effectiveDbUser")).toBeLessThan(
-      dashboard.indexOf('if (dbUser.role === "student")'),
+      dashboard.indexOf("const isCoachOrAbove = isStaffRole(dbUser.role)"),
+    );
+    expect(dashboard).not.toContain('redirect("/dashboard/reader")');
+  });
+
+  it("sends disallowed student routes back to Home instead of a learning tool", () => {
+    const middleware = readFileSync(
+      path.join(process.cwd(), "src/proxy.ts"),
+      "utf8",
+    );
+
+    expect(middleware).toContain(
+      'NextResponse.redirect(new URL("/dashboard", req.url))',
+    );
+    expect(middleware).not.toContain(
+      'NextResponse.redirect(new URL("/dashboard/reader", req.url))',
     );
   });
 });

@@ -31,6 +31,7 @@ import {
   CalendarDays,
   NotebookPen,
   Megaphone,
+  House,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
 import { hasMinimumPlatformRole } from "@/lib/platform-roles";
@@ -70,6 +71,11 @@ type NavSectionWithRoleAndFeature = Omit<NavSectionWithRole, "items"> & {
 };
 
 const navSections: NavSectionWithRoleAndFeature[] = [
+  {
+    label: "Overview",
+    minRole: "student",
+    items: [{ title: "Home", url: "/dashboard", icon: House }],
+  },
   {
     label: "Admin",
     minRole: "admin",

@@ -30,7 +30,7 @@ export type NavSection = {
 function isActive(pathname: string, url: string): boolean {
   // Exact match for /dashboard to avoid matching all nested routes
   if (url === "/dashboard") {
-    return pathname === "/dashboard" || pathname.startsWith("/dashboard/practice");
+    return pathname === "/dashboard";
   }
   // Exact match or prefix match with path separator
   return pathname === url || pathname.startsWith(url + "/");
