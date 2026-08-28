@@ -66,4 +66,21 @@ describe("coach student administration boundary", () => {
     }
     expect(roleAttribution).toContain('access.actor.role !== "admin"');
   });
+
+  it("lets an assigned coach set a student's Study Today goal", () => {
+    const studentPage = source(
+      "src/app/(dashboard)/admin/students/[studentId]/page.tsx",
+    );
+    const studyPreferences = source(
+      "src/app/api/admin/students/[studentId]/study-preferences/route.ts",
+    );
+
+    expect(studentPage).toContain("<StudentStudyPlanEditor");
+    expect(studyPreferences).toContain("getStaffStudentAccessContext");
+    expect(studyPreferences).toContain("canStaffAccessStudent");
+    expect(studyPreferences).toContain(
+      "assignedCoachId: student.assignedCoachId",
+    );
+    expect(studyPreferences).toContain("upsertStudyPreferences(");
+  });
 });

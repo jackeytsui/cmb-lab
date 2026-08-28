@@ -13,9 +13,11 @@ import { StudentPortalAccessControls } from "@/components/admin/StudentPortalAcc
 import { StudentProfileEditor } from "@/components/admin/StudentProfileEditor";
 import { StudentRoleAssignment } from "@/components/admin/StudentRoleAssignment";
 import { AssignCoachDropdown } from "@/components/admin/AssignCoachDropdown";
+import { StudentStudyPlanEditor } from "@/components/admin/StudentStudyPlanEditor";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { loadStudentCourseLibraryProgress } from "@/lib/course-library-student-progress";
 import { summarizeCourseLibraryAccessProgress } from "@/lib/course-library-progress-summary";
+import { getStudyPreferences } from "@/lib/study";
 import {
   ChevronRight,
   ArrowLeft,
@@ -315,6 +317,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
   let courseEndDateLabel: string | null = null;
   let portalAccessReason: string | null = null;
   let courseEndDateIso: string | null = null;
+  let initialStudyMinutes = 30;
 
   try {
     // Fetch summary stats and activity timeline in parallel
@@ -490,6 +493,15 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
     console.error("Failed to load progress:", error);
     progressError =
       "Failed to load student progress data. Some sections may be incomplete.";
+  }
+
+  if (student.role === "student") {
+    try {
+      const preferences = await getStudyPreferences(student.id);
+      initialStudyMinutes = preferences.dailyMinutes;
+    } catch (error) {
+      console.error("Failed to load student study preferences:", error);
+    }
   }
 
   if (isAdmin) {
@@ -741,6 +753,17 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
           <StudentCourseLibraryUnlock
             studentId={studentId}
             studentName={displayName}
+          />
+        </section>
+      ) : null}
+
+      {student.role === "student" ? (
+        <section className="mb-8">
+          <h2 className="mb-4 text-xl font-semibold">Study Today Plan</h2>
+          <StudentStudyPlanEditor
+            studentId={studentId}
+            studentName={displayName}
+            initialDailyMinutes={initialStudyMinutes}
           />
         </section>
       ) : null}

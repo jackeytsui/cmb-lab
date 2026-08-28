@@ -1,17 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ActivityRings, RING_COLORS } from "@/components/xp/ActivityRings";
-import { LevelBadge } from "@/components/xp/LevelBadge";
-import { StreakDisplay } from "@/components/xp/StreakDisplay";
-import { DailyGoalProgress } from "@/components/xp/DailyGoalProgress";
+import {
+  BookOpenCheck,
+  Flame,
+  MessageCircleMore,
+  Sparkles,
+  Star,
+  Target,
+  Trophy,
+} from "lucide-react";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RING_GOALS } from "@/lib/xp";
-
-// ============================================================
-// Types
-// ============================================================
 
 interface XPDashboardData {
   level: {
@@ -41,162 +42,249 @@ interface XPDashboardData {
   };
 }
 
-// ============================================================
-// Loading Skeleton
-// ============================================================
-
 function XPOverviewSkeleton() {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-      {/* Title skeleton */}
-      <Skeleton className="mb-6 h-6 w-40 bg-zinc-800" />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Left column: rings + daily goal */}
-        <div className="flex flex-col items-center gap-4">
-          <Skeleton className="h-[140px] w-[140px] rounded-full bg-zinc-800" />
-          <Skeleton className="h-3 w-full max-w-[200px] rounded-full bg-zinc-800" />
-        </div>
-
-        {/* Right column: level + streak */}
-        <div className="flex flex-col items-center gap-4">
-          <Skeleton className="h-20 w-20 rounded-full bg-zinc-800" />
-          <Skeleton className="h-2 w-[160px] rounded-full bg-zinc-800" />
-          <div className="mt-2 flex items-center gap-2">
-            <Skeleton className="h-7 w-7 rounded bg-zinc-800" />
-            <Skeleton className="h-8 w-12 rounded bg-zinc-800" />
-          </div>
-          <Skeleton className="h-4 w-24 rounded bg-zinc-800" />
-        </div>
+    <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+      <Skeleton className="h-6 w-40" />
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-20 rounded-xl" />
+        ))}
       </div>
+      <Skeleton className="mt-5 h-28 rounded-xl" />
     </div>
   );
 }
 
-// ============================================================
-// Component
-// ============================================================
+function Stat({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  icon: typeof Star;
+  tone: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background/70 p-3.5">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${tone}`}>
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </span>
+        {label}
+      </div>
+      <p className="mt-2 text-xl font-bold tracking-tight text-foreground">{value}</p>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function ActivityBar({
+  label,
+  current,
+  goal,
+  icon: Icon,
+  barClassName,
+}: {
+  label: string;
+  current: number;
+  goal: number;
+  icon: typeof Star;
+  barClassName: string;
+}) {
+  const percent = goal > 0 ? Math.min((current / goal) * 100, 100) : 0;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="flex items-center gap-2 font-medium text-foreground">
+          <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          {label}
+        </span>
+        <span className="font-semibold tabular-nums text-muted-foreground">
+          {current}/{goal}
+        </span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full rounded-full ${barClassName}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function XPOverview() {
   const [data, setData] = useState<XPDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchXPData = useCallback(async () => {
+  const fetchXPData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch("/api/xp");
-
+      const res = await fetch("/api/xp", { signal });
       if (!res.ok) {
-        // Don't treat 401 as an error — user may not be authenticated yet
-        if (res.status === 401) {
-          setLoading(false);
-          return;
-        }
+        if (res.status === 401) return;
         throw new Error(`Failed to load XP data (${res.status})`);
       }
-
-      const json = await res.json();
-      setData(json);
-    } catch (err) {
-      console.error("[XPOverview] Fetch failed:", err);
+      setData(await res.json());
+    } catch (fetchError) {
+      if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+        return;
+      }
+      console.error("[XPOverview] Fetch failed:", fetchError);
       setError(
-        err instanceof Error ? err.message : "Unable to load XP data"
+        fetchError instanceof Error
+          ? fetchError.message
+          : "Unable to load XP data",
       );
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchXPData();
+    const controller = new AbortController();
+    void fetchXPData(controller.signal);
+    return () => controller.abort();
   }, [fetchXPData]);
 
-  // Loading state
-  if (loading) {
-    return <XPOverviewSkeleton />;
-  }
+  if (loading) return <XPOverviewSkeleton />;
 
-  // Error state
   if (error) {
     return (
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-        <h3 className="mb-4 text-lg font-semibold text-zinc-100">
-          XP &amp; Activity
-        </h3>
+      <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+        <h2 className="mb-4 text-lg font-semibold text-foreground">XP &amp; activity</h2>
         <ErrorAlert
           variant="block"
           message={error}
-          onRetry={fetchXPData}
+          onRetry={() => void fetchXPData()}
         />
       </div>
     );
   }
 
-  // No data (unauthenticated or no XP yet) — render nothing gracefully
-  if (!data) {
-    return null;
-  }
+  if (!data) return null;
 
-  // Build rings array for ActivityRings component
-  const rings = [
-    {
-      label: "Learn",
-      current: data.daily.lessonCount,
-      goal: RING_GOALS.learn,
-      color: RING_COLORS.learn,
-    },
-    {
-      label: "Practice",
-      current: data.daily.practiceCount,
-      goal: RING_GOALS.practice,
-      color: RING_COLORS.practice,
-    },
-    {
-      label: "Speak",
-      current: data.daily.conversationCount,
-      goal: RING_GOALS.speak,
-      color: RING_COLORS.speak,
-    },
-  ];
+  const dailyPercent =
+    data.daily.goalXp > 0
+      ? Math.min((data.daily.totalXp / data.daily.goalXp) * 100, 100)
+      : 0;
+  const levelPercent =
+    data.level.nextLevelXP > 0
+      ? Math.min(
+          (data.level.currentLevelXP / data.level.nextLevelXP) * 100,
+          100,
+        )
+      : 100;
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-      <h3 className="mb-6 text-lg font-semibold text-zinc-100">
-        XP &amp; Activity
-      </h3>
+    <section
+      aria-labelledby="xp-activity-heading"
+      className="overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-card via-card to-[#4a9fe3]/[0.08] p-5 sm:p-6"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f2b705]/15 text-[#9a7200] dark:text-[#f2c94c]">
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <h2 id="xp-activity-heading" className="text-lg font-bold text-foreground">
+              XP &amp; activity
+            </h2>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            A quick view of today&apos;s momentum — no dashboard clutter.
+          </p>
+        </div>
+        <span className="rounded-full border border-primary/15 bg-primary/[0.07] px-3 py-1 text-xs font-semibold text-primary">
+          {data.daily.goalMet ? "Daily goal complete" : `${Math.round(dailyPercent)}% of daily goal`}
+        </span>
+      </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Left column: Activity Rings + Daily Goal */}
-        <div className="flex flex-col items-center gap-5">
-          <ActivityRings rings={rings} size={160} />
-          <DailyGoalProgress
-            currentXP={data.daily.totalXp}
-            goalXP={data.daily.goalXp}
-            goalMet={data.daily.goalMet}
-            className="w-full max-w-[240px]"
-          />
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat
+          label="Level"
+          value={data.level.level}
+          detail={`${Math.round(levelPercent)}% to next level`}
+          icon={Trophy}
+          tone="bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        />
+        <Stat
+          label="Today"
+          value={`${data.daily.totalXp} XP`}
+          detail={`${data.daily.goalXp} XP daily goal`}
+          icon={Target}
+          tone="bg-blue-500/10 text-blue-600 dark:text-blue-400"
+        />
+        <Stat
+          label="Streak"
+          value={`${data.streak.currentStreak} days`}
+          detail={`Best: ${data.streak.longestStreak} days`}
+          icon={Flame}
+          tone="bg-orange-500/10 text-orange-600 dark:text-orange-400"
+        />
+        <Stat
+          label="Total"
+          value={`${data.level.totalXP.toLocaleString()} XP`}
+          detail={`${data.streak.freezesRemaining} streak freezes left`}
+          icon={Star}
+          tone="bg-violet-500/10 text-violet-600 dark:text-violet-400"
+        />
+      </div>
+
+      <div className="mt-4 grid gap-5 rounded-xl border border-border bg-background/70 p-4 sm:grid-cols-2 sm:p-5">
+        <div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-semibold text-foreground">Today&apos;s XP goal</span>
+            <span className="font-bold tabular-nums text-primary">
+              {data.daily.totalXp} / {data.daily.goalXp}
+            </span>
+          </div>
+          <div className="mt-3 h-3 overflow-hidden rounded-full bg-primary/10">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#2e3a97] via-[#4354bd] to-[#4a9fe3]"
+              style={{ width: `${dailyPercent}%` }}
+            />
+          </div>
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+            {data.daily.goalMet
+              ? "Nice work — your daily target is complete."
+              : `${Math.max(data.daily.goalXp - data.daily.totalXp, 0)} XP to go today.`}
+          </p>
         </div>
 
-        {/* Right column: Level Badge + Streak */}
-        <div className="flex flex-col items-center gap-5">
-          <LevelBadge
-            level={data.level.level}
-            currentLevelXP={data.level.currentLevelXP}
-            nextLevelXP={data.level.nextLevelXP}
-            totalXP={data.level.totalXP}
+        <div className="grid gap-3">
+          <ActivityBar
+            label="Learn"
+            current={data.daily.lessonCount}
+            goal={RING_GOALS.learn}
+            icon={BookOpenCheck}
+            barClassName="bg-emerald-500"
           />
-          <div className="h-px w-full max-w-[160px] bg-zinc-800" />
-          <StreakDisplay
-            currentStreak={data.streak.currentStreak}
-            longestStreak={data.streak.longestStreak}
-            freezesRemaining={data.streak.freezesRemaining}
-            freezesUsedThisMonth={data.streak.freezesUsedThisMonth}
+          <ActivityBar
+            label="Practice"
+            current={data.daily.practiceCount}
+            goal={RING_GOALS.practice}
+            icon={Target}
+            barClassName="bg-blue-500"
+          />
+          <ActivityBar
+            label="Speak"
+            current={data.daily.conversationCount}
+            goal={RING_GOALS.speak}
+            icon={MessageCircleMore}
+            barClassName="bg-amber-500"
           />
         </div>
       </div>
-    </div>
+    </section>
   );
 }

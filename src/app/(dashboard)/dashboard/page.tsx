@@ -2,9 +2,14 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect, unstable_rethrow } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/db";
-import { users, courses, modules, lessons, lessonProgress, certificates } from "@/db/schema";
-import { eq, and, isNull, sql, inArray } from "drizzle-orm";
-import { CourseCard } from "@/components/course/CourseCard";
+import {
+  users,
+  courseLibraryCourses,
+  courseLibraryModules,
+  courseLibraryLessons,
+  courseLibraryLessonProgress,
+} from "@/db/schema";
+import { eq, and, isNull, inArray, asc } from "drizzle-orm";
 
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { getStudentAssignments, type ResolvedAssignment } from "@/lib/assignments";
@@ -30,16 +35,23 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { XPOverview } from "@/components/xp/XPOverview";
-import { resolvePermissions, type PermissionSet } from "@/lib/permissions";
+import { resolvePermissions } from "@/lib/permissions";
 import { StudyTodayCard } from "@/components/dashboard/StudyTodayCard";
+import { DashboardLearningSection } from "@/components/dashboard/DashboardLearningSection";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import {
   applyFeatureTagOverrides,
   canViewCourseLibrary,
+  getCourseLibraryCourseAccess,
   getUserFeatureTagOverrides,
 } from "@/lib/tag-feature-access";
-import { DEFAULT_PLATFORM_ROLE, isStaffRole } from "@/lib/platform-roles";
+import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
 import { getCurrentUser as getEffectiveDbUser } from "@/lib/auth";
+import { visibleCourseStatuses } from "@/lib/course-library-access";
+import {
+  buildDashboardLearningCourses,
+  type DashboardLearningCourse,
+} from "@/lib/dashboard-learning";
 
 type DashboardShortcut = {
   title: string;
@@ -48,15 +60,6 @@ type DashboardShortcut = {
   feature: string;
   icon: LucideIcon;
   accent: string;
-};
-
-type DashboardUserCourse = {
-  id: string;
-  title: string;
-  description: string | null;
-  thumbnailUrl: string | null;
-  totalLessons: number;
-  completedLessons: number;
 };
 
 type DashboardContentProps = {
@@ -71,10 +74,8 @@ type DashboardContentProps = {
   threadAssignments: ResolvedThreadAssignment[];
   pendingThreadAssignments: ResolvedThreadAssignment[];
   pendingThreadCount: number;
-  userCourses: DashboardUserCourse[];
-  isCoachOrAbove: boolean;
-  permissions: PermissionSet;
-  certificateMap: Map<string, string>;
+  learningCourses: DashboardLearningCourse[];
+  showCourseLibrary: boolean;
 };
 
 const DASHBOARD_SHORTCUTS: DashboardShortcut[] = [
@@ -192,42 +193,48 @@ function DashboardContent({
   threadAssignments,
   pendingThreadAssignments,
   pendingThreadCount,
-  userCourses,
-  isCoachOrAbove,
-  permissions,
-  certificateMap,
+  learningCourses,
+  showCourseLibrary,
 }: DashboardContentProps) {
+  const primaryCourse = learningCourses[0];
+  const primaryHref = primaryCourse?.nextLessonId
+    ? `/dashboard/course-library/${primaryCourse.id}/lessons/${primaryCourse.nextLessonId}`
+    : primaryCourse
+      ? `/dashboard/course-library/${primaryCourse.id}`
+      : shortcuts[0]?.href;
+
   return (
     <div className="container mx-auto space-y-8 px-4 py-8">
-      <header className="rounded-2xl border border-border bg-gradient-to-br from-card via-card to-primary/5 p-6 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#202a76] via-[#3545aa] to-[#4a9fe3] p-6 shadow-lg shadow-[#2e3a97]/10 sm:p-8">
+        <div className="pointer-events-none absolute -right-12 -top-24 h-64 w-64 rounded-full border-[40px] border-white/[0.06]" />
+        <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-[#f2b705]/15 blur-2xl" />
+        <p className="relative text-xs font-bold uppercase tracking-[0.18em] text-[#f6d04d]">
           CMB Lab Home
         </p>
-        <div className="mt-3 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative mt-3 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
               Welcome back, {displayName}
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-              Your learning home brings courses, assignments, progress, and study tools together.
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/75 sm:text-base">
+              Start with your next lesson, then use today&apos;s plan to keep your momentum going.
             </p>
           </div>
-          {shortcuts[0] && (
+          {primaryHref && (
             <Link
-              href={shortcuts[0].href}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              href={primaryHref}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#2e3a97] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
-              Continue learning
+              {primaryCourse?.isStarted ? "Resume learning" : "Start learning"}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           )}
         </div>
       </header>
 
-      <QuickAccess shortcuts={shortcuts} />
-
-      <XPOverview />
-      <StudyTodayCard />
+      {showCourseLibrary ? (
+        <DashboardLearningSection courses={learningCourses} />
+      ) : null}
 
       {assignments.length > 0 && (
         <section aria-labelledby="practice-assignments-heading">
@@ -326,44 +333,9 @@ function DashboardContent({
         </section>
       )}
 
-      <section aria-labelledby="assigned-courses-heading" className="space-y-3">
-        <div>
-          <h2 id="assigned-courses-heading" className="text-lg font-semibold text-foreground">
-            Assigned courses
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your enrolled courses and completion progress.
-          </p>
-        </div>
-        {userCourses.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <div
-            data-testid="course-grid"
-            className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
-          >
-            {userCourses.map((course) => (
-              <CourseCard
-                key={course.id}
-                course={{
-                  id: course.id,
-                  title: course.title,
-                  description: course.description,
-                  thumbnailUrl: course.thumbnailUrl,
-                  accessTier: isCoachOrAbove
-                    ? "full"
-                    : permissions.getAccessTier(course.id) ?? "preview",
-                }}
-                progress={{
-                  completedLessons: course.completedLessons ?? 0,
-                  totalLessons: course.totalLessons ?? 0,
-                }}
-                certificateVerificationId={certificateMap.get(course.id) ?? null}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      <StudyTodayCard />
+      <XPOverview />
+      <QuickAccess shortcuts={shortcuts} />
     </div>
   );
 }
@@ -456,14 +428,16 @@ export default async function DashboardPage() {
       await ensureDefaultStudentRoleAssignment(dbUser.id);
     }
 
-    // Use the effective role so an administrator's "View As" dashboard mirrors
-    // the selected learner instead of exposing staff-only course visibility.
-    const isCoachOrAbove = isStaffRole(dbUser.role);
-
-    const [permissions, featureTagOverrides, showCourseLibrary] = await Promise.all([
+    const [
+      permissions,
+      featureTagOverrides,
+      showCourseLibrary,
+      canSeeCourseLibraryCourse,
+    ] = await Promise.all([
       resolvePermissions(dbUser.id),
       getUserFeatureTagOverrides(dbUser.id),
       canViewCourseLibrary(dbUser),
+      getCourseLibraryCourseAccess(dbUser),
     ]);
     const enabledFeatures = applyFeatureTagOverrides(
       permissions.features,
@@ -475,57 +449,70 @@ export default async function DashboardPage() {
       enabledFeatures.has(shortcut.feature),
     );
 
-    const userCoursesPromise = (async (): Promise<DashboardUserCourse[]> => {
-      if (isCoachOrAbove || permissions.hasWildcardAccess) {
-        return db
-          .select({
-            id: courses.id,
-            title: courses.title,
-            description: courses.description,
-            thumbnailUrl: courses.thumbnailUrl,
-            totalLessons: sql<number>`COUNT(DISTINCT ${lessons.id})`.as("total_lessons"),
-            completedLessons: sql<number>`COUNT(DISTINCT CASE WHEN ${lessonProgress.completedAt} IS NOT NULL THEN ${lessonProgress.lessonId} END)`.as("completed_lessons"),
-          })
-          .from(courses)
-          .leftJoin(modules, eq(modules.courseId, courses.id))
-          .leftJoin(lessons, eq(lessons.moduleId, modules.id))
-          .leftJoin(
-            lessonProgress,
-            and(eq(lessonProgress.lessonId, lessons.id), eq(lessonProgress.userId, dbUser.id))
-          )
-          .where(isNull(courses.deletedAt))
-          .groupBy(courses.id, courses.title, courses.description, courses.thumbnailUrl);
-      }
-
-      const courseIds = Array.from(permissions.courseIds);
-      if (courseIds.length === 0) return [];
-      return db
+    const learningCoursesPromise = showCourseLibrary
+      ? db
         .select({
-          id: courses.id,
-          title: courses.title,
-          description: courses.description,
-          thumbnailUrl: courses.thumbnailUrl,
-          totalLessons: sql<number>`COUNT(DISTINCT ${lessons.id})`.as("total_lessons"),
-          completedLessons: sql<number>`COUNT(DISTINCT CASE WHEN ${lessonProgress.completedAt} IS NOT NULL THEN ${lessonProgress.lessonId} END)`.as("completed_lessons"),
+          courseId: courseLibraryCourses.id,
+          courseTitle: courseLibraryCourses.title,
+          courseSummary: courseLibraryCourses.summary,
+          courseSortOrder: courseLibraryCourses.sortOrder,
+          coverImageUrl: courseLibraryCourses.coverImageUrl,
+          coverUpdatedAt: courseLibraryCourses.updatedAt,
+          moduleId: courseLibraryModules.id,
+          moduleTitle: courseLibraryModules.title,
+          moduleSortOrder: courseLibraryModules.sortOrder,
+          lessonId: courseLibraryLessons.id,
+          lessonTitle: courseLibraryLessons.title,
+          lessonSortOrder: courseLibraryLessons.sortOrder,
+          progressId: courseLibraryLessonProgress.id,
+          completedAt: courseLibraryLessonProgress.completedAt,
+          progressUpdatedAt: courseLibraryLessonProgress.updatedAt,
         })
-        .from(courses)
-        .leftJoin(modules, eq(modules.courseId, courses.id))
-        .leftJoin(lessons, eq(lessons.moduleId, modules.id))
+        .from(courseLibraryCourses)
         .leftJoin(
-          lessonProgress,
-          and(eq(lessonProgress.lessonId, lessons.id), eq(lessonProgress.userId, dbUser.id)),
+          courseLibraryModules,
+          and(
+            eq(courseLibraryModules.courseId, courseLibraryCourses.id),
+            isNull(courseLibraryModules.deletedAt),
+          ),
         )
-        .where(and(isNull(courses.deletedAt), inArray(courses.id, courseIds)))
-        .groupBy(courses.id, courses.title, courses.description, courses.thumbnailUrl);
-    })();
-
-    const userCertificatesPromise = db
-      .select({
-        courseId: certificates.courseId,
-        verificationId: certificates.verificationId,
-      })
-      .from(certificates)
-      .where(eq(certificates.userId, dbUser.id));
+        .leftJoin(
+          courseLibraryLessons,
+          and(
+            eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
+            isNull(courseLibraryLessons.deletedAt),
+          ),
+        )
+        .leftJoin(
+          courseLibraryLessonProgress,
+          and(
+            eq(
+              courseLibraryLessonProgress.lessonId,
+              courseLibraryLessons.id,
+            ),
+            eq(courseLibraryLessonProgress.userId, dbUser.id),
+          ),
+        )
+        .where(
+          and(
+            isNull(courseLibraryCourses.deletedAt),
+            inArray(
+              courseLibraryCourses.status,
+              visibleCourseStatuses(dbUser.role),
+            ),
+          ),
+        )
+        .orderBy(
+          asc(courseLibraryCourses.sortOrder),
+          asc(courseLibraryModules.sortOrder),
+          asc(courseLibraryLessons.sortOrder),
+        )
+        .then((rows) =>
+          buildDashboardLearningCourses(
+            rows.filter((row) => canSeeCourseLibraryCourse(row.courseId)),
+          ),
+        )
+      : Promise.resolve([] as DashboardLearningCourse[]);
 
     const assignmentsPromise = getStudentAssignments(dbUser.id).catch((error) => {
       console.error("Failed to load practice assignments:", error);
@@ -545,23 +532,16 @@ export default async function DashboardPage() {
     );
 
     const [
-      userCourses,
-      userCertificates,
+      learningCourses,
       assignments,
       videoAssignments,
       threadAssignments,
     ] = await Promise.all([
-      userCoursesPromise,
-      userCertificatesPromise,
+      learningCoursesPromise,
       assignmentsPromise,
       videoAssignmentsPromise,
       threadAssignmentsPromise,
     ]);
-
-    // Build map: courseId -> verificationId
-    const certificateMap = new Map<string, string>(
-      userCertificates.map((c) => [c.courseId, c.verificationId])
-    );
 
     // Filter to pending only (< 80% completion), sort by due date soonest first
     const pendingVideoAssignments = videoAssignments
@@ -610,10 +590,8 @@ export default async function DashboardPage() {
       threadAssignments,
       pendingThreadAssignments,
       pendingThreadCount,
-      userCourses,
-      isCoachOrAbove,
-      permissions,
-      certificateMap,
+      learningCourses,
+      showCourseLibrary,
     };
   } catch (error) {
     unstable_rethrow(error);
@@ -623,31 +601,4 @@ export default async function DashboardPage() {
 
   if (loadFailed || !pageData) return <DashboardLoadError displayName={displayName} />;
   return <DashboardContent {...pageData} />;
-}
-
-/**
- * Empty state when user has no courses
- */
-function EmptyState() {
-  return (
-    <div className="rounded-xl border border-dashed border-border bg-card py-12 text-center">
-      <svg
-        className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-        />
-      </svg>
-      <h3 className="text-base font-semibold text-foreground">No assigned courses yet</h3>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-        You can continue with the learning tools above, or contact your coach if you expected a course here.
-      </p>
-    </div>
-  );
 }

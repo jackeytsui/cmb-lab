@@ -11,11 +11,38 @@ describe("dashboard home information architecture", () => {
     const dashboard = source("src/app/(dashboard)/dashboard/page.tsx");
 
     expect(dashboard).toContain("CMB Lab Home");
-    expect(dashboard).toContain("Your learning home brings courses");
+    expect(dashboard).toContain("Start with your next lesson");
+    expect(dashboard).toContain(
+      "<DashboardLearningSection courses={learningCourses} />",
+    );
     expect(dashboard).toContain("<QuickAccess shortcuts={shortcuts} />");
     expect(dashboard).not.toContain('redirect("/dashboard/reader")');
     expect(dashboard).not.toContain('redirect("/dashboard/accelerator")');
     expect(dashboard).not.toContain('redirect("/admin/manage")');
+  });
+
+  it("puts permitted course continuation ahead of utilities and activity", () => {
+    const dashboard = source("src/app/(dashboard)/dashboard/page.tsx");
+    const learning = dashboard.indexOf("<DashboardLearningSection");
+    const study = dashboard.indexOf("<StudyTodayCard />");
+    const xp = dashboard.indexOf("<XPOverview />");
+    const quickAccess = dashboard.indexOf("<QuickAccess shortcuts={shortcuts} />");
+
+    expect(learning).toBeGreaterThan(0);
+    expect(learning).toBeLessThan(study);
+    expect(study).toBeLessThan(xp);
+    expect(xp).toBeLessThan(quickAccess);
+  });
+
+  it("uses the Course Library visibility policy for every home course", () => {
+    const dashboard = source("src/app/(dashboard)/dashboard/page.tsx");
+
+    expect(dashboard).toContain("getCourseLibraryCourseAccess(dbUser)");
+    expect(dashboard).toContain(
+      "rows.filter((row) => canSeeCourseLibraryCourse(row.courseId))",
+    );
+    expect(dashboard).toContain("courseLibraryLessonProgress.updatedAt");
+    expect(dashboard).not.toContain("<CourseCard");
   });
 
   it("shows Home explicitly while preserving stable reader deep links", () => {
