@@ -60,15 +60,18 @@ export const groupCoachingEventReminders = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    occurrenceStartsAt: timestamp("occurrence_starts_at", { withTimezone: true })
+      .notNull(),
     reminderKey: text("reminder_key").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("group_coaching_reminders_event_user_key_unique").on(
+    uniqueIndex("group_coaching_reminders_event_user_occurrence_key_unique").on(
       table.eventId,
       table.userId,
+      table.occurrenceStartsAt,
       table.reminderKey,
     ),
     index("group_coaching_reminders_event_idx").on(table.eventId),

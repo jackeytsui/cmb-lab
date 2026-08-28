@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   groupCoachingEventReminders,
@@ -12,6 +12,7 @@ import {
   users,
 } from "@/db/schema";
 import { GROUP_COACHING_EVENT_CONTENT_TYPE } from "@/lib/tag-feature-access";
+import { expandCoachingOccurrences } from "@/lib/group-coaching-recurrence";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -58,16 +59,12 @@ export async function GET(request: Request) {
       .select({
         id: groupCoachingEvents.id,
         title: groupCoachingEvents.title,
+        description: groupCoachingEvents.description,
         startsAt: groupCoachingEvents.startsAt,
       })
       .from(groupCoachingEvents)
-      .where(
-        and(
-          eq(groupCoachingEvents.isCancelled, false),
-          gte(groupCoachingEvents.startsAt, windowStart),
-          lte(groupCoachingEvents.startsAt, windowEnd),
-        ),
-      ),
+      .where(eq(groupCoachingEvents.isCancelled, false))
+      .limit(500),
     db
       .select({ contentId: tagContentGrants.contentId })
       .from(tagContentGrants)
@@ -93,9 +90,13 @@ export async function GET(request: Request) {
       ),
   ]);
 
+  const candidateOccurrences = expandCoachingOccurrences(candidateEvents, {
+    startsAt: windowStart,
+    endsAt: windowEnd,
+  });
   const grantedEventIds = new Set(audienceGrants.map((grant) => grant.contentId));
   const recipientIds = recipients.map((recipient) => recipient.id);
-  if (candidateEvents.length === 0 || recipientIds.length === 0) {
+  if (candidateOccurrences.length === 0 || recipientIds.length === 0) {
     return NextResponse.json({ events: 0, recipients: recipientIds.length, sent: 0 });
   }
 
@@ -114,8 +115,8 @@ export async function GET(request: Request) {
 
   let processedEvents = 0;
   let sent = 0;
-  for (const event of candidateEvents) {
-    if (!grantedEventIds.has(event.id)) continue;
+  for (const event of candidateOccurrences) {
+    if (!grantedEventIds.has(event.sourceEventId)) continue;
     const deltaMinutes = (event.startsAt.getTime() - now.getTime()) / 60_000;
     const reminderKey = dueReminder(deltaMinutes);
     if (!reminderKey || activeRecipientIds.length === 0) continue;
@@ -125,8 +126,9 @@ export async function GET(request: Request) {
       .insert(groupCoachingEventReminders)
       .values(
         activeRecipientIds.map((userId) => ({
-          eventId: event.id,
+          eventId: event.sourceEventId,
           userId,
+          occurrenceStartsAt: event.startsAt,
           reminderKey,
         })),
       )
@@ -144,7 +146,8 @@ export async function GET(request: Request) {
         body: `${copy.lead} ${event.title}`,
         linkUrl: "/dashboard/coaching/group-schedule",
         metadata: JSON.stringify({
-          coachingEventId: event.id,
+          coachingEventId: event.sourceEventId,
+          occurrenceStartsAt: event.startsAt.toISOString(),
           reminderKey,
         }),
       })),
