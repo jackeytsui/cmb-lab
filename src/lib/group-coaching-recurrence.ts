@@ -40,10 +40,8 @@ function occurrenceId(sourceEventId: string, startsAt: Date): string {
 
 /**
  * Expand schedule templates into concrete occurrences for a bounded window.
- *
- * Existing ICGC rows describe recurrence with a `Repeats every <weekday>` line.
- * Recurrences advance in Toronto calendar time so the advertised local hour is
- * preserved across daylight-saving changes.
+ * Weekly recurrences advance in Toronto calendar time so the advertised local
+ * hour remains stable through daylight-saving changes.
  */
 export function expandCoachingOccurrences<T extends CoachingEventLike>(
   events: readonly T[],
@@ -56,16 +54,11 @@ export function expandCoachingOccurrences<T extends CoachingEventLike>(
   for (const event of events) {
     if (!isWeeklyCoachingEvent(event.description)) {
       if (event.startsAt >= window.startsAt && event.startsAt <= window.endsAt) {
-        occurrences.push({
-          ...event,
-          sourceEventId: event.id,
-        });
+        occurrences.push({ ...event, sourceEventId: event.id });
       }
       continue;
     }
 
-    // Start close to the requested window, then correct using Toronto calendar
-    // arithmetic. The one-week buffer accounts for UTC offset changes at DST.
     const approximateWeek = Math.max(
       0,
       Math.floor((window.startsAt.getTime() - event.startsAt.getTime()) / WEEK_MS) - 1,
@@ -78,8 +71,6 @@ export function expandCoachingOccurrences<T extends CoachingEventLike>(
       startsAt = weeklyOccurrenceAt(event.startsAt, weekIndex);
     }
 
-    // The public schedule uses a 16-week window and reminders use a one-hour
-    // window. This guard also keeps malformed, unbounded input from looping.
     for (let count = 0; startsAt <= window.endsAt && count < 520; count += 1) {
       occurrences.push({
         ...event,

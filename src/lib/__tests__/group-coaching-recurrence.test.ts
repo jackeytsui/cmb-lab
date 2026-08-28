@@ -35,7 +35,7 @@ describe("group coaching recurrence", () => {
   it("preserves Toronto wall-clock time across daylight-saving changes", () => {
     const event = {
       ...weeklyEvent,
-      startsAt: new Date("2026-10-30T22:00:00.000Z"), // 6:00 PM Toronto (EDT)
+      startsAt: new Date("2026-10-30T22:00:00.000Z"),
     };
     const occurrences = expandCoachingOccurrences([event], {
       startsAt: new Date("2026-10-30T00:00:00.000Z"),

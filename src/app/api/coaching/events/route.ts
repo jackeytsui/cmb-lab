@@ -42,12 +42,17 @@ export async function GET() {
   );
 
   if (isStaffRole(user.role)) {
-    return NextResponse.json({
-      events: expandCoachingOccurrences(templates, {
-        startsAt: recentCutoff,
-        endsAt: horizonEnd,
-      }),
+    const events = expandCoachingOccurrences(templates, {
+      startsAt: recentCutoff,
+      endsAt: horizonEnd,
     });
+    console.info("[coaching/events] schedule generated", {
+      role: user.role,
+      templates: templates.length,
+      visibleTemplates: templates.length,
+      events: events.length,
+    });
+    return NextResponse.json({ events });
   }
 
   const [grantedIds, restrictedIds] = await Promise.all([
@@ -57,10 +62,15 @@ export async function GET() {
   const visibleTemplates = templates.filter(
     (event) => !restrictedIds.has(event.id) || grantedIds.has(event.id),
   );
-  return NextResponse.json({
-    events: expandCoachingOccurrences(visibleTemplates, {
-      startsAt: recentCutoff,
-      endsAt: horizonEnd,
-    }),
+  const events = expandCoachingOccurrences(visibleTemplates, {
+    startsAt: recentCutoff,
+    endsAt: horizonEnd,
   });
+  console.info("[coaching/events] schedule generated", {
+    role: user.role,
+    templates: templates.length,
+    visibleTemplates: visibleTemplates.length,
+    events: events.length,
+  });
+  return NextResponse.json({ events });
 }
