@@ -82,7 +82,7 @@ export function LessonVideoPlayer({
         if (body?.upstreamStatus) upstream = `, upstream ${body.upstreamStatus}`;
       }
       httpPart = ` — HTTP ${res.status}${upstream}, ${type}`;
-      await res.body?.cancel();
+      if (res.ok) await res.body?.cancel();
     } catch {
       httpPart = " — network request failed";
     }
@@ -206,9 +206,13 @@ export function LessonVideoPlayer({
     if (wantsPlaybackRef.current) {
       // Set the default playback start now as well, before play() can begin.
       video.currentTime = resumePositionRef.current;
-      void video.play()?.catch(() => {
-        wantsPlaybackRef.current = false;
-        markReady(); // Native Play remains available if autoplay is denied.
+      void video.play()?.catch((error: unknown) => {
+        // A network/decode rejection also emits `error`; do not cancel its
+        // recovery timer. Only autoplay denial should hand back native Play.
+        if (error instanceof DOMException && error.name === "NotAllowedError") {
+          wantsPlaybackRef.current = false;
+          markReady();
+        }
       });
     }
   }, [markReady]);
@@ -257,7 +261,8 @@ export function LessonVideoPlayer({
     // playback actually ran out of data, not while the user is paused.
     if (!video || video.paused || video.ended || video.readyState >= 3) return;
     beginBuffering();
-    if (recoveryTimerRef.current || autoRetryCountRef.current >= 2) return;
+    if (recoveryTimerRef.current ||
+        autoRetryCountRef.current >= AUTO_RETRY_DELAYS_MS.length) return;
     const position = video.currentTime;
     recoveryTimerRef.current = setTimeout(() => {
       recoveryTimerRef.current = null;

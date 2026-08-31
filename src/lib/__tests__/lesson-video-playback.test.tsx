@@ -122,6 +122,18 @@ describe("lesson playback recovery", () => {
     expect(play).toHaveBeenCalledOnce();
   });
 
+  it("does not cancel another network recovery when play() rejects", async () => {
+    await startAt(100);
+    play.mockImplementation(() => {
+      video.dispatchEvent(new Event("error"));
+      return Promise.reject(new DOMException("Unsupported source", "NotSupportedError"));
+    });
+    await event("error");
+    await advance(3000);
+    await advance(8000);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it("bounds automatic recovery and leaves a manual retry after 30 seconds", async () => {
     await startAt();
     for (let i = 0; i < 3; i++) {
