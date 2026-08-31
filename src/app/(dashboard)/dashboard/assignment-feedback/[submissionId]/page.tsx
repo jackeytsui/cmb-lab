@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ExternalLink, Video } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -13,50 +13,14 @@ import {
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { lessonLanguage } from "@/lib/lesson-language";
-import { parseRecordingEmbed } from "@/lib/recording-embed";
 import { CorrectedSentence } from "@/components/assignments/CorrectedSentence";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
+import { AssignmentReviewRecording } from "@/components/student/AssignmentReviewRecording";
 
 export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ submissionId: string }>;
-}
-
-function RecordingEmbed({ url }: { url: string }) {
-  const embed = parseRecordingEmbed(url);
-  if (!embed) return null;
-
-  if (embed.kind === "link") {
-    return (
-      <a
-        href={embed.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-2 rounded-md border border-border bg-background p-3 hover:bg-muted/50 transition-colors"
-      >
-        <Video className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm text-foreground flex-1 truncate">
-          Watch your review recording
-        </span>
-        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-      </a>
-    );
-  }
-
-  return (
-    <div className="rounded-lg overflow-hidden border border-border bg-black aspect-video">
-      <iframe
-        src={embed.embedUrl}
-        title="Review recording"
-        className="w-full h-full"
-        allow="autoplay; fullscreen; picture-in-picture"
-        allowFullScreen
-        loading="lazy"
-        referrerPolicy="no-referrer"
-      />
-    </div>
-  );
 }
 
 export default async function AssignmentFeedbackDetailPage({
@@ -202,6 +166,10 @@ export default async function AssignmentFeedbackDetailPage({
         </div>
       )}
 
+      {row.submission.recordingUrl && (
+        <AssignmentReviewRecording url={row.submission.recordingUrl} />
+      )}
+
       {row.submission.assignmentType === "diary" &&
         row.submission.studentAudioUrl && (
           <div className="rounded-lg border border-border bg-card p-5 space-y-2">
@@ -343,15 +311,6 @@ export default async function AssignmentFeedbackDetailPage({
             className="prose prose-invert prose-sm max-w-none text-foreground"
             dangerouslySetInnerHTML={{ __html: row.submission.extraComment }}
           />
-        </div>
-      )}
-
-      {row.submission.recordingUrl && (
-        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">
-            Review Recording
-          </h2>
-          <RecordingEmbed url={row.submission.recordingUrl} />
         </div>
       )}
     </div>

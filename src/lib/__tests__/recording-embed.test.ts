@@ -3,6 +3,7 @@ import {
   parseRecordingEmbed,
   sanitizeRecordingUrl,
 } from "@/lib/recording-embed";
+import nextConfig from "../../../next.config";
 
 describe("sanitizeRecordingUrl", () => {
   it.each([
@@ -44,5 +45,22 @@ describe("parseRecordingEmbed", () => {
       kind: "link",
       url: "https://fathom.video/share/example",
     });
+  });
+});
+
+describe("recording embed security policy", () => {
+  it("allows Loom players in application frames", async () => {
+    const headerRules = await nextConfig.headers?.();
+    const appHeaders = headerRules?.find(
+      (rule) => rule.source === "/((?!api/accelerator/file).*)",
+    );
+    const contentSecurityPolicy = appHeaders?.headers.find(
+      (header) => header.key === "Content-Security-Policy",
+    )?.value;
+    const frameSource = contentSecurityPolicy
+      ?.split(";")
+      .find((directive) => directive.trim().startsWith("frame-src"));
+
+    expect(frameSource).toContain("https://www.loom.com");
   });
 });
