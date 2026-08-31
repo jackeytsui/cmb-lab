@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { studentTags, tags } from "@/db/schema";
 
 // Users with any of these tags are excluded from analytics calculations.
-const WHITELIST_TAGS = [
+export const WHITELIST_TAGS = [
   "analytics_whitelist",
   "analytics-whitelist",
   "whitelisted",
