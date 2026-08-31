@@ -22,11 +22,27 @@ export interface TTSRequest {
   phoneme?: string;
 }
 
+export type HeaderCredentialState =
+  | "missing"
+  | "empty"
+  | "contains-whitespace"
+  | "usable";
+
+/** Classify a credential without exposing its value, length, or format. */
+export function getHeaderCredentialState(
+  value: string | undefined,
+): HeaderCredentialState {
+  if (value === undefined) return "missing";
+  const credential = value.trim();
+  if (!credential) return "empty";
+  if (/\s/.test(credential)) return "contains-whitespace";
+  return "usable";
+}
+
 /** Return a header-safe credential without ever logging its value. */
 export function getHeaderCredential(value: string | undefined): string | null {
-  const credential = value?.trim();
-  if (!credential || /\s/.test(credential)) return null;
-  return credential;
+  if (getHeaderCredentialState(value) !== "usable") return null;
+  return value!.trim();
 }
 
 // --- Voice Resolution ---

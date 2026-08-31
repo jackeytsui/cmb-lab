@@ -4,6 +4,8 @@ import {
   synthesizeSpeechMiniMax,
   resolveCantoneseProvider,
   buildCacheKey,
+  getHeaderCredential,
+  getHeaderCredentialState,
 } from "@/lib/tts";
 
 interface ElevenLabsRequestBody {
@@ -11,6 +13,24 @@ interface ElevenLabsRequestBody {
   language_code?: string;
   voice_settings: { stability: number; similarity_boost: number; speed: number };
 }
+
+describe("header credential validation", () => {
+  it("distinguishes missing, empty, malformed, and usable credentials", () => {
+    expect(getHeaderCredentialState(undefined)).toBe("missing");
+    expect(getHeaderCredentialState("  \n ")).toBe("empty");
+    expect(getHeaderCredentialState("key with-spaces")).toBe(
+      "contains-whitespace",
+    );
+    expect(getHeaderCredentialState("  valid-key  ")).toBe("usable");
+  });
+
+  it("returns only a trimmed, header-safe credential", () => {
+    expect(getHeaderCredential(undefined)).toBeNull();
+    expect(getHeaderCredential(" \n ")).toBeNull();
+    expect(getHeaderCredential("key with-spaces")).toBeNull();
+    expect(getHeaderCredential("  valid-key  ")).toBe("valid-key");
+  });
+});
 
 describe("synthesizeSpeechElevenLabs Cantonese", () => {
   beforeEach(() => {

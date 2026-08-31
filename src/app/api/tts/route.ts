@@ -19,6 +19,7 @@ import {
   synthesizeSpeechMiniMax,
   escapeXml,
   getHeaderCredential,
+  getHeaderCredentialState,
   MINIMAX_DEFAULT_CANTONESE_VOICE,
 } from "@/lib/tts";
 import type { TTSLanguage, TTSRate } from "@/lib/tts";
@@ -207,9 +208,10 @@ export async function POST(request: NextRequest) {
     //   produces Mandarin-inflected Cantonese.
     // Mandarin: TTS_PROVIDER env > OpenAI > Azure
     const isCantonese = language === "zh-HK" || language === "cantonese";
-    const hasMiniMax = Boolean(
-      getHeaderCredential(process.env.MINIMAX_API_KEY),
+    const miniMaxCredentialState = getHeaderCredentialState(
+      process.env.MINIMAX_API_KEY,
     );
+    const hasMiniMax = miniMaxCredentialState === "usable";
     const hasElevenLabs = Boolean(
       getHeaderCredential(process.env.ELEVENLABS_API_KEY) &&
         process.env.ELEVENLABS_CANTONESE_VOICE_ID?.trim()
@@ -279,7 +281,7 @@ export async function POST(request: NextRequest) {
       // or an env-var problem (missing/typo'd/wrong-environment key).
       console.log(
         `TTS: cantonese synthesis via ${provider} (voice=${voice.voiceName}, rate=${rate}) ` +
-          `[configured: minimax=${hasMiniMax} azure=${hasAzure} elevenlabs=${hasElevenLabs} openai=${hasOpenAI}]`,
+          `[configured: minimax=${hasMiniMax}(${miniMaxCredentialState}) azure=${hasAzure} elevenlabs=${hasElevenLabs} openai=${hasOpenAI}]`,
       );
     }
     let audioBuffer: Buffer;
