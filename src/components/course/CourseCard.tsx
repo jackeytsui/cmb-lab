@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { CertificateDownloadButton } from "@/components/certificate/CertificateDownloadButton";
 
 interface CourseCardProps {
+  completedByDefault?: boolean;
   course: {
     id: string;
     title: string;
@@ -24,7 +25,7 @@ interface CourseCardProps {
  * Course card component with progress bar and cinematic styling.
  * Features hover animations via Framer Motion and gradient progress bar.
  */
-export function CourseCard({ course, progress, certificateVerificationId }: CourseCardProps) {
+export function CourseCard({ course, progress, certificateVerificationId, completedByDefault = false }: CourseCardProps) {
   const progressPercent =
     progress.totalLessons > 0
       ? Math.round((progress.completedLessons / progress.totalLessons) * 100)
@@ -96,7 +97,7 @@ export function CourseCard({ course, progress, certificateVerificationId }: Cour
             {/* Access tier badge and certificate download */}
             <div className="mt-4 flex items-center gap-2">
               <AccessTierBadge tier={course.accessTier} />
-              {progress.totalLessons > 0 &&
+              {!completedByDefault && progress.totalLessons > 0 &&
                 progress.completedLessons === progress.totalLessons && (
                   <CertificateDownloadButton
                     courseId={course.id}

@@ -9,25 +9,29 @@ interface CourseLibraryLessonControlsProps {
   lessonId: string;
   initialCompleted: boolean;
   nextHref?: string | null;
+  completedByDefault?: boolean;
 }
 
 export function CourseLibraryLessonControls({
   lessonId,
   initialCompleted,
   nextHref = null,
+  completedByDefault = false,
 }: CourseLibraryLessonControlsProps) {
   const router = useRouter();
-  const [isComplete, setIsComplete] = useState(initialCompleted);
+  const [recordedComplete, setIsComplete] = useState(initialCompleted);
+  const isComplete = completedByDefault || recordedComplete;
   const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
+    if (completedByDefault) return;
     // Mark the lesson as "last opened" so the course page can resume from here.
     fetch(`/api/course-library/lessons/${lessonId}/progress`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ touch: true }),
     }).catch(() => null);
-  }, [lessonId]);
+  }, [lessonId, completedByDefault]);
 
   const markComplete = (advance = false) => {
     if (isComplete) {
@@ -52,10 +56,10 @@ export function CourseLibraryLessonControls({
 
   if (isComplete) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-200">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-          <span>Completed on this device account.</span>
+          <span>{completedByDefault ? "Completed — staff access" : "Completed on your account."}</span>
         </div>
         {nextHref ? (
           <Button onClick={() => router.push(nextHref)} className="shrink-0 gap-2">

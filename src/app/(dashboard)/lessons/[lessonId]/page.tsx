@@ -1,15 +1,16 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/db";
 import {
-  users,
   lessons,
   interactions,
 } from "@/db/schema";
 import { eq, and, isNull, asc } from "drizzle-orm";
 import { resolvePermissions, canAccessLesson } from "@/lib/permissions";
-import { hasMinimumRole } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { isStaffRole } from "@/lib/platform-roles";
+import { hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
+import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgressNotice";
 import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
 import { ChevronLeft, BookOpenText, FileText, Link as LinkIcon, Download } from "lucide-react";
 import { checkLessonUnlock } from "@/lib/unlock";
@@ -50,17 +51,7 @@ interface PageProps {
 export default async function LessonPlayerPage({ params }: PageProps) {
   const { lessonId } = await params;
 
-  // 1. Auth check
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
-    redirect("/sign-in");
-  }
-
-  // 2. Get internal user ID
-  const user = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+  const user = await getCurrentUser();
   if (!user) {
     redirect("/sign-in");
   }
@@ -87,7 +78,8 @@ export default async function LessonPlayerPage({ params }: PageProps) {
   const courseId = lesson.module.course.id;
 
   // 4. Verify user has valid access via permission resolver (full hierarchy check)
-  const isCoachOrAbove = await hasMinimumRole("coach");
+  const isCoachOrAbove = isStaffRole(user.role);
+  const staffProgress = hasDefaultCourseCompletion(user.role);
   if (!isCoachOrAbove) {
     // Classic LTO students don't get regular lessons — send them to Accelerator
     if (await userHasLtoStudentTag(user.id)) {
@@ -101,8 +93,8 @@ export default async function LessonPlayerPage({ params }: PageProps) {
   }
 
   // 5. Check unlock status
-  const unlockStatus = await checkLessonUnlock(user.id, lessonId);
-  if (!unlockStatus.isUnlocked) {
+  const unlockStatus = staffProgress ? null : await checkLessonUnlock(user.id, lessonId);
+  if (unlockStatus && !unlockStatus.isUnlocked) {
     // Lesson is locked, redirect to course detail page
     redirect(`/courses/${courseId}`);
   }
@@ -136,7 +128,7 @@ export default async function LessonPlayerPage({ params }: PageProps) {
       id: `cue-${interaction.id}`,
       timestamp: interaction.timestamp,
       interactionId: interaction.id,
-      completed: false,
+      completed: staffProgress,
       language: interaction.language,
       type: interaction.type,
       prompt: interaction.prompt,
@@ -157,7 +149,7 @@ export default async function LessonPlayerPage({ params }: PageProps) {
   const hasReadableText = interactionPrompts.length > 0;
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div key={`${user.id}:${lessonId}`} className="container mx-auto px-4 py-8">
         {/* Back link */}
         <Link
           href={`/courses/${courseId}`}
@@ -174,6 +166,8 @@ export default async function LessonPlayerPage({ params }: PageProps) {
             <p className="text-zinc-400 mt-2">{lesson.description}</p>
           )}
         </header>
+
+        {staffProgress && <StaffCourseProgressNotice />}
 
         {/* Open in Reader link */}
         {hasReadableText && (
@@ -207,7 +201,7 @@ export default async function LessonPlayerPage({ params }: PageProps) {
             <InteractiveVideoPlayer
               playbackId={lesson.muxPlaybackId}
               cuePoints={cuePoints}
-              lessonId={lessonId}
+              lessonId={staffProgress ? undefined : lessonId}
               courseId={courseId}
               title={lesson.title}
             />
@@ -334,7 +328,7 @@ export default async function LessonPlayerPage({ params }: PageProps) {
         })()}
 
         {/* Lesson Controls (Mark Complete / Next Lesson) */}
-        <LessonControls lessonId={lessonId} courseId={courseId} />
+        <LessonControls lessonId={lessonId} courseId={courseId} completedByDefault={staffProgress} />
 
         {/* Lesson metadata */}
         <div className="mt-6 text-sm text-zinc-500">

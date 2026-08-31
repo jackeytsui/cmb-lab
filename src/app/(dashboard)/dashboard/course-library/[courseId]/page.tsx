@@ -15,6 +15,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { getCurrentCourseLibraryModuleIndex } from "@/lib/course-library-progression";
+import { displayedCompletedLessonIds, hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
+import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgressNotice";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
@@ -23,6 +25,7 @@ interface PageProps {
 export default async function CourseLibraryCourseDetailPage({ params }: PageProps) {
   const { courseId } = await params;
   const currentUser = await getCurrentUser();
+  const staffProgress = hasDefaultCourseCompletion(currentUser?.role);
 
   const [course] = await db
     .select()
@@ -74,7 +77,7 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
       : [];
 
   const progressRows =
-    currentUser && lessons.length > 0
+    currentUser && !staffProgress && lessons.length > 0
       ? await db
           .select({
             lessonId: courseLibraryLessonProgress.lessonId,
@@ -92,8 +95,8 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
           )
       : [];
 
-  const completedLessonIds = new Set(
-    progressRows.filter((row) => row.completedAt).map((row) => row.lessonId),
+  const completedLessonIds = displayedCompletedLessonIds(
+    currentUser?.role, lessons, progressRows,
   );
 
   const lessonsByModule = new Map<string, string[]>();
@@ -142,7 +145,7 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
   } as const;
 
   return (
-    <CourseLibraryGate>
+    <CourseLibraryGate key={currentUser?.id}>
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         <Link
           href="/dashboard/course-library"
@@ -232,6 +235,8 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
           </div>
         </header>
 
+        {staffProgress && <StaffCourseProgressNotice />}
+
         {stops.length === 0 ? (
           <div className="mx-auto mt-6 max-w-md rounded-lg border border-dashed border-border bg-card p-8 text-center">
             <p className="text-sm text-muted-foreground">
@@ -243,6 +248,7 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
             courseId={courseId}
             stops={stops}
             currentIndex={currentIndex}
+            staffProgress={staffProgress}
           />
         )}
       </div>

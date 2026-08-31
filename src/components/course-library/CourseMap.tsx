@@ -34,6 +34,8 @@ interface CourseMapProps {
   stops: CourseMapStop[];
   /** Index of the stop the student should do next; -1 when all complete. */
   currentIndex: number;
+  /** Staff completion is an access override, not a learner achievement. */
+  staffProgress?: boolean;
 }
 
 // Brand palette from the roadmap PDFs: dark-blue chapter lessons, light-blue
@@ -347,7 +349,7 @@ function BandGrid({
   );
 }
 
-export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
+export function CourseMap({ courseId, stops, currentIndex, staffProgress = false }: CourseMapProps) {
   const router = useRouter();
   const [jumpTarget, setJumpTarget] = useState<CourseMapStop | null>(null);
   const jumpTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -368,7 +370,7 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
 
   // Confetti the first time a student lands on a fully-completed course.
   useEffect(() => {
-    if (!allComplete || typeof window === "undefined") return;
+    if (staffProgress || !allComplete || typeof window === "undefined") return;
     const key = `cmb-map-done-${courseId}`;
     if (localStorage.getItem(key)) return;
     localStorage.setItem(key, "1");
@@ -382,7 +384,7 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
         });
       })
       .catch(() => {});
-  }, [allComplete, courseId]);
+  }, [allComplete, courseId, staffProgress]);
 
   const bands = groupByWeek(stops);
   const columns = columnsFor(width);
@@ -438,7 +440,9 @@ export function CourseMap({ courseId, stops, currentIndex }: CourseMapProps) {
           />
         </span>
         <p className="mt-3 max-w-[240px] text-center text-sm font-semibold text-foreground">
-          {allComplete
+          {staffProgress
+            ? "All course content completed & unlocked for staff"
+            : allComplete
             ? "Congratulations on completing this section!"
             : "Complete every stop to finish this section"}
         </p>

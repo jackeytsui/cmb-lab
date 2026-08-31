@@ -18,6 +18,7 @@ export async function NativeVideoThreadLesson({
   lessonId,
   userId,
   initialCompleted,
+  completedByDefault = false,
   description,
 }: {
   threadId: string;
@@ -26,6 +27,7 @@ export async function NativeVideoThreadLesson({
   lessonId: string;
   userId: string | null;
   initialCompleted: boolean;
+  completedByDefault?: boolean;
   description?: string;
 }) {
   const thread = await db.query.videoThreads.findFirst({
@@ -96,6 +98,7 @@ export async function NativeVideoThreadLesson({
       <CourseLibraryLessonControls
         lessonId={lessonId}
         initialCompleted={initialCompleted}
+        completedByDefault={completedByDefault}
       />
     </div>
   );

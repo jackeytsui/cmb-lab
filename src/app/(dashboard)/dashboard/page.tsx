@@ -26,6 +26,7 @@ import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { getUserFeatureTagOverrides, applyFeatureTagOverrides } from "@/lib/tag-feature-access";
 import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
 import { getCurrentUser as getEffectiveDbUser } from "@/lib/auth";
+import { displayedCompletedLessonCount, hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
 
 /**
  * Dashboard page - shows courses the authenticated user has access to.
@@ -397,8 +398,9 @@ export default async function DashboardPage() {
                     ? "full"
                     : permissions?.getAccessTier(course.id) ?? "preview",
                 }}
+                completedByDefault={hasDefaultCourseCompletion(dbUser.role)}
                 progress={{
-                  completedLessons: course.completedLessons ?? 0,
+                  completedLessons: displayedCompletedLessonCount(dbUser.role, Number(course.totalLessons ?? 0), Number(course.completedLessons ?? 0)),
                   totalLessons: course.totalLessons ?? 0,
                 }}
                 certificateVerificationId={certificateMap.get(course.id) ?? null}

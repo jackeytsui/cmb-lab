@@ -55,6 +55,8 @@ import { studentFacingSourcePrompt } from "@/lib/videoask/vocal-hack-content";
 import { userCanReceiveAssignmentFeedback } from "@/lib/assignment-review";
 import { extractEmbedUrl } from "@/lib/embed";
 import { legacyVideoAskUrl } from "@/lib/legacy-vocal-hack";
+import { hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
+import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgressNotice";
 
 interface Attachment {
   url: string;
@@ -106,6 +108,7 @@ interface PageProps {
 export default async function CourseLibraryLessonViewerPage({ params }: PageProps) {
   const { courseId, lessonId } = await params;
   const currentUser = await getCurrentUser();
+  const staffProgress = hasDefaultCourseCompletion(currentUser?.role);
   const feedbackEnabled = currentUser
     ? await userCanReceiveAssignmentFeedback(currentUser)
     : false;
@@ -424,7 +427,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
   }
 
   return (
-    <CourseLibraryGate>
+    <CourseLibraryGate key={`${currentUser?.id}:${lessonId}`}>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <a
           href={`/dashboard/course-library/${courseId}/modules/${row.moduleId}`}
@@ -440,6 +443,8 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
         <h1 className="text-2xl font-bold text-foreground mb-6">
           {row.lessonTitle}
         </h1>
+
+        {staffProgress && <StaffCourseProgressNotice />}
 
         {row.lessonType === "video" && (
           <div className="space-y-4">
@@ -509,6 +514,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              completedByDefault={staffProgress}
               nextHref={nextHref}
             />
             <LessonAttachments
@@ -582,6 +588,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              completedByDefault={staffProgress}
               nextHref={nextHref}
             />
             <LessonAttachments
@@ -616,6 +623,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              completedByDefault={staffProgress}
               nextHref={nextHref}
             />
           </div>
@@ -666,6 +674,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              completedByDefault={staffProgress}
               nextHref={nextHref}
             />
             <LessonAttachments
@@ -721,6 +730,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             <CourseLibraryLessonControls
               lessonId={lessonId}
               initialCompleted={!!progress?.completedAt}
+              completedByDefault={staffProgress}
               nextHref={nextHref}
             />
           </div>
@@ -734,6 +744,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
             lessonId={lessonId}
             userId={currentUser?.id ?? null}
             initialCompleted={!!progress?.completedAt}
+            completedByDefault={staffProgress}
             description={
               typeof content.description === "string"
                 ? content.description

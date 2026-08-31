@@ -7,6 +7,7 @@ import {
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
+import { hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
 
 interface RouteParams {
   params: Promise<{ lessonId: string }>;
@@ -42,8 +43,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return NextResponse.json({
     progress: progress ?? null,
     completion: {
-      isComplete: !!progress?.completedAt,
+      isComplete: hasDefaultCourseCompletion(user.role) || !!progress?.completedAt,
     },
+    completedByDefault: hasDefaultCourseCompletion(user.role),
   });
 }
 
@@ -74,6 +76,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const shouldComplete = parsed.data.completed === true;
+
+  // Staff completion is virtual. Opening or marking a lesson must not create
+  // fabricated progress records (or learner milestones) for a staff account.
+  if (hasDefaultCourseCompletion(user.role)) {
+    return NextResponse.json({
+      progress: null,
+      completion: { isComplete: true },
+      completedByDefault: true,
+    });
+  }
 
   const [progress] = await db
     .insert(courseLibraryLessonProgress)

@@ -13,6 +13,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { courseCoverImagePath } from "@/lib/course-cover-image";
+import { displayedCompletedLessonCount, hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
+import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgressNotice";
 
 export const metadata = {
   title: "Course Library",
@@ -89,13 +91,17 @@ export default async function CourseLibraryStudentPage() {
     for (const row of progressRows) {
       progressByCourse.set(row.courseId, {
         totalLessons: Number(row.totalLessons ?? 0),
-        completedLessons: Number(row.completedLessons ?? 0),
+        completedLessons: displayedCompletedLessonCount(
+          currentUser.role,
+          Number(row.totalLessons ?? 0),
+          Number(row.completedLessons ?? 0),
+        ),
       });
     }
   }
 
   return (
-    <CourseLibraryGate>
+    <CourseLibraryGate key={currentUser?.id}>
       <div className="container mx-auto px-4 py-8 space-y-6">
         <header>
           <h1 className="text-2xl font-bold text-foreground">Course Library</h1>
@@ -103,6 +109,8 @@ export default async function CourseLibraryStudentPage() {
             Browse available courses and track your progress.
           </p>
         </header>
+
+        {hasDefaultCourseCompletion(currentUser?.role) && <StaffCourseProgressNotice />}
 
         {courses.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">

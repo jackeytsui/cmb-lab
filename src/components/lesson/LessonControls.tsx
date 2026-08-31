@@ -9,13 +9,15 @@ import { useRouter } from "next/navigation";
 interface LessonControlsProps {
   lessonId: string;
   courseId: string;
+  completedByDefault?: boolean;
 }
 
-export function LessonControls({ lessonId, courseId }: LessonControlsProps) {
+export function LessonControls({ lessonId, courseId, completedByDefault = false }: LessonControlsProps) {
   const router = useRouter();
   const [nextLessonId, setNextLessonId] = useState<string | null>(null);
   const [nextQuizId, setNextQuizId] = useState<string | null>(null);
-  const [isComplete, setIsComplete] = useState(false);
+  const [recordedComplete, setIsComplete] = useState(false);
+  const isComplete = completedByDefault || recordedComplete;
   const [loading, setLoading] = useState(false);
 
   // Fetch next lesson/quiz and current completion status
@@ -24,7 +26,7 @@ export function LessonControls({ lessonId, courseId }: LessonControlsProps) {
       try {
         const [nextRes, progressRes] = await Promise.all([
           fetch(`/api/lessons/${lessonId}/next`),
-          fetch(`/api/progress/${lessonId}`)
+          completedByDefault ? Promise.resolve(null) : fetch(`/api/progress/${lessonId}`)
         ]);
 
         if (nextRes.ok) {
@@ -33,7 +35,7 @@ export function LessonControls({ lessonId, courseId }: LessonControlsProps) {
           setNextQuizId(data.nextQuiz?.id || null);
         }
 
-        if (progressRes.ok) {
+        if (progressRes?.ok) {
           const data = await progressRes.json();
           setIsComplete(!!data.progress?.completedAt);
         }
@@ -42,9 +44,10 @@ export function LessonControls({ lessonId, courseId }: LessonControlsProps) {
       }
     }
     fetchData();
-  }, [lessonId]);
+  }, [lessonId, completedByDefault]);
 
   const handleMarkComplete = async () => {
+    if (isComplete) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/progress/${lessonId}`, {

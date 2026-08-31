@@ -1,9 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/db";
 import {
-  users,
   courses,
   modules,
   lessons,
@@ -21,7 +19,10 @@ import { LessonCard } from "@/components/course/LessonCard";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { PracticeSetCard } from "@/components/practice/assignments/PracticeSetCard";
 import { resolvePermissions, type PermissionSet } from "@/lib/permissions";
-import { hasMinimumRole } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { isStaffRole } from "@/lib/platform-roles";
+import { hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
+import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgressNotice";
 import { userHasLtoStudentTag } from "@/lib/tag-feature-access";
 import { canAccessLessonByPolicy } from "@/lib/course-access-policy";
 
@@ -35,23 +36,15 @@ interface PageProps {
 export default async function CourseDetailPage({ params }: PageProps) {
   const { courseId } = await params;
 
-  // 1. Auth check
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
-    redirect("/sign-in");
-  }
-
-  // 2. Get internal user ID
-  const user = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
+  // Use the effective identity so View As keeps real student progression.
+  const user = await getCurrentUser();
   if (!user) {
     redirect("/sign-in");
   }
 
   // 3. Verify user has valid access to this course (via resolver or coach bypass)
-  const isCoachOrAbove = await hasMinimumRole("coach");
+  const isCoachOrAbove = isStaffRole(user.role);
+  const staffProgress = hasDefaultCourseCompletion(user.role);
   let accessTier: "preview" | "full" | null = "full";
   let permissions: PermissionSet | null = null;
 
@@ -213,7 +206,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
       for (let i = 0; i < mod.lessons.length; i++) {
         const lesson = mod.lessons[i];
         const progress = progressMap.get(lesson.id);
-        const isCompleted = progress?.completedAt != null;
+        const isCompleted = staffProgress || progress?.completedAt != null;
         const isTierAccessible = canAccessLessonByPolicy({
           accessTier,
           hasCourseLevelAccess,
@@ -231,7 +224,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
           ? undefined
           : "Available with full course access";
 
-        if (isTierAccessible && i > 0) {
+        if (!staffProgress && isTierAccessible && i > 0) {
           const prevLesson = mod.lessons[i - 1];
           const prevProgress = progressMap.get(prevLesson.id);
           isUnlocked = prevProgress?.completedAt != null;
@@ -355,6 +348,8 @@ export default async function CourseDetailPage({ params }: PageProps) {
               </p>
             )}
           </header>
+
+          {staffProgress && <StaffCourseProgressNotice />}
 
           <div
             data-testid="course-progress-summary"

@@ -29,6 +29,8 @@ import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { canUserAccessCourseLibraryModule } from "@/lib/course-library-lesson-access";
 import { baseLessonType, isCantoneseLessonType } from "@/lib/lesson-language";
 import { cn } from "@/lib/utils";
+import { displayedCompletedLessonIds, hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
+import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgressNotice";
 
 interface PageProps {
   params: Promise<{ courseId: string; moduleId: string }>;
@@ -80,6 +82,7 @@ const MAP_STYLE_CHIP: Record<string, { label: string; className: string } | null
 export default async function CourseLibraryModulePage({ params }: PageProps) {
   const { courseId, moduleId } = await params;
   const currentUser = await getCurrentUser();
+  const staffProgress = hasDefaultCourseCompletion(currentUser?.role);
 
   const [row] = await db
     .select({
@@ -130,7 +133,7 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
     .orderBy(asc(courseLibraryLessons.sortOrder));
 
   const progressRows =
-    currentUser && lessons.length > 0
+    currentUser && !staffProgress && lessons.length > 0
       ? await db
           .select({
             lessonId: courseLibraryLessonProgress.lessonId,
@@ -148,8 +151,8 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
           )
       : [];
 
-  const completedLessonIds = new Set(
-    progressRows.filter((r) => r.completedAt).map((r) => r.lessonId),
+  const completedLessonIds = displayedCompletedLessonIds(
+    currentUser?.role, lessons, progressRows,
   );
   const currentLessonId =
     lessons.find((lesson) => !completedLessonIds.has(lesson.id))?.id ?? null;
@@ -177,7 +180,7 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
   const chip = MAP_STYLE_CHIP[mod.mapStyle] ?? null;
 
   return (
-    <CourseLibraryGate>
+    <CourseLibraryGate key={currentUser?.id}>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Link
           href={`/dashboard/course-library/${courseId}`}
@@ -209,11 +212,15 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
           <p className="mt-2 text-sm text-muted-foreground">
             {lessons.length === 0
               ? "No content in this stop yet."
+              : staffProgress
+                ? "Every part of this stop is completed and unlocked for your staff role."
               : isModuleComplete
                 ? "You have completed every part of this stop. 🎉"
                 : `${completedLessonIds.size} of ${lessons.length} parts complete`}
           </p>
         </header>
+
+        {staffProgress && <StaffCourseProgressNotice />}
 
         {lessons.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
@@ -268,7 +275,7 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
           </div>
         )}
 
-        {nextModule && isModuleComplete && (
+        {nextModule && (staffProgress || isModuleComplete) && (
           <Link
             href={`/dashboard/course-library/${courseId}/modules/${nextModule.id}`}
             className="mt-6 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 hover:bg-muted/30 transition-colors"
