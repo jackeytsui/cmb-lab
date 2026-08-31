@@ -9,6 +9,7 @@ import { linkAndSyncTagsFromGhl } from "@/lib/ghl/tag-sync";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { assignRole } from "@/lib/user-roles";
 import { assignTag } from "@/lib/tags";
+import { composeStudentName } from "@/lib/student-name";
 import {
   DEFAULT_PLATFORM_ROLE,
   normalizePlatformRole,
@@ -159,7 +160,7 @@ export async function POST(req: NextRequest) {
               .set({
                 clerkId: id,
                 email: normalizedEmail,
-                name: [first_name, last_name].filter(Boolean).join(" ") || null,
+                name: composeStudentName(first_name, last_name),
                 role: effectiveRole,
                 deletedAt: null,
               })
@@ -170,7 +171,7 @@ export async function POST(req: NextRequest) {
               .values({
                 clerkId: id,
                 email: normalizedEmail,
-                name: [first_name, last_name].filter(Boolean).join(" ") || null,
+                name: composeStudentName(first_name, last_name),
                 role: DEFAULT_PLATFORM_ROLE,
               })
               .returning({ id: users.id });
@@ -213,7 +214,7 @@ export async function POST(req: NextRequest) {
           .update(users)
           .set({
             email: normalizedEmail,
-            name: [first_name, last_name].filter(Boolean).join(" ") || null,
+            name: composeStudentName(first_name, last_name),
           })
           .where(eq(users.clerkId, id))
           .returning({ id: users.id, role: users.role });
@@ -229,7 +230,7 @@ export async function POST(req: NextRequest) {
               .set({
                 clerkId: id,
                 email: normalizedEmail,
-                name: [first_name, last_name].filter(Boolean).join(" ") || null,
+                name: composeStudentName(first_name, last_name),
                 deletedAt: null,
               })
               .where(eq(users.id, existingByEmail.id))

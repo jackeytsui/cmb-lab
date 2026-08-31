@@ -5,6 +5,7 @@ import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { composeStudentName } from "@/lib/student-name";
 import {
   PLATFORM_ROLES,
   normalizePlatformRole,
@@ -281,11 +282,7 @@ async function upsertDbUserFromInvite(params: {
 }): Promise<string | undefined> {
   const normalizedEmail = params.email.trim().toLowerCase();
   const normalizedRole = normalizeRole(params.role);
-  const name = [params.firstName?.trim(), params.lastName?.trim()]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  const safeName = name.length > 0 ? name : null;
+  const safeName = composeStudentName(params.firstName, params.lastName);
 
   // Source of truth by Clerk ID first.
   const existingByClerk = await db.query.users.findFirst({

@@ -24,6 +24,7 @@ import {
 import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 import { LabAssistantWidget } from "@/components/lab-assistant/LabAssistantWidget";
 import { StudentContentGuard } from "@/components/layout/StudentContentGuard";
+import { composeStudentName } from "@/lib/student-name";
 import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
 import {
   DEFAULT_PLATFORM_ROLE,
@@ -111,8 +112,7 @@ export default async function DashboardLayout({
       .values({
         clerkId: userId,
         email,
-        name:
-          [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ") || null,
+        name: composeStudentName(clerkUser?.firstName, clerkUser?.lastName),
         imageUrl: clerkUser?.imageUrl ?? null,
         role: DEFAULT_PLATFORM_ROLE,
       })

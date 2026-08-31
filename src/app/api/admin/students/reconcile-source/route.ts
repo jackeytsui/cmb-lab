@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
+import { composeStudentName } from "@/lib/student-name";
 
 const sourceRecordSchema = z.object({
   row: z.number().int().positive().optional(),
@@ -131,10 +132,7 @@ export async function POST(request: NextRequest) {
           throw new Error(`Coach account not found: ${coachEmail}`);
         }
 
-        const sourceName = [source.firstName, source.lastName]
-          .filter(Boolean)
-          .join(" ")
-          .trim();
+        const sourceName = composeStudentName(source.firstName, source.lastName) ?? "";
         const sourceEndDate = normalizeSourceDate(source.courseEndDate);
         if (source.courseEndDate && !sourceEndDate) {
           throw new Error(`Invalid course end date: ${source.courseEndDate}`);

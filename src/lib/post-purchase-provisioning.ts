@@ -15,6 +15,7 @@ import { getGhlClientForLocation } from "@/lib/ghl/client";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { assignTag, removeTag } from "@/lib/tags";
 import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
+import { composeStudentName } from "@/lib/student-name";
 import {
   canReassignAuthoritativeGhlContact,
   aggregatePostPurchaseStudents,
@@ -118,9 +119,7 @@ async function ensureCmbUser(params: {
     await clerk.users.unlockUser(clerkUser.id).catch(() => {});
   }
 
-  const fullName = [params.firstName?.trim(), params.lastName?.trim()]
-    .filter(Boolean)
-    .join(" ") || null;
+  const fullName = composeStudentName(params.firstName, params.lastName);
   const existingByClerk = await db.query.users.findFirst({
     where: eq(users.clerkId, clerkUser.id),
   });

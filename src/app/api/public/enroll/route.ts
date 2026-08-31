@@ -5,6 +5,7 @@ import { validateBearerApiKey } from "@/lib/validate-api-key";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { composeStudentName } from "@/lib/student-name";
 import {
   DEFAULT_PLATFORM_ROLE,
   normalizePlatformRole,
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   const { email, firstName, lastName } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
-  const name = [firstName?.trim(), lastName?.trim()].filter(Boolean).join(" ") || null;
+  const name = composeStudentName(firstName, lastName);
 
   const clerk = await clerkClient();
 

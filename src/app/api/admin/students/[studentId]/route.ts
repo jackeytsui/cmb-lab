@@ -6,6 +6,7 @@ import { users, courseAccess, lessonProgress } from "@/db/schema";
 import { eq, sql, max } from "drizzle-orm";
 import { z } from "zod";
 import { PLATFORM_ROLES } from "@/lib/platform-roles";
+import { composeStudentName } from "@/lib/student-name";
 
 interface RouteParams {
   params: Promise<{ studentId: string }>;
@@ -134,7 +135,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   const firstName = parsed.data.firstName?.trim() || "";
   const lastName = parsed.data.lastName?.trim() || "";
-  const name = [firstName, lastName].filter(Boolean).join(" ").trim() || null;
+  const name = composeStudentName(firstName, lastName);
   const normalizedEmail = parsed.data.email.trim().toLowerCase();
 
   // Prevent duplicate local users by email.
