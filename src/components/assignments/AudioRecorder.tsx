@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  Mic,
+  AudioLines,
   Square,
   Play,
   Pause,
@@ -303,9 +303,9 @@ export function AudioRecorder({
               <button
                 type="button"
                 onClick={() => startRecording("audio")}
-                className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                className="inline-flex items-center gap-2 rounded-md border border-primary/35 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                <Mic className="w-4 h-4" />
+                <AudioLines className="w-4 h-4" aria-hidden="true" />
                 {allowedMediaTypes.length > 1 ? "Record audio" : "Record"}
               </button>
             )}
@@ -313,9 +313,9 @@ export function AudioRecorder({
               <button
                 type="button"
                 onClick={() => startRecording("video")}
-                className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                className="inline-flex items-center gap-2 rounded-md border border-[#f2b705]/55 bg-[#f2b705]/15 px-4 py-2 text-sm font-semibold text-[#765900] transition-colors hover:bg-[#f2b705]/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2b705]/50 dark:text-[#f7cf4a]"
               >
-                <Video className="w-4 h-4" />
+                <Video className="w-4 h-4" aria-hidden="true" />
                 Record video
               </button>
             )}

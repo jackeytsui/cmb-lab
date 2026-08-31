@@ -3,7 +3,14 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CheckCircle2, Info, Loader2, Lock, Send } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Info,
+  Loader2,
+  Lock,
+  Send,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AudioRecorder,
@@ -11,12 +18,23 @@ import {
 } from "@/components/assignments/AudioRecorder";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import { SentenceVideo } from "@/components/assignments/SentenceVideo";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // ---------------------------------------------------------------------------
 // Student-facing Vocal Hack: watch the coach video for each sentence, record
 // yourself reading it (listen back / re-record freely), then submit everything
-// at the end for human review. Mirrors the Text Assignment lifecycle: editable
-// until review starts, then locked; reviewed submissions link to feedback.
+// at the end for human review. A submission is final and receives one review;
+// reviewed submissions link to feedback.
 // ---------------------------------------------------------------------------
 
 export interface VocalHackSentenceDto {
@@ -41,8 +59,6 @@ export interface VocalHackSubmissionDto {
   recordingMediaTypes: Record<string, RecordingMediaType>;
 }
 
-const LOCKED_STATUSES = new Set(["in_review", "reviewed"]);
-
 export function VocalHackViewer({
   lessonId,
   videoBaseUrl,
@@ -51,6 +67,7 @@ export function VocalHackViewer({
   maxResponseSeconds = 300,
   lang = "mandarin",
   feedbackEnabled = true,
+  nextLessonHref,
 }: {
   lessonId: string;
   /** Server-minted, expiring URL for the private coach-video proxy. */
@@ -60,6 +77,7 @@ export function VocalHackViewer({
   maxResponseSeconds?: number;
   lang?: "mandarin" | "cantonese";
   feedbackEnabled?: boolean;
+  nextLessonHref: string | null;
 }) {
   const [submission, setSubmission] = useState<VocalHackSubmissionDto | null>(
     initialSubmission,
@@ -81,7 +99,7 @@ export function VocalHackViewer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const locked = submission ? LOCKED_STATUSES.has(submission.status) : false;
+  const locked = Boolean(submission?.submittedAt);
   const recordedCount = useMemo(
     () => sentences.filter((s) => recordings[s.id]).length,
     [sentences, recordings],
@@ -95,7 +113,6 @@ export function VocalHackViewer({
     }
     setSubmitting(true);
     setError(null);
-    const isResubmit = Boolean(submission?.submittedAt);
     try {
       const res = await fetch(
         `/api/course-library/lessons/${lessonId}/vocal-hack-submission`,
@@ -116,7 +133,7 @@ export function VocalHackViewer({
       if (!res.ok) {
         if (res.status === 409) {
           setSubmission((prev) =>
-            prev ? { ...prev, status: "in_review" } : prev,
+            prev ? { ...prev, status: "submitted" } : prev,
           );
         }
         setError(data.error || "Failed to submit");
@@ -144,14 +161,11 @@ export function VocalHackViewer({
         recordingMediaTypes: nextMediaTypes,
       });
       setReplacementSentenceIds(new Set());
-      toast.success(
-        isResubmit ? "Recordings resubmitted!" : "Recordings submitted!",
-        {
+      toast.success("Recordings submitted!", {
           description: feedbackEnabled
             ? "You'll receive personalised feedback from our coaching team very soon."
             : "Your recording practice has been saved.",
-        },
-      );
+      });
     } catch {
       setError("Network error — please try again.");
     } finally {
@@ -201,16 +215,10 @@ export function VocalHackViewer({
         <div
           className={cn(
             "rounded-md border px-4 py-3 text-sm flex items-start gap-2",
-            locked
-              ? "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
-              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+            "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400",
           )}
         >
-          {locked ? (
-            <Lock className="w-4 h-4 mt-0.5 shrink-0" />
-          ) : (
-            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
-          )}
+          <Lock className="w-4 h-4 mt-0.5 shrink-0" />
           <div>
             {submission.status === "reviewed" ? (
               <>
@@ -222,14 +230,12 @@ export function VocalHackViewer({
                   View your feedback
                 </Link>
               </>
-            ) : locked ? (
-              "Your submission is currently being reviewed and can no longer be edited."
             ) : (
               <>
                 <span className="font-medium">Submitted!</span>{" "}
                 {feedbackEnabled
-                  ? "You'll receive personalised feedback from our coaching team very soon. You can still re-record and resubmit until it has been reviewed."
-                  : "Your recording practice has been saved. You can still re-record and resubmit it at any time."}
+                  ? "Your responses are locked and have been sent for your one coaching review."
+                  : "Your recording practice is saved and locked."}
               </>
             )}
           </div>
@@ -357,24 +363,56 @@ export function VocalHackViewer({
         </div>
       )}
 
-      {!locked && (
+      {!locked ? (
         <div className="flex items-center justify-end gap-3">
           <span className="text-xs text-muted-foreground">
             {recordedCount} of {sentences.length} recorded
           </span>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting || !allRecorded}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button
+                type="button"
+                disabled={submitting || !allRecorded}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {submitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                Submit
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Submit this assignment?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  You can submit this assignment only once
+                  {feedbackEnabled ? " and receive one coaching review" : ""}.
+                  After submitting, every response will be locked. Please play
+                  back your responses before continuing.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Go back</AlertDialogCancel>
+                <AlertDialogAction onClick={handleSubmit}>
+                  Yes, submit once
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      ) : (
+        <div className="flex justify-end">
+          <Link
+            href={nextLessonHref ?? `/dashboard/course-library`}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            {submitting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
-            {submission?.submittedAt ? "Resubmit" : "Submit"}
-          </button>
+            {nextLessonHref
+              ? "Continue to next chapter"
+              : "Back to course library"}
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
         </div>
       )}
     </div>
