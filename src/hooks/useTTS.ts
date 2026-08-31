@@ -59,6 +59,12 @@ function buildClientCacheKey(
 
 // --- Browser Speech Synthesis Fallback ---
 
+// Cantonese must keep the configured teaching voice. A device's zh-HK voice
+// may be a different accent/quality even when its locale is technically valid.
+function allowsDeviceVoice(language: string): boolean {
+  return language !== "zh-HK" && language !== "cantonese";
+}
+
 /** Map TTS language options to BCP-47 lang tags for browser speechSynthesis */
 function getBrowserLang(
   language: string
@@ -214,7 +220,12 @@ export function useTTS(): UseTTSReturn {
       }
 
       const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+      // MiniMax permits 15 seconds for synthesis. Do not abort a healthy
+      // Cantonese request before that server deadline (allow transport time).
+      const timeoutId = window.setTimeout(
+        () => controller.abort(),
+        allowsDeviceVoice(language) ? 12000 : 20000,
+      );
       let response: Response;
       try {
         response = await fetch("/api/tts", {
@@ -352,6 +363,14 @@ export function useTTS(): UseTTSReturn {
               return;
             }
 
+            if (!allowsDeviceVoice(language)) {
+              if (mountedRef.current) {
+                setError("Cantonese audio is temporarily unavailable. Please try again.");
+                setIsPlaying(false);
+              }
+              return;
+            }
+
             // Server TTS failed — try the device voice, but only if a real
             // voice for this language exists (browserSpeak enforces that).
             try {
@@ -414,6 +433,15 @@ export function useTTS(): UseTTSReturn {
             err instanceof DOMException &&
             err.name === "NotAllowedError"
           ) {
+            if (!allowsDeviceVoice(language)) {
+              // The fetched voice is already cached. A second tap can play it
+              // synchronously with user activation; never change the voice.
+              if (mountedRef.current) {
+                setError("Tap again to play Cantonese audio.");
+                setIsPlaying(false);
+              }
+              return false;
+            }
             // First playback after async fetch can be blocked by browser policy.
             // Fall back immediately to device speech so first click still produces sound.
             browserSpeak(text, language, rate)
@@ -455,6 +483,11 @@ export function useTTS(): UseTTSReturn {
           try {
             const language = options?.language ?? "zh-CN";
             const rate = options?.rate ?? "medium";
+            if (!allowsDeviceVoice(language)) {
+              setError("Cantonese audio is temporarily unavailable. Please try again.");
+              setIsPlaying(false);
+              return;
+            }
             setIsPlaying(true);
             await browserSpeak(text, language, rate);
             if (mountedRef.current) setIsPlaying(false);

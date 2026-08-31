@@ -268,9 +268,9 @@ export async function POST(request: NextRequest) {
       : text;
     const spokenText = provider === "openai" ? plainSpokenText : text;
 
-    // 8. Synthesize. MiniMax is the Cantonese-quality primary; if its network
-    // path fails, OpenAI receives an explicit Hong Kong Cantonese instruction
-    // so students still get audio instead of a dead request.
+    // 8. Keep the selected voice stable. Do not substitute OpenAI when the
+    // native Cantonese provider fails: an instruction does not preserve the
+    // approved voice/accent. Surface a retryable error instead.
     if (isCantonese) {
       // Cantonese quality regressions have bitten twice — keep an explicit
       // trail of which provider/voice served each fresh synthesis, plus which
@@ -282,29 +282,9 @@ export async function POST(request: NextRequest) {
           `[configured: minimax=${hasMiniMax} azure=${hasAzure} elevenlabs=${hasElevenLabs} openai=${hasOpenAI}]`,
       );
     }
-    let servedProvider = provider;
-    let servedVoice = voice;
     let audioBuffer: Buffer;
     if (provider === "minimax") {
-      try {
-        audioBuffer = await synthesizeSpeechMiniMax(plainSpokenText, rate);
-      } catch (error) {
-        if (!hasOpenAI) throw error;
-        console.warn(
-          "TTS: MiniMax failed; using instructed Cantonese OpenAI fallback:",
-          error instanceof Error ? error.name : "UnknownError",
-        );
-        servedProvider = "openai";
-        servedVoice = {
-          voiceName: `openai-${OPENAI_TTS_VOICE}`,
-          lang: "zh-HK",
-        };
-        audioBuffer = await synthesizeSpeechOpenAI(
-          plainSpokenText,
-          language,
-          rate,
-        );
-      }
+      audioBuffer = await synthesizeSpeechMiniMax(plainSpokenText, rate);
     } else if (provider === "elevenlabs") {
       audioBuffer = await synthesizeSpeechElevenLabs(plainSpokenText, rate);
     } else if (provider === "openai") {
@@ -329,16 +309,9 @@ export async function POST(request: NextRequest) {
       audioBuffer = await synthesizeSpeech(ssml);
     }
 
-    // 9. Cache under the provider that actually served the audio. This avoids
-    // poisoning a MiniMax cache key with fallback audio.
+    // 9. Cache only audio from the selected provider.
     const ttl = getCacheTTL(text.length);
-    const servedCacheKey = buildCacheKey(
-      text,
-      servedVoice.lang,
-      servedVoice.voiceName,
-      rate,
-    );
-    await writeCachedAudio(servedCacheKey, audioBuffer, ttl);
+    await writeCachedAudio(cacheKey, audioBuffer, ttl);
 
     // 10. Return MP3 audio
     return new NextResponse(new Uint8Array(audioBuffer), {
@@ -346,7 +319,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "audio/mpeg",
         "Cache-Control": "public, max-age=86400",
         "X-Cache": redis ? "MISS" : "BYPASS",
-        "X-TTS-Provider": servedProvider,
+        "X-TTS-Provider": provider,
       },
     });
   } catch (error) {
