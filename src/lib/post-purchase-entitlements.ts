@@ -3,6 +3,7 @@ export const POST_PURCHASE_CONTROLLED_TAGS = [
   "ic_student",
   "1on1_student",
   "icgc_student",
+  "custom_course_student",
 ] as const;
 
 export type PostPurchaseControlledTag =
@@ -100,6 +101,11 @@ export function derivePostPurchaseTags(
   }
   if (addOns.some((value) => value.includes("icgc"))) {
     expected.add("icgc_student");
+  }
+  if (addOns.some((value) => value.includes("custom course"))) {
+    // Purchase/fulfillment marker only. Custom content must still be granted
+    // to the individual student; cc_student means Confident Cantonese.
+    expected.add("custom_course_student");
   }
 
   return POST_PURCHASE_CONTROLLED_TAGS.filter((tag) => expected.has(tag));

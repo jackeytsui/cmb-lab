@@ -54,13 +54,55 @@ describe("derivePostPurchaseTags", () => {
     ]);
   });
 
-  it("accepts array values and ignores the manual custom-course option", () => {
+  it("records custom-course purchases without misusing the Confident Cantonese tag", () => {
     expect(
       derivePostPurchaseTags({
         productLine: ["Improve Canto"],
         addOnPurchased: ["Custom course"],
       }),
-    ).toEqual(["ic_student"]);
+    ).toEqual(["ic_student", "custom_course_student"]);
+  });
+
+  const addOnOptions = [
+    ["1:1 coaching + Discord Private Channel", "1on1_student"],
+    ["ICGC (Group Coaching)", "icgc_student"],
+    ["Custom course", "custom_course_student"],
+  ] as const;
+
+  for (const [productLine, baseTags] of [
+    ["CMBP", ["cmb_student"]],
+    ["Improve Canto", ["ic_student"]],
+    ["CMBP, Improve Canto", ["cmb_student", "ic_student"]],
+  ] as const) {
+    for (let mask = 0; mask < 8; mask++) {
+      const selected = addOnOptions.filter((_, index) => mask & (1 << index));
+      for (const format of ["array", "comma-separated"] as const) {
+        it(`unions ${productLine} with add-on combination ${mask} (${format})`, () => {
+          const values = selected.map(([label]) => label);
+          expect(derivePostPurchaseTags({
+            productLine,
+            addOnPurchased: format === "array" ? values : values.join(", "),
+          })).toEqual([...baseTags, ...selected.map(([, tag]) => tag)]);
+        });
+      }
+    }
+  }
+
+  it("does not carry one student's add-ons to the next student", () => {
+    expect(derivePostPurchaseTags({
+      productLine: "CMBP",
+      addOnPurchased: addOnOptions.map(([label]) => label),
+    })).toEqual([
+      "cmb_student", "1on1_student", "icgc_student", "custom_course_student",
+    ]);
+    expect(derivePostPurchaseTags({ productLine: "CMBP" })).toEqual(["cmb_student"]);
+  });
+
+  it("normalizes case and duplicate custom-course selections", () => {
+    expect(derivePostPurchaseTags({
+      productLine: " CMBP ",
+      addOnPurchased: [" CUSTOM COURSE ", "Custom course"],
+    })).toEqual(["cmb_student", "custom_course_student"]);
   });
 });
 
@@ -93,6 +135,13 @@ describe("shouldApplyInboundPostPurchaseTagChange", () => {
 });
 
 describe("planPostPurchaseTagReconciliation", () => {
+  it("adds the missing custom-course marker without changing other selected add-ons", () => {
+    expect(planPostPurchaseTagReconciliation({
+      currentTags: ["cmb_student", "1on1_student", "icgc_student", "cc_student", "manual_vip"],
+      expectedTags: ["cmb_student", "1on1_student", "icgc_student", "custom_course_student"],
+    })).toEqual({ add: ["custom_course_student"], remove: [] });
+  });
+
   it("adds missing entitlements and removes only controlled stale tags", () => {
     expect(
       planPostPurchaseTagReconciliation({

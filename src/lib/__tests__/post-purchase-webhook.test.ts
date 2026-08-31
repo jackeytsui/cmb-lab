@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { canonicalizePostPurchasePayload } from "@/lib/ghl/post-purchase-webhook";
+import { derivePostPurchaseTags, type PostPurchaseEntitlementInput } from "@/lib/post-purchase-entitlements";
 
 describe("post-purchase webhook payload normalization", () => {
+  it("preserves and maps all three add-ons sent by the live workflow", () => {
+    const payload = canonicalizePostPurchasePayload({
+      email: "student@example.com",
+      productLine: "CMBP",
+      addOnPurchased: "ICGC (Group Coaching), 1:1 coaching + Discord Private Channel, Custom course",
+      contactId: "contact-1",
+      locationId: "sales-location",
+    });
+    expect(derivePostPurchaseTags(payload as PostPurchaseEntitlementInput)).toEqual([
+      "cmb_student", "1on1_student", "icgc_student", "custom_course_student",
+    ]);
+  });
+
   it("keeps the explicit CMB custom payload compatible", () => {
     expect(
       canonicalizePostPurchasePayload({
