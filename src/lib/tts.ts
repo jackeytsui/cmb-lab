@@ -84,66 +84,21 @@ export function resolveVoice(language: string): VoiceInfo {
   }
 }
 
-// --- Cantonese provider resolution ---
+// --- Cantonese voice contract ---
 
-export type CantoneseProvider = "minimax" | "azure" | "elevenlabs" | "openai";
-
-export interface CantoneseProviderEnv {
-  MINIMAX_API_KEY?: string;
-  AZURE_SPEECH_KEY?: string;
-  AZURE_SPEECH_REGION?: string;
-  ELEVENLABS_API_KEY?: string;
-  ELEVENLABS_CANTONESE_VOICE_ID?: string;
-  CANTONESE_TTS_PROVIDER?: string;
-  OPENAI_API_KEY?: string;
-  // Allows passing process.env directly.
-  [key: string]: string | undefined;
-}
+/** User-approved production provider. Do not substitute another accent. */
+export const APPROVED_CANTONESE_PROVIDER = "minimax" as const;
+export type CantoneseProvider = typeof APPROVED_CANTONESE_PROVIDER;
 
 /**
- * Decide which provider synthesizes Cantonese audio.
+ * Return the only approved Cantonese provider.
  *
- * Only providers with an EXPLICIT Cantonese mode are ever chosen by default:
- *
- * - MiniMax (preferred when configured): T2A v2 with
- *   `language_boost: "Chinese,Yue"` plus native Cantonese preset voices —
- *   the language is pinned per request, never guessed from the text.
- * - Azure zh-HK-HiuMaanNeural: a dedicated Cantonese (Hong Kong) locale
- *   voice; also the only provider supporting jyutping phoneme
- *   disambiguation and true SSML rate control.
- *
- * ElevenLabs has no Cantonese TTS language code ("yue" is speech-to-text
- * only), so its models auto-detect the language from text — which drifts
- * into a Mandarin-inflected accent, especially on short words and single
- * characters. That accent drift is exactly the "audio sounds weird"
- * regression this resolver exists to prevent, so ElevenLabs must be opted
- * into explicitly with CANTONESE_TTS_PROVIDER=elevenlabs. OpenAI is the
- * last-resort fallback when nothing else is configured.
+ * This is intentionally not configurable. If MiniMax is unavailable, callers
+ * must pause Cantonese synthesis instead of substituting Azure, ElevenLabs,
+ * OpenAI, or a browser/device voice.
  */
-export function resolveCantoneseProvider(
-  env: CantoneseProviderEnv = process.env,
-): CantoneseProvider {
-  const hasMiniMax = Boolean(getHeaderCredential(env.MINIMAX_API_KEY));
-  const hasAzure = Boolean(
-    getHeaderCredential(env.AZURE_SPEECH_KEY) && env.AZURE_SPEECH_REGION?.trim(),
-  );
-  const hasElevenLabs = Boolean(
-    getHeaderCredential(env.ELEVENLABS_API_KEY) &&
-      env.ELEVENLABS_CANTONESE_VOICE_ID?.trim(),
-  );
-  const preference = (env.CANTONESE_TTS_PROVIDER || "").trim().toLowerCase();
-
-  // An explicit provider choice is a quality contract, not a soft hint. If
-  // MiniMax is selected but its credential is missing, fail closed instead of
-  // silently sending Cantonese through a different accent/voice.
-  if (preference === "minimax") return "minimax";
-  if (preference === "elevenlabs" && hasElevenLabs) return "elevenlabs";
-  if (preference === "azure" && hasAzure) return "azure";
-
-  if (hasMiniMax) return "minimax";
-  if (hasAzure) return "azure";
-  if (hasElevenLabs) return "elevenlabs";
-  return "openai";
+export function resolveCantoneseProvider(): CantoneseProvider {
+  return APPROVED_CANTONESE_PROVIDER;
 }
 
 // --- XML Escaping ---
@@ -256,11 +211,11 @@ export function buildCacheKey(
   voice: string,
   rate: string
 ): string {
-  // v6: bust cache after moving Cantonese back to Azure zh-HK-HiuMaanNeural —
-  // entries generated while ElevenLabs multilingual_v2 auto-detection was the
-  // default contain Mandarin-inflected ("weird-sounding") Cantonese audio.
+  // v7: only audio produced by the locked, user-approved MiniMax Cantonese
+  // voice contract may be served. Older provider/voice/model variants stay
+  // unreachable even if they used the same text and rate.
   const hash = createHash("md5").update(text).digest("hex");
-  return `tts:v6:${language}:${voice}:${rate}:${hash}`;
+  return `tts:v7:${language}:${voice}:${rate}:${hash}`;
 }
 
 /**
@@ -284,24 +239,24 @@ export function getCacheTTL(textLength: number): number {
 
 // --- MiniMax TTS REST API ---
 
-/** Default native-Cantonese preset voice for MiniMax T2A. */
-export const MINIMAX_DEFAULT_CANTONESE_VOICE = "Cantonese_GentleLady";
+/** User-approved best Cantonese voice contract. Keep these code-locked. */
+export const APPROVED_CANTONESE_VOICE_ID = "Cantonese_GentleLady";
+export const APPROVED_CANTONESE_TTS_MODEL = "speech-02-hd";
 
 /**
  * Call MiniMax T2A v2 to synthesize Cantonese speech.
  *
  * Unlike ElevenLabs, MiniMax has an explicit Cantonese mode: the request
  * pins `language_boost: "Chinese,Yue"` so the engine never guesses the
- * language from the text, and the default voice is a native Cantonese
- * preset. Returns raw MP3 audio as a Buffer (MiniMax responds with
+ * language from the text. The model and native Cantonese voice are locked to
+ * the user-approved production combination. Returns raw MP3 audio as a Buffer
+ * (MiniMax responds with
  * hex-encoded audio inside JSON).
  *
  * Env:
  * - MINIMAX_API_KEY (required)
  * - MINIMAX_GROUP_ID (optional; appended as ?GroupId= for accounts that
  *   require it)
- * - MINIMAX_CANTONESE_VOICE_ID (optional, default Cantonese_GentleLady)
- * - MINIMAX_TTS_MODEL (optional, default speech-02-hd)
  */
 export async function synthesizeSpeechMiniMax(
   text: string,
@@ -312,10 +267,6 @@ export async function synthesizeSpeechMiniMax(
     throw new Error("MiniMax credentials not configured");
   }
 
-  const voiceId =
-    process.env.MINIMAX_CANTONESE_VOICE_ID?.trim() ||
-    MINIMAX_DEFAULT_CANTONESE_VOICE;
-  const model = process.env.MINIMAX_TTS_MODEL?.trim() || "speech-02-hd";
   const groupId = process.env.MINIMAX_GROUP_ID?.trim() || "";
   const url = `https://api.minimax.io/v1/t2a_v2${groupId ? `?GroupId=${encodeURIComponent(groupId)}` : ""}`;
 
@@ -334,13 +285,13 @@ export async function synthesizeSpeechMiniMax(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model,
+        model: APPROVED_CANTONESE_TTS_MODEL,
         text,
         stream: false,
         // Pin Cantonese explicitly — this is the whole point of using MiniMax.
         language_boost: "Chinese,Yue",
         voice_setting: {
-          voice_id: voiceId,
+          voice_id: APPROVED_CANTONESE_VOICE_ID,
           speed,
           vol: 1.0,
           pitch: 0,
@@ -403,114 +354,6 @@ export async function synthesizeSpeechMiniMax(
   }
 
   return Buffer.from(hexAudio, "hex");
-}
-
-// --- ElevenLabs TTS REST API ---
-
-/**
- * Call ElevenLabs TTS API to synthesize speech.
- * Uses the voice ID configured in ELEVENLABS_CANTONESE_VOICE_ID.
- * Returns raw MP3 audio as a Buffer.
- */
-export async function synthesizeSpeechElevenLabs(
-  text: string,
-  rate: TTSRate = "medium"
-): Promise<Buffer> {
-  const apiKey = getHeaderCredential(process.env.ELEVENLABS_API_KEY);
-  const voiceId = process.env.ELEVENLABS_CANTONESE_VOICE_ID?.trim();
-  if (!apiKey || !voiceId) {
-    throw new Error("ElevenLabs credentials not configured");
-  }
-
-  const stability = 0.5;
-  const similarityBoost = 0.75;
-  // ElevenLabs only accepts voice_settings.speed in [0.7, 1.2] — 0.6/1.3
-  // (our old x-slow/fast values) are rejected by the API.
-  const speed = rate === "x-slow" ? 0.7 : rate === "slow" ? 0.8 : rate === "fast" ? 1.2 : 1.0;
-
-  // Cantonese TTS: ElevenLabs' Multilingual v2 model auto-detects the language
-  // from the text and, paired with a Cantonese voice, renders Cantonese. The
-  // turbo/flash v2.5 models accept a `language_code`, but their TTS language
-  // list does NOT include Cantonese ("yue") — sending it 400s the request.
-  // ("yue" is only a valid code for ElevenLabs' speech-to-TEXT models.) So we
-  // do not send a language_code by default. Both the model and, if a supported
-  // combination ever exists, the language code are overridable via env.
-  const modelId = process.env.ELEVENLABS_CANTONESE_MODEL || "eleven_multilingual_v2";
-  const configuredLanguageCode =
-    process.env.ELEVENLABS_CANTONESE_LANGUAGE_CODE?.trim() || "";
-  const modelSupportsLanguageCode = /v2_5|flash|_v3/i.test(modelId);
-  const languageCode = modelSupportsLanguageCode ? configuredLanguageCode : "";
-
-  const callElevenLabs = async (withLanguageCode: string) => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    try {
-      return await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-        {
-          method: "POST",
-          headers: {
-            "xi-api-key": apiKey,
-            "Content-Type": "application/json",
-            Accept: "audio/mpeg",
-          },
-          body: JSON.stringify({
-            text,
-            model_id: modelId,
-            ...(withLanguageCode ? { language_code: withLanguageCode } : {}),
-            voice_settings: {
-              stability,
-              similarity_boost: similarityBoost,
-              speed,
-            },
-          }),
-          signal: controller.signal,
-        },
-      );
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  };
-
-  try {
-    let response = await callElevenLabs(languageCode);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      // Self-heal: if ElevenLabs rejects the language_code for this model,
-      // retry once without it so Cantonese TTS falls back to auto-detection
-      // instead of hard-failing.
-      if (languageCode && response.status === 400 && /language_code/i.test(errorText)) {
-        console.warn(
-          `ElevenLabs TTS: model "${modelId}" rejected language_code "${languageCode}", retrying without it`,
-        );
-        response = await callElevenLabs("");
-        if (response.ok) {
-          return Buffer.from(await response.arrayBuffer());
-        }
-        const retryText = await response.text();
-        console.error(`ElevenLabs TTS: API error ${response.status}:`, retryText);
-        const retrySnippet = retryText.slice(0, 300).replace(/\s+/g, " ").trim();
-        throw new Error(
-          `ElevenLabs TTS error: ${response.status}${retrySnippet ? ` — ${retrySnippet}` : ""}`,
-        );
-      }
-
-      console.error(`ElevenLabs TTS: API error ${response.status}:`, errorText);
-      // Include a snippet of the response body so callers can diagnose.
-      const snippet = errorText.slice(0, 300).replace(/\s+/g, " ").trim();
-      throw new Error(
-        `ElevenLabs TTS error: ${response.status}${snippet ? ` — ${snippet}` : ""}`,
-      );
-    }
-
-    return Buffer.from(await response.arrayBuffer());
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("ElevenLabs TTS request timed out");
-    }
-    throw error;
-  }
 }
 
 // --- Azure TTS REST API ---

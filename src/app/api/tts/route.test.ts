@@ -17,7 +17,9 @@ describe("Cantonese voice continuity", () => {
     vi.resetModules();
     vi.stubEnv("MINIMAX_API_KEY", "test-minimax-key");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
-    vi.stubEnv("CANTONESE_TTS_PROVIDER", "minimax");
+    vi.stubEnv("CANTONESE_TTS_PROVIDER", "azure");
+    vi.stubEnv("MINIMAX_CANTONESE_VOICE_ID", "unapproved-voice");
+    vi.stubEnv("MINIMAX_TTS_MODEL", "unapproved-model");
     vi.stubEnv("TTS_PROVIDER", "openai");
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
     vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
@@ -53,10 +55,16 @@ describe("Cantonese voice continuity", () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain("minimax.io");
   });
 
-  it("keeps the existing native Cantonese voice on successful requests", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      base_resp: { status_code: 0 }, data: { audio: "010203" },
-    })));
+  it("locks successful requests to the approved provider, voice, and model", async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      requestBodies.push(
+        JSON.parse(String(init?.body)) as Record<string, unknown>,
+      );
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0 }, data: { audio: "010203" },
+      }));
+    });
     vi.stubGlobal("fetch", fetchMock);
     const { POST } = await import("./route");
     const response = await POST(new NextRequest("https://example.com/api/tts", {
@@ -65,9 +73,13 @@ describe("Cantonese voice continuity", () => {
     }));
     expect(response.status).toBe(200);
     expect(response.headers.get("X-TTS-Provider")).toBe("minimax");
+    expect(requestBodies[0].model).toBe("speech-02-hd");
+    expect(
+      (requestBodies[0].voice_setting as { voice_id: string }).voice_id,
+    ).toBe("Cantonese_GentleLady");
   });
 
-  it("fails closed when MiniMax is selected but its credential is unavailable", async () => {
+  it("pauses Cantonese when MiniMax is unavailable", async () => {
     vi.stubEnv("MINIMAX_API_KEY", "");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -77,6 +89,9 @@ describe("Cantonese voice continuity", () => {
       body: JSON.stringify({ text: "你好", language: "zh-HK" }),
     }));
     expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Cantonese voice temporarily paused",
+    });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

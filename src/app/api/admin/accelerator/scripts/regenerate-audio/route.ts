@@ -6,10 +6,8 @@ import { scriptLines } from "@/db/schema";
 import { hasAcceleratorManagementAccess } from "@/lib/auth";
 import {
   resolveVoice,
-  resolveCantoneseProvider,
   buildSSML,
   synthesizeSpeech,
-  synthesizeSpeechElevenLabs,
   synthesizeSpeechMiniMax,
 } from "@/lib/tts";
 
@@ -21,41 +19,24 @@ type ScriptLine = typeof scriptLines.$inferSelect;
 
 /**
  * Synthesize one line of text with the shared provider policy.
- * Cantonese follows the same resolution as /api/tts (MiniMax with pinned
- * "Chinese,Yue" when configured, else Azure zh-HK; ElevenLabs only via
- * explicit CANTONESE_TTS_PROVIDER=elevenlabs opt-in). The non-Azure
- * providers may fall back to Azure, except when MiniMax is explicitly
- * selected: that choice is fail-closed so generated course audio can never
- * silently switch accents.
+ * Cantonese uses the same locked MiniMax voice contract as /api/tts. If
+ * MiniMax is unavailable, regeneration pauses; it never substitutes another
+ * provider or accent.
  * Mandarin: Azure direct.
  */
 async function synthesizeLine(text: string, isCantonese: boolean): Promise<Buffer> {
-  const provider = isCantonese ? resolveCantoneseProvider(process.env) : "azure";
-
-  let primaryError: string | null = null;
-  if (provider === "minimax") {
+  if (isCantonese) {
     return synthesizeSpeechMiniMax(text, "medium");
-  } else if (provider === "elevenlabs") {
-    try {
-      return await synthesizeSpeechElevenLabs(text, "medium");
-    } catch (err) {
-      primaryError = err instanceof Error ? err.message : "ElevenLabs failed";
-      console.warn("[regenerate-audio] ElevenLabs failed, falling back to Azure:", err);
-    }
   }
 
   try {
-    const { voiceName, lang } = resolveVoice(isCantonese ? "zh-HK" : "zh-CN");
+    const { voiceName, lang } = resolveVoice("zh-CN");
     const ssml = buildSSML(text, voiceName, lang, "medium");
     return await synthesizeSpeech(ssml);
   } catch (err) {
     const azureError = err instanceof Error ? err.message : "Azure failed";
     console.error("[regenerate-audio] Azure failed:", err);
-    throw new Error(
-      primaryError
-        ? `Both providers failed. Primary: ${primaryError}. Azure: ${azureError}`
-        : azureError,
-    );
+    throw new Error(azureError);
   }
 }
 
