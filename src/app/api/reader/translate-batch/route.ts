@@ -2,28 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
-
-const PROPER_SYSTEM = `You are a Mandarin Chinese-to-English translator. Translate each sentence to natural, fluent English.
-You will receive sentences wrapped in <s> tags like <s>sentence</s>.
-Return a JSON array of strings, one translation per input sentence. Return ONLY the JSON array, no other text.
-Ignore any citation markers like [1], [14], [註 6] etc. — just translate the actual content.`;
-
-const WORDS_SYSTEM = `You are a Mandarin Chinese-English dictionary. For each word, provide a short English definition (1-3 words).
-You will receive words separated by newlines.
-Return a JSON object mapping each Chinese word to its English definition.
-Example input: 医生\n职责\n患者
-Example output: {"医生":"doctor","职责":"duties","患者":"patient"}
-Return ONLY the JSON object, no other text. Keep definitions as short as possible.`;
-
-const PROPER_SYSTEM_CANTONESE = `You are a Cantonese-to-English translator. Translate each sentence to natural, fluent English.
-You will receive sentences wrapped in <s> tags like <s>sentence</s>.
-Return a JSON array of strings, one translation per input sentence. Return ONLY the JSON array, no other text.
-Ignore any citation markers like [1], [14], [註 6] etc. — just translate the actual content.`;
-
-const WORDS_SYSTEM_CANTONESE = `You are a Cantonese-English dictionary. For each word, provide a short English definition (1-3 words).
-You will receive words separated by newlines.
-Return a JSON object mapping each word to its English definition.
-Return ONLY the JSON object, no other text. Keep definitions as short as possible.`;
+import {
+  properBatchTranslationSystem,
+  wordGlossTranslationSystem,
+  type ChineseTranslationLanguage,
+} from "@/lib/chinese-translation-prompts";
 
 const MAX_SENTENCES = 50;
 const MAX_WORDS = 200;
@@ -90,6 +73,10 @@ export async function POST(request: NextRequest) {
       mode: "proper" | "words";
       language?: "zh-CN" | "zh-HK";
     };
+    if (language !== undefined && language !== "zh-CN" && language !== "zh-HK") {
+      return NextResponse.json({ error: "Invalid language" }, { status: 400 });
+    }
+    const translationLanguage: ChineseTranslationLanguage = language ?? "zh-CN";
 
     // "words" mode: dictionary lookup for individual words
     if (mode === "words") {
@@ -116,7 +103,7 @@ export async function POST(request: NextRequest) {
       const prompt = cleaned.join("\n");
       const { text: rawResponse } = await generateText({
         model: openai("gpt-4o-mini"),
-        system: language === "zh-HK" ? WORDS_SYSTEM_CANTONESE : WORDS_SYSTEM,
+        system: wordGlossTranslationSystem(translationLanguage),
         prompt,
         maxOutputTokens: 4096,
       });
@@ -166,7 +153,7 @@ export async function POST(request: NextRequest) {
 
     const { text: rawResponse } = await generateText({
       model: openai("gpt-4o-mini"),
-      system: language === "zh-HK" ? PROPER_SYSTEM_CANTONESE : PROPER_SYSTEM,
+      system: properBatchTranslationSystem(translationLanguage),
       prompt: taggedTexts,
       maxOutputTokens: 4096,
     });

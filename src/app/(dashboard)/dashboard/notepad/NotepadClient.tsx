@@ -427,6 +427,7 @@ function NoteRow({
             }
             isTranslating={processed.isTranslating}
             toneColorsEnabled={toneColorsEnabled}
+            romanizationOverride={note.romanizationOverride}
           />
         ) : (
           <div className="text-sm text-muted-foreground">Loading...</div>

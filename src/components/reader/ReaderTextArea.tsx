@@ -7,6 +7,8 @@ import { detectSentences } from "@/lib/sentences";
 import { WordSpan } from "./WordSpan";
 import { SentenceControls } from "./SentenceControls";
 import { cn } from "@/lib/utils";
+import { annotateFromModelAnswer } from "@/lib/mandarin-annotate";
+import { smartRomanise } from "@/lib/romanise";
 
 /** Standard glosses for grammatical particles — used as fallback for common words */
 const PARTICLE_GLOSSES: Record<string, string> = {
@@ -70,6 +72,8 @@ export interface ReaderTextAreaProps {
   className?: string;
   /** When true, color each character by its tone (Pleco scheme) */
   toneColorsEnabled?: boolean;
+  /** A saved manual pinyin/jyutping value, one syllable per Han character. */
+  romanizationOverride?: string | null;
 }
 
 function findWordElement(target: EventTarget): HTMLElement | null {
@@ -104,12 +108,38 @@ export function ReaderTextArea({
   disableSentencePlayback = false,
   className: outerClassName,
   toneColorsEnabled = false,
+  romanizationOverride,
 }: ReaderTextAreaProps) {
   const lastHoveredIndexRef = useRef<number | null>(null);
   const fallbackRef = useRef<HTMLDivElement>(null);
   const ref = containerRef ?? fallbackRef;
 
   const sentences = useMemo(() => detectSentences(segments), [segments]);
+
+  // Cantonese readings must be resolved from the complete entry, before the
+  // renderer splits it into word spans. Calling to-jyutping on each span loses
+  // surrounding context for multi-pronunciation characters. A saved manual
+  // override wins for either language.
+  const romanizationBySegment = useMemo(() => {
+    const result = new Map<number, readonly (string | null)[]>();
+    const fullText = segments.map((segment) => segment.text).join("");
+    const saved = romanizationOverride?.trim() ?? "";
+    const contextRomanization =
+      saved || (showJyutping ? smartRomanise(fullText, "cantonese") : "");
+
+    if (!contextRomanization) return result;
+
+    const aligned = annotateFromModelAnswer(fullText, contextRomanization).map(
+      (annotation) => annotation.pinyin || null,
+    );
+    let charOffset = 0;
+    segments.forEach((segment, index) => {
+      const charCount = [...segment.text].length;
+      result.set(index, aligned.slice(charOffset, charOffset + charCount));
+      charOffset += charCount;
+    });
+    return result;
+  }, [segments, romanizationOverride, showJyutping]);
 
   const handleMouseOver = useCallback(
     (e: React.MouseEvent) => {
@@ -236,6 +266,7 @@ export function ReaderTextArea({
                       englishGloss={gloss}
                       fontSize={fontSize}
                       toneColorsEnabled={toneColorsEnabled}
+                      romanization={romanizationBySegment.get(globalIndex)}
                     />
                   );
                 })}

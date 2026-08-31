@@ -35,6 +35,12 @@ export interface WordSpanProps {
    * so drag-selecting characters copies clean Chinese text only.
    */
   selectableAnnotations?: boolean;
+  /**
+   * Optional per-character romanisation produced from the complete entry.
+   * This preserves context-sensitive readings when the UI later renders the
+   * entry as smaller word segments. Null entries represent punctuation.
+   */
+  romanization?: readonly (string | null)[];
 }
 
 function getPinyinArray(text: string): string[] {
@@ -114,6 +120,7 @@ export const WordSpan = React.memo(function WordSpan({
   showSandhi = true,
   toneColorsEnabled = false,
   selectableAnnotations = false,
+  romanization,
 }: WordSpanProps) {
   // Resolve props: legacy annotationMode overrides booleans
   const isLegacy = !!annotationMode;
@@ -138,13 +145,19 @@ export const WordSpan = React.memo(function WordSpan({
   }, [text, annotationMode, showSandhi, isLegacy, isWordLike]);
 
   const pinyinArr = useMemo(
-    () => (!isLegacy && showPinyin && isWordLike ? getPinyinArray(text) : []),
-    [text, showPinyin, isLegacy, isWordLike],
+    () =>
+      !isLegacy && showPinyin && isWordLike
+        ? (romanization ?? getPinyinArray(text))
+        : [],
+    [text, showPinyin, isLegacy, isWordLike, romanization],
   );
 
   const jyutpingArr = useMemo(
-    () => (!isLegacy && showJyutping && isWordLike ? getJyutpingArray(text) : []),
-    [text, showJyutping, isLegacy, isWordLike],
+    () =>
+      !isLegacy && showJyutping && isWordLike
+        ? (romanization ?? getJyutpingArray(text))
+        : [],
+    [text, showJyutping, isLegacy, isWordLike, romanization],
   );
 
   // Compute per-character tone color classes
@@ -154,7 +167,7 @@ export const WordSpan = React.memo(function WordSpan({
     // Prefer Mandarin tones when pinyin is shown (or neither shown), Cantonese when only jyutping
     const useCantonese = showJyutping && !showPinyin;
     if (useCantonese) {
-      const jpList = getJyutpingArray(text);
+      const jpList = romanization ?? getJyutpingArray(text);
       return chars.map((_, i) => {
         const jp = jpList[i];
         if (!jp) return "";
@@ -163,14 +176,14 @@ export const WordSpan = React.memo(function WordSpan({
       });
     }
     // Mandarin tones from pinyin
-    const pyArr = getPinyinArray(text);
+    const pyArr = romanization ?? getPinyinArray(text);
     return chars.map((_, i) => {
       const py = pyArr[i];
       if (!py) return "";
       const tone = extractToneFromPinyin(py);
       return getToneColorClass(tone, "mandarin");
     });
-  }, [text, toneColorsEnabled, isWordLike, showPinyin, showJyutping]);
+  }, [text, toneColorsEnabled, isWordLike, showPinyin, showJyutping, romanization]);
 
   if (!isWordLike) {
     if (text === "\n") return <br />;

@@ -14,6 +14,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
+import {
+  singleTranslationSystem,
+  type ChineseTranslationLanguage,
+} from "@/lib/chinese-translation-prompts";
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +30,10 @@ export async function POST(request: NextRequest) {
     // Parse and validate body
     const body = await request.json();
     const { text, language } = body as { text?: string; language?: "zh-CN" | "zh-HK" };
+
+    if (language !== undefined && language !== "zh-CN" && language !== "zh-HK") {
+      return NextResponse.json({ error: "Invalid language" }, { status: 400 });
+    }
 
     if (!text || typeof text !== "string" || !text.trim()) {
       return NextResponse.json(
@@ -42,14 +50,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate translation via AI SDK
-    const system =
-      language === "zh-HK"
-        ? "Translate the following Cantonese text to natural, fluent English. Return ONLY the English translation, nothing else. Do not include the original text."
-        : "Translate the following Mandarin Chinese text to natural, fluent English. Return ONLY the English translation, nothing else. Do not include the original text.";
+    const translationLanguage: ChineseTranslationLanguage = language ?? "zh-CN";
 
     const { text: translation } = await generateText({
       model: openai("gpt-4o-mini"),
-      system,
+      system: singleTranslationSystem(translationLanguage),
       prompt: text,
     });
 

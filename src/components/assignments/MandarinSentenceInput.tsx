@@ -15,6 +15,10 @@ import {
   ASSIGNMENT_CHAR_SIZE_COMPACT,
 } from "@/lib/mandarin-annotate";
 import { useTTS } from "@/hooks/useTTS";
+import {
+  adjustedPinyinToneCursor,
+  applyPinyinToneNumbers,
+} from "@/lib/pinyin-tone-input";
 
 // ---------------------------------------------------------------------------
 // Simplified Mandarin sentence input for assignments.
@@ -221,9 +225,28 @@ export function MandarinSentenceInput({
               <input
                 type="text"
                 value={value.pinyin}
-                onChange={(e) =>
-                  onValueChange({ ...value, pinyin: e.target.value })
-                }
+                onChange={(e) => {
+                  const input = e.currentTarget;
+                  const raw = input.value;
+                  const converted =
+                    lang === "mandarin"
+                      ? applyPinyinToneNumbers(raw)
+                      : raw;
+                  onValueChange({
+                    ...value,
+                    pinyin: converted,
+                  });
+                  if (converted.length !== raw.length) {
+                    const cursor = adjustedPinyinToneCursor(
+                      raw,
+                      converted,
+                      input.selectionStart ?? raw.length,
+                    );
+                    requestAnimationFrame(() =>
+                      input.setSelectionRange(cursor, cursor),
+                    );
+                  }
+                }}
                 disabled={disabled}
                 placeholder={
                   lang === "cantonese"

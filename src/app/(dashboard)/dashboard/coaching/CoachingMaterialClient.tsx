@@ -29,6 +29,10 @@ import {
 } from "@/lib/tone-colors";
 import type { Roles } from "@/types/globals";
 import { isStaffRole } from "@/lib/platform-roles";
+import {
+  adjustedPinyinToneCursor,
+  applyPinyinToneNumbers,
+} from "@/lib/pinyin-tone-input";
 
 // The end date arrives as a plain "YYYY-MM-DD" from GHL; build the Date from
 // parts so the displayed day never shifts across timezones.
@@ -419,69 +423,6 @@ export function useProcessedText({
   };
 }
 
-/** Pinyin tone marks lookup — vowel letter → array of tone 1-4 variants */
-const TONE_MAP: Record<string, string[]> = {
-  a: ["ā", "á", "ǎ", "à"],
-  e: ["ē", "é", "ě", "è"],
-  i: ["ī", "í", "ǐ", "ì"],
-  o: ["ō", "ó", "ǒ", "ò"],
-  u: ["ū", "ú", "ǔ", "ù"],
-  ü: ["ǖ", "ǘ", "ǚ", "ǜ"],
-  v: ["ǖ", "ǘ", "ǚ", "ǜ"], // v as alias for ü
-  A: ["Ā", "Á", "Ǎ", "À"],
-  E: ["Ē", "É", "Ě", "È"],
-  I: ["Ī", "Í", "Ǐ", "Ì"],
-  O: ["Ō", "Ó", "Ǒ", "Ò"],
-  U: ["Ū", "Ú", "Ǔ", "Ù"],
-};
-
-const VOWELS = new Set("aeiouüvAEIOUÜ");
-
-/**
- * Apply tone number to a pinyin syllable following standard placement rules:
- * 1. If there's an a or e, the tone goes on it
- * 2. If there's "ou", the tone goes on the o
- * 3. Otherwise the tone goes on the last vowel
- */
-function applyToneToSyllable(syllable: string, tone: number): string {
-  const chars = [...syllable];
-  // Rule 1: a or e gets the tone
-  for (let i = 0; i < chars.length; i++) {
-    const lower = chars[i].toLowerCase();
-    if (lower === "a" || lower === "e") {
-      const toned = TONE_MAP[chars[i]];
-      if (toned) chars[i] = toned[tone - 1];
-      return chars.join("");
-    }
-  }
-  // Rule 2: ou → tone on o
-  for (let i = 0; i < chars.length - 1; i++) {
-    if (chars[i].toLowerCase() === "o" && chars[i + 1].toLowerCase() === "u") {
-      const toned = TONE_MAP[chars[i]];
-      if (toned) chars[i] = toned[tone - 1];
-      return chars.join("");
-    }
-  }
-  // Rule 3: last vowel
-  for (let i = chars.length - 1; i >= 0; i--) {
-    if (VOWELS.has(chars[i])) {
-      const toned = TONE_MAP[chars[i]];
-      if (toned) chars[i] = toned[tone - 1];
-      return chars.join("");
-    }
-  }
-  return syllable;
-}
-
-/** Convert full pinyin syllables with trailing tone number: chang4→chàng, nü3→nǚ */
-function applyInlineTones(text: string): string {
-  return text.replace(/([a-züA-ZÜ]+)([1-4])/g, (match, syllable: string, tone: string) => {
-    // Only convert if the syllable contains at least one vowel
-    if (![...syllable].some((c) => VOWELS.has(c))) return match;
-    return applyToneToSyllable(syllable, parseInt(tone, 10));
-  });
-}
-
 function NoteCard({
   note,
   index,
@@ -656,11 +597,15 @@ function NoteCard({
       setDraftRomanization(raw);
       return;
     }
-    const converted = applyInlineTones(raw);
+    const converted = applyPinyinToneNumbers(raw);
     setDraftRomanization(converted);
     // Adjust cursor if conversion shortened the string (e.g. "a1" → "ā")
     if (converted.length !== raw.length) {
-      const cursor = (el.selectionStart ?? raw.length) - (raw.length - converted.length);
+      const cursor = adjustedPinyinToneCursor(
+        raw,
+        converted,
+        el.selectionStart ?? raw.length,
+      );
       requestAnimationFrame(() => {
         el.setSelectionRange(cursor, cursor);
       });
@@ -878,15 +823,16 @@ function NoteCard({
                 </button>
               </div>
             </div>
-          ) : note.romanizationOverride || note.translationOverride || note.textOverride ? (
+          ) : note.romanizationOverride || note.translationOverride || note.textOverride || noteLanguage === "zh-HK" ? (
             <>
               {/* Render text with per-character aligned romanization */}
               {processed.segments.length > 0 ? (() => {
-                // When romanization is overridden, distribute syllables to Han characters
-                // for per-word alignment instead of a grouped sentence string
-                const hasOverrideAnnotation = note.romanizationOverride && (showPinyin || showJyutping);
+                // Always use the full-entry Cantonese result, or a saved manual
+                // override, rather than recalculating each rendered word span.
+                const displayRomanization = note.romanizationOverride ?? defaultRomanization;
+                const hasOverrideAnnotation = displayRomanization && (showPinyin || showJyutping);
                 const overrideSyllables = hasOverrideAnnotation
-                  ? note.romanizationOverride!.split(/\s+/).filter(Boolean)
+                  ? displayRomanization.split(/\s+/).filter(Boolean)
                   : [];
                 // Build a lookup: for each Han char index in the full text, map to override syllable
                 let overrideMap: Map<number, string> | null = null;
@@ -998,8 +944,8 @@ function NoteCard({
                           text={seg.text}
                           index={i}
                           isWordLike={seg.isWordLike}
-                          showPinyin={!note.romanizationOverride && showPinyin}
-                          showJyutping={!note.romanizationOverride && showJyutping}
+                          showPinyin={!displayRomanization && showPinyin}
+                          showJyutping={!displayRomanization && showJyutping}
                           showEnglish={false}
                           fontSize={fontSize}
                           toneColorsEnabled={toneColorsEnabled}

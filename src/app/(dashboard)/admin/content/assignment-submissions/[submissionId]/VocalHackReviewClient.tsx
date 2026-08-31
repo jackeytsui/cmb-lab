@@ -11,6 +11,10 @@ import { SentenceVideo } from "@/components/assignments/SentenceVideo";
 import { isLoomUrl, sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { generateModelRomanisation } from "@/lib/generate-model-pinyin";
 import { fetchProperTranslations } from "@/lib/mandarin-generation";
+import {
+  adjustedPinyinToneCursor,
+  applyPinyinToneNumbers,
+} from "@/lib/pinyin-tone-input";
 
 // ---------------------------------------------------------------------------
 // Vocal Hack review: listen to each recording (seekable) and, per sentence,
@@ -375,11 +379,27 @@ export function VocalHackReviewClient({
                         <input
                           type="text"
                           value={entry.pinyin}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const input = e.currentTarget;
+                            const raw = input.value;
+                            const converted =
+                              submission.lang === "mandarin"
+                                ? applyPinyinToneNumbers(raw)
+                                : raw;
                             patchEntry(sentence.id, entry.key, {
-                              pinyin: e.target.value,
-                            })
-                          }
+                              pinyin: converted,
+                            });
+                            if (converted.length !== raw.length) {
+                              const cursor = adjustedPinyinToneCursor(
+                                raw,
+                                converted,
+                                input.selectionStart ?? raw.length,
+                              );
+                              requestAnimationFrame(() =>
+                                input.setSelectionRange(cursor, cursor),
+                              );
+                            }
+                          }}
                           placeholder="Pinyin (auto-generated, editable)"
                           className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm"
                         />
