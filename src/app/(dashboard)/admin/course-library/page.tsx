@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, MapPinned } from "lucide-react";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess, checkRole } from "@/lib/auth";
 import { db } from "@/db";
 import { courseLibraryCourses } from "@/db/schema";
 import { asc, desc, isNull } from "drizzle-orm";
@@ -13,11 +13,12 @@ export const metadata = {
 };
 
 export default async function CourseLibraryAdminPage() {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     redirect("/dashboard");
   }
 
+  const isAdmin = await checkRole("admin");
   const courses = await db
     .select()
     .from(courseLibraryCourses)
@@ -51,6 +52,7 @@ export default async function CourseLibraryAdminPage() {
         </p>
       </header>
 
+      {isAdmin ? (
       <div className="mb-7 flex flex-col gap-4 rounded-2xl border border-rose-500/25 bg-rose-500/[0.04] p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex gap-3">
           <MapPinned className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
@@ -73,6 +75,8 @@ export default async function CourseLibraryAdminPage() {
           <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
+
+      ) : null}
 
       <CourseLibraryListClient
         initialCourses={courses.map((c) => ({

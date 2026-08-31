@@ -15,7 +15,7 @@ import { hasFullFeatureAccess } from "@/lib/platform-roles";
 //
 // Review access is a capability (feature key) granted through the existing
 // role-bundle system, so it is additive: a user can be Coach AND Challenge
-// Reviewer at the same time. Admins always have every capability.
+// Reviewer at the same time. Coaches and Admins already have every feature.
 //
 // Future assignment types add their own capability key here, e.g.
 // { audio_assignment: "assignment_review_audio" }.
@@ -58,14 +58,14 @@ export const ALL_ASSIGNMENT_REVIEW_FEATURE_KEYS = Object.values(
 
 /**
  * Check whether a user can review the given assignment type.
- * Admins always can; everyone else needs the capability via a role bundle
+ * Coaches and Admins always can; everyone else needs the capability via a role bundle
  * (e.g. the seeded "Challenge Reviewer" role).
  */
 export async function userCanReviewAssignments(
   user: { id: string; role: string },
   assignmentType: ReviewableAssignmentType = "text_assignment",
 ): Promise<boolean> {
-  if (user.role === "admin") return true;
+  if (hasFullFeatureAccess(user.role)) return true;
   const permissions = await resolvePermissions(user.id);
   return permissions.canUseFeature(
     ASSIGNMENT_REVIEW_FEATURE_KEYS[assignmentType],
@@ -80,7 +80,7 @@ export async function getReviewableAssignmentTypes(user: {
   const assignmentTypes = Object.keys(
     ASSIGNMENT_REVIEW_FEATURE_KEYS,
   ) as ReviewableAssignmentType[];
-  if (user.role === "admin") return assignmentTypes;
+  if (hasFullFeatureAccess(user.role)) return assignmentTypes;
 
   const permissions = await resolvePermissions(user.id);
   return assignmentTypes.filter((assignmentType) =>
@@ -92,7 +92,7 @@ export async function getReviewableAssignmentTypes(user: {
 
 /**
  * Resolve the real authenticated user if they are an authorized assignment
- * reviewer (admin or capability holder); otherwise null.
+ * reviewer (Coach, Admin, or capability holder); otherwise null.
  * Use in assignment-review API routes and admin pages.
  */
 export async function getAssignmentReviewer(
@@ -106,13 +106,13 @@ export async function getAssignmentReviewer(
 
 /**
  * Resolve the real authenticated user if they can review ANY assignment type
- * (admin, Challenge Reviewer, Vocal Hack Reviewer, ...). Use for the shared
+ * (Coach, Admin, Challenge Reviewer, Vocal Hack Reviewer, ...). Use for the shared
  * submissions dashboard; per-type authorization stays in the review routes.
  */
 export async function getAnyAssignmentReviewer() {
   const user = await getRealUser();
   if (!user) return null;
-  if (user.role === "admin") return user;
+  if (hasFullFeatureAccess(user.role)) return user;
   const permissions = await resolvePermissions(user.id);
   const allowed = ALL_ASSIGNMENT_REVIEW_FEATURE_KEYS.some((key) =>
     permissions.canUseFeature(key),

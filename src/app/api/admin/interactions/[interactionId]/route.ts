@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { db } from "@/db";
 import { interactions } from "@/db/schema";
 import { eq, isNull, and, ne } from "drizzle-orm";
@@ -14,7 +14,7 @@ interface RouteParams {
  * Requires admin role.
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  * Requires admin role.
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -173,7 +173,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
  * Requires admin role.
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

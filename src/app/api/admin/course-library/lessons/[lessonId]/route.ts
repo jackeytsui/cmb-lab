@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -16,7 +16,7 @@ interface RouteParams {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -57,7 +57,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

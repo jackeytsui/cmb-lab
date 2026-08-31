@@ -133,3 +133,8 @@ export function resolveNonDowngradingPlatformRole(
 export function hasFullFeatureAccess(role: unknown): boolean {
   return getPlatformRoleDefinition(role)?.featureAccess === "full";
 }
+
+/** Content authoring is explicit: peer staff roles do not inherit Coach access. */
+export function canManageCourseContent(role: unknown): boolean {
+  return role === "admin" || role === "coach";
+}

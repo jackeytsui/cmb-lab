@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { db } from "@/db";
 import { modules, lessons, practiceSetAssignments, practiceSets } from "@/db/schema";
 import { eq, isNull, asc, and, inArray } from "drizzle-orm";
@@ -13,7 +13,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ moduleId: string }> }
 ) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -100,7 +100,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ moduleId: string }> }
 ) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -167,7 +167,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ moduleId: string }> }
 ) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

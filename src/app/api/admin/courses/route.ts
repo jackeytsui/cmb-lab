@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { db } from "@/db";
 import { courses, modules } from "@/db/schema";
 import { isNull, asc, count } from "drizzle-orm";
@@ -12,7 +12,7 @@ import { isNull, asc, count } from "drizzle-orm";
  */
 export async function GET() {
   // Verify admin role
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -71,7 +71,7 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   // Verify admin role
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

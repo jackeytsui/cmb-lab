@@ -7,7 +7,7 @@ import {
   tagContentGrants,
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { COURSE_LIBRARY_COURSE_CONTENT_TYPE } from "@/lib/tag-feature-access";
 import { z } from "zod";
 
@@ -35,7 +35,7 @@ interface RouteParams {
  * Returns the course with all its modules + lessons (for the editor page).
  */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -111,7 +111,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -197,7 +197,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

@@ -187,7 +187,7 @@ async function uploadDirect(
   } catch (err) {
     if (err instanceof Error && err.message.includes("client token")) {
       throw new Error(
-        "Upload permission denied — make sure your account has admin access, " +
+        "Upload permission denied — make sure your account has coach or admin access, " +
         "or ask an admin to verify the BLOB_READ_WRITE_TOKEN environment variable is set."
       );
     }

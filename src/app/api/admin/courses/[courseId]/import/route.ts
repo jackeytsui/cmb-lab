@@ -11,7 +11,7 @@ import {
   practiceSetAssignments,
   practiceSets,
 } from "@/db/schema";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasCourseContentAccess, getCurrentUser } from "@/lib/auth";
 import { exerciseDefinitionSchema } from "@/types/exercises";
 
 const languageSchema = z.enum(["cantonese", "mandarin", "both"]).default("both");
@@ -144,7 +144,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ courseId: string }> },
 ) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

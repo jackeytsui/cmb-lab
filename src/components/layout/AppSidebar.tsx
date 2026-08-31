@@ -63,6 +63,7 @@ type FeatureKey =
 
 type NavItemWithFeature = NavSection["items"][number] & {
   featureKey?: FeatureKey;
+  allowedRoles?: Roles[];
   minRole?: Roles;
 };
 type NavSectionWithRoleAndFeature = Omit<NavSectionWithRole, "items"> & {
@@ -248,6 +249,9 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     label: "Coach Tools",
     minRole: "coach",
     items: [
+      { title: "Admin Portal", url: "/admin/manage", icon: LayoutDashboard, allowedRoles: ["coach"] },
+      { title: "Edit Course Content", url: "/admin/course-library", icon: BookOpenText, allowedRoles: ["coach", "admin"] },
+      { title: "Assignment Submissions", url: "/admin/content/assignment-submissions", icon: ClipboardList, allowedRoles: ["coach", "admin"] },
       { title: "Coach Dashboard", url: "/coach", icon: LayoutDashboard },
       { title: "Students", url: "/coach/students", icon: Users },
       { title: "Internal Docs", url: "/coach/internal-docs", icon: FileText },
@@ -279,6 +283,7 @@ export function AppSidebar({
     )
     .map((section) => {
       const items = section.items
+        .filter((item) => !item.allowedRoles || item.allowedRoles.includes(role))
         .filter(
           (item) =>
             !item.minRole || hasMinimumPlatformRole(role, item.minRole),

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { db } from "@/db";
 import { eq } from "drizzle-orm";
 import { lessonAttachments } from "@/db/schema/courses";
@@ -13,7 +13,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ attachmentId: string }> }
 ) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

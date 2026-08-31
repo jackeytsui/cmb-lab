@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 
 // Each invocation serves at most one bounded chunk (see blob-media-proxy), so
@@ -12,11 +12,11 @@ export const maxDuration = 60;
  * Admin-only proxy that streams a private Vercel Blob asset by URL, so the
  * lesson editor can preview a just-uploaded video/audio (which isn't yet saved
  * into lesson content, and whose raw URL needs the store token to fetch).
- * Only proxies our own Vercel Blob host, and only for admins. Forwards Range
+ * Only proxies our own Vercel Blob host, and only for coaches/admins. Forwards Range
  * for seeking.
  */
 export async function GET(request: NextRequest) {
-  if (!(await hasMinimumRole("admin"))) {
+  if (!(await hasCourseContentAccess())) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

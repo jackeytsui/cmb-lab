@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, ChevronLeft, MapPinned } from "lucide-react";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess, checkRole } from "@/lib/auth";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -24,11 +24,12 @@ interface PageProps {
 }
 
 export default async function CourseLibraryEditorPage({ params }: PageProps) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     redirect("/dashboard");
   }
 
+  const isAdmin = await checkRole("admin");
   const { courseId } = await params;
 
   const [course] = await db
@@ -141,7 +142,7 @@ export default async function CourseLibraryEditorPage({ params }: PageProps) {
         Back to courses
       </Link>
 
-      {vocalHackLessonCount > 0 ? (
+      {isAdmin && vocalHackLessonCount > 0 ? (
         <div className="mb-6 flex flex-col gap-4 rounded-lg border border-rose-500/30 bg-rose-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-3">
             <MapPinned className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />

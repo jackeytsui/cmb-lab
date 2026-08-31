@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { courses, lessons, modules, tagContentGrants } from "@/db/schema";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasMinimumRole, hasCourseContentAccess } from "@/lib/auth";
 
 type AudioSeriesMeta = {
   audioCourse: true;
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
  * Reorder audio series. Body: { order: [{ id: string, sortOrder: number }] }
  */
 export async function PATCH(request: Request) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

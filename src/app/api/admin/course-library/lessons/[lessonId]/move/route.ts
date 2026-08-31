@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { courseLibraryLessons, courseLibraryModules } from "@/db/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { z } from "zod";
 
 const moveSchema = z.object({
@@ -26,7 +26,7 @@ interface RouteParams {
  * as the dragged lesson, so a drag can never leak data across courses.
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

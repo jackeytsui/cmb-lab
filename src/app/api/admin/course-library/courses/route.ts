@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { courseLibraryCourses } from "@/db/schema";
 import { and, asc, desc, isNull } from "drizzle-orm";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasCourseContentAccess, getCurrentUser } from "@/lib/auth";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -15,7 +15,7 @@ const createSchema = z.object({
  * GET /api/admin/course-library/courses — list all (non-deleted) courses
  */
 export async function GET() {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -33,7 +33,7 @@ export async function GET() {
  * POST /api/admin/course-library/courses — create a new course
  */
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

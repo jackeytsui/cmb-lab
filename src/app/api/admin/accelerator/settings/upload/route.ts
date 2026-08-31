@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { getRealUser } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 
 export const maxDuration = 60;
 
 async function checkAuth(): Promise<boolean> {
-  const user = await getRealUser();
-  return user?.role === "admin";
+  return hasCourseContentAccess();
 }
 
 /**

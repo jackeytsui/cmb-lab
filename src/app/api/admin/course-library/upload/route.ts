@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -61,7 +61,7 @@ const MAX_SIZE = {
 
 export async function POST(request: NextRequest) {
   try {
-    const hasAccess = await hasMinimumRole("admin");
+    const hasAccess = await hasCourseContentAccess();
     if (!hasAccess) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

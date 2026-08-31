@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { db } from "@/db";
 import { lessonAttachments, lessons } from "@/db/schema/courses";
 import { eq, and, isNull } from "drizzle-orm";
@@ -47,7 +47,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> }
 ) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

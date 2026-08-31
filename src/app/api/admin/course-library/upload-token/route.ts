@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { getCurrentUser, hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 
 export const maxDuration = 60;
 
@@ -10,7 +10,7 @@ export const maxDuration = 60;
  * Signs a client-upload token so the browser can PUT directly to Vercel
  * Blob via @vercel/blob/client. Vercel serverless/edge routes cap at
  * ~4.5MB per request, which is less than the 5MB minimum multipart part
- * size — so anything over ~4MB must go direct. Admin-gated, pathnames
+ * size — so anything over ~4MB must go direct. Coach/Admin-gated, pathnames
  * scoped to course-library/.
  */
 
@@ -74,10 +74,8 @@ export async function POST(request: NextRequest) {
       request,
       token: process.env.BLOB_READ_WRITE_TOKEN,
       onBeforeGenerateToken: async (pathname) => {
-        const hasRoleAccess = await hasMinimumRole("admin");
+        const hasRoleAccess = await hasCourseContentAccess();
         if (!hasRoleAccess) {
-          const user = await getCurrentUser();
-          if (!user) throw new Error("Forbidden");
           throw new Error("Forbidden");
         }
 

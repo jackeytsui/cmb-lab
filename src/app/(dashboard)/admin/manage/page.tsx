@@ -72,15 +72,21 @@ const allSections: PortalSection[] = [
 /** Sections and items visible to coaches */
 const COACH_SECTION_IDS = new Set(["view-as", "access", "ops"]);
 const COACH_ITEM_IDS = new Set(["user-access", "analytics"]);
+const COACH_CONTENT_ITEM_IDS = new Set([
+  "course-library", "exercises", "audio-course", "video-uploads",
+  "accelerator", "tone-mastery", "assignment-submissions",
+]);
 
-function filterForCoach(sections: PortalSection[]): PortalSection[] {
+function filterForCoach(sections: PortalSection[], isCoach: boolean): PortalSection[] {
   return sections
-    .filter((s) => COACH_SECTION_IDS.has(s.id))
+    .filter((s) => COACH_SECTION_IDS.has(s.id) || (isCoach && s.id === "content"))
     .map((s) => {
       if (s.widget) return s; // widgets pass through
       return {
         ...s,
-        items: s.items?.filter((item) => COACH_ITEM_IDS.has(item.id)),
+        items: s.items?.filter((item) =>
+          COACH_ITEM_IDS.has(item.id) || (isCoach && COACH_CONTENT_ITEM_IDS.has(item.id)),
+        ),
       };
     })
     .filter((s) => s.widget || (s.items && s.items.length > 0));
@@ -93,7 +99,8 @@ export default async function AdminManagePortalPage() {
   }
 
   const isAdmin = await checkRole("admin");
-  const sections = isAdmin ? allSections : filterForCoach(allSections);
+  const isCoach = await checkRole("coach");
+  const sections = isAdmin ? allSections : filterForCoach(allSections, isCoach);
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
@@ -109,7 +116,9 @@ export default async function AdminManagePortalPage() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           {isAdmin
                 ? "Manage people, learning content, integrations, and system health from one place."
-                : "Review students, check analytics, and preview the portal as a learner."}
+                : isCoach
+                  ? "Edit course content, view assignment submissions, and support your students."
+                  : "Review students, check analytics, and preview the portal as a learner."}
             </p>
           </div>
           <div className="inline-flex w-fit items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">

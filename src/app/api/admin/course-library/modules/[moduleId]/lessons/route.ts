@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { courseLibraryLessons, courseLibraryModules } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -67,7 +67,7 @@ function diaryDefaultDescription(language: string): string {
  * the admin fills it in via the lesson editor form.
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

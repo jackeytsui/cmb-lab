@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasCourseContentAccess } from "@/lib/auth";
 import { db } from "@/db";
 import { toneMasteryClips } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -25,7 +25,7 @@ const bulkSchema = z.object({
  * Skips rows that already exist with the same (group, item, variant).
  */
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
