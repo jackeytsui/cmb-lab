@@ -10,22 +10,19 @@ import type { CourseLibraryVocalHackContent } from "@/db/schema/course-library";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { isVocalHackLesson } from "@/lib/lesson-language";
 import { verifySignedMediaPath } from "@/lib/signed-media-url";
-import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { privateMediaPlaybackRedirect } from "@/lib/private-media-playback";
 import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 import { getCurrentUser } from "@/lib/auth";
 import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
-// Video blobs are large; the default function timeout can cut the stream off
-// mid-transfer (perpetual loading spinner). Match the 60s used by the other
-// blob-proxy routes in this codebase.
+// Authorization/signing only. Video bytes are served directly by Blob.
 export const maxDuration = 60;
 
 /**
  * GET /api/course-library/vocal-hack-video/[lessonId]?sentence=<id>
  *
- * Authenticated proxy that streams a Vocal Hack sentence's coach video from
- * private Vercel Blob. Forwards Range headers for seeking, and sets
- * no-download / no-store headers so students can't save the file.
+ * Authenticates access to a sentence, then issues a single-file, expiring GET
+ * URL. Blob handles Range requests without serverless chunk handoffs.
  */
 export async function GET(
   request: NextRequest,
@@ -103,12 +100,5 @@ export async function GET(
     return NextResponse.json({ error: "No video for sentence" }, { status: 404 });
   }
 
-  return proxyBlobMedia(request, videoUrl, {
-    fallbackContentType: "video/mp4",
-    label: "course-library/vocal-hack-video",
-    extraHeaders: {
-      "Cache-Control": "private, no-store",
-      "Content-Disposition": "inline",
-    },
-  });
+  return privateMediaPlaybackRedirect(videoUrl, "course-library/vocal-hack-video");
 }

@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasCourseContentAccess } from "@/lib/auth";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
+import { privateMediaPlaybackRedirect } from "@/lib/private-media-playback";
 
-// Each invocation serves at most one bounded chunk (see blob-media-proxy), so
-// 60s is ample headroom even for large video previews.
+// Private previews redirect to Blob; the app does not relay video bytes.
 export const maxDuration = 60;
 
 /**
  * GET /api/admin/course-library/blob-preview?url=<privateBlobUrl>
  *
- * Admin-only proxy that streams a private Vercel Blob asset by URL, so the
+ * Staff-only endpoint that plays a private Vercel Blob asset by URL, so the
  * lesson editor can preview a just-uploaded video/audio (which isn't yet saved
  * into lesson content, and whose raw URL needs the store token to fetch).
- * Only proxies our own Vercel Blob host, and only for coaches/admins. Forwards Range
- * for seeking.
+ * Only supports Vercel Blob, and only for authorized content staff.
  */
 export async function GET(request: NextRequest) {
   if (!(await hasCourseContentAccess())) {
@@ -38,6 +37,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unsupported url" }, { status: 400 });
   }
 
+  if (target.hostname.endsWith(".private.blob.vercel-storage.com")) {
+    return privateMediaPlaybackRedirect(target.toString(), "admin/blob-preview", {
+      // An unsaved upload may have been replaced in place.
+      useCache: false,
+    });
+  }
+
+  // Preserve legacy public-asset previews.
   return proxyBlobMedia(request, target.toString(), {
     fallbackContentType: "application/octet-stream",
     label: "admin/blob-preview",

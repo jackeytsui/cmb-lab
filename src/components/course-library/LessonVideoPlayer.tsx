@@ -14,6 +14,7 @@ interface LessonVideoPlayerProps {
 export const SLOW_LOAD_MS = 8000;
 export const MANUAL_RETRY_MS = 20000;
 export const HARD_FAILURE_MS = 30000;
+export const STALL_RECOVERY_MS = 8000;
 const AUTO_RETRY_DELAYS_MS = [3000, 8000] as const;
 
 /**
@@ -45,6 +46,11 @@ export function LessonVideoPlayer({
   const loadStartedAtRef = useRef(0);
   const autoRetryCountRef = useRef(0);
   const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wantsPlaybackRef = useRef(false);
+  const lastPositionRef = useRef(0);
+  const resumePositionRef = useRef<number | null>(null);
+  const ignoreLoadPauseRef = useRef(false);
+  const bufferingRef = useRef(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
@@ -61,12 +67,13 @@ export function LessonVideoPlayer({
     const err = video?.error;
     const errPart = err
       ? `Error ${err.code} (${MEDIA_ERR_LABELS[err.code] ?? "UNKNOWN"})${err.message ? `: ${err.message}` : ""}`
-      : `Media stalled before metadata (readyState ${video?.readyState ?? "?"}, networkState ${video?.networkState ?? "?"})`;
+      : `Media stalled (readyState ${video?.readyState ?? "?"}, networkState ${video?.networkState ?? "?"})`;
     let httpPart = "";
     try {
       const res = await fetch(src.split("#")[0], {
         headers: { Range: "bytes=0-1" },
         cache: "no-store",
+        signal: AbortSignal.timeout(5000),
       });
       const type = res.headers.get("content-type") ?? "?";
       let upstream = "";
@@ -75,6 +82,7 @@ export function LessonVideoPlayer({
         if (body?.upstreamStatus) upstream = `, upstream ${body.upstreamStatus}`;
       }
       httpPart = ` — HTTP ${res.status}${upstream}, ${type}`;
+      await res.body?.cancel();
     } catch {
       httpPart = " — network request failed";
     }
@@ -104,7 +112,8 @@ export function LessonVideoPlayer({
     );
     const failureTimer = setTimeout(() => {
       const video = videoRef.current;
-      if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      if (video && !wantsPlaybackRef.current &&
+          video.readyState >= HTMLMediaElement.HAVE_METADATA && !video.error) {
         setStatus("ready");
         return;
       }
@@ -124,6 +133,11 @@ export function LessonVideoPlayer({
     if (!video) return;
     loadStartedAtRef.current = Date.now();
     autoRetryCountRef.current = 0;
+    wantsPlaybackRef.current = false;
+    lastPositionRef.current = 0;
+    resumePositionRef.current = null;
+    ignoreLoadPauseRef.current = false;
+    bufferingRef.current = false;
     clearRecoveryTimer();
     // If it's already buffered (e.g. cached, or canplay fired before
     // hydration attached our listeners), skip the overlay. Checked in a
@@ -146,49 +160,82 @@ export function LessonVideoPlayer({
 
   const markReady = useCallback(() => {
     clearRecoveryTimer();
-    autoRetryCountRef.current = 0;
+    bufferingRef.current = false;
     setStatus("ready");
   }, [clearRecoveryTimer]);
 
-  const retry = useCallback(() => {
+  const beginBuffering = useCallback(() => {
+    if (!bufferingRef.current) {
+      loadStartedAtRef.current = Date.now();
+      bufferingRef.current = true;
+      setSlow(false);
+      setShowManualRetry(false);
+      setDiagnosis(null);
+    }
+    setStatus("loading");
+  }, []);
+
+  const restorePosition = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    setSlow(false);
-    setShowManualRetry(false);
-    setDiagnosis(null);
-    setStatus("loading");
-    loadStartedAtRef.current = Date.now();
-    autoRetryCountRef.current = 0;
-    clearRecoveryTimer();
-    // load() re-issues the request from scratch (fresh auth cookies included),
-    // which recovers from transient network/session hiccups. Retry is a user
-    // gesture, so unmuted playback is permitted by browser autoplay policy.
-    video.load();
-    video.muted = false;
-    const attempt = video.play();
-    if (attempt && typeof attempt.catch === "function") {
-      attempt.catch(() => {});
+    const position = resumePositionRef.current;
+    if (position !== null) {
+      // Avoid seeking to the exact end: a recovery must never complete a
+      // lesson just because duration rounding puts the cursor at EOF.
+      video.currentTime = Number.isFinite(video.duration)
+        ? Math.min(position, Math.max(0, video.duration - 0.1))
+        : position;
+      lastPositionRef.current = video.currentTime;
+      resumePositionRef.current = null;
     }
-  }, [clearRecoveryTimer]);
+    ignoreLoadPauseRef.current = false;
+    // Metadata alone is enough to expose native controls before first play,
+    // but does not prove an interrupted video is ready to resume.
+    if (!wantsPlaybackRef.current) markReady();
+  }, [markReady]);
+
+  const reloadMedia = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    resumePositionRef.current ??= video.currentTime || lastPositionRef.current;
+    ignoreLoadPauseRef.current = !video.paused;
+    video.defaultPlaybackRate = video.playbackRate;
+    // load() refreshes the protected playback URL. Restore the cursor when
+    // metadata arrives and preserve volume/mute/rate and the user's pause.
+    video.load();
+    if (wantsPlaybackRef.current) {
+      // Set the default playback start now as well, before play() can begin.
+      video.currentTime = resumePositionRef.current;
+      void video.play()?.catch(() => {
+        wantsPlaybackRef.current = false;
+        markReady(); // Native Play remains available if autoplay is denied.
+      });
+    }
+  }, [markReady]);
+
+  const retry = useCallback(() => {
+    clearRecoveryTimer();
+    autoRetryCountRef.current = 0;
+    bufferingRef.current = false;
+    // Clicking Retry is an explicit request to resume playback.
+    wantsPlaybackRef.current = true;
+    beginBuffering();
+    reloadMedia();
+  }, [beginBuffering, clearRecoveryTimer, reloadMedia]);
 
   const recoverFromMediaError = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
 
     clearRecoveryTimer();
-    setStatus("loading");
-    setSlow(Date.now() - loadStartedAtRef.current >= SLOW_LOAD_MS);
+    beginBuffering();
 
     const retryIndex = autoRetryCountRef.current;
     if (retryIndex < AUTO_RETRY_DELAYS_MS.length) {
       autoRetryCountRef.current += 1;
       recoveryTimerRef.current = setTimeout(() => {
-        video.load();
-        video.muted = false;
-        const attempt = video.play();
-        if (attempt && typeof attempt.catch === "function") {
-          attempt.catch(() => {});
-        }
+        recoveryTimerRef.current = null;
+        reloadMedia();
       }, AUTO_RETRY_DELAYS_MS[retryIndex]);
       return;
     }
@@ -202,7 +249,37 @@ export function LessonVideoPlayer({
       setStatus("error");
       void diagnose();
     }, remaining);
-  }, [clearRecoveryTimer, diagnose]);
+  }, [beginBuffering, clearRecoveryTimer, diagnose, reloadMedia]);
+
+  const recoverFromStall = useCallback(() => {
+    const video = videoRef.current;
+    // `stalled` can fire during a healthy paused preload. Only recover if
+    // playback actually ran out of data, not while the user is paused.
+    if (!video || video.paused || video.ended || video.readyState >= 3) return;
+    beginBuffering();
+    if (recoveryTimerRef.current || autoRetryCountRef.current >= 2) return;
+    const position = video.currentTime;
+    recoveryTimerRef.current = setTimeout(() => {
+      recoveryTimerRef.current = null;
+      if (video.paused || !wantsPlaybackRef.current) return;
+      if (video.currentTime > position + 0.25 || video.readyState >= 3) {
+        markReady();
+        return;
+      }
+      autoRetryCountRef.current += 1;
+      reloadMedia();
+    }, STALL_RECOVERY_MS);
+  }, [beginBuffering, markReady, reloadMedia]);
+
+  const handlePause = useCallback(() => {
+    if (ignoreLoadPauseRef.current) {
+      ignoreLoadPauseRef.current = false;
+      return;
+    }
+    if (videoRef.current?.error) return;
+    wantsPlaybackRef.current = false;
+    markReady();
+  }, [markReady]);
 
   const completeAndAdvance = useCallback(async () => {
     const response = await fetch(
@@ -232,9 +309,23 @@ export function LessonVideoPlayer({
         disablePictureInPicture
         onContextMenu={(e) => e.preventDefault()}
         className="h-full w-full"
-        onLoadedMetadata={markReady}
+        onLoadedMetadata={restorePosition}
         onCanPlay={markReady}
         onPlaying={markReady}
+        onPlay={() => { wantsPlaybackRef.current = true; }}
+        onPause={handlePause}
+        onWaiting={recoverFromStall}
+        onStalled={recoverFromStall}
+        onTimeUpdate={(event) => {
+          if (resumePositionRef.current === null) {
+            lastPositionRef.current = event.currentTarget.currentTime;
+          }
+        }}
+        onSeeking={(event) => {
+          if (resumePositionRef.current === null) {
+            lastPositionRef.current = event.currentTarget.currentTime;
+          }
+        }}
         onEnded={() => void completeAndAdvance()}
         onError={recoverFromMediaError}
       />

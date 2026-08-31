@@ -40,13 +40,13 @@ describe("course-library media recovery", () => {
     expect(MANUAL_RETRY_MS).toBeLessThanOrEqual(20_000);
     expect(HARD_FAILURE_MS).toBeGreaterThan(MANUAL_RETRY_MS);
     expect(HARD_FAILURE_MS).toBeLessThanOrEqual(30_000);
-    expect(playerSource).toContain("Media stalled before metadata");
+    expect(playerSource).toContain("Media stalled (readyState");
     expect(playerSource).toContain('setStatus("error")');
     expect(playerSource).toContain("void diagnose()");
   });
 
   it("unblocks the player as soon as MP4 metadata arrives", () => {
-    expect(playerSource).toContain("onLoadedMetadata={markReady}");
+    expect(playerSource).toContain("onLoadedMetadata={restorePosition}");
     expect(playerSource).toContain("HTMLMediaElement.HAVE_METADATA");
     expect(playerSource).toContain("onCanPlay={markReady}");
     expect(playerSource).toContain("onPlaying={markReady}");
@@ -60,11 +60,9 @@ describe("course-library media recovery", () => {
   });
 
   it("keeps authenticated video bytes out of the serverless proxy hop", () => {
-    expect(streamRouteSource).toContain("issueSignedToken");
-    expect(streamRouteSource).toContain("presignUrl");
-    expect(streamRouteSource).toContain(
-      "NextResponse.redirect(presignedUrl, 307)",
-    );
+    expect(streamRouteSource).toContain("privateMediaPlaybackRedirect");
+    expect(streamRouteSource).toContain("verifySignedMediaPath");
+    expect(streamRouteSource).toContain("canUserAccessCourseLibraryLesson");
     expect(streamRouteSource).not.toContain("proxyBlobMedia");
   });
 

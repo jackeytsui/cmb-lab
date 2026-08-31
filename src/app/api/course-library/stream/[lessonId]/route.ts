@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { issueSignedToken, presignUrl } from "@vercel/blob";
 import { db } from "@/db";
 import { courseLibraryLessons } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
-import {
-  SIGNED_MEDIA_TTL_SECONDS,
-  verifySignedMediaPath,
-} from "@/lib/signed-media-url";
+import { verifySignedMediaPath } from "@/lib/signed-media-url";
+import { privateMediaPlaybackRedirect } from "@/lib/private-media-playback";
 import { getCurrentUser } from "@/lib/auth";
 import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
 
-// Each invocation now serves at most one bounded chunk (see blob-media-proxy),
-// so 60s is ample headroom — the timeout can no longer kill a transfer that a
-// browser is still waiting on.
-export const maxDuration = 300;
+// Only authorization/signing runs here, not the long-lived video transfer.
+export const maxDuration = 60;
 
 /**
  * GET /api/course-library/stream/[lessonId]
@@ -89,56 +84,5 @@ export async function GET(
     );
   }
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
-  if (!token || /\s/.test(token)) {
-    console.error(
-      "[course-library/stream] BLOB_READ_WRITE_TOKEN is not configured",
-    );
-    return NextResponse.json(
-      { error: "Media storage is not configured" },
-      { status: 500, headers: { "Cache-Control": "no-store" } },
-    );
-  }
-
-  let pathname: string;
-  try {
-    const blob = new URL(videoUrl);
-    if (!blob.hostname.endsWith(".private.blob.vercel-storage.com")) {
-      throw new Error("not a private Vercel Blob URL");
-    }
-    pathname = decodeURIComponent(blob.pathname.replace(/^\//, ""));
-  } catch {
-    return NextResponse.json(
-      { error: "Video storage URL is invalid" },
-      { status: 502, headers: { "Cache-Control": "no-store" } },
-    );
-  }
-
-  try {
-    const validUntil = Date.now() + SIGNED_MEDIA_TTL_SECONDS * 1000;
-    const signedToken = await issueSignedToken({
-      token,
-      pathname,
-      operations: ["get"],
-      validUntil,
-    });
-    const { presignedUrl } = await presignUrl(signedToken, {
-      operation: "get",
-      pathname,
-      access: "private",
-      validUntil,
-    });
-    const response = NextResponse.redirect(presignedUrl, 307);
-    response.headers.set("Cache-Control", "private, no-store");
-    return response;
-  } catch (error) {
-    console.error(
-      "[course-library/stream] Failed to issue private playback URL:",
-      error instanceof Error ? error.name : "UnknownError",
-    );
-    return NextResponse.json(
-      { error: "Failed to prepare video playback" },
-      { status: 502, headers: { "Cache-Control": "no-store" } },
-    );
-  }
+  return privateMediaPlaybackRedirect(videoUrl, "course-library/stream");
 }
