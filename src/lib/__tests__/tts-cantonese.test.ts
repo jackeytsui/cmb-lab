@@ -108,19 +108,21 @@ describe("resolveCantoneseProvider", () => {
     ).toBe("azure");
   });
 
-  it("ignores an override for an unconfigured provider", () => {
+  it("ignores an ElevenLabs override when it is unconfigured", () => {
     expect(
       resolveCantoneseProvider({
         ...azureEnv,
         CANTONESE_TTS_PROVIDER: "elevenlabs",
       }),
     ).toBe("azure");
-    expect(
-      resolveCantoneseProvider({
-        ...azureEnv,
-        CANTONESE_TTS_PROVIDER: "minimax",
-      }),
-    ).toBe("azure");
+  });
+
+  it("fails closed on an explicit MiniMax choice instead of changing accents", () => {
+    expect(resolveCantoneseProvider({
+      ...elevenEnv,
+      OPENAI_API_KEY: "k",
+      CANTONESE_TTS_PROVIDER: "minimax",
+    })).toBe("minimax");
   });
 
   it("falls back to ElevenLabs then OpenAI when MiniMax and Azure are absent", () => {

@@ -337,6 +337,12 @@ export async function POST(request: NextRequest) {
           { status: 503 }
         );
       }
+      if (error.message === "MiniMax credentials not configured") {
+        return NextResponse.json(
+          { error: "Cantonese audio service not configured" },
+          { status: 503 },
+        );
+      }
       if (
         error.message === "TTS request timed out" ||
         error.message === "MiniMax TTS request timed out" ||

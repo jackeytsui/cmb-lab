@@ -67,6 +67,19 @@ describe("Cantonese voice continuity", () => {
     expect(response.headers.get("X-TTS-Provider")).toBe("minimax");
   });
 
+  it("fails closed when MiniMax is selected but its credential is unavailable", async () => {
+    vi.stubEnv("MINIMAX_API_KEY", "");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const { POST } = await import("./route");
+    const response = await POST(new NextRequest("https://example.com/api/tts", {
+      method: "POST",
+      body: JSON.stringify({ text: "你好", language: "zh-HK" }),
+    }));
+    expect(response.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("leaves Mandarin voice selection unchanged", async () => {
     const fetchMock = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])));
     vi.stubGlobal("fetch", fetchMock);

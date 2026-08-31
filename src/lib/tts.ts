@@ -117,7 +117,10 @@ export function resolveCantoneseProvider(
   );
   const preference = (env.CANTONESE_TTS_PROVIDER || "").trim().toLowerCase();
 
-  if (preference === "minimax" && hasMiniMax) return "minimax";
+  // An explicit provider choice is a quality contract, not a soft hint. If
+  // MiniMax is selected but its credential is missing, fail closed instead of
+  // silently sending Cantonese through a different accent/voice.
+  if (preference === "minimax") return "minimax";
   if (preference === "elevenlabs" && hasElevenLabs) return "elevenlabs";
   if (preference === "azure" && hasAzure) return "azure";
 

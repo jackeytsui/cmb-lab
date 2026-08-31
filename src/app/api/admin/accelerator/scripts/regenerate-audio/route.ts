@@ -24,7 +24,9 @@ type ScriptLine = typeof scriptLines.$inferSelect;
  * Cantonese follows the same resolution as /api/tts (MiniMax with pinned
  * "Chinese,Yue" when configured, else Azure zh-HK; ElevenLabs only via
  * explicit CANTONESE_TTS_PROVIDER=elevenlabs opt-in). The non-Azure
- * providers fall back to Azure on failure so the feature keeps working.
+ * providers may fall back to Azure, except when MiniMax is explicitly
+ * selected: that choice is fail-closed so generated course audio can never
+ * silently switch accents.
  * Mandarin: Azure direct.
  */
 async function synthesizeLine(text: string, isCantonese: boolean): Promise<Buffer> {
@@ -32,12 +34,7 @@ async function synthesizeLine(text: string, isCantonese: boolean): Promise<Buffe
 
   let primaryError: string | null = null;
   if (provider === "minimax") {
-    try {
-      return await synthesizeSpeechMiniMax(text, "medium");
-    } catch (err) {
-      primaryError = err instanceof Error ? err.message : "MiniMax failed";
-      console.warn("[regenerate-audio] MiniMax failed, falling back to Azure:", err);
-    }
+    return synthesizeSpeechMiniMax(text, "medium");
   } else if (provider === "elevenlabs") {
     try {
       return await synthesizeSpeechElevenLabs(text, "medium");
