@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasAcceleratorManagementAccess } from "@/lib/auth";
 import { db } from "@/db";
 import { toneMasteryClips } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -23,7 +23,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ clipId: string }> },
 ) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -58,7 +58,7 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ clipId: string }> },
 ) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

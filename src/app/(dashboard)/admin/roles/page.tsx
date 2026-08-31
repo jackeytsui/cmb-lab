@@ -223,14 +223,13 @@ function PlatformRoleCard({ platformRole }: { platformRole: PlatformRole }) {
             Feature Access
             {hasLockedFullAccess && (
               <span className="ml-2 normal-case font-normal">
-                (all features enabled for this role)
+                (managed by platform policy)
               </span>
             )}
           </p>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {FEATURE_DEFINITIONS.map((feature) => {
-              const isEnabled =
-                hasLockedFullAccess || enabledFeatures.has(feature.key);
+              const isEnabled = enabledFeatures.has(feature.key);
               const isSaving = savingKey === feature.key;
 
               return (

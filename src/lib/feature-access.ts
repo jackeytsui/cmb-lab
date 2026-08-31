@@ -4,17 +4,20 @@ import {
   getUserFeatureTagOverrides,
   hasFeatureWithTagOverrides,
 } from "@/lib/tag-feature-access";
-import { hasFullFeatureAccess } from "@/lib/platform-roles";
+import { hasFullFeatureAccess, isFeatureDisabledForRole } from "@/lib/platform-roles";
 
 /**
  * Authoritative feature entitlement check shared by pages and API routes.
- * Staff bypass package gates; student role grants and tag overrides are
- * resolved together, with tag denies taking precedence.
+ * Explicit role exclusions precede staff package bypasses. Role grants and tag
+ * overrides are resolved together, with tag denies taking precedence.
+ * Callers must supply the persisted role, not just an ID or a client claim.
  */
 export async function userCanUseFeature(
-  user: { id: string; role?: string | null },
+  user: { id: string; role: string },
   feature: FeatureKey,
 ): Promise<boolean> {
+  if (!user.role) return false;
+  if (isFeatureDisabledForRole(user.role, feature)) return false;
   if (hasFullFeatureAccess(user.role)) return true;
 
   const [permissions, overrides] = await Promise.all([

@@ -2,6 +2,8 @@ import type { FeatureKey } from "@/lib/permissions";
 import { Lock } from "lucide-react";
 import { userCanUseFeature } from "@/lib/feature-access";
 import { getCurrentUser } from "@/lib/auth";
+import { isFeatureDisabledForRole } from "@/lib/platform-roles";
+import { redirect } from "next/navigation";
 
 // ---------------------------------------------------------------------------
 // Human-readable labels for feature keys
@@ -76,6 +78,11 @@ export async function FeatureGate({
   const user = await getCurrentUser();
   if (!user) {
     return fallback ? <>{fallback}</> : null;
+  }
+
+  // Send coaches back to their teaching workspace instead of an upgrade dead end.
+  if (isFeatureDisabledForRole(user.role, feature)) {
+    redirect("/dashboard/course-library");
   }
 
   if (await userCanUseFeature(user, feature)) {

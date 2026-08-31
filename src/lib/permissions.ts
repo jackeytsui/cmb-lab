@@ -16,7 +16,7 @@ import {
   platformRoleFeatures,
 } from "@/db/schema";
 import { FEATURE_KEYS } from "@/lib/feature-definitions";
-import { hasFullFeatureAccess } from "@/lib/platform-roles";
+import { hasFullFeatureAccess, isFeatureDisabledForRole } from "@/lib/platform-roles";
 
 // ---------------------------------------------------------------------------
 // Feature Key Constants & Zod Schema
@@ -188,6 +188,11 @@ async function _resolvePermissions(userId: string): Promise<PermissionSet> {
   // Union platform role feature grants
   for (const row of platformFeatureRows) {
     featureSet.add(row.featureKey);
+  }
+
+  // Apply exclusions after the union so package grants cannot restore them.
+  for (const feature of featureSet) {
+    if (isFeatureDisabledForRole(platformRole, feature)) featureSet.delete(feature);
   }
 
   // Union direct courseAccess grants

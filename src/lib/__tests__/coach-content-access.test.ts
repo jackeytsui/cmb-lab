@@ -26,7 +26,7 @@ vi.mock("@/lib/tag-feature-access", () => ({
   getUserFeatureTagOverrides: vi.fn(), hasFeatureWithTagOverrides: vi.fn(),
 }));
 
-import { hasCourseContentAccess } from "@/lib/auth";
+import { hasCourseContentAccess, hasAcceleratorManagementAccess } from "@/lib/auth";
 import { PUT } from "@/app/api/admin/course-library/lessons/[lessonId]/route";
 import {
   getAnyAssignmentReviewer, getReviewableAssignmentTypes, userCanReviewAssignments,
@@ -53,6 +53,17 @@ describe("coach content authorization", () => {
   it("uses the real database role without consulting View As", async () => {
     expect(await hasCourseContentAccess()).toBe(true);
     expect(mocks.cookies).not.toHaveBeenCalled();
+  });
+
+  it("denies coach Accelerator management even with stale admin claims", async () => {
+    expect(await hasAcceleratorManagementAccess()).toBe(false);
+    expect(await hasCourseContentAccess()).toBe(true);
+    expect(mocks.cookies).not.toHaveBeenCalled();
+  });
+
+  it.each(["admin", "operations", "consultant", "temp"])("preserves existing Accelerator management for %s", async (role) => {
+    mocks.findUser.mockResolvedValue({ role, deletedAt: null });
+    expect(await hasAcceleratorManagementAccess()).toBe(true);
   });
 
   it.each(["coach", "admin"])("allows %s to save lesson content", async (role) => {

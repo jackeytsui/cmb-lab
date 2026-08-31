@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasAcceleratorManagementAccess, getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import { curatedPassages } from "@/db/schema/accelerator";
 import { eq, asc } from "drizzle-orm";
@@ -29,7 +29,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -118,7 +118,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -182,7 +182,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

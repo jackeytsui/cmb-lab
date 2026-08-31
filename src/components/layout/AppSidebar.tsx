@@ -33,7 +33,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import type { Roles } from "@/types/globals";
-import { hasMinimumPlatformRole } from "@/lib/platform-roles";
+import { hasMinimumPlatformRole, filterFeaturesForRole } from "@/lib/platform-roles";
 
 type NavSectionWithRole = NavSection & { minRole: Roles };
 type FeatureKey =
@@ -275,7 +275,7 @@ export function AppSidebar({
     role: Roles;
   } | null;
 }) {
-  const featureSet = new Set(enabledFeatures ?? []);
+  const featureSet = new Set(filterFeaturesForRole(role, enabledFeatures ?? []));
 
   const filteredSections: NavSection[] = navSections
     .filter(

@@ -6,6 +6,7 @@ import { sql, isNull } from "drizzle-orm";
 import {
   PLATFORM_ROLE_DEFINITIONS,
   hasFullFeatureAccess,
+  filterFeaturesForRole,
 } from "@/lib/platform-roles";
 import { FEATURE_KEYS } from "@/lib/feature-definitions";
 
@@ -58,9 +59,10 @@ export async function GET() {
       label: definition.label,
       description: definition.description,
       userCount: countMap[definition.role] ?? 0,
-      features: hasFullFeatureAccess(definition.role)
-        ? [...FEATURE_KEYS]
-        : featureMap[definition.role],
+      features: filterFeaturesForRole(
+        definition.role,
+        hasFullFeatureAccess(definition.role) ? FEATURE_KEYS : featureMap[definition.role],
+      ),
       featureAccess: definition.featureAccess,
     }));
 

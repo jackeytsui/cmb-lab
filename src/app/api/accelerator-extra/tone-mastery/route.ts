@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { getCurrentUser } from "@/lib/auth";
+import { userCanUseFeature } from "@/lib/feature-access";
 import { db } from "@/db";
-import { toneMasteryClips, toneMasteryProgress, users } from "@/db/schema";
+import { toneMasteryClips, toneMasteryProgress } from "@/db/schema";
 import { asc, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
@@ -10,17 +11,12 @@ import { sql } from "drizzle-orm";
  * Returns all tone mastery clips + user progress + hero video URL.
  */
 export async function GET() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) {
+  const dbUser = await getCurrentUser();
+  if (!dbUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.clerkId, clerkId),
-    columns: { id: true },
-  });
-  if (!dbUser) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (!(await userCanUseFeature(dbUser, "tone_mastery"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const [clips, progress, heroRow] = await Promise.all([

@@ -20,7 +20,7 @@ export type AccessibleAudioLesson = {
  * direct API requests cannot bypass the catalogue's feature/content rules.
  */
 export async function getAccessibleAudioLesson(
-  user: { id: string; role?: string | null },
+  user: { id: string; role: string },
   lessonId: string,
 ): Promise<AccessibleAudioLesson | null> {
   const [lesson] = await db

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { userCanUseFeature } from "@/lib/feature-access";
 import { db } from "@/db";
 import { typingProgress } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
@@ -13,6 +14,9 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await userCanUseFeature(user, "mandarin_accelerator"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   // Try the new query with the `skipped` column first; fall back to the legacy
@@ -66,6 +70,9 @@ export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await userCanUseFeature(user, "mandarin_accelerator"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
@@ -131,6 +138,9 @@ export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await userCanUseFeature(user, "mandarin_accelerator"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {

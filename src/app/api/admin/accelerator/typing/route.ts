@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasAcceleratorManagementAccess, getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import { typingSentences } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
@@ -41,7 +41,7 @@ const deleteSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export async function GET() {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -67,7 +67,7 @@ export async function GET() {
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
 // ---------------------------------------------------------------------------
 
 export async function PUT(req: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -179,7 +179,7 @@ export async function PUT(req: NextRequest) {
 // ---------------------------------------------------------------------------
 
 export async function DELETE(req: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

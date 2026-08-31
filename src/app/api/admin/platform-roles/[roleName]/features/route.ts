@@ -7,6 +7,7 @@ import { z } from "zod";
 import { featureKeySchema } from "@/lib/permissions";
 import {
   hasFullFeatureAccess,
+  filterFeaturesForRole,
   normalizePlatformRole,
 } from "@/lib/platform-roles";
 import { FEATURE_KEYS } from "@/lib/feature-definitions";
@@ -42,7 +43,7 @@ export async function GET(
     }
 
     if (hasFullFeatureAccess(platformRole)) {
-      return NextResponse.json({ features: [...FEATURE_KEYS] });
+      return NextResponse.json({ features: filterFeaturesForRole(platformRole, FEATURE_KEYS) });
     }
 
     const features = await db
@@ -91,7 +92,7 @@ export async function PUT(
     if (hasFullFeatureAccess(platformRole)) {
       return NextResponse.json(
         {
-          error: `${platformRole === "admin" ? "Admin" : "Coach"} feature access is locked because this role has all features.`,
+          error: `${platformRole === "admin" ? "Admin" : "Coach"} feature access is managed by platform policy.`,
         },
         { status: 400 }
       );

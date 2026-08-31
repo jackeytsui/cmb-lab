@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { userCanUseFeature } from "@/lib/feature-access";
 import { db } from "@/db";
 import { toneMasteryProgress } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -22,6 +23,9 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (!(await userCanUseFeature(user, "tone_mastery"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
@@ -69,6 +73,9 @@ export async function DELETE(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (!(await userCanUseFeature(user, "tone_mastery"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {

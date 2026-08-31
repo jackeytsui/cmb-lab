@@ -4,6 +4,7 @@ import { passageReadStatus } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
+import { userCanUseFeature } from "@/lib/feature-access";
 
 /**
  * GET /api/accelerator/reader/progress
@@ -13,6 +14,9 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await userCanUseFeature(user, "mandarin_accelerator"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const statuses = await db
@@ -33,6 +37,9 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await userCanUseFeature(user, "mandarin_accelerator"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json();

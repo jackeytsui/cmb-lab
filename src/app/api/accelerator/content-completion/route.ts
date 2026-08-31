@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { acceleratorContentCompletion } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
+import { userCanUseFeature } from "@/lib/feature-access";
 
 const VALID_KEYS = ["practice_plan", "starter_pack"];
 
@@ -19,6 +20,9 @@ export async function GET(req: NextRequest) {
   const user = await getDbUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await userCanUseFeature(user, "mandarin_accelerator"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const key = req.nextUrl.searchParams.get("key");
@@ -53,6 +57,9 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!(await userCanUseFeature(user, "mandarin_accelerator"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { key } = (await req.json()) as { key?: string };
   if (!key || !VALID_KEYS.includes(key)) {
@@ -76,6 +83,9 @@ export async function DELETE(req: NextRequest) {
   const user = await getDbUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await userCanUseFeature(user, "mandarin_accelerator"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { key } = (await req.json()) as { key?: string };

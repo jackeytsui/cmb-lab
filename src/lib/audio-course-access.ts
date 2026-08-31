@@ -70,17 +70,17 @@ export async function isPublicAudioCourse(
 
 /** Authoritative entitlement check for private podcast feeds and token creation. */
 export async function userCanAccessAudioCourse(
-  user: { id: string; role?: string | null },
+  user: { id: string; role: string },
   course: AudioCourseRecord,
 ): Promise<boolean> {
   const isStandard = isStandardAudioCourse(course);
   const isExtraPack = isExtraPackAudioCourse(course);
   if (!isStandard && !isExtraPack) return false;
-  if (hasFullFeatureAccess(user.role)) return true;
-
   if (isExtraPack) {
     return userCanUseFeature(user, "audio_accelerator_edition");
   }
+
+  if (hasFullFeatureAccess(user.role)) return true;
 
   if (!(await userCanUseFeature(user, "audio_courses"))) return false;
 

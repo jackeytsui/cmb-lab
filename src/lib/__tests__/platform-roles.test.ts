@@ -5,6 +5,8 @@ import {
   PLATFORM_ROLE_DEFINITIONS,
   PLATFORM_ROLES,
   hasFullFeatureAccess,
+  filterFeaturesForRole,
+  isFeatureDisabledForRole,
   hasMinimumPlatformRole,
   normalizePlatformRole,
   resolveNonDowngradingPlatformRole,
@@ -43,12 +45,24 @@ describe("platform roles", () => {
     expect(hasMinimumPlatformRole("student", "coach")).toBe(false);
   });
 
-  it("locks every learning feature on for Coach and Admin only", () => {
+  it("provides default package access for Coach and Admin only, subject to exclusions", () => {
     expect(hasFullFeatureAccess("coach")).toBe(true);
     expect(hasFullFeatureAccess("admin")).toBe(true);
     expect(hasFullFeatureAccess("operations")).toBe(false);
     expect(hasFullFeatureAccess("consultant")).toBe(false);
     expect(hasFullFeatureAccess("temp")).toBe(false);
+  });
+
+  it("excludes exactly the Accelerator and Extra Pack features for coaches", () => {
+    const disabled = FEATURE_KEYS.filter((key) => isFeatureDisabledForRole("coach", key));
+    expect(disabled).toEqual([
+      "mandarin_accelerator", "audio_accelerator_edition", "tone_mastery", "listening_training",
+    ]);
+    expect(filterFeaturesForRole("coach", FEATURE_KEYS)).toContain("course_library");
+    expect(filterFeaturesForRole("coach", FEATURE_KEYS)).toContain("audio_courses");
+    for (const role of PLATFORM_ROLES.filter((role) => role !== "coach")) {
+      expect(filterFeaturesForRole(role, FEATURE_KEYS)).toEqual(FEATURE_KEYS);
+    }
   });
 
   it("keeps feature metadata aligned with every permission key", () => {

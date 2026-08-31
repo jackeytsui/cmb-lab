@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasAcceleratorManagementAccess } from "@/lib/auth";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
@@ -18,7 +18,7 @@ const ALLOWED_KEYS = [
  * Returns all accelerator settings.
  */
 export async function GET() {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -40,7 +40,7 @@ export async function GET() {
  * Upsert a setting key-value pair.
  */
 export async function PUT(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

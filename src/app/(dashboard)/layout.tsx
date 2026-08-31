@@ -28,6 +28,7 @@ import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanne
 import {
   DEFAULT_PLATFORM_ROLE,
   hasFullFeatureAccess,
+  filterFeaturesForRole,
 } from "@/lib/platform-roles";
 
 export const dynamic = "force-dynamic";
@@ -240,7 +241,7 @@ export default async function DashboardLayout({
       <SidebarProvider defaultOpen={defaultOpen}>
         <AppSidebar
           role={role}
-          enabledFeatures={enabledFeatures}
+          enabledFeatures={filterFeaturesForRole(role, enabledFeatures ?? [])}
           assignmentFeedbackUnread={assignmentFeedbackUnread}
           viewAsUser={viewAsUser}
         />

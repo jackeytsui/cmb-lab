@@ -74,7 +74,7 @@ const COACH_SECTION_IDS = new Set(["view-as", "access", "ops"]);
 const COACH_ITEM_IDS = new Set(["user-access", "analytics"]);
 const COACH_CONTENT_ITEM_IDS = new Set([
   "course-library", "exercises", "audio-course", "video-uploads",
-  "accelerator", "tone-mastery", "assignment-submissions",
+  "assignment-submissions",
 ]);
 
 function filterForCoach(sections: PortalSection[], isCoach: boolean): PortalSection[] {

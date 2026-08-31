@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasAcceleratorManagementAccess, getCurrentUser } from "@/lib/auth";
 
 export const maxDuration = 60;
 
@@ -24,7 +24,7 @@ function isValidPathname(pathname: string): boolean {
 }
 
 async function checkAuth(): Promise<NextResponse | null> {
-  const hasRoleAccess = await hasMinimumRole("coach");
+  const hasRoleAccess = await hasAcceleratorManagementAccess();
   if (hasRoleAccess) return null;
   const user = await getCurrentUser();
   if (!user) {

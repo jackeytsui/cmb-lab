@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
+import { hasAcceleratorManagementAccess, getCurrentUser } from "@/lib/auth";
 import { db } from "@/db";
 import {
   conversationScripts,
@@ -52,7 +52,7 @@ const deleteScriptSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export async function GET() {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -82,7 +82,7 @@ export async function GET() {
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -168,7 +168,7 @@ export async function POST(request: NextRequest) {
 // ---------------------------------------------------------------------------
 
 export async function PATCH(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -201,7 +201,7 @@ export async function PATCH(request: NextRequest) {
 // ---------------------------------------------------------------------------
 
 export async function PUT(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -285,7 +285,7 @@ export async function PUT(request: NextRequest) {
 // ---------------------------------------------------------------------------
 
 export async function DELETE(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

@@ -3,7 +3,7 @@ import { put } from "@vercel/blob";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { scriptLines } from "@/db/schema";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasAcceleratorManagementAccess } from "@/lib/auth";
 import {
   resolveVoice,
   resolveCantoneseProvider,
@@ -110,7 +110,7 @@ async function regenerateLine(line: ScriptLine, field: FieldName): Promise<strin
  * Blob, and updates just the audio URL column(s). Coach+ only.
  */
 export async function POST(req: NextRequest) {
-  if (!(await hasMinimumRole("coach"))) {
+  if (!(await hasAcceleratorManagementAccess())) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

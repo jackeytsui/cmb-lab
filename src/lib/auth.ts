@@ -7,6 +7,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import {
   DEFAULT_PLATFORM_ROLE,
   canManageCourseContent,
+  canManageAcceleratorContent,
   hasMinimumPlatformRole,
 } from "@/lib/platform-roles";
 
@@ -49,6 +50,11 @@ export async function hasMinimumRole(minimumRole: Roles): Promise<boolean> {
 /** Authorize content editors from the real persisted role, never View As. */
 export async function hasCourseContentAccess(): Promise<boolean> {
   return canManageCourseContent(await resolveRole());
+}
+
+/** Accelerator management uses the real database role, never View As. */
+export async function hasAcceleratorManagementAccess(): Promise<boolean> {
+  return canManageAcceleratorContent(await resolveRole());
 }
 
 /**

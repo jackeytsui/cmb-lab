@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasAcceleratorManagementAccess } from "@/lib/auth";
 import { db } from "@/db";
 import {
   users,
@@ -23,7 +23,7 @@ import { eq, count, and, max, inArray } from "drizzle-orm";
 import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
 
 export async function GET() {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

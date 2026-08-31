@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasAcceleratorManagementAccess } from "@/lib/auth";
 import { db } from "@/db";
 import { toneMasteryClips } from "@/db/schema";
 import { asc } from "drizzle-orm";
@@ -10,7 +10,7 @@ import { z } from "zod";
  * Returns all tone mastery clips.
  */
 export async function GET() {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -39,7 +39,7 @@ const createSchema = z.object({
  * Create a new tone mastery clip.
  */
 export async function POST(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasAcceleratorManagementAccess();
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

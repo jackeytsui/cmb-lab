@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { hasMinimumRole } from "@/lib/auth";
+import { hasAcceleratorManagementAccess } from "@/lib/auth";
 
 export const maxDuration = 60;
 // Allow larger request bodies for video uploads (default is 4.5MB on Vercel Hobby,
@@ -18,7 +18,7 @@ export const runtime = "nodejs";
  */
 export async function POST(request: NextRequest) {
   try {
-    const hasAccess = await hasMinimumRole("coach");
+    const hasAccess = await hasAcceleratorManagementAccess();
     if (!hasAccess) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

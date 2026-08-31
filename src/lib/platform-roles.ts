@@ -39,7 +39,7 @@ export const PLATFORM_ROLE_DEFINITIONS: readonly PlatformRoleDefinition[] = [
     role: "coach",
     label: "Coach",
     description:
-      "Manages students and content. Includes access to every learning feature.",
+      "Manages students and course content. Mandarin Accelerator and Extra Pack are excluded.",
     accessLevel: 1,
     featureAccess: "full",
   },
@@ -130,8 +130,33 @@ export function resolveNonDowngradingPlatformRole(
     : currentRole;
 }
 
+/** Default package bypass; explicit role exclusions still take precedence. */
 export function hasFullFeatureAccess(role: unknown): boolean {
   return getPlatformRoleDefinition(role)?.featureAccess === "full";
+}
+
+const COACH_DISABLED_FEATURES = new Set<string>([
+  "mandarin_accelerator",
+  "audio_accelerator_edition",
+  "tone_mastery",
+  "listening_training",
+]);
+
+/** Role exclusions cannot be re-enabled by package grants or tag overrides. */
+export function isFeatureDisabledForRole(role: unknown, feature: string): boolean {
+  return role === "coach" && COACH_DISABLED_FEATURES.has(feature);
+}
+
+export function filterFeaturesForRole<T extends string>(
+  role: unknown,
+  features: readonly T[],
+): T[] {
+  return features.filter((feature) => !isFeatureDisabledForRole(role, feature));
+}
+
+/** Preserve existing staff permissions, except coaches no longer use Accelerator. */
+export function canManageAcceleratorContent(role: unknown): boolean {
+  return isStaffRole(role) && role !== "coach";
 }
 
 /** Content authoring is explicit: peer staff roles do not inherit Coach access. */

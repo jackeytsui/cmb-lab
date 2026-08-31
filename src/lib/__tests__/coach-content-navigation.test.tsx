@@ -2,6 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { Roles } from "@/types/globals";
+import { FEATURE_KEYS } from "@/lib/feature-definitions";
 
 const { roleState } = vi.hoisted(() => ({ roleState: { role: "coach" as string } }));
 vi.mock("@/lib/auth", () => ({
@@ -31,9 +32,33 @@ describe("coach content navigation", () => {
     for (const href of ["/admin/course-library", "/admin/content/assignment-submissions", "/admin/audio-course", "/admin/exercises"]) {
       expect(html).toContain(href);
     }
-    for (const href of ["/admin/api-keys", "/admin/roles", "/admin/ghl", "/admin/announcements"]) {
+    for (const href of ["/admin/api-keys", "/admin/roles", "/admin/ghl", "/admin/announcements", "/admin/accelerator/typing", "/admin/accelerator-extra/tone-mastery"]) {
       expect(html).not.toContain(href);
     }
+  });
+
+  it("removes both Accelerator groups for coaches even with all feature grants", () => {
+    const html = renderToStaticMarkup(<AppSidebar role="coach" enabledFeatures={[...FEATURE_KEYS]} />);
+    expect(html).not.toContain("/dashboard/accelerator");
+    expect(html).not.toContain("Mandarin Accelerator");
+    expect(html).toContain("/dashboard/course-library");
+    expect(html).toContain("/admin/course-library");
+    expect(html).toContain("/admin/content/assignment-submissions");
+  });
+
+  it.each(["student", "admin"] as Roles[])("retains both groups for entitled %s accounts", (role) => {
+    const html = renderToStaticMarkup(<AppSidebar role={role} enabledFeatures={[...FEATURE_KEYS]} />);
+    expect(html).toContain("/dashboard/accelerator");
+    expect(html).toContain("/dashboard/accelerator-extra/audio");
+    expect(html).toContain("/dashboard/accelerator-extra/tone-mastery");
+    expect(html).toContain("/dashboard/accelerator-extra/listening-training");
+  });
+
+  it("retains admin Accelerator management shortcuts", async () => {
+    roleState.role = "admin";
+    const html = renderToStaticMarkup(await AdminManagePortalPage());
+    expect(html).toContain("/admin/accelerator/typing");
+    expect(html).toContain("/admin/accelerator-extra/tone-mastery");
   });
 
   it.each(["operations", "consultant", "temp"])("does not add content controls for %s", async (role) => {
