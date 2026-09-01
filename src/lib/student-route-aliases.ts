@@ -31,11 +31,18 @@ export function getStudentRouteRedirects() {
       destination: clean,
       permanent: true as const,
     })),
-    ...CLEAN_STUDENT_ROUTE_PREFIXES.map((prefix) => ({
-      source: `/dashboard/${prefix}/:path*`,
-      destination: `/${prefix}/:path*`,
-      permanent: true as const,
-    })),
+    ...CLEAN_STUDENT_ROUTE_PREFIXES.flatMap((prefix) => [
+      {
+        source: `/dashboard/${prefix}`,
+        destination: `/${prefix}`,
+        permanent: true as const,
+      },
+      {
+        source: `/dashboard/${prefix}/:path+`,
+        destination: `/${prefix}/:path+`,
+        permanent: true as const,
+      },
+    ]),
   ];
 }
 
@@ -45,10 +52,16 @@ export function getStudentRouteRewrites() {
       source: clean,
       destination: legacy,
     })),
-    ...CLEAN_STUDENT_ROUTE_PREFIXES.map((prefix) => ({
-      source: `/${prefix}/:path*`,
-      destination: `/dashboard/${prefix}/:path*`,
-    })),
+    ...CLEAN_STUDENT_ROUTE_PREFIXES.flatMap((prefix) => [
+      {
+        source: `/${prefix}`,
+        destination: `/dashboard/${prefix}`,
+      },
+      {
+        source: `/${prefix}/:path+`,
+        destination: `/dashboard/${prefix}/:path+`,
+      },
+    ]),
   ];
 }
 
@@ -56,4 +69,3 @@ export const CLEAN_STUDENT_PROTECTED_ROUTE_PATTERNS = [
   "/home(.*)",
   ...CLEAN_STUDENT_ROUTE_PREFIXES.map((prefix) => `/${prefix}(.*)`),
 ] as const;
-

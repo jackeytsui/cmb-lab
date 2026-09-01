@@ -52,6 +52,46 @@ describe("clean student URLs", () => {
     });
   });
 
+  it("separates route indexes from nested paths so empty params never reach dynamic pages", () => {
+    const redirects = getStudentRouteRedirects();
+    const rewrites = getStudentRouteRewrites();
+
+    expect(redirects).toHaveLength(
+      CLEAN_STUDENT_EXACT_ROUTES.length + CLEAN_STUDENT_ROUTE_PREFIXES.length * 2,
+    );
+    expect(rewrites).toHaveLength(
+      CLEAN_STUDENT_EXACT_ROUTES.length + CLEAN_STUDENT_ROUTE_PREFIXES.length * 2,
+    );
+
+    for (const prefix of CLEAN_STUDENT_ROUTE_PREFIXES) {
+      expect(redirects).toContainEqual({
+        source: `/dashboard/${prefix}`,
+        destination: `/${prefix}`,
+        permanent: true,
+      });
+      expect(redirects).toContainEqual({
+        source: `/dashboard/${prefix}/:path+`,
+        destination: `/${prefix}/:path+`,
+        permanent: true,
+      });
+      expect(rewrites).toContainEqual({
+        source: `/${prefix}`,
+        destination: `/dashboard/${prefix}`,
+      });
+      expect(rewrites).toContainEqual({
+        source: `/${prefix}/:path+`,
+        destination: `/dashboard/${prefix}/:path+`,
+      });
+    }
+
+    expect(
+      [...redirects, ...rewrites].some(
+        ({ source, destination }) =>
+          source.includes(":path*") || destination.includes(":path*"),
+      ),
+    ).toBe(false);
+  });
+
   it("uses clean URLs in the shared student navigation", () => {
     const sidebar = readFileSync("src/components/layout/AppSidebar.tsx", "utf8");
     const navMain = readFileSync("src/components/layout/NavMain.tsx", "utf8");
