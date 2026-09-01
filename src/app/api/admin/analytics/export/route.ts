@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { hasMinimumRole } from "@/lib/auth";
 import { parseDateRange, formatCsvResponse } from "@/lib/analytics";
-import { getOverviewData } from "../overview/route";
-import { getCompletionData } from "../completion/route";
-import { getDropoffData } from "../dropoff/route";
-import { getStudentsData } from "../students/route";
-import { getDifficultyData } from "../difficulty/route";
+import {
+  getCompletionData,
+  getDifficultyData,
+  getDropoffData,
+  getOverviewData,
+  getStudentsData,
+} from "@/lib/admin-analytics-data";
 import {
   getEngagedStudents,
   getEngagementByFeature,
