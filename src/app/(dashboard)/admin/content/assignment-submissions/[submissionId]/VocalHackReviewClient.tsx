@@ -77,8 +77,10 @@ function toEntry(c: VocalHackCorrection): CorrectionEntry {
 
 export function VocalHackReviewClient({
   submission,
+  returnHref,
 }: {
   submission: VocalHackReviewDto;
+  returnHref: string;
 }) {
   const router = useRouter();
   const [entries, setEntries] = useState<Record<string, CorrectionEntry[]>>(
@@ -200,7 +202,7 @@ export function VocalHackReviewClient({
         return;
       }
       toast.success("Review submitted — the student has been notified.");
-      router.push("/admin/content/assignment-submissions");
+      router.push(returnHref);
       router.refresh();
     } catch {
       setError("Network error — please try again.");

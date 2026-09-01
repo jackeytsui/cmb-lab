@@ -19,6 +19,7 @@ import {
   hasOverlappingRanges,
 } from "@/lib/assignment-scoring";
 import { isLoomUrl, sanitizeRecordingUrl } from "@/lib/recording-embed";
+import { StudentSubmissionRecording } from "@/components/assignments/StudentSubmissionRecording";
 
 export interface ReviewCorrectionDto extends RenderableCorrection {
   originalText: string;
@@ -37,6 +38,7 @@ export interface ReviewSentenceDto {
 
 export interface ReviewSubmissionDto {
   id: string;
+  assignmentType: "text_assignment" | "diary";
   /** Romanisation/tone language of the lesson (jyutping for Cantonese). */
   lang: "mandarin" | "cantonese";
   status: "submitted" | "assigned" | "in_review" | "reviewed";
@@ -131,8 +133,10 @@ function getSelectionOffsets(
 
 export function ReviewClient({
   submission,
+  returnHref,
 }: {
   submission: ReviewSubmissionDto;
+  returnHref: string;
 }) {
   const router = useRouter();
   const isRereview = submission.status === "reviewed";
@@ -353,7 +357,7 @@ export function ReviewClient({
         return;
       }
       toast.success(isRereview ? "Review updated" : "Review submitted");
-      router.push("/admin/content/assignment-submissions");
+      router.push(returnHref);
       router.refresh();
     } catch {
       toast.error("Failed to submit review");
@@ -449,19 +453,10 @@ export function ReviewClient({
       )}
 
       {submission.studentAudioUrl && (
-        <div className="rounded-lg border border-border bg-card p-5 space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">
-            Student&apos;s recording
-          </h2>
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-          <audio
-            controls
-            preload="metadata"
-            controlsList="nodownload"
-            src={submission.studentAudioUrl}
-            className="w-full"
-          />
-        </div>
+        <StudentSubmissionRecording
+          src={submission.studentAudioUrl}
+          sticky={submission.assignmentType === "diary"}
+        />
       )}
 
       {/* Sentences */}

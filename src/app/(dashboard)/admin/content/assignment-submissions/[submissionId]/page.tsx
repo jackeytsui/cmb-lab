@@ -23,16 +23,29 @@ import {
   VocalHackReviewClient,
   type VocalHackReviewDto,
 } from "./VocalHackReviewClient";
+import {
+  sanitizeAssignmentReviewReturnHref,
+  type AssignmentSubmissionSearchParams,
+} from "@/lib/assignment-review-navigation";
 
 interface PageProps {
   params: Promise<{ submissionId: string }>;
+  searchParams: Promise<AssignmentSubmissionSearchParams>;
 }
 
-export default async function AssignmentReviewPage({ params }: PageProps) {
-  const reviewer = await getAnyAssignmentReviewer();
+export default async function AssignmentReviewPage({
+  params,
+  searchParams,
+}: PageProps) {
+  const [reviewer, { submissionId }, rawSearchParams] = await Promise.all([
+    getAnyAssignmentReviewer(),
+    params,
+    searchParams,
+  ]);
   if (!reviewer) redirect("/home");
-
-  const { submissionId } = await params;
+  const returnHref = sanitizeAssignmentReviewReturnHref(
+    rawSearchParams.returnTo,
+  );
 
   const [row] = await db
     .select({
@@ -150,13 +163,16 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-6">
         <Link
-          href="/admin/content/assignment-submissions"
+          href={returnHref}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="w-4 h-4" />
           Back to Submissions
         </Link>
-        <VocalHackReviewClient submission={vocalDto} />
+        <VocalHackReviewClient
+          submission={vocalDto}
+          returnHref={returnHref}
+        />
       </div>
     );
   }
@@ -175,6 +191,8 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
 
   const dto: ReviewSubmissionDto = {
     id: row.submission.id,
+    assignmentType:
+      row.submission.assignmentType === "diary" ? "diary" : "text_assignment",
     lang,
     status: row.submission.status,
     submittedAt: row.submission.submittedAt?.toISOString() ?? null,
@@ -221,13 +239,13 @@ export default async function AssignmentReviewPage({ params }: PageProps) {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
       <Link
-        href="/admin/content/assignment-submissions"
+        href={returnHref}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="w-4 h-4" />
         Back to Submissions
       </Link>
-      <ReviewClient submission={dto} />
+      <ReviewClient submission={dto} returnHref={returnHref} />
     </div>
   );
 }

@@ -6,6 +6,10 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  buildAssignmentReviewHref,
+  type AssignmentSubmissionListState,
+} from "@/lib/assignment-review-navigation";
 
 interface SubmissionRow {
   id: string;
@@ -86,20 +90,24 @@ function reviewerLabel(name: string | null, email: string | null): string {
 export function AssignmentSubmissionsClient({
   currentUserId,
   courses,
+  initialFilters,
 }: {
   currentUserId: string;
   courses: Array<{ id: string; title: string }>;
+  initialFilters: AssignmentSubmissionListState;
 }) {
-  const [tab, setTab] = useState<"all" | "assigned">("all");
+  const [tab, setTab] = useState<"all" | "assigned">(initialFilters.tab);
   const [rows, setRows] = useState<SubmissionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewers, setReviewers] = useState<Reviewer[]>([]);
   const [assigning, setAssigning] = useState<string | null>(null);
 
-  const [typeFilter, setTypeFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [reviewerFilter, setReviewerFilter] = useState("");
-  const [courseFilter, setCourseFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState(initialFilters.type);
+  const [statusFilter, setStatusFilter] = useState(initialFilters.status);
+  const [reviewerFilter, setReviewerFilter] = useState(
+    initialFilters.reviewerId,
+  );
+  const [courseFilter, setCourseFilter] = useState(initialFilters.courseId);
 
   const fetchRows = useCallback(async () => {
     setLoading(true);
@@ -182,7 +190,11 @@ export function AssignmentSubmissionsClient({
       <div className="flex flex-wrap items-center gap-2">
         <select
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
+          onChange={(e) =>
+            setTypeFilter(
+              e.target.value as AssignmentSubmissionListState["type"],
+            )
+          }
           className={selectClass}
         >
           <option value="">All Types</option>
@@ -192,7 +204,11 @@ export function AssignmentSubmissionsClient({
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) =>
+            setStatusFilter(
+              e.target.value as AssignmentSubmissionListState["status"],
+            )
+          }
           className={selectClass}
         >
           <option value="">All Statuses</option>
@@ -359,7 +375,13 @@ export function AssignmentSubmissionsClient({
                     </td>
                     <td className="sticky right-0 z-10 border-l border-border bg-card px-4 py-3 group-hover:bg-muted/30">
                       <Link
-                        href={`/admin/content/assignment-submissions/${row.id}`}
+                        href={buildAssignmentReviewHref(row.id, {
+                          tab,
+                          type: typeFilter,
+                          status: statusFilter,
+                          reviewerId: reviewerFilter,
+                          courseId: courseFilter,
+                        })}
                         className={cn(
                           "inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold",
                           row.status === "reviewed"

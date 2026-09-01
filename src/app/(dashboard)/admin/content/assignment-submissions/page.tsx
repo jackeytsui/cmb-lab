@@ -4,12 +4,26 @@ import { db } from "@/db";
 import { courseLibraryCourses } from "@/db/schema";
 import { getAnyAssignmentReviewer } from "@/lib/assignment-review";
 import { AssignmentSubmissionsClient } from "./AssignmentSubmissionsClient";
+import {
+  parseAssignmentSubmissionListState,
+  type AssignmentSubmissionSearchParams,
+} from "@/lib/assignment-review-navigation";
 
-export default async function AssignmentSubmissionsPage() {
-  const reviewer = await getAnyAssignmentReviewer();
+interface PageProps {
+  searchParams: Promise<AssignmentSubmissionSearchParams>;
+}
+
+export default async function AssignmentSubmissionsPage({
+  searchParams,
+}: PageProps) {
+  const [reviewer, rawSearchParams] = await Promise.all([
+    getAnyAssignmentReviewer(),
+    searchParams,
+  ]);
   if (!reviewer) {
     redirect("/home");
   }
+  const initialFilters = parseAssignmentSubmissionListState(rawSearchParams);
 
   const courses = await db
     .select({
@@ -45,6 +59,7 @@ export default async function AssignmentSubmissionsPage() {
       <AssignmentSubmissionsClient
         currentUserId={reviewer.id}
         courses={courses}
+        initialFilters={initialFilters}
       />
     </div>
   );
