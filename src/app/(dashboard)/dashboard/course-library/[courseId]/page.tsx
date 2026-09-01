@@ -9,6 +9,7 @@ import {
   courseLibraryModules,
   courseLibraryLessons,
   courseLibraryLessonProgress,
+  courseLibraryModuleJumpGrants,
 } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
@@ -21,7 +22,10 @@ import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgre
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
-  searchParams?: Promise<{ notice?: string | string[] }>;
+  searchParams?: Promise<{
+    notice?: string | string[];
+    jumpTo?: string | string[];
+  }>;
 }
 
 export default async function CourseLibraryCourseDetailPage({
@@ -30,7 +34,11 @@ export default async function CourseLibraryCourseDetailPage({
 }: PageProps) {
   const [{ courseId }, query] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve<{ notice?: string | string[] }>({}),
+    searchParams ??
+      Promise.resolve<{
+        notice?: string | string[];
+        jumpTo?: string | string[];
+      }>({}),
   ]);
   const showProgressLockedNotice = hasCourseLibraryProgressLockedNotice(
     query.notice,
@@ -87,9 +95,9 @@ export default async function CourseLibraryCourseDetailPage({
           .orderBy(asc(courseLibraryLessons.sortOrder))
       : [];
 
-  const progressRows =
+  const [progressRows, jumpGrantRows] = await Promise.all([
     currentUser && !staffProgress && lessons.length > 0
-      ? await db
+      ? db
           .select({
             lessonId: courseLibraryLessonProgress.lessonId,
             completedAt: courseLibraryLessonProgress.completedAt,
@@ -104,7 +112,22 @@ export default async function CourseLibraryCourseDetailPage({
               ),
             ),
           )
-      : [];
+      : Promise.resolve([]),
+    currentUser && !staffProgress && moduleIds.length > 0
+      ? db
+          .select({ moduleId: courseLibraryModuleJumpGrants.moduleId })
+          .from(courseLibraryModuleJumpGrants)
+          .where(
+            and(
+              eq(courseLibraryModuleJumpGrants.userId, currentUser.id),
+              inArray(courseLibraryModuleJumpGrants.moduleId, moduleIds),
+            ),
+          )
+      : Promise.resolve([]),
+  ]);
+  const jumpGrantedModuleIds = new Set(
+    jumpGrantRows.map((grant) => grant.moduleId),
+  );
 
   const completedLessonIds = displayedCompletedLessonIds(
     currentUser?.role, lessons, progressRows,
@@ -131,6 +154,7 @@ export default async function CourseLibraryCourseDetailPage({
       lessonCount: modLessonIds.length,
       completedCount,
       isComplete: modLessonIds.length > 0 && completedCount === modLessonIds.length,
+      isJumpUnlocked: jumpGrantedModuleIds.has(mod.id),
     };
   });
 
@@ -255,8 +279,9 @@ export default async function CourseLibraryCourseDetailPage({
             <div>
               <p className="font-semibold">That lesson is not unlocked yet.</p>
               <p className="mt-0.5 text-sm leading-relaxed text-amber-900/80 dark:text-amber-100/80">
-                We brought you back to your current course position. Complete
-                the current stop to unlock what comes next.
+                We brought you back to the roadmap. You can complete the
+                current stop first, or confirm that you want to jump ahead
+                without changing your earlier lesson progress.
               </p>
             </div>
           </div>
@@ -276,6 +301,9 @@ export default async function CourseLibraryCourseDetailPage({
             stops={stops}
             currentIndex={currentIndex}
             staffProgress={staffProgress}
+            initialJumpTargetId={
+              typeof query.jumpTo === "string" ? query.jumpTo : null
+            }
           />
         )}
       </div>

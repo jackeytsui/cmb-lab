@@ -92,11 +92,30 @@ describe("staff course progress screens", () => {
 
   it("keeps the View As student roadmap incomplete", async () => {
     mocks.role = "student";
-    mocks.rows = [[course], modules, lessons, progress];
+    mocks.rows = [[course], modules, lessons, progress, []];
     const html = renderToStaticMarkup(await CourseLibraryCourseDetailPage({ params: Promise.resolve({ courseId: "course" }) }));
     expect(html).toContain("50%");
     expect(mocks.map).toHaveBeenCalledWith(expect.objectContaining({ currentIndex: 1, staffProgress: false }));
     expect(html).not.toContain("admin and coach access");
+  });
+
+  it("marks only the student's explicitly granted stop as jump-unlocked", async () => {
+    mocks.role = "student";
+    mocks.rows = [[course], modules, lessons, [], [{ moduleId: "last" }]];
+    renderToStaticMarkup(
+      await CourseLibraryCourseDetailPage({
+        params: Promise.resolve({ courseId: "course" }),
+      }),
+    );
+    expect(mocks.map).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentIndex: 0,
+        stops: expect.arrayContaining([
+          expect.objectContaining({ id: "first", isJumpUnlocked: false }),
+          expect.objectContaining({ id: "last", isJumpUnlocked: true }),
+        ]),
+      }),
+    );
   });
 
   it.each(["admin", "coach"])("marks all chapter lessons Done for %s", async (role) => {

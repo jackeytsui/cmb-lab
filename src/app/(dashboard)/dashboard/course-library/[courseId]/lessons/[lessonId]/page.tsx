@@ -154,7 +154,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
   if (!canSeeCourse(courseId)) notFound();
   if (!currentUser) notFound();
   if (!(await canUserAccessCourseLibraryLesson(currentUser, lessonId))) {
-    redirect(courseLibraryProgressLockedHref(courseId));
+    redirect(courseLibraryProgressLockedHref(courseId, row.moduleId));
   }
 
   const orderedLessons = await db

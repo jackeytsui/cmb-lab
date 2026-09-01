@@ -1,7 +1,14 @@
 export const COURSE_LIBRARY_PROGRESS_LOCKED_NOTICE = "progress-locked";
 
-export function courseLibraryProgressLockedHref(courseId: string): string {
-  return `/course-library/${encodeURIComponent(courseId)}?notice=${COURSE_LIBRARY_PROGRESS_LOCKED_NOTICE}`;
+export function courseLibraryProgressLockedHref(
+  courseId: string,
+  moduleId?: string,
+): string {
+  const params = new URLSearchParams({
+    notice: COURSE_LIBRARY_PROGRESS_LOCKED_NOTICE,
+  });
+  if (moduleId) params.set("jumpTo", moduleId);
+  return `/course-library/${encodeURIComponent(courseId)}?${params.toString()}`;
 }
 
 export function hasCourseLibraryProgressLockedNotice(

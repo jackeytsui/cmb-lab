@@ -3,6 +3,7 @@ import {
   courseLibraryCourses,
   courseLibraryLessonProgress,
   courseLibraryLessons,
+  courseLibraryModuleJumpGrants,
   courseLibraryModules,
 } from "@/db/schema";
 import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
@@ -32,6 +33,18 @@ async function canAccessResolvedModule(
   // their personal student progress. View As resolves to the student role, so
   // the student sequence is still faithfully enforced during QA.
   if (hasFullFeatureAccess(user.role)) return true;
+
+  const [jumpGrant] = await db
+    .select({ id: courseLibraryModuleJumpGrants.id })
+    .from(courseLibraryModuleJumpGrants)
+    .where(
+      and(
+        eq(courseLibraryModuleJumpGrants.userId, user.id),
+        eq(courseLibraryModuleJumpGrants.moduleId, target.moduleId),
+      ),
+    )
+    .limit(1);
+  if (jumpGrant) return true;
 
   const modules = await db
     .select({

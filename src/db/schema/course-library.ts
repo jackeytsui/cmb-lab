@@ -192,6 +192,31 @@ export const courseLibraryLessonProgress = pgTable(
   ],
 );
 
+// Explicit per-student exceptions to the sequential roadmap. A grant unlocks
+// only the selected module; it never changes lesson completion or implicitly
+// unlocks modules that come after it.
+export const courseLibraryModuleJumpGrants = pgTable(
+  "course_library_module_jump_grants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    moduleId: uuid("module_id")
+      .notNull()
+      .references(() => courseLibraryModules.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("course_library_module_jump_grants_user_module_unique").on(
+      table.userId,
+      table.moduleId,
+    ),
+    index("course_library_module_jump_grants_user_idx").on(table.userId),
+    index("course_library_module_jump_grants_module_idx").on(table.moduleId),
+  ],
+);
+
 /** Persistent scratchpad shown beside Course Library video lessons. */
 export const courseLibraryLessonNotes = pgTable(
   "course_library_lesson_notes",
@@ -276,6 +301,21 @@ export const courseLibraryModulesRelations = relations(
       references: [courseLibraryCourses.id],
     }),
     lessons: many(courseLibraryLessons),
+    jumpGrants: many(courseLibraryModuleJumpGrants),
+  }),
+);
+
+export const courseLibraryModuleJumpGrantsRelations = relations(
+  courseLibraryModuleJumpGrants,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [courseLibraryModuleJumpGrants.userId],
+      references: [users.id],
+    }),
+    module: one(courseLibraryModules, {
+      fields: [courseLibraryModuleJumpGrants.moduleId],
+      references: [courseLibraryModules.id],
+    }),
   }),
 );
 
@@ -339,6 +379,10 @@ export type NewCourseLibraryLesson = typeof courseLibraryLessons.$inferInsert;
 
 export type CourseLibraryLessonProgress =
   typeof courseLibraryLessonProgress.$inferSelect;
+export type CourseLibraryModuleJumpGrant =
+  typeof courseLibraryModuleJumpGrants.$inferSelect;
+export type NewCourseLibraryModuleJumpGrant =
+  typeof courseLibraryModuleJumpGrants.$inferInsert;
 export type CourseLibraryLessonNote =
   typeof courseLibraryLessonNotes.$inferSelect;
 

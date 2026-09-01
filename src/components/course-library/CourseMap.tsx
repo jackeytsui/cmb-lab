@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, Lock, Trophy } from "lucide-react";
@@ -15,6 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { jumpAheadToCourseLibraryModule } from "@/app/(dashboard)/dashboard/course-library/actions";
 
 export type CourseMapStyle = "lesson" | "cm_school" | "custom_goal";
 
@@ -27,6 +28,7 @@ export interface CourseMapStop {
   lessonCount: number;
   completedCount: number;
   isComplete: boolean;
+  isJumpUnlocked: boolean;
 }
 
 interface CourseMapProps {
@@ -36,6 +38,8 @@ interface CourseMapProps {
   currentIndex: number;
   /** Staff completion is an access override, not a learner achievement. */
   staffProgress?: boolean;
+  /** A directly requested locked stop that should open the confirmation. */
+  initialJumpTargetId?: string | null;
 }
 
 // Brand palette from the roadmap PDFs: dark-blue chapter lessons, light-blue
@@ -66,6 +70,17 @@ type StopState = "completed" | "current" | "unlocked" | "locked";
 interface WeekBand {
   label: string | null;
   items: { stop: CourseMapStop; index: number }[];
+}
+
+function isStopLocked(
+  stop: CourseMapStop,
+  index: number,
+  currentIndex: number,
+): boolean {
+  if (stop.isComplete || stop.isJumpUnlocked || index === currentIndex) {
+    return false;
+  }
+  return currentIndex !== -1 && index > currentIndex;
 }
 
 /** Group consecutive stops into week bands. A stop with an empty weekLabel
@@ -349,9 +364,22 @@ function BandGrid({
   );
 }
 
-export function CourseMap({ courseId, stops, currentIndex, staffProgress = false }: CourseMapProps) {
+export function CourseMap({
+  courseId,
+  stops,
+  currentIndex,
+  staffProgress = false,
+  initialJumpTargetId = null,
+}: CourseMapProps) {
   const router = useRouter();
-  const [jumpTarget, setJumpTarget] = useState<CourseMapStop | null>(null);
+  const [jumpTarget, setJumpTarget] = useState<CourseMapStop | null>(() => {
+    const index = stops.findIndex((stop) => stop.id === initialJumpTargetId);
+    return index >= 0 && isStopLocked(stops[index], index, currentIndex)
+      ? stops[index]
+      : null;
+  });
+  const [jumpError, setJumpError] = useState<string | null>(null);
+  const [isJumpPending, startJumpTransition] = useTransition();
   const jumpTriggerRef = useRef<HTMLButtonElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -392,7 +420,7 @@ export function CourseMap({ courseId, stops, currentIndex, staffProgress = false
   const stateFor = (index: number): StopState => {
     if (stops[index].isComplete) return "completed";
     if (index === currentIndex) return "current";
-    if (currentIndex !== -1 && index > currentIndex) return "locked";
+    if (isStopLocked(stops[index], index, currentIndex)) return "locked";
     return "unlocked";
   };
 
@@ -409,6 +437,7 @@ export function CourseMap({ courseId, stops, currentIndex, staffProgress = false
             stateFor={stateFor}
             onLockedTap={(stop, trigger) => {
               jumpTriggerRef.current = trigger;
+              setJumpError(null);
               setJumpTarget(stop);
             }}
           />
@@ -451,7 +480,12 @@ export function CourseMap({ courseId, stops, currentIndex, staffProgress = false
       {/* Soft-lock confirmation. */}
       <AlertDialog
         open={jumpTarget !== null}
-        onOpenChange={(open) => !open && setJumpTarget(null)}
+        onOpenChange={(open) => {
+          if (!open && !isJumpPending) {
+            setJumpError(null);
+            setJumpTarget(null);
+          }
+        }}
       >
         <AlertDialogContent
           onCloseAutoFocus={(event) => {
@@ -467,18 +501,37 @@ export function CourseMap({ courseId, stops, currentIndex, staffProgress = false
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {jumpError ? (
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {jumpError}
+            </p>
+          ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>Not yet</AlertDialogCancel>
+            <AlertDialogCancel disabled={isJumpPending}>
+              Not yet
+            </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                if (jumpTarget) {
-                  router.push(
-                    `/course-library/${courseId}/modules/${jumpTarget.id}`,
-                  );
-                }
+              disabled={isJumpPending}
+              onClick={(event) => {
+                event.preventDefault();
+                if (!jumpTarget || isJumpPending) return;
+                const moduleId = jumpTarget.id;
+                setJumpError(null);
+                startJumpTransition(async () => {
+                  const result = await jumpAheadToCourseLibraryModule(moduleId);
+                  if (!result.success) {
+                    setJumpError(result.error);
+                    return;
+                  }
+                  setJumpTarget(null);
+                  router.push(result.href);
+                });
               }}
             >
-              Jump ahead
+              {isJumpPending ? "Opening…" : "Jump ahead"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

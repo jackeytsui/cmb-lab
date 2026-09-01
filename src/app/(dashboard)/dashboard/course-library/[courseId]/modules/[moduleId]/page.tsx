@@ -115,7 +115,7 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
   if (!canSeeCourse(courseId)) notFound();
   if (!currentUser) notFound();
   if (!(await canUserAccessCourseLibraryModule(currentUser, moduleId))) {
-    redirect(courseLibraryProgressLockedHref(courseId));
+    redirect(courseLibraryProgressLockedHref(courseId, moduleId));
   }
 
   const mod = row.module;

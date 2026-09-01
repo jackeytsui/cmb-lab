@@ -96,10 +96,10 @@ describe("Course Library roadmap authorization", () => {
     expect(modulePage).toContain("if (!canSeeCourse(courseId)) notFound()");
     expect(lessonPage).toContain("if (!canSeeCourse(courseId)) notFound()");
     expect(modulePage).toContain(
-      "redirect(courseLibraryProgressLockedHref(courseId))",
+      "redirect(courseLibraryProgressLockedHref(courseId, moduleId))",
     );
     expect(lessonPage).toContain(
-      "redirect(courseLibraryProgressLockedHref(courseId))",
+      "redirect(courseLibraryProgressLockedHref(courseId, row.moduleId))",
     );
     expect(modulePage).toContain("if (!currentUser) notFound()");
     expect(lessonPage).toContain("if (!currentUser) notFound()");
@@ -132,6 +132,14 @@ describe("Course Library roadmap authorization", () => {
     expect(courseLibraryProgressLockedHref("course/with spaces")).toBe(
       "/course-library/course%2Fwith%20spaces?notice=progress-locked",
     );
+    expect(
+      courseLibraryProgressLockedHref(
+        "7ba50a56-a6ab-46ee-a690-e70a2a938859",
+        "87458074-d0b5-4830-9ac5-3832051b32aa",
+      ),
+    ).toBe(
+      "/course-library/7ba50a56-a6ab-46ee-a690-e70a2a938859?notice=progress-locked&jumpTo=87458074-d0b5-4830-9ac5-3832051b32aa",
+    );
     expect(hasCourseLibraryProgressLockedNotice("progress-locked")).toBe(
       true,
     );
@@ -140,6 +148,31 @@ describe("Course Library roadmap authorization", () => {
     ).toBe(true);
     expect(hasCourseLibraryProgressLockedNotice("ignored")).toBe(false);
     expect(hasCourseLibraryProgressLockedNotice(undefined)).toBe(false);
+  });
+
+  it("uses a separate one-stop grant without rewriting lesson progress", () => {
+    const accessSource = source(
+      "src/lib/course-library-lesson-access.ts",
+    );
+    const actionSource = source(
+      "src/app/(dashboard)/dashboard/course-library/actions.ts",
+    );
+    const migrationSource = source(
+      "src/db/migrations/0109_course_library_student_jumps.sql",
+    );
+
+    expect(accessSource).toContain("courseLibraryModuleJumpGrants");
+    expect(actionSource).toContain("student_jump_confirmation");
+    expect(actionSource).toContain(
+      "INSERT INTO course_library_module_jump_grants",
+    );
+    expect(actionSource).not.toContain("course_library_lesson_progress");
+    expect(migrationSource).toContain(
+      'CREATE TABLE IF NOT EXISTS "course_library_module_jump_grants"',
+    );
+    expect(migrationSource).toContain(
+      'UNIQUE INDEX IF NOT EXISTS "course_library_module_jump_grants_user_module_unique"',
+    );
   });
 
   it("uses the View As student identity for progress and interactive media", () => {
