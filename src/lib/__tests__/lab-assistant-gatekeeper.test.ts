@@ -86,6 +86,7 @@ describe("Lab Assistant gatekeeper (offline pipeline simulation)", () => {
     email: "mei.wong@example.com",
     fields: merged.fields,
     coach: { status: "assigned", name: "Jane Ip", source: "ghl" },
+    coachingAccess: { innerCircle: true, oneOnOne: true },
     ghlContactId: "c-course",
   });
 
@@ -110,6 +111,15 @@ describe("Lab Assistant gatekeeper (offline pipeline simulation)", () => {
     expect(context).not.toContain("c-course");
     expect(context).not.toContain("loc-course");
     expect(context).not.toContain("fld_");
+    expect(context).not.toContain("icgc_student");
+    expect(context).not.toContain("1on1_student");
+  });
+
+  it("gives the model human-readable coaching access without internal tags", () => {
+    expect(context).toContain("1:1 Coaching access: included");
+    expect(context).toContain(
+      "Inner Circle Group Coaching access: included",
+    );
   });
 
   it("never exposes sensitive business fields (default DENY)", () => {
@@ -129,6 +139,7 @@ describe("Lab Assistant gatekeeper (offline pipeline simulation)", () => {
       email: "new.student@example.com",
       fields: emptyConceptRecord<string | null>(null),
       coach: { status: "unassigned", name: null, source: "cmb_lab" },
+      coachingAccess: { innerCircle: false, oneOnOne: false },
       ghlContactId: null,
     });
     expect(emptyContext).toContain("not set");
@@ -142,6 +153,7 @@ describe("Lab Assistant gatekeeper (offline pipeline simulation)", () => {
       email: "ari@example.com",
       fields: emptyConceptRecord<string | null>(null),
       coach: { status: "unavailable", name: null, source: null },
+      coachingAccess: { innerCircle: false, oneOnOne: false },
       ghlContactId: null,
     });
     expect(unavailableContext).toContain("temporarily unavailable");

@@ -62,6 +62,12 @@ import {
   type LabAssistantMessage,
 } from "@/lib/lab-assistant/message";
 import { answerNeedsAutomaticHandoff } from "@/lib/lab-assistant/case-resolution";
+import {
+  canAccessRestrictedCoachingTopic,
+  detectRestrictedCoachingTopic,
+  filterKnowledgeForCoachingAccess,
+  restrictedCoachingReply,
+} from "@/lib/lab-assistant/entitlement-policy";
 
 export const maxDuration = 30;
 
@@ -322,12 +328,48 @@ export async function POST(request: Request) {
       return cannedResponse(SAFE_SCOPE_REPLY);
     }
 
+    const studentContextPromise = getStudentContext(user);
+    const restrictedCoachingTopic = detectRestrictedCoachingTopic(
+      messages.map(messageText).filter(Boolean),
+    );
+
+    // Private coaching access is decided before intent classification, RAG,
+    // or answer generation. A missing entitlement fails closed, so neither
+    // the model nor published knowledge content can disclose a join link.
+    if (restrictedCoachingTopic) {
+      const studentContext = await studentContextPromise;
+      if (
+        !canAccessRestrictedCoachingTopic(
+          studentContext.coachingAccess,
+          restrictedCoachingTopic,
+        )
+      ) {
+        if (!dryRun) {
+          logIntentScan(
+            user,
+            {
+              intent: "faq_navigation",
+              confidence: 1,
+              urgent: false,
+              handoffSummary:
+                "Student asked about a private coaching feature that is not included in their verified access.",
+            },
+            true,
+          );
+        }
+        return cannedResponse(
+          restrictedCoachingReply(restrictedCoachingTopic),
+          "awaiting_confirmation",
+        );
+      }
+    }
+
     // Direct coach-assignment questions use the server-verified CMB Lab
     // assignment and a deterministic reply. This keeps the most common coach
     // question correct even if the intent model is unavailable or GHL has a
     // stale Coach Name field.
     if (isDirectCoachLookup(latestUserText)) {
-      const studentContext = await getStudentContext(user);
+      const studentContext = await studentContextPromise;
       const coachScan: IntentScan = {
         intent: "my_coach",
         confidence: 1,
@@ -368,7 +410,7 @@ export async function POST(request: Request) {
     // Pipeline: intent scan + gatekept context (independent, run together)
     const [scan, studentContext] = await Promise.all([
       scanIntent(messages),
-      getStudentContext(user),
+      studentContextPromise,
     ]);
 
     const confident =
@@ -565,7 +607,11 @@ export async function POST(request: Request) {
                     "A short search phrase using the student's key topic",
                   ),
               }),
-              execute: async ({ query }) => searchKnowledgeBase(query),
+              execute: async ({ query }) =>
+                filterKnowledgeForCoachingAccess(
+                  await searchKnowledgeBase(query),
+                  studentContext.coachingAccess,
+                ),
             },
             escalateToTeam: {
               description:

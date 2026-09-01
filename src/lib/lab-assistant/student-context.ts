@@ -49,6 +49,8 @@ import {
   type CoachAssignment,
   type InternalCoachCandidate,
 } from "./coach-context";
+import { getLabAssistantCoachingAccess } from "./entitlements";
+import type { LabAssistantCoachingAccess } from "./entitlement-policy";
 
 /** Safety cap on how many linked sub-accounts are read per request. */
 const MAX_LINKS = 5;
@@ -62,6 +64,8 @@ export interface StudentContext {
   fields: Record<AllowlistedFieldConcept, string | null>;
   /** Canonical, explicitly resolved coach state for reliable student replies. */
   coach: CoachAssignment;
+  /** Private coaching products this signed-in account is entitled to access. */
+  coachingAccess: LabAssistantCoachingAccess;
   /**
    * Contact for task creation — the primary link (Course location when
    * present, email-verified); null when the student isn't linked.
@@ -125,6 +129,7 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
   const firstNameFallback = user.name?.trim().split(/\s+/)[0] ?? null;
   const sessionEmail = normalizeEmail(user.email);
   const internalCoachPromise = getInternalCoach(user);
+  const coachingAccessPromise = getLabAssistantCoachingAccess(user);
 
   // Ensure the user is linked to their GHL contact(s). Linking is BY EMAIL
   // (session email, server-side); getGhlContactLinks returns active links
@@ -146,7 +151,10 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
   }
 
   if (links.length === 0) {
-    const internalCoach = await internalCoachPromise;
+    const [internalCoach, coachingAccess] = await Promise.all([
+      internalCoachPromise,
+      coachingAccessPromise,
+    ]);
     const coach = resolveCoachAssignment({
       assignedCoachId: user.assignedCoachId,
       internalCoach: internalCoach.coach,
@@ -161,6 +169,7 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
         coach,
       ),
       coach,
+      coachingAccess,
       ghlContactId: null,
     };
   }
@@ -234,7 +243,10 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
   }
 
   const merged = mergeLinkResolutions(resolutions, { preferredLocationIds });
-  const internalCoach = await internalCoachPromise;
+  const [internalCoach, coachingAccess] = await Promise.all([
+    internalCoachPromise,
+    coachingAccessPromise,
+  ]);
   const coach = resolveCoachAssignment({
     assignedCoachId: user.assignedCoachId,
     internalCoach: internalCoach.coach,
@@ -274,6 +286,7 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
         status: coach.status,
         source: coach.source,
       },
+      coachingAccess,
       resolvedVia: Object.fromEntries(
         ALLOWLISTED_FIELD_CONCEPTS.map((concept) => [
           concept,
@@ -295,6 +308,7 @@ export async function getStudentContext(user: User): Promise<StudentContext> {
     email: user.email,
     fields,
     coach,
+    coachingAccess,
     ghlContactId,
   };
 }
