@@ -8,8 +8,13 @@ import { CompletionTable } from "./components/CompletionTable";
 import { DropoffTable } from "./components/DropoffTable";
 import { DifficultyTable } from "./components/DifficultyTable";
 import { AtRiskTable } from "./components/AtRiskTable";
+import { ManagementSummary } from "./components/ManagementSummary";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { cn } from "@/lib/utils";
+import {
+  hasWrittenFeedbackComment,
+  type CompletionRow,
+} from "@/lib/admin-analytics-model";
 import LtoReportClient from "@/app/(dashboard)/admin/accelerator/reports/LtoReportClient";
 
 interface DateRange {
@@ -83,15 +88,6 @@ interface FeedbackEntry {
   coachName: string | null;
 }
 
-interface CompletionRow {
-  courseId: string;
-  courseTitle: string;
-  totalLessons: number;
-  enrolledStudents: number;
-  completedStudents: number;
-  completionRate: number;
-}
-
 interface DropoffRow {
   lessonId: string;
   lessonTitle: string;
@@ -137,7 +133,15 @@ function exportUrl(metric: string, range: DateRange): string {
   return `/api/admin/analytics/export?${params.toString()}`;
 }
 
-function ExportButton({ metric, range, label }: { metric: string; range: DateRange; label: string }) {
+function ExportButton({
+  metric,
+  range,
+  label,
+}: {
+  metric: string;
+  range: DateRange;
+  label: string;
+}) {
   return (
     <a
       href={exportUrl(metric, range)}
@@ -188,8 +192,12 @@ export function AnalyticsDashboard() {
   const [overview, setOverview] = useState(EMPTY_OVERVIEW);
   const [engagementOverview, setEngagementOverview] =
     useState<EngagementOverview>(EMPTY_ENGAGEMENT);
-  const [engagementFeatures, setEngagementFeatures] = useState<FeatureRow[]>([]);
-  const [engagementStudents, setEngagementStudents] = useState<StudentRow[]>([]);
+  const [engagementFeatures, setEngagementFeatures] = useState<FeatureRow[]>(
+    []
+  );
+  const [engagementStudents, setEngagementStudents] = useState<StudentRow[]>(
+    []
+  );
   const [selectedFeatureKey, setSelectedFeatureKey] = useState<string>("all");
 
   // Course & lesson analytics
@@ -200,9 +208,14 @@ export function AnalyticsDashboard() {
 
   // Coaching feedback state
   const [coachRatings, setCoachRatings] = useState<CoachRating[]>([]);
-  const [sessionTypeRatings, setSessionTypeRatings] = useState<SessionTypeRating[]>([]);
+  const [sessionTypeRatings, setSessionTypeRatings] = useState<
+    SessionTypeRating[]
+  >([]);
   const [ratingTrends, setRatingTrends] = useState<RatingTrend[]>([]);
   const [recentFeedback, setRecentFeedback] = useState<FeedbackEntry[]>([]);
+  const [feedbackFilter, setFeedbackFilter] = useState<"comments" | "all">(
+    "comments"
+  );
 
   const fetchData = useCallback(async (range: DateRange) => {
     setLoading(true);
@@ -210,16 +223,23 @@ export function AnalyticsDashboard() {
     const qs = buildParams(range);
 
     try {
-      const [overviewRes, engagementRes, ratingsRes, completionRes, dropoffRes, difficultyRes, studentsRes] =
-        await Promise.all([
-          fetch(`/api/admin/analytics/overview${qs}`),
-          fetch(`/api/admin/analytics/engagement${qs}`),
-          fetch(`/api/admin/analytics/coaching-ratings`),
-          fetch(`/api/admin/analytics/completion${qs}`),
-          fetch(`/api/admin/analytics/dropoff${qs}`),
-          fetch(`/api/admin/analytics/difficulty${qs}`),
-          fetch(`/api/admin/analytics/students${qs}`),
-        ]);
+      const [
+        overviewRes,
+        engagementRes,
+        ratingsRes,
+        completionRes,
+        dropoffRes,
+        difficultyRes,
+        studentsRes,
+      ] = await Promise.all([
+        fetch(`/api/admin/analytics/overview${qs}`),
+        fetch(`/api/admin/analytics/engagement${qs}`),
+        fetch(`/api/admin/analytics/coaching-ratings${qs}`),
+        fetch(`/api/admin/analytics/completion${qs}`),
+        fetch(`/api/admin/analytics/dropoff${qs}`),
+        fetch(`/api/admin/analytics/difficulty${qs}`),
+        fetch(`/api/admin/analytics/students${qs}`),
+      ]);
 
       if (!overviewRes.ok && !engagementRes.ok) {
         setError("Failed to load analytics. Please retry.");
@@ -276,30 +296,54 @@ export function AnalyticsDashboard() {
         key: item.featureKey,
         label: item.featureLabel,
       })),
-    [engagementFeatures],
+    [engagementFeatures]
   );
 
   const filteredFeatures = useMemo(() => {
     if (selectedFeatureKey === "all") return engagementFeatures;
-    return engagementFeatures.filter((row) => row.featureKey === selectedFeatureKey);
+    return engagementFeatures.filter(
+      (row) => row.featureKey === selectedFeatureKey
+    );
   }, [engagementFeatures, selectedFeatureKey]);
 
   const filteredStudents = useMemo(() => {
     if (selectedFeatureKey === "all") return engagementStudents;
     const selectedFeatureLabel =
-      engagementFeatures.find((f) => f.featureKey === selectedFeatureKey)?.featureLabel ?? null;
+      engagementFeatures.find((f) => f.featureKey === selectedFeatureKey)
+        ?.featureLabel ?? null;
     if (!selectedFeatureLabel) return [];
-    return engagementStudents.filter((row) => row.topFeatureLabel === selectedFeatureLabel);
+    return engagementStudents.filter(
+      (row) => row.topFeatureLabel === selectedFeatureLabel
+    );
   }, [engagementFeatures, engagementStudents, selectedFeatureKey]);
+
+  const feedbackWithCommentsCount = useMemo(
+    () =>
+      recentFeedback.filter((entry) => hasWrittenFeedbackComment(entry.comment))
+        .length,
+    [recentFeedback]
+  );
+
+  const filteredRecentFeedback = useMemo(
+    () =>
+      feedbackFilter === "comments"
+        ? recentFeedback.filter((entry) =>
+            hasWrittenFeedbackComment(entry.comment)
+          )
+        : recentFeedback,
+    [feedbackFilter, recentFeedback]
+  );
 
   return (
     <div className="space-y-8">
       {/* Tab bar */}
       <div className="flex gap-1 rounded-lg border border-border bg-card p-1 w-fit">
-        {([
-          { key: "engagement", label: "Engagement" },
-          { key: "lto_progress", label: "LTO Progress" },
-        ] as const).map((tab) => (
+        {(
+          [
+            { key: "engagement", label: "Engagement" },
+            { key: "lto_progress", label: "LTO Progress" },
+          ] as const
+        ).map((tab) => (
           <button
             key={tab.key}
             type="button"
@@ -308,7 +352,7 @@ export function AnalyticsDashboard() {
               "rounded-md px-4 py-2 text-sm font-medium transition-colors",
               activeTab === tab.key
                 ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
             )}
           >
             {tab.label}
@@ -317,395 +361,593 @@ export function AnalyticsDashboard() {
       </div>
 
       {/* LTO Progress tab */}
-      {activeTab === "lto_progress" && (
-        <LtoReportClient />
-      )}
+      {activeTab === "lto_progress" && <LtoReportClient />}
 
       {/* Engagement tab — existing analytics content */}
       {activeTab !== "lto_progress" && (
-      <>
-      <DateRangeFilter onChange={setDateRange} />
+        <>
+          <DateRangeFilter onChange={setDateRange} />
 
-      {error && <ErrorAlert message={error} onRetry={() => fetchData(dateRange)} />}
+          {error && (
+            <ErrorAlert message={error} onRetry={() => fetchData(dateRange)} />
+          )}
 
-      {/* Overview */}
-      <section>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Overview</h2>
-          <ExportButton metric="overview" range={dateRange} label="Export CSV" />
-        </div>
-        <OverviewCards {...overview} loading={loading} />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Users tagged <code>analytics_whitelist</code> or <code>analytics-whitelist</code> are excluded.
-        </p>
-      </section>
+          <ManagementSummary
+            overview={overview}
+            engagement={engagementOverview}
+            completion={completion}
+            dropoff={dropoff}
+            atRiskCount={atRisk.length}
+            loading={loading}
+          />
 
-      {/* Course Completion */}
-      <section>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Course Completion</h2>
-          <ExportButton metric="completion" range={dateRange} label="Export CSV" />
-        </div>
-        <CompletionTable data={completion} loading={loading} />
-      </section>
-
-      {/* Lesson Drop-off */}
-      <section>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Lesson Drop-off</h2>
-          <ExportButton metric="dropoff" range={dateRange} label="Export CSV" />
-        </div>
-        <DropoffTable data={dropoff} loading={loading} />
-      </section>
-
-      {/* Lesson Difficulty */}
-      <section>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Lesson Difficulty</h2>
-          <ExportButton metric="difficulty" range={dateRange} label="Export CSV" />
-        </div>
-        <DifficultyTable data={difficulty} loading={loading} />
-      </section>
-
-      {/* At-Risk Students */}
-      <section>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">At-Risk Students</h2>
-          <ExportButton metric="students" range={dateRange} label="Export CSV" />
-        </div>
-        <AtRiskTable data={atRisk} loading={loading} />
-      </section>
-
-      {/* Most Engaged Students */}
-      <section>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Most Engaged Students</h2>
-          <ExportButton metric="engagement_students" range={dateRange} label="Export CSV" />
-        </div>
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left">Student</th>
-                <th className="px-3 py-2 text-left">Events</th>
-                <th className="px-3 py-2 text-left">Actions</th>
-                <th className="px-3 py-2 text-left">Sessions</th>
-                <th className="px-3 py-2 text-left">Minutes</th>
-                <th className="px-3 py-2 text-left">Top Feature</th>
-                <th className="px-3 py-2 text-left">Last Activity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredStudents.slice(0, 15).map((row) => (
-                <tr key={row.userId} className="border-t border-border">
-                  <td className="px-3 py-2">
-                    <div className="font-medium text-foreground">{row.name || "Student"}</div>
-                    <div className="text-xs text-muted-foreground">{row.email}</div>
-                  </td>
-                  <td className="px-3 py-2 text-foreground">{row.totalEvents}</td>
-                  <td className="px-3 py-2 text-foreground">{row.actions}</td>
-                  <td className="px-3 py-2 text-foreground">{row.sessions}</td>
-                  <td className="px-3 py-2 text-foreground">{row.totalMinutes}</td>
-                  <td className="px-3 py-2 text-foreground">{row.topFeatureLabel ?? "N/A"}</td>
-                  <td className="px-3 py-2 text-foreground">
-                    {row.lastActivityAt ? new Date(row.lastActivityAt).toLocaleString() : "Never"}
-                  </td>
-                </tr>
-              ))}
-              {filteredStudents.length === 0 && (
-                <tr>
-                  <td className="px-3 py-6 text-center text-muted-foreground" colSpan={7}>
-                    No student engagement data for the selected filter.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Feature Engagement */}
-      <section>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-foreground">Released Feature Engagement</h2>
-          <div className="flex items-center gap-2">
-            <label htmlFor="feature-filter" className="text-sm text-muted-foreground">
-              Feature
-            </label>
-            <select
-              id="feature-filter"
-              value={selectedFeatureKey}
-              onChange={(e) => setSelectedFeatureKey(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-            >
-              <option value="all">All features</option>
-              {featureOptions.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <ExportButton metric="engagement_features" range={dateRange} label="Features CSV" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="rounded-lg border border-border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Active Students</p>
-            <p className="mt-1 text-xl font-semibold text-foreground">{engagementOverview.activeStudents}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Total Events</p>
-            <p className="mt-1 text-xl font-semibold text-foreground">{engagementOverview.totalEvents}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Total Session Minutes</p>
-            <p className="mt-1 text-xl font-semibold text-foreground">{engagementOverview.totalMinutes}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Avg Active Minutes / Active Student</p>
-            <p className="mt-1 text-xl font-semibold text-foreground">
-              {engagementOverview.avgActiveMinutesPerActiveStudent}
+          {/* Overview */}
+          <section>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-foreground">
+                Student Activation Detail
+              </h2>
+              <ExportButton
+                metric="overview"
+                range={dateRange}
+                label="Export CSV"
+              />
+            </div>
+            <OverviewCards {...overview} loading={loading} />
+            <p className="mt-2 text-xs text-muted-foreground">
+              Users tagged <code>analytics_whitelist</code> or{" "}
+              <code>analytics-whitelist</code> are excluded.
             </p>
-          </div>
-        </div>
+          </section>
 
-        <div className="mt-4 overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left">Feature</th>
-                <th className="px-3 py-2 text-left">Active Students</th>
-                <th className="px-3 py-2 text-left">Events</th>
-                <th className="px-3 py-2 text-left">Actions</th>
-                <th className="px-3 py-2 text-left">Sessions</th>
-                <th className="px-3 py-2 text-left">Avg Session (min)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredFeatures.map((row) => (
-                <tr key={row.featureKey} className="border-t border-border">
-                  <td className="px-3 py-2 text-foreground">{row.featureLabel}</td>
-                  <td className="px-3 py-2 text-foreground">{row.activeStudents}</td>
-                  <td className="px-3 py-2 text-foreground">{row.totalEvents}</td>
-                  <td className="px-3 py-2 text-foreground">{row.actions}</td>
-                  <td className="px-3 py-2 text-foreground">{row.sessions}</td>
-                  <td className="px-3 py-2 text-foreground">{row.avgSessionMinutes}</td>
-                </tr>
-              ))}
-              {filteredFeatures.length === 0 && (
-                <tr>
-                  <td className="px-3 py-6 text-center text-muted-foreground" colSpan={6}>
-                    No feature engagement data for the selected filter.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Coaching Session Feedback */}
-      <section>
-        <h2 className="mb-4 text-lg font-semibold text-foreground">Coaching Session Feedback</h2>
-
-        {/* Summary cards: per session type */}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3 mb-4">
-          {sessionTypeRatings.map((st) => (
-            <div key={st.sessionType} className="rounded-lg border border-border bg-card p-3">
-              <p className="text-xs text-muted-foreground">
-                {st.sessionType === "one_on_one" ? "1:1 Coaching" : "Inner Circle"}
-              </p>
-              <div className="mt-1 flex items-center gap-2">
-                <p className="text-xl font-semibold text-foreground">
-                  {st.avgRating !== null ? st.avgRating.toFixed(1) : "N/A"}
+          {/* Course Completion */}
+          <section>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Course Completion
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Main programs stay separate; customized courses are summarized
+                  in one row.
                 </p>
-                <div className="flex items-center gap-0.5">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star
-                      key={s}
-                      className={cn(
-                        "h-3.5 w-3.5",
-                        st.avgRating !== null && s <= Math.round(st.avgRating)
-                          ? "fill-amber-400 text-amber-400"
-                          : "fill-none text-muted-foreground/40",
-                      )}
-                    />
+              </div>
+              <ExportButton
+                metric="completion"
+                range={dateRange}
+                label="Export CSV"
+              />
+            </div>
+            <CompletionTable data={completion} loading={loading} />
+          </section>
+
+          {/* Lesson Drop-off */}
+          <section>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Student Drop-off Points
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  CMB Lab and migrated GHL lesson starts that students did not
+                  complete.
+                </p>
+              </div>
+              <ExportButton
+                metric="dropoff"
+                range={dateRange}
+                label="Export CSV"
+              />
+            </div>
+            <DropoffTable data={dropoff} loading={loading} />
+          </section>
+
+          {/* Lesson Difficulty */}
+          <section>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-foreground">
+                Lesson Difficulty
+              </h2>
+              <ExportButton
+                metric="difficulty"
+                range={dateRange}
+                label="Export CSV"
+              />
+            </div>
+            <DifficultyTable data={difficulty} loading={loading} />
+          </section>
+
+          {/* At-Risk Students */}
+          <section>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Students Needing Attention
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  No recorded activity or inactive for at least seven days.
+                </p>
+              </div>
+              <ExportButton
+                metric="students"
+                range={dateRange}
+                label="Export CSV"
+              />
+            </div>
+            <AtRiskTable data={atRisk} loading={loading} />
+          </section>
+
+          {/* Most Engaged Students */}
+          <section>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-foreground">
+                Most Engaged Students
+              </h2>
+              <ExportButton
+                metric="engagement_students"
+                range={dateRange}
+                label="Export CSV"
+              />
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Student</th>
+                    <th className="px-3 py-2 text-left">Events</th>
+                    <th className="px-3 py-2 text-left">Actions</th>
+                    <th className="px-3 py-2 text-left">Sessions</th>
+                    <th className="px-3 py-2 text-left">Minutes</th>
+                    <th className="px-3 py-2 text-left">Top Feature</th>
+                    <th className="px-3 py-2 text-left">Last Activity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStudents.slice(0, 15).map((row) => (
+                    <tr key={row.userId} className="border-t border-border">
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-foreground">
+                          {row.name || "Student"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {row.email}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.totalEvents}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.actions}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.sessions}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.totalMinutes}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.topFeatureLabel ?? "N/A"}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.lastActivityAt
+                          ? new Date(row.lastActivityAt).toLocaleString()
+                          : "Never"}
+                      </td>
+                    </tr>
                   ))}
-                </div>
-                <span className="text-xs text-muted-foreground">({st.totalRatings} reviews)</span>
+                  {filteredStudents.length === 0 && (
+                    <tr>
+                      <td
+                        className="px-3 py-6 text-center text-muted-foreground"
+                        colSpan={7}
+                      >
+                        No student engagement data for the selected filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Feature Engagement */}
+          <section>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-foreground">
+                Released Feature Engagement
+              </h2>
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="feature-filter"
+                  className="text-sm text-muted-foreground"
+                >
+                  Feature
+                </label>
+                <select
+                  id="feature-filter"
+                  value={selectedFeatureKey}
+                  onChange={(e) => setSelectedFeatureKey(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                >
+                  <option value="all">All features</option>
+                  {featureOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <ExportButton
+                  metric="engagement_features"
+                  range={dateRange}
+                  label="Features CSV"
+                />
               </div>
             </div>
-          ))}
-          {sessionTypeRatings.length === 0 && (
-            <div className="rounded-lg border border-border bg-card p-3 col-span-3">
-              <p className="text-sm text-muted-foreground text-center py-2">No feedback data yet.</p>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="rounded-lg border border-border bg-card p-3">
+                <p className="text-xs text-muted-foreground">Active Students</p>
+                <p className="mt-1 text-xl font-semibold text-foreground">
+                  {engagementOverview.activeStudents}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-3">
+                <p className="text-xs text-muted-foreground">Total Events</p>
+                <p className="mt-1 text-xl font-semibold text-foreground">
+                  {engagementOverview.totalEvents}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-3">
+                <p className="text-xs text-muted-foreground">
+                  Total Session Minutes
+                </p>
+                <p className="mt-1 text-xl font-semibold text-foreground">
+                  {engagementOverview.totalMinutes}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-3">
+                <p className="text-xs text-muted-foreground">
+                  Avg Active Minutes / Active Student
+                </p>
+                <p className="mt-1 text-xl font-semibold text-foreground">
+                  {engagementOverview.avgActiveMinutesPerActiveStudent}
+                </p>
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* Per-coach breakdown */}
-        {coachRatings.length > 0 && (
-          <div className="mb-4 overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left">Coach</th>
-                  <th className="px-3 py-2 text-left">Avg Rating</th>
-                  <th className="px-3 py-2 text-left">Total Reviews</th>
-                </tr>
-              </thead>
-              <tbody>
-                {coachRatings.map((row) => (
-                  <tr key={row.coachId} className="border-t border-border">
-                    <td className="px-3 py-2">
-                      <div className="font-medium text-foreground">{row.coachName || "Coach"}</div>
-                      <div className="text-xs text-muted-foreground">{row.coachEmail}</div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-foreground">
-                          {row.avgRating !== null ? row.avgRating.toFixed(1) : "N/A"}
-                        </span>
-                        <div className="flex items-center gap-0.5">
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <Star
-                              key={s}
-                              className={cn(
-                                "h-3 w-3",
-                                row.avgRating !== null && s <= Math.round(row.avgRating)
-                                  ? "fill-amber-400 text-amber-400"
-                                  : "fill-none text-muted-foreground/40",
-                              )}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-foreground">{row.totalRatings}</td>
+            <div className="mt-4 overflow-hidden rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Feature</th>
+                    <th className="px-3 py-2 text-left">Active Students</th>
+                    <th className="px-3 py-2 text-left">Events</th>
+                    <th className="px-3 py-2 text-left">Actions</th>
+                    <th className="px-3 py-2 text-left">Sessions</th>
+                    <th className="px-3 py-2 text-left">Avg Session (min)</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {filteredFeatures.map((row) => (
+                    <tr key={row.featureKey} className="border-t border-border">
+                      <td className="px-3 py-2 text-foreground">
+                        {row.featureLabel}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.activeStudents}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.totalEvents}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.actions}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.sessions}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {row.avgSessionMinutes}
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredFeatures.length === 0 && (
+                    <tr>
+                      <td
+                        className="px-3 py-6 text-center text-muted-foreground"
+                        colSpan={6}
+                      >
+                        No feature engagement data for the selected filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
-        {/* Monthly trends */}
-        {ratingTrends.length > 0 && (
-          <div className="mb-4 overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left">Month</th>
-                  <th className="px-3 py-2 text-left">Avg Rating</th>
-                  <th className="px-3 py-2 text-left">Total Reviews</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ratingTrends.map((row) => (
-                  <tr key={row.month} className="border-t border-border">
-                    <td className="px-3 py-2 text-foreground">{row.month}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-foreground">
-                          {row.avgRating !== null ? row.avgRating.toFixed(1) : "N/A"}
-                        </span>
-                        <div className="flex items-center gap-0.5">
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <Star
-                              key={s}
-                              className={cn(
-                                "h-3 w-3",
-                                row.avgRating !== null && s <= Math.round(row.avgRating)
-                                  ? "fill-amber-400 text-amber-400"
-                                  : "fill-none text-muted-foreground/40",
-                              )}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-foreground">{row.totalRatings}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+          {/* Coaching Session Feedback */}
+          <section>
+            <h2 className="mb-4 text-lg font-semibold text-foreground">
+              Coaching Session Feedback
+            </h2>
 
-        {/* Recent individual feedback */}
-        <h3 className="mb-2 text-sm font-semibold text-foreground">Recent Student Feedback</h3>
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left">Student</th>
-                <th className="px-3 py-2 text-left">Session</th>
-                <th className="px-3 py-2 text-left">Type</th>
-                <th className="px-3 py-2 text-left">Rating</th>
-                <th className="px-3 py-2 text-left">Comment</th>
-                <th className="px-3 py-2 text-left">Coach</th>
-                <th className="px-3 py-2 text-left">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentFeedback.map((fb) => (
-                <tr key={fb.id} className="border-t border-border">
-                  <td className="px-3 py-2">
-                    <div className="font-medium text-foreground">{fb.studentName || "Student"}</div>
-                    <div className="text-xs text-muted-foreground">{fb.studentEmail}</div>
-                  </td>
-                  <td className="px-3 py-2 text-foreground max-w-[150px] truncate">{fb.sessionTitle}</td>
-                  <td className="px-3 py-2">
-                    <span className={cn(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                      fb.sessionType === "one_on_one"
-                        ? "bg-blue-500/10 text-blue-400"
-                        : "bg-violet-500/10 text-violet-400",
-                    )}>
-                      {fb.sessionType === "one_on_one" ? "1:1" : "Inner Circle"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
+            {/* Summary cards: per session type */}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3 mb-4">
+              {sessionTypeRatings.map((st) => (
+                <div
+                  key={st.sessionType}
+                  className="rounded-lg border border-border bg-card p-3"
+                >
+                  <p className="text-xs text-muted-foreground">
+                    {st.sessionType === "one_on_one"
+                      ? "1:1 Coaching"
+                      : "Inner Circle"}
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="text-xl font-semibold text-foreground">
+                      {st.avgRating !== null ? st.avgRating.toFixed(1) : "N/A"}
+                    </p>
                     <div className="flex items-center gap-0.5">
                       {[1, 2, 3, 4, 5].map((s) => (
                         <Star
                           key={s}
                           className={cn(
-                            "h-3 w-3",
-                            s <= fb.rating
+                            "h-3.5 w-3.5",
+                            st.avgRating !== null &&
+                              s <= Math.round(st.avgRating)
                               ? "fill-amber-400 text-amber-400"
-                              : "fill-none text-muted-foreground/40",
+                              : "fill-none text-muted-foreground/40"
                           )}
                         />
                       ))}
                     </div>
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground max-w-[200px]">
-                    {fb.comment ? (
-                      <span className="italic text-foreground/80 line-clamp-2">&ldquo;{fb.comment}&rdquo;</span>
-                    ) : (
-                      <span className="text-muted-foreground/50">No comment</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-foreground">{fb.coachName || "Coach"}</td>
-                  <td className="px-3 py-2 text-foreground text-xs">
-                    {new Date(fb.createdAt).toLocaleDateString()}
-                  </td>
-                </tr>
+                    <span className="text-xs text-muted-foreground">
+                      ({st.totalRatings} reviews)
+                    </span>
+                  </div>
+                </div>
               ))}
-              {recentFeedback.length === 0 && (
-                <tr>
-                  <td className="px-3 py-6 text-center text-muted-foreground" colSpan={7}>
-                    No student feedback submitted yet.
-                  </td>
-                </tr>
+              {sessionTypeRatings.length === 0 && (
+                <div className="rounded-lg border border-border bg-card p-3 col-span-3">
+                  <p className="text-sm text-muted-foreground text-center py-2">
+                    No feedback data yet.
+                  </p>
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      </>
+            </div>
+
+            {/* Per-coach breakdown */}
+            {coachRatings.length > 0 && (
+              <div className="mb-4 overflow-hidden rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Coach</th>
+                      <th className="px-3 py-2 text-left">Avg Rating</th>
+                      <th className="px-3 py-2 text-left">Total Reviews</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coachRatings.map((row) => (
+                      <tr key={row.coachId} className="border-t border-border">
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-foreground">
+                            {row.coachName || "Coach"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {row.coachEmail}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-foreground">
+                              {row.avgRating !== null
+                                ? row.avgRating.toFixed(1)
+                                : "N/A"}
+                            </span>
+                            <div className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star
+                                  key={s}
+                                  className={cn(
+                                    "h-3 w-3",
+                                    row.avgRating !== null &&
+                                      s <= Math.round(row.avgRating)
+                                      ? "fill-amber-400 text-amber-400"
+                                      : "fill-none text-muted-foreground/40"
+                                  )}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-foreground">
+                          {row.totalRatings}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Monthly trends */}
+            {ratingTrends.length > 0 && (
+              <div className="mb-4 overflow-hidden rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Month</th>
+                      <th className="px-3 py-2 text-left">Avg Rating</th>
+                      <th className="px-3 py-2 text-left">Total Reviews</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ratingTrends.map((row) => (
+                      <tr key={row.month} className="border-t border-border">
+                        <td className="px-3 py-2 text-foreground">
+                          {row.month}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-foreground">
+                              {row.avgRating !== null
+                                ? row.avgRating.toFixed(1)
+                                : "N/A"}
+                            </span>
+                            <div className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star
+                                  key={s}
+                                  className={cn(
+                                    "h-3 w-3",
+                                    row.avgRating !== null &&
+                                      s <= Math.round(row.avgRating)
+                                      ? "fill-amber-400 text-amber-400"
+                                      : "fill-none text-muted-foreground/40"
+                                  )}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-foreground">
+                          {row.totalRatings}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Recent individual feedback */}
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Recent Student Feedback
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {feedbackWithCommentsCount} with comments ·{" "}
+                  {recentFeedback.length} total
+                </p>
+              </div>
+              <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1">
+                {(
+                  [
+                    { key: "comments", label: "Comments only" },
+                    { key: "all", label: "All ratings" },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setFeedbackFilter(option.key)}
+                    aria-pressed={feedbackFilter === option.key}
+                    className={cn(
+                      "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                      feedbackFilter === option.key
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Student</th>
+                    <th className="px-3 py-2 text-left">Session</th>
+                    <th className="px-3 py-2 text-left">Type</th>
+                    <th className="px-3 py-2 text-left">Rating</th>
+                    <th className="px-3 py-2 text-left">Comment</th>
+                    <th className="px-3 py-2 text-left">Coach</th>
+                    <th className="px-3 py-2 text-left">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRecentFeedback.map((fb) => (
+                    <tr key={fb.id} className="border-t border-border">
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-foreground">
+                          {fb.studentName || "Student"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {fb.studentEmail}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-foreground max-w-[150px] truncate">
+                        {fb.sessionTitle}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            fb.sessionType === "one_on_one"
+                              ? "bg-blue-500/10 text-blue-400"
+                              : "bg-violet-500/10 text-violet-400"
+                          )}
+                        >
+                          {fb.sessionType === "one_on_one"
+                            ? "1:1"
+                            : "Inner Circle"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={cn(
+                                "h-3 w-3",
+                                s <= fb.rating
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "fill-none text-muted-foreground/40"
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground max-w-[200px]">
+                        {fb.comment ? (
+                          <span className="italic text-foreground/80 line-clamp-2">
+                            &ldquo;{fb.comment}&rdquo;
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50">
+                            No comment
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {fb.coachName || "Coach"}
+                      </td>
+                      <td className="px-3 py-2 text-foreground text-xs">
+                        {new Date(fb.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredRecentFeedback.length === 0 && (
+                    <tr>
+                      <td
+                        className="px-3 py-6 text-center text-muted-foreground"
+                        colSpan={7}
+                      >
+                        {feedbackFilter === "comments"
+                          ? "No written comments in this period. Switch to All ratings to see rating-only feedback."
+                          : "No student feedback submitted in this period."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
       )}
     </div>
   );

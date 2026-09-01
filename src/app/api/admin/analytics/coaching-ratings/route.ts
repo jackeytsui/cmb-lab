@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import {
@@ -6,10 +6,21 @@ import {
   coachingSessions,
   users,
 } from "@/db/schema";
-import { and, eq, avg, count, desc, sql, isNull } from "drizzle-orm";
+import {
+  and,
+  eq,
+  avg,
+  count,
+  desc,
+  gte,
+  lte,
+  sql,
+  isNull,
+} from "drizzle-orm";
 import { hasMinimumRole } from "@/lib/auth";
 import { alias } from "drizzle-orm/pg-core";
 import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
+import { parseDateRange } from "@/lib/analytics";
 
 /**
  * GET /api/admin/analytics/coaching-ratings
@@ -19,7 +30,7 @@ import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
  * Excludes whitelisted users.
  * Requires admin or coach role.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,12 +43,17 @@ export async function GET() {
 
   // Alias for the student who submitted the rating
   const ratingUser = alias(users, "ratingUser");
+  const { from, to } = parseDateRange(new URL(request.url).searchParams);
+  const dateConditions = [];
+  if (from) dateConditions.push(gte(coachingSessionRatings.createdAt, from));
+  if (to) dateConditions.push(lte(coachingSessionRatings.createdAt, to));
 
   // Common filter: only students, not whitelisted
   const studentOnlyFilter = and(
     eq(ratingUser.role, "student"),
     isNull(ratingUser.deletedAt),
     excludeWhitelistedUsersSql(ratingUser.id),
+    ...dateConditions,
   );
 
   // Average rating per coach (only from students)
@@ -124,6 +140,7 @@ export async function GET() {
         eq(studentUsers.role, "student"),
         isNull(studentUsers.deletedAt),
         excludeWhitelistedUsersSql(studentUsers.id),
+        ...dateConditions,
       ),
     )
     .orderBy(desc(coachingSessionRatings.createdAt))

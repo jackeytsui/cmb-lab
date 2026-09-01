@@ -19,7 +19,7 @@ const cards = [
   },
   {
     key: "activeStudents",
-    label: "Active Students (7d)",
+    label: "Active in Selected Period",
     accent: "text-emerald-500",
     border: "border-emerald-500/30",
   },

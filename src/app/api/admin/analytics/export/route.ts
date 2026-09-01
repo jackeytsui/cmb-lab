@@ -68,15 +68,19 @@ export async function GET(request: NextRequest) {
         const data = await getCompletionData(from, to);
         headers = [
           "Course",
+          "Courses Summarized",
           "Total Lessons",
-          "Enrolled",
+          "Course Accesses",
+          "Active in Selected Period",
           "Completed",
           "Completion Rate",
         ];
         rows = data.map((row) => [
           row.courseTitle,
+          row.courseCount,
           row.totalLessons,
           row.enrolledStudents,
+          row.activeStudents,
           row.completedStudents,
           row.completionRate,
         ]);
@@ -91,6 +95,7 @@ export async function GET(request: NextRequest) {
           "Course",
           "Started",
           "Completed",
+          "Dropped",
           "Drop-off Rate",
         ];
         rows = data.map((row) => [
@@ -99,6 +104,7 @@ export async function GET(request: NextRequest) {
           row.courseTitle,
           row.startedCount,
           row.completedCount,
+          row.dropoffCount,
           row.dropoffRate,
         ]);
         break;

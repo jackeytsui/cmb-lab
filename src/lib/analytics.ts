@@ -12,7 +12,16 @@ export function parseDateRange(searchParams: URLSearchParams): {
   const toStr = searchParams.get("to");
 
   const from = fromStr ? new Date(fromStr) : null;
-  const to = toStr ? new Date(toStr) : null;
+  // Date inputs represent whole calendar days. Without an explicit time,
+  // `new Date("YYYY-MM-DD")` lands at midnight and silently excludes the rest
+  // of the selected "to" day from every dashboard metric.
+  const to = toStr
+    ? new Date(
+        /^\d{4}-\d{2}-\d{2}$/.test(toStr)
+          ? `${toStr}T23:59:59.999Z`
+          : toStr,
+      )
+    : null;
 
   // Validate parsed dates
   return {

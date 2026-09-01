@@ -69,7 +69,7 @@ export function AtRiskTable({ data, loading }: AtRiskTableProps) {
             <th className="px-4 py-3 font-medium">Email</th>
             <th className="px-4 py-3 font-medium">Last Activity</th>
             <th className="px-4 py-3 font-medium">Days Inactive</th>
-            <th className="px-4 py-3 font-medium">Lessons Completed</th>
+            <th className="px-4 py-3 font-medium">Lessons Completed in Period</th>
           </tr>
         </thead>
         <tbody>
