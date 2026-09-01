@@ -16,6 +16,12 @@ export type StudentCourseLibraryProgressModule = {
   shortTitle: string | null;
   lessonIds: string[];
   completedLessonIds: string[];
+  lessons: Array<{
+    id: string;
+    title: string;
+    lessonType: string;
+    isComplete: boolean;
+  }>;
 };
 
 export type StudentCourseLibraryProgressCourse = {
@@ -44,6 +50,8 @@ export async function loadStudentCourseLibraryProgress(student: {
       moduleTitle: courseLibraryModules.title,
       moduleShortTitle: courseLibraryModules.shortTitle,
       lessonId: courseLibraryLessons.id,
+      lessonTitle: courseLibraryLessons.title,
+      lessonType: courseLibraryLessons.lessonType,
       completedAt: courseLibraryLessonProgress.completedAt,
     })
     .from(courseLibraryCourses)
@@ -102,12 +110,19 @@ export async function loadStudentCourseLibraryProgress(student: {
         shortTitle: row.moduleShortTitle,
         lessonIds: [],
         completedLessonIds: [],
+        lessons: [],
       };
       course.modules.push(chapter);
     }
 
     if (!row.lessonId) continue;
     chapter.lessonIds.push(row.lessonId);
+    chapter.lessons.push({
+      id: row.lessonId,
+      title: row.lessonTitle ?? "Untitled lesson",
+      lessonType: row.lessonType ?? "text",
+      isComplete: Boolean(row.completedAt),
+    });
     if (row.completedAt) chapter.completedLessonIds.push(row.lessonId);
   }
 

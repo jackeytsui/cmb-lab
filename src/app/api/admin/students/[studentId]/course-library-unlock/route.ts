@@ -5,7 +5,10 @@ import { db, getNeonSql } from "@/db";
 import { users } from "@/db/schema";
 import { getCurrentUser, getRealUser } from "@/lib/auth";
 import { canStaffAccessStudent } from "@/lib/coach-student-scope";
-import { planManualChapterUnlock } from "@/lib/course-library-manual-unlock";
+import {
+  planManualChapterUnlock,
+  planManualLessonPosition,
+} from "@/lib/course-library-manual-unlock";
 import {
   loadStudentCourseLibraryProgress,
   type StudentCourseLibraryProgressCourse,
@@ -16,6 +19,12 @@ const unlockSchema = z.object({
   courseId: z.string().uuid(),
   targetModuleId: z.string().uuid(),
 });
+const setNextLessonSchema = z.object({
+  action: z.literal("set_next_lesson"),
+  courseId: z.string().uuid(),
+  targetLessonId: z.string().uuid(),
+});
+const progressMutationSchema = z.union([setNextLessonSchema, unlockSchema]);
 
 type RouteContext = {
   params: Promise<{ studentId: string }>;
@@ -42,6 +51,9 @@ function publicCourse(course: UnlockCourse) {
         module.lessonIds.length > 0 &&
         module.completedLessonIds.length < module.lessonIds.length,
     )?.id ?? null;
+  const currentLessonId = course.modules
+    .flatMap((module) => module.lessons)
+    .find((lesson) => !lesson.isComplete)?.id ?? null;
 
   return {
     id: course.id,
@@ -49,6 +61,7 @@ function publicCourse(course: UnlockCourse) {
     completedLessons,
     totalLessons,
     currentModuleId,
+    currentLessonId,
     modules: course.modules.map((module) => ({
       id: module.id,
       title: module.title,
@@ -59,6 +72,7 @@ function publicCourse(course: UnlockCourse) {
         module.lessonIds.length > 0 &&
         module.completedLessonIds.length === module.lessonIds.length,
       isCurrent: module.id === currentModuleId,
+      lessons: module.lessons,
     })),
   };
 }
@@ -147,12 +161,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Invalid student ID" }, { status: 400 });
   }
 
-  const parsedBody = unlockSchema.safeParse(
+  const parsedBody = progressMutationSchema.safeParse(
     await request.json().catch(() => null),
   );
   if (!parsedBody.success) {
     return NextResponse.json(
-      { error: "Select a valid course and chapter" },
+      { error: "Select a valid course and progress target" },
       { status: 400 },
     );
   }
@@ -180,8 +194,140 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
+    const completedLessonIds = course.modules.flatMap(
+      (module) => module.completedLessonIds,
+    );
+
+    if ("targetLessonId" in parsedBody.data) {
+      const targetLessonId = parsedBody.data.targetLessonId;
+      const targetLesson = course.modules
+        .flatMap((module) =>
+          module.lessons.map((lesson) => ({
+            ...lesson,
+            moduleId: module.id,
+            moduleTitle: module.title,
+          })),
+        )
+        .find((lesson) => lesson.id === targetLessonId);
+      if (!targetLesson) {
+        return NextResponse.json(
+          { error: "Lesson does not belong to the selected course" },
+          { status: 400 },
+        );
+      }
+
+      const plan = planManualLessonPosition({
+        orderedModules: course.modules,
+        targetLessonId: targetLesson.id,
+        completedLessonIds,
+      });
+      const changedAt = new Date();
+      const actor = authorization.actor;
+      const realActor = authorization.realActor;
+      const auditPayload = {
+        source: "staff_manual_lesson_position",
+        actorUserId: actor.id,
+        actorEmail: actor.email,
+        actorRole: actor.role,
+        realActorUserId: realActor.id,
+        realActorEmail: realActor.email,
+        realActorRole: realActor.role,
+        studentId: student.id,
+        studentEmail: student.email,
+        courseId: course.id,
+        courseTitle: course.title,
+        targetModuleId: targetLesson.moduleId,
+        targetModuleTitle: targetLesson.moduleTitle,
+        targetLessonId: targetLesson.id,
+        targetLessonTitle: targetLesson.title,
+        prerequisiteLessons: plan.lessonIdsBeforeTarget.length,
+        lessonsCompleted: plan.missingPrerequisiteLessonIds.length,
+        lessonsReopened: plan.completedLessonIdsToReopen.length,
+        preservedFields: [
+          "video_watched_percent",
+          "quiz_score",
+          "quiz_answers",
+          "started_at",
+          "submissions",
+          "recordings",
+          "notes",
+        ],
+        performedAt: changedAt.toISOString(),
+      };
+      const sql = getNeonSql();
+
+      await sql.transaction([
+        sql`
+          WITH progress_rows AS (
+            SELECT lesson_id
+            FROM jsonb_to_recordset(${JSON.stringify(
+              plan.missingPrerequisiteLessonIds.map((lessonId) => ({
+                lesson_id: lessonId,
+              })),
+            )}::jsonb) AS rows(lesson_id uuid)
+          )
+          INSERT INTO course_library_lesson_progress
+            (user_id, lesson_id, completed_at, video_watched_percent, started_at, updated_at)
+          SELECT ${student.id}::uuid, lesson_id,
+            ${changedAt.toISOString()}::timestamptz, 0,
+            ${changedAt.toISOString()}::timestamptz, NOW()
+          FROM progress_rows
+          ON CONFLICT (user_id, lesson_id) DO UPDATE
+          SET completed_at = COALESCE(
+            course_library_lesson_progress.completed_at,
+            EXCLUDED.completed_at
+          ),
+          updated_at = NOW()
+        `,
+        sql`
+          WITH progress_rows AS (
+            SELECT lesson_id
+            FROM jsonb_to_recordset(${JSON.stringify(
+              plan.completedLessonIdsToReopen.map((lessonId) => ({
+                lesson_id: lessonId,
+              })),
+            )}::jsonb) AS rows(lesson_id uuid)
+          )
+          UPDATE course_library_lesson_progress AS progress
+          SET completed_at = NULL, updated_at = NOW()
+          FROM progress_rows
+          WHERE progress.user_id = ${student.id}::uuid
+            AND progress.lesson_id = progress_rows.lesson_id
+            AND progress.completed_at IS NOT NULL
+        `,
+        sql`
+          INSERT INTO sync_events
+            (event_type, direction, status, entity_type, entity_id, payload, processed_at)
+          VALUES (
+            'course_progress.staff_reposition',
+            'inbound',
+            'completed',
+            'course_library_progress',
+            ${student.id},
+            ${JSON.stringify(auditPayload)}::jsonb,
+            NOW()
+          )
+        `,
+      ]);
+
+      const refreshedCourses = await loadUnlockCourses(student);
+      return NextResponse.json({
+        success: true,
+        result: {
+          action: "set_next_lesson",
+          courseTitle: course.title,
+          targetModuleTitle: targetLesson.moduleTitle,
+          targetLessonTitle: targetLesson.title,
+          lessonsCompleted: plan.missingPrerequisiteLessonIds.length,
+          lessonsReopened: plan.completedLessonIdsToReopen.length,
+        },
+        courses: refreshedCourses.map(publicCourse),
+      });
+    }
+
+    const targetModuleId = parsedBody.data.targetModuleId;
     const targetModule = course.modules.find(
-      (module) => module.id === parsedBody.data.targetModuleId,
+      (module) => module.id === targetModuleId,
     );
     if (!targetModule) {
       return NextResponse.json(
@@ -204,9 +350,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const completedLessonIds = course.modules.flatMap(
-      (module) => module.completedLessonIds,
-    );
     const plan = planManualChapterUnlock({
       orderedModules: course.modules,
       targetModuleId: targetModule.id,
@@ -284,9 +427,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       courses: refreshedCourses.map(publicCourse),
     });
   } catch (error) {
-    console.error("Failed to unlock Course Library chapter:", error);
+    console.error("Failed to update Course Library progress:", error);
     return NextResponse.json(
-      { error: "Failed to unlock the selected chapter" },
+      { error: "Failed to update Course Library progress" },
       { status: 500 },
     );
   }

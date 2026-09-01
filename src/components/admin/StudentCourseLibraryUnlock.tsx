@@ -6,7 +6,7 @@ import {
   CheckCircle2,
   CircleDot,
   Loader2,
-  LockOpen,
+  LocateFixed,
   ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 
+type LessonSummary = {
+  id: string;
+  title: string;
+  lessonType: string;
+  isComplete: boolean;
+};
+
 type ChapterSummary = {
   id: string;
   title: string;
@@ -30,6 +37,7 @@ type ChapterSummary = {
   completedLessons: number;
   isComplete: boolean;
   isCurrent: boolean;
+  lessons: LessonSummary[];
 };
 
 type CourseSummary = {
@@ -38,16 +46,19 @@ type CourseSummary = {
   completedLessons: number;
   totalLessons: number;
   currentModuleId: string | null;
+  currentLessonId: string | null;
   modules: ChapterSummary[];
 };
 
-type UnlockResponse = {
+type ProgressResponse = {
   courses?: CourseSummary[];
   result?: {
+    action?: "set_next_lesson";
     courseTitle: string;
     targetModuleTitle: string;
-    lessonsChanged: number;
-    lessonsAlreadyComplete: number;
+    targetLessonTitle?: string;
+    lessonsCompleted?: number;
+    lessonsReopened?: number;
   };
   error?: string;
 };
@@ -61,10 +72,32 @@ function chapterLabel(chapter: ChapterSummary) {
   return chapter.shortTitle?.trim() || chapter.title;
 }
 
+function selectionForCourse(course: CourseSummary | undefined) {
+  if (!course) return { moduleId: "", lessonId: "" };
+
+  const currentModule = course.modules.find((module) =>
+    module.lessons.some((lesson) => lesson.id === course.currentLessonId),
+  );
+  const fallbackModule =
+    currentModule ??
+    course.modules.find((module) => module.lessons.length > 0) ??
+    null;
+  const fallbackLesson =
+    fallbackModule?.lessons.find(
+      (lesson) => lesson.id === course.currentLessonId,
+    ) ?? fallbackModule?.lessons[0];
+
+  return {
+    moduleId: fallbackModule?.id ?? "",
+    lessonId: fallbackLesson?.id ?? "",
+  };
+}
+
 export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedModuleId, setSelectedModuleId] = useState("");
+  const [selectedLessonId, setSelectedLessonId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,18 +112,18 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
           `/api/admin/students/${studentId}/course-library-unlock`,
           { signal },
         );
-        const data = (await response.json()) as UnlockResponse;
+        const data = (await response.json()) as ProgressResponse;
         if (!response.ok) {
           throw new Error(data.error || "Failed to load Course Library progress");
         }
 
         const nextCourses = data.courses ?? [];
-        setCourses(nextCourses);
         const firstCourse = nextCourses[0];
+        const selection = selectionForCourse(firstCourse);
+        setCourses(nextCourses);
         setSelectedCourseId(firstCourse?.id ?? "");
-        setSelectedModuleId(
-          firstCourse?.currentModuleId ?? firstCourse?.modules[0]?.id ?? "",
-        );
+        setSelectedModuleId(selection.moduleId);
+        setSelectedLessonId(selection.lessonId);
       } catch (loadError) {
         if (loadError instanceof DOMException && loadError.name === "AbortError") {
           return;
@@ -118,30 +151,47 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
   const selectedModule =
     selectedCourse?.modules.find((module) => module.id === selectedModuleId) ??
     null;
-  const selectedModuleIndex = selectedCourse?.modules.findIndex(
-    (module) => module.id === selectedModuleId,
-  ) ?? -1;
+  const selectedLesson =
+    selectedModule?.lessons.find((lesson) => lesson.id === selectedLessonId) ??
+    null;
+  const orderedLessons =
+    selectedCourse?.modules.flatMap((module) => module.lessons) ?? [];
+  const selectedLessonIndex = orderedLessons.findIndex(
+    (lesson) => lesson.id === selectedLessonId,
+  );
   const lessonsToComplete =
-    selectedCourse && selectedModuleIndex > 0
-      ? selectedCourse.modules
-          .slice(0, selectedModuleIndex)
-          .reduce(
-            (total, module) =>
-              total + Math.max(0, module.lessonCount - module.completedLessons),
-            0,
-          )
+    selectedLessonIndex >= 0
+      ? orderedLessons
+          .slice(0, selectedLessonIndex)
+          .filter((lesson) => !lesson.isComplete).length
       : 0;
+  const lessonsToReopen =
+    selectedLessonIndex >= 0
+      ? orderedLessons
+          .slice(selectedLessonIndex)
+          .filter((lesson) => lesson.isComplete).length
+      : 0;
+  const hasChanges = lessonsToComplete > 0 || lessonsToReopen > 0;
 
   const handleCourseChange = (courseId: string) => {
-    setSelectedCourseId(courseId);
     const course = courses.find((item) => item.id === courseId);
-    setSelectedModuleId(
-      course?.currentModuleId ?? course?.modules[0]?.id ?? "",
-    );
+    const selection = selectionForCourse(course);
+    setSelectedCourseId(courseId);
+    setSelectedModuleId(selection.moduleId);
+    setSelectedLessonId(selection.lessonId);
   };
 
-  const handleUnlock = async () => {
-    if (!selectedCourse || !selectedModule || saving) return;
+  const handleModuleChange = (moduleId: string) => {
+    const chapter = selectedCourse?.modules.find((item) => item.id === moduleId);
+    const lesson =
+      chapter?.lessons.find((item) => !item.isComplete) ??
+      chapter?.lessons[0];
+    setSelectedModuleId(moduleId);
+    setSelectedLessonId(lesson?.id ?? "");
+  };
+
+  const handleSetNextLesson = async () => {
+    if (!selectedCourse || !selectedLesson || saving) return;
 
     setSaving(true);
     try {
@@ -151,29 +201,29 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            action: "set_next_lesson",
             courseId: selectedCourse.id,
-            targetModuleId: selectedModule.id,
+            targetLessonId: selectedLesson.id,
           }),
         },
       );
-      const data = (await response.json()) as UnlockResponse;
+      const data = (await response.json()) as ProgressResponse;
       if (!response.ok) {
-        throw new Error(data.error || "Failed to unlock chapter");
+        throw new Error(data.error || "Failed to update Course Library progress");
       }
 
       if (data.courses) setCourses(data.courses);
       setConfirmOpen(false);
-      const changed = data.result?.lessonsChanged ?? 0;
+      const completed = data.result?.lessonsCompleted ?? lessonsToComplete;
+      const reopened = data.result?.lessonsReopened ?? lessonsToReopen;
       toast.success(
-        changed > 0
-          ? `${chapterLabel(selectedModule)} unlocked for ${studentName}. ${changed} prerequisite lesson${changed === 1 ? "" : "s"} completed.`
-          : `${chapterLabel(selectedModule)} was already unlocked for ${studentName}.`,
+        `${selectedLesson.title} is now ${studentName}'s next lesson. ${completed} prerequisite lesson${completed === 1 ? "" : "s"} completed; ${reopened} lesson${reopened === 1 ? "" : "s"} reopened.`,
       );
-    } catch (unlockError) {
+    } catch (updateError) {
       toast.error(
-        unlockError instanceof Error
-          ? unlockError.message
-          : "Failed to unlock chapter",
+        updateError instanceof Error
+          ? updateError.message
+          : "Failed to update Course Library progress",
       );
     } finally {
       setSaving(false);
@@ -217,7 +267,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           Assign a published course through the student&apos;s tags or course
-          visibility before setting a chapter.
+          visibility before changing progress.
         </p>
       </div>
     );
@@ -228,16 +278,17 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <LockOpen className="size-5" aria-hidden="true" />
+            <LocateFixed className="size-5" aria-hidden="true" />
           </span>
           <div>
             <h3 className="font-semibold text-foreground">
-              Set the student&apos;s next chapter
+              Set the student&apos;s next lesson
             </h3>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Choose the chapter {studentName} should open next. CMB Lab will
-              complete only unfinished prerequisite lessons; the selected
-              chapter remains current and incomplete.
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Move forward to unlock content or move backward to resume an
+              earlier lesson. CMB Lab adjusts only completion flags; quiz
+              answers, submissions, recordings, notes, and viewing history are
+              preserved.
             </p>
           </div>
         </div>
@@ -247,7 +298,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         </span>
       </div>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div className="mt-5 grid gap-4 lg:grid-cols-3">
         <label className="space-y-1.5 text-sm font-medium text-foreground">
           Course
           <select
@@ -264,17 +315,17 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         </label>
 
         <label className="space-y-1.5 text-sm font-medium text-foreground">
-          Chapter to open next
+          Chapter
           <select
             value={selectedModuleId}
-            onChange={(event) => setSelectedModuleId(event.target.value)}
+            onChange={(event) => handleModuleChange(event.target.value)}
             className="block h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
           >
             {selectedCourse?.modules.map((chapter, index) => (
               <option
                 key={chapter.id}
                 value={chapter.id}
-                disabled={chapter.lessonCount === 0 || chapter.isComplete}
+                disabled={chapter.lessonCount === 0}
               >
                 {index + 1}. {chapterLabel(chapter)}
                 {chapter.lessonCount === 0
@@ -288,20 +339,45 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
             ))}
           </select>
         </label>
+
+        <label className="space-y-1.5 text-sm font-medium text-foreground">
+          Lesson to open next
+          <select
+            value={selectedLessonId}
+            onChange={(event) => setSelectedLessonId(event.target.value)}
+            disabled={!selectedModule || selectedModule.lessons.length === 0}
+            className="block h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
+          >
+            {selectedModule?.lessons.map((lesson, index) => (
+              <option key={lesson.id} value={lesson.id}>
+                {index + 1}. {lesson.title}
+                {lesson.id === selectedCourse?.currentLessonId
+                  ? " — next"
+                  : lesson.isComplete
+                    ? " — complete"
+                    : ""}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      {selectedCourse ? (
-        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg bg-muted/40 px-4 py-3 text-sm">
+      {selectedCourse && selectedLesson ? (
+        <div className="mt-4 grid gap-3 rounded-lg bg-muted/40 px-4 py-3 text-sm md:grid-cols-3">
           <span className="inline-flex items-center gap-1.5 text-foreground">
             <CheckCircle2 className="size-4 text-emerald-500" aria-hidden="true" />
-            {selectedCourse.completedLessons} / {selectedCourse.totalLessons}
-            {" "}lessons complete
+            {selectedCourse.completedLessons} / {selectedCourse.totalLessons}{" "}
+            lessons complete
           </span>
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <CircleDot className="size-4 text-primary" aria-hidden="true" />
-            {lessonsToComplete > 0
-              ? `${lessonsToComplete} prerequisite lesson${lessonsToComplete === 1 ? "" : "s"} will be completed`
-              : "This chapter is already available"}
+            {lessonsToComplete} earlier lesson{lessonsToComplete === 1 ? "" : "s"}{" "}
+            will be completed
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <CircleDot className="size-4 text-amber-500" aria-hidden="true" />
+            {lessonsToReopen} completed lesson{lessonsToReopen === 1 ? "" : "s"}{" "}
+            will be reopened
           </span>
         </div>
       ) : null}
@@ -310,10 +386,10 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         <Button
           type="button"
           onClick={() => setConfirmOpen(true)}
-          disabled={!selectedModule || lessonsToComplete === 0}
+          disabled={!selectedLesson || !hasChanges}
         >
-          <LockOpen aria-hidden="true" />
-          {lessonsToComplete === 0 ? "Already unlocked" : "Unlock chapter"}
+          <LocateFixed aria-hidden="true" />
+          {hasChanges ? "Set as next lesson" : "Already the next lesson"}
         </Button>
       </div>
 
@@ -321,13 +397,15 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Unlock {selectedModule ? chapterLabel(selectedModule) : "chapter"}?
+              Set {selectedLesson?.title ?? "this lesson"} as next?
             </AlertDialogTitle>
             <AlertDialogDescription className="leading-6">
-              This will mark {lessonsToComplete} unfinished prerequisite lesson
-              {lessonsToComplete === 1 ? "" : "s"} complete for {studentName}.
-              The selected chapter stays incomplete and becomes their next stop.
-              Existing quiz, video, and assignment data will not be overwritten.
+              This will complete {lessonsToComplete} unfinished prerequisite
+              lesson{lessonsToComplete === 1 ? "" : "s"} and reopen{" "}
+              {lessonsToReopen} completed lesson
+              {lessonsToReopen === 1 ? "" : "s"} from the selected lesson
+              onward for {studentName}. Existing quiz answers, submissions,
+              recordings, notes, and viewing history will not be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -336,11 +414,11 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
               disabled={saving}
               onClick={(event) => {
                 event.preventDefault();
-                void handleUnlock();
+                void handleSetNextLesson();
               }}
             >
-              {saving ? <Loader2 className="animate-spin" /> : <LockOpen />}
-              {saving ? "Unlocking…" : "Confirm unlock"}
+              {saving ? <Loader2 className="animate-spin" /> : <LocateFixed />}
+              {saving ? "Updating…" : "Confirm next lesson"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { planManualChapterUnlock } from "@/lib/course-library-manual-unlock";
+import {
+  planManualChapterUnlock,
+  planManualLessonPosition,
+} from "@/lib/course-library-manual-unlock";
 
 const modules = [
   { id: "chapter-1", lessonIds: ["lesson-1", "lesson-2"] },
@@ -67,5 +70,82 @@ describe("planManualChapterUnlock", () => {
         completedLessonIds: [],
       }),
     ).toThrow("Target chapter was not found in this course");
+  });
+});
+
+describe("planManualLessonPosition", () => {
+  it("moves forward by completing only missing prerequisites", () => {
+    const plan = planManualLessonPosition({
+      orderedModules: modules,
+      targetLessonId: "lesson-4",
+      completedLessonIds: ["lesson-1"],
+    });
+
+    expect(plan.lessonIdsBeforeTarget).toEqual([
+      "lesson-1",
+      "lesson-2",
+      "lesson-3",
+    ]);
+    expect(plan.missingPrerequisiteLessonIds).toEqual([
+      "lesson-2",
+      "lesson-3",
+    ]);
+    expect(plan.completedLessonIdsToReopen).toEqual([]);
+  });
+
+  it("moves backward by reopening the target and every later completion", () => {
+    const plan = planManualLessonPosition({
+      orderedModules: modules,
+      targetLessonId: "lesson-3",
+      completedLessonIds: [
+        "lesson-1",
+        "lesson-2",
+        "lesson-3",
+        "lesson-4",
+        "lesson-5",
+      ],
+    });
+
+    expect(plan.missingPrerequisiteLessonIds).toEqual([]);
+    expect(plan.completedLessonIdsToReopen).toEqual([
+      "lesson-3",
+      "lesson-4",
+      "lesson-5",
+    ]);
+  });
+
+  it("repairs mixed progress on both sides of the selected lesson", () => {
+    const plan = planManualLessonPosition({
+      orderedModules: modules,
+      targetLessonId: "lesson-3",
+      completedLessonIds: ["lesson-1", "lesson-3", "lesson-5"],
+    });
+
+    expect(plan.missingPrerequisiteLessonIds).toEqual(["lesson-2"]);
+    expect(plan.completedLessonIdsToReopen).toEqual([
+      "lesson-3",
+      "lesson-5",
+    ]);
+  });
+
+  it("is a no-op when the selected lesson is already the exact next lesson", () => {
+    const plan = planManualLessonPosition({
+      orderedModules: modules,
+      targetLessonId: "lesson-3",
+      completedLessonIds: ["lesson-1", "lesson-2"],
+    });
+
+    expect(plan.missingPrerequisiteLessonIds).toEqual([]);
+    expect(plan.completedLessonIdsToReopen).toEqual([]);
+  });
+
+  it("rejects a lesson outside the selected course", () => {
+    expect(() =>
+      planManualLessonPosition({
+        orderedModules: modules,
+        targetLessonId: "other-course-lesson",
+        completedLessonIds: [],
+      }),
+    ).toThrow("Target lesson was not found in this course");
   });
 });
