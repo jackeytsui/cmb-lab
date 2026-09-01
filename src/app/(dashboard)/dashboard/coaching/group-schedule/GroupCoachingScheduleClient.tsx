@@ -28,6 +28,7 @@ import {
   type CalendarDay,
   type CalendarMonth,
 } from "@/lib/group-coaching-calendar";
+import { getCoachingSessionPresentation } from "@/lib/group-coaching-session";
 
 type CoachingEvent = {
   id: string;
@@ -83,16 +84,6 @@ function eventState(event: CoachingEvent) {
   return "past";
 }
 
-function calendarEventLabel(title: string) {
-  const parenthetical = title.match(/^\(([^)]+)\)/)?.[1]?.trim();
-  if (parenthetical) return parenthetical;
-  return title
-    .replace(/\b(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\b/i, "")
-    .replace(/Inner Circle Group Coaching/i, "")
-    .replace(/\s{2,}/g, " ")
-    .trim() || title;
-}
-
 function calendarDateToUtc(date: CalendarDate) {
   return new Date(Date.UTC(date.year, date.month - 1, date.day));
 }
@@ -145,20 +136,34 @@ function CalendarEventCard({
 }) {
   const state = eventState(event);
   const details = getEventDetails(event.description);
-  const displayTitle = expanded ? event.title : calendarEventLabel(event.title);
+  const session = getCoachingSessionPresentation(event.title);
+  const isCantonese = session.language === "cantonese";
+  const cardColors = isCantonese
+    ? "border-orange-300 bg-orange-50/80 dark:border-orange-700 dark:bg-orange-950/25"
+    : "border-indigo-200 bg-indigo-50/75 dark:border-indigo-800 dark:bg-indigo-950/25";
+  const languageBadgeColors = isCantonese
+    ? "bg-orange-200/80 text-orange-900 dark:bg-orange-900/60 dark:text-orange-100"
+    : "bg-indigo-200/80 text-indigo-900 dark:bg-indigo-900/60 dark:text-indigo-100";
+  const accentTextColor = isCantonese
+    ? "text-orange-700 dark:text-orange-300"
+    : "text-indigo-700 dark:text-indigo-300";
+  const actionColors = isCantonese
+    ? "bg-orange-600 text-white hover:bg-orange-700 dark:bg-orange-600 dark:hover:bg-orange-500"
+    : "bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500";
 
   return (
     <article
       data-testid="calendar-event"
-      aria-label={`${event.title} at ${new Date(event.startsAt).toLocaleTimeString(undefined, {
+      data-language={session.language}
+      aria-label={`${session.name}, ${session.languageLabel}, at ${new Date(event.startsAt).toLocaleTimeString(undefined, {
         timeZone,
         hour: "numeric",
         minute: "2-digit",
       })}`}
-      className={`min-w-0 rounded-lg border ${expanded ? "p-4" : "p-2.5"} ${state === "live" ? "border-red-500/40 bg-red-500/10" : isNext ? "border-primary/35 bg-primary/5" : "border-border bg-background"}`}
+      className={`min-w-0 rounded-lg border ${expanded ? "p-4" : "p-2.5"} ${cardColors} ${state === "live" ? "ring-2 ring-inset ring-red-500/50" : isNext ? "ring-1 ring-inset ring-primary/25" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className={`${expanded ? "text-xs" : "text-[10px]"} font-bold text-primary`}>
+        <span className={`${expanded ? "text-xs" : "text-[10px]"} font-bold ${accentTextColor}`}>
           {new Date(event.startsAt).toLocaleTimeString(undefined, {
             timeZone,
             hour: "numeric",
@@ -171,38 +176,41 @@ function CalendarEventCard({
           </span>
         )}
       </div>
+      <span
+        className={`mt-1.5 inline-flex w-fit rounded-full px-1.5 py-0.5 text-[8px] font-bold ${languageBadgeColors}`}
+      >
+        {session.languageLabel}
+      </span>
       <h3
         title={event.title}
         className={`mt-1 whitespace-normal break-words font-semibold text-foreground ${expanded ? "text-sm leading-5" : "text-[11px] leading-[1.35]"}`}
       >
-        {displayTitle}
+        {session.name}
       </h3>
       {expanded && details.summary && (
         <p className="mt-1.5 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
           {details.summary}
         </p>
       )}
-      <div className={`grid grid-cols-2 gap-1.5 ${expanded ? "mt-3" : "mt-2"}`}>
+      <div className={`grid grid-cols-1 gap-1.5 ${expanded ? "mt-3 sm:grid-cols-2" : "mt-2"}`}>
         {details.signupUrl ? (
           <a
             href={details.signupUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-w-0 items-center justify-center gap-1 rounded-md border border-border bg-card px-1.5 py-1.5 text-[10px] font-semibold text-foreground hover:border-primary/40"
+            className="inline-flex h-8 w-full min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-md border border-border bg-card px-2 text-[10px] font-semibold text-foreground hover:border-primary/40"
           >
             Sign up <ExternalLink className="h-2.5 w-2.5 shrink-0" />
           </a>
-        ) : (
-          <span />
-        )}
+        ) : null}
         <a
           href={event.meetingUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex min-w-0 items-center justify-center gap-1 rounded-md bg-primary px-1.5 py-1.5 text-[10px] font-semibold text-primary-foreground hover:bg-primary/90"
+          className={`inline-flex h-8 w-full min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 text-[10px] font-semibold transition-colors ${actionColors}`}
         >
           <Video className="h-2.5 w-2.5 shrink-0" />
-          {state === "live" ? "Join" : "Open"}
+          {state === "live" ? "Join now" : "Join"}
         </a>
       </div>
     </article>
@@ -624,20 +632,26 @@ export function GroupCoachingScheduleClient() {
             const state = eventState(event);
             const startsAt = new Date(event.startsAt);
             const details = getEventDetails(event.description);
+            const session = getCoachingSessionPresentation(event.title);
+            const isCantonese = session.language === "cantonese";
             return (
               <article
                 key={event.id}
-                className={`relative overflow-hidden rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6 ${index === 0 ? "border-primary/35" : "border-border"}`}
+                data-language={session.language}
+                className={`relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6 ${isCantonese ? "border-orange-300 bg-orange-50/60 dark:border-orange-800 dark:bg-orange-950/20" : "border-indigo-200 bg-indigo-50/50 dark:border-indigo-800 dark:bg-indigo-950/20"}`}
                 data-testid="group-coaching-event"
               >
-                {index === 0 && <div className="absolute inset-y-0 left-0 w-1 bg-primary" />}
+                <div className={`absolute inset-y-0 left-0 w-1 ${isCantonese ? "bg-orange-500" : "bg-indigo-600"}`} />
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       {index === 0 && state !== "live" && <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-primary">Next session</span>}
                       <h2 className="text-lg font-semibold text-foreground">
-                        {event.title}
+                        {session.name}
                       </h2>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${isCantonese ? "bg-orange-200/80 text-orange-900 dark:bg-orange-900/60 dark:text-orange-100" : "bg-indigo-200/80 text-indigo-900 dark:bg-indigo-900/60 dark:text-indigo-100"}`}>
+                        {session.languageLabel}
+                      </span>
                       {state === "live" && (
                         <span className="rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
                           Live now
@@ -688,8 +702,8 @@ export function GroupCoachingScheduleClient() {
                         Sign up <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     )}
-                    <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
-                      <Video className="h-4 w-4" /> {state === "live" ? "Join now" : "Open session"}
+                    <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors ${isCantonese ? "bg-orange-600 hover:bg-orange-700" : "bg-indigo-600 hover:bg-indigo-700"}`}>
+                      <Video className="h-4 w-4" /> {state === "live" ? "Join now" : "Join session"}
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   </div>
@@ -708,7 +722,7 @@ export function GroupCoachingScheduleClient() {
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             {cancelledEvents.map((event) => (
               <li key={event.id} className="line-through">
-                {event.title} — {new Date(event.startsAt).toLocaleString(undefined, { timeZone })}
+                {getCoachingSessionPresentation(event.title).name} — {new Date(event.startsAt).toLocaleString(undefined, { timeZone })}
               </li>
             ))}
           </ul>
