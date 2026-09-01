@@ -8,12 +8,57 @@ import {
 } from "@/db/schema";
 import { eq, and, asc, gte, count } from "drizzle-orm";
 import {
+  coalesceCaptions,
   extractChineseCaptions,
-  extractEnglishCaptions,
   isYouTubeCaptionAccessBlocked,
+  type NormalizedCaption,
 } from "@/lib/captions";
 import { getTranscriptLimitSettings, getPeriodStart } from "@/lib/usage-limits";
 import { extractVideoId } from "@/lib/youtube";
+
+export const maxDuration = 60;
+
+const CAPTION_INSERT_BATCH_SIZE = 500;
+
+async function replaceStoredCaptions(
+  videoSessionId: string,
+  captions: NormalizedCaption[]
+) {
+  await db
+    .update(videoSessions)
+    .set({ captionCount: 0 })
+    .where(eq(videoSessions.id, videoSessionId));
+  await db
+    .delete(videoCaptions)
+    .where(eq(videoCaptions.videoSessionId, videoSessionId));
+
+  for (
+    let index = 0;
+    index < captions.length;
+    index += CAPTION_INSERT_BATCH_SIZE
+  ) {
+    const batch = captions.slice(index, index + CAPTION_INSERT_BATCH_SIZE);
+    await db.insert(videoCaptions).values(
+      batch.map((caption) => ({
+        videoSessionId,
+        sequence: caption.sequence,
+        startMs: caption.startMs,
+        endMs: caption.endMs,
+        text: caption.text,
+      }))
+    );
+  }
+
+  const [completedSession] = await db
+    .update(videoSessions)
+    .set({ captionCount: captions.length })
+    .where(eq(videoSessions.id, videoSessionId))
+    .returning();
+  if (!completedSession) {
+    throw new Error(`Failed to persist captions for session ${videoSessionId}`);
+  }
+  return completedSession;
+}
 
 /**
  * POST /api/video/extract-captions
@@ -78,14 +123,28 @@ export async function POST(request: NextRequest) {
       });
 
       if (cachedCaptions.length > 0) {
+        const cachedNormalized = cachedCaptions.map((caption) => ({
+          text: caption.text,
+          startMs: caption.startMs,
+          endMs: caption.endMs,
+          sequence: caption.sequence,
+        }));
+        const optimizedCaptions = coalesceCaptions(cachedNormalized);
+        let cachedSession = existingSession;
+
+        if (optimizedCaptions.length < cachedNormalized.length) {
+          console.log(
+            `[extract-captions] Repairing granular cache for videoId=${videoId}, before=${cachedNormalized.length}, after=${optimizedCaptions.length}`
+          );
+          cachedSession = await replaceStoredCaptions(
+            existingSession.id,
+            optimizedCaptions
+          );
+        }
+
         return NextResponse.json({
-          session: existingSession,
-          captions: cachedCaptions.map((c) => ({
-            text: c.text,
-            startMs: c.startMs,
-            endMs: c.endMs,
-            sequence: c.sequence,
-          })),
+          session: cachedSession,
+          captions: optimizedCaptions,
           englishCaptions: null,
           cached: true,
         });
@@ -131,9 +190,19 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Extract captions from YouTube
-    console.log(`[extract-captions] Starting extraction for videoId=${videoId}, hasSupadataKey=${!!process.env.SUPADATA_API_KEY}`);
-    const result = await extractChineseCaptions(videoId);
-    console.log(`[extract-captions] Result: ${result ? `${result.captions.length} captions (lang=${result.lang})` : "null"}`);
+    const extractionStartedAt = Date.now();
+    console.log(
+      `[extract-captions] Starting extraction for videoId=${videoId}, hasSupadataKey=${!!process.env.SUPADATA_API_KEY}`
+    );
+    const rawResult = await extractChineseCaptions(videoId);
+    const result = rawResult
+      ? { ...rawResult, captions: coalesceCaptions(rawResult.captions) }
+      : null;
+    console.log(
+      `[extract-captions] Result: ${
+        result ? `${result.captions.length} captions (lang=${result.lang})` : "null"
+      }, elapsedMs=${Date.now() - extractionStartedAt}`
+    );
 
     if (!result) {
       const youtubeBlocked = await isYouTubeCaptionAccessBlocked(videoId);
@@ -170,9 +239,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 5b. Extract English captions (optional -- don't fail if unavailable)
-    const englishCaptions = await extractEnglishCaptions(videoId);
-
     // 6. Create or update video session via upsert
     const [session] = await db
       .insert(videoSessions)
@@ -195,33 +261,19 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    // 7. Replace captions. Keep metadata at zero until every row has been
-    // written, so an interrupted request can never produce a false cache hit.
-    await db
-      .delete(videoCaptions)
-      .where(eq(videoCaptions.videoSessionId, session.id));
-    if (result.captions.length > 0) {
-      await db.insert(videoCaptions).values(
-        result.captions.map((c) => ({
-          videoSessionId: session.id,
-          sequence: c.sequence,
-          startMs: c.startMs,
-          endMs: c.endMs,
-          text: c.text,
-        }))
-      );
-    }
-
-    const [completedSession] = await db
-      .update(videoSessions)
-      .set({ captionCount: result.captions.length })
-      .where(eq(videoSessions.id, session.id))
-      .returning();
+    // 7. Replace captions in bounded batches. Keep metadata at zero until
+    // every row is written so interrupted requests cannot produce false hits.
+    const completedSession = await replaceStoredCaptions(
+      session.id,
+      result.captions
+    );
 
     return NextResponse.json({
       session: completedSession,
       captions: result.captions,
-      englishCaptions: englishCaptions ?? null,
+      // English is translated on demand in the client. Keeping it out of the
+      // critical load path avoids a second provider request and rate limits.
+      englishCaptions: null,
       cached: false,
     });
   } catch (error) {

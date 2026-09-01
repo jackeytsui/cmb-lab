@@ -34,6 +34,55 @@ type CaptionLine = {
   sequence: number;
 };
 
+type CaptionExtractionPayload = {
+  error?: string;
+  period?: string;
+  limit?: number;
+  captions?: CaptionLine[] | null;
+  englishCaptions?: CaptionLine[] | null;
+  session?: {
+    id?: string;
+    lastPositionMs?: number;
+  } | null;
+};
+
+const CAPTION_REQUEST_TIMEOUT_MS = 45_000;
+
+async function requestCaptionExtraction(videoId: string, url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    CAPTION_REQUEST_TIMEOUT_MS
+  );
+
+  try {
+    const response = await fetch("/api/video/extract-captions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ videoId, url }),
+      signal: controller.signal,
+    });
+    const data = (await response.json().catch(() => null)) as
+      | CaptionExtractionPayload
+      | null;
+    if (!data) throw new Error("invalid_caption_response");
+    return { response, data };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("caption_request_timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function captionLoadErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message === "caption_request_timeout"
+    ? "Caption extraction took too long. Please retry or upload an SRT/VTT file."
+    : "Failed to load captions. Please try again.";
+}
+
 const ONBOARDING_FALLBACK_CAPTIONS: CaptionLine[] = [
   { text: "欢迎来到 CMB Lab。", startMs: 0, endMs: 2600, sequence: 1 },
   { text: "这里是 YouTube Listening Lab。", startMs: 2600, endMs: 5600, sequence: 2 },
@@ -304,17 +353,9 @@ export function ListeningClient() {
       setVideoTitle(null);
       resumePositionRef.current = null;
 
-      fetch("/api/video/extract-captions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoId: session.youtubeVideoId, url }),
-      })
-        .then(async (res) => {
+      requestCaptionExtraction(session.youtubeVideoId, url)
+        .then(async ({ response: res, data }) => {
           if (captionLoadSequenceRef.current !== loadSequence) return null;
-          const data = await res.json().catch(() => null);
-          if (!data) {
-            throw new Error("Invalid caption response");
-          }
           if (res.status === 429 && data.error === "usage_limit_reached") {
             setCaptionStatus("error");
             setTranscribeError(
@@ -364,10 +405,10 @@ export function ListeningClient() {
             queueOrApplyResumePosition(data.session.lastPositionMs);
           }
         })
-        .catch(() => {
+        .catch((error) => {
           if (captionLoadSequenceRef.current !== loadSequence) return;
           setCaptionStatus("error");
-          setTranscribeError("Failed to load captions. Please try again.");
+          setTranscribeError(captionLoadErrorMessage(error));
         })
         .finally(() => {
           if (captionLoadSequenceRef.current === loadSequence) {
@@ -912,13 +953,10 @@ export function ListeningClient() {
       resumePositionRef.current = null;
 
       try {
-        const res = await fetch("/api/video/extract-captions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ videoId: extractedVideoId, url }),
-        });
-
-        const data = await res.json();
+        const { response: res, data } = await requestCaptionExtraction(
+          extractedVideoId,
+          url
+        );
         if (captionLoadSequenceRef.current !== loadSequence) return;
 
         if (res.status === 429 && data.error === "usage_limit_reached") {
@@ -973,11 +1011,11 @@ export function ListeningClient() {
         if (data.session?.lastPositionMs && data.session.lastPositionMs > 0) {
           queueOrApplyResumePosition(data.session.lastPositionMs);
         }
-      } catch {
+      } catch (error) {
         if (captionLoadSequenceRef.current !== loadSequence) return;
         if (applyOnboardingFallbackCaptions()) return;
         setCaptionStatus("error");
-        setTranscribeError("Failed to load captions. Please try again.");
+        setTranscribeError(captionLoadErrorMessage(error));
       } finally {
         if (captionLoadSequenceRef.current === loadSequence) {
           setIsLoadingVideo(false);

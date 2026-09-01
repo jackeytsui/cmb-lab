@@ -30,55 +30,58 @@ export async function GET(request: Request) {
     });
   }
 
-  // Test with zh-Hans first
-  const langCodes = ["zh-Hans", "zh-CN", "zh-TW", "zh"];
   const results: Array<Record<string, unknown>> = [];
 
-  for (const lang of langCodes) {
+  try {
+    const apiUrl = new URL("https://api.supadata.ai/v1/transcript");
+    apiUrl.searchParams.set(
+      "url",
+      `https://www.youtube.com/watch?v=${videoId}`
+    );
+    apiUrl.searchParams.set("mode", "native");
+    apiUrl.searchParams.set("text", "false");
+    apiUrl.searchParams.set("lang", "zh");
+    const res = await fetch(apiUrl, {
+      headers: {
+        "x-api-key": apiKey,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    const body = await res.text();
+    let parsed: unknown = null;
     try {
-      const apiUrl = `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&lang=${lang}`;
-      const res = await fetch(apiUrl, {
-        headers: {
-          "x-api-key": apiKey,
-          "Content-Type": "application/json",
-        },
-      });
-
-      const body = await res.text();
-      let parsed: unknown = null;
-      try {
-        parsed = JSON.parse(body);
-      } catch {
-        parsed = body.slice(0, 500);
-      }
-
-      results.push({
-        lang,
-        status: res.status,
-        ok: res.ok,
-        contentType: res.headers.get("content-type"),
-        bodyPreview: typeof parsed === "object" && parsed !== null
-          ? {
-              keys: Object.keys(parsed as Record<string, unknown>),
-              lang: (parsed as Record<string, unknown>).lang,
-              availableLangs: (parsed as Record<string, unknown>).availableLangs,
-              contentType: Array.isArray((parsed as Record<string, unknown>).content)
-                ? `array[${((parsed as Record<string, unknown>).content as unknown[]).length}]`
-                : typeof (parsed as Record<string, unknown>).content,
-              error: (parsed as Record<string, unknown>).error,
-              message: (parsed as Record<string, unknown>).message,
-            }
-          : parsed,
-      });
-
-      // Stop after first success
-      if (res.ok) break;
-    } catch (err) {
-      results.push({
-        lang,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      parsed = JSON.parse(body);
+    } catch {
+      parsed = body.slice(0, 500);
     }
+
+    results.push({
+      lang: "zh",
+      status: res.status,
+      ok: res.ok,
+      contentType: res.headers.get("content-type"),
+      bodyPreview: typeof parsed === "object" && parsed !== null
+        ? {
+            keys: Object.keys(parsed as Record<string, unknown>),
+            lang: (parsed as Record<string, unknown>).lang,
+            availableLangs: (parsed as Record<string, unknown>).availableLangs,
+            contentType: Array.isArray(
+              (parsed as Record<string, unknown>).content
+            )
+              ? `array[${((parsed as Record<string, unknown>).content as unknown[]).length}]`
+              : typeof (parsed as Record<string, unknown>).content,
+            error: (parsed as Record<string, unknown>).error,
+            message: (parsed as Record<string, unknown>).message,
+          }
+        : parsed,
+    });
+  } catch (err) {
+    results.push({
+      lang: "zh",
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   return NextResponse.json({ ...diagnostics, results });

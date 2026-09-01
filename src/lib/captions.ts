@@ -69,6 +69,44 @@ const CJK_REGEX = /[\u4e00-\u9fff]/;
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
+const SUPADATA_TIMEOUT_MS = 15_000;
+const YOUTUBE_FETCH_TIMEOUT_MS = 6_000;
+const CAPTION_EXTRACTOR_TIMEOUT_MS = 7_000;
+
+async function fetchWithTimeout(
+  input: string | URL,
+  init: RequestInit = {},
+  timeoutMs = YOUTUBE_FETCH_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(`Caption provider timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    );
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 // ============================================================
 // Caption Track Discovery — Page Scraping (primary)
 // ============================================================
@@ -83,7 +121,7 @@ async function fetchCaptionTrackDataViaPageScrape(videoId: string): Promise<{
   tracks: CaptionTrack[];
   translationLanguages: TranslationLanguage[];
 }> {
-  const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+  const res = await fetchWithTimeout(`https://www.youtube.com/watch?v=${videoId}`, {
     headers: {
       "User-Agent": BROWSER_UA,
       "Accept-Language": "en-US,en;q=0.9",
@@ -252,7 +290,7 @@ async function fetchAndParseCaptions(
   track: CaptionTrack
 ): Promise<NormalizedCaption[]> {
   // Try default format first
-  const res = await fetch(track.baseUrl, {
+  const res = await fetchWithTimeout(track.baseUrl, {
     headers: { "User-Agent": BROWSER_UA },
   });
   const xml = await res.text();
@@ -263,7 +301,7 @@ async function fetchAndParseCaptions(
   const url = new URL(track.baseUrl);
   if (!url.searchParams.has("fmt")) {
     url.searchParams.set("fmt", "srv3");
-    const srv3Res = await fetch(url.toString(), {
+    const srv3Res = await fetchWithTimeout(url.toString(), {
       headers: { "User-Agent": BROWSER_UA },
     });
     const srv3Xml = await srv3Res.text();
@@ -278,34 +316,47 @@ async function extractViaCaptionExtractor(
   videoId: string,
   languages: string[]
 ): Promise<{ captions: NormalizedCaption[]; lang: string } | null> {
-  for (const lang of languages) {
-    try {
-      const subtitles = await getSubtitles({ videoID: videoId, lang });
-      if (!subtitles || subtitles.length === 0) continue;
-      const captions: NormalizedCaption[] = subtitles
-        .map((line, index) => {
-          const startMs = Math.max(
-            0,
-            Math.round(Number.parseFloat(line.start || "0") * 1000)
-          );
-          const durationMs = Math.max(
-            0,
-            Math.round(Number.parseFloat(line.dur || "0") * 1000)
-          );
-          return {
-            text: (line.text || "").trim(),
-            startMs,
-            endMs: startMs + durationMs,
-            sequence: index + 1,
-          };
-        })
-        .filter((line) => line.text.length > 0);
-      if (captions.length > 0) {
-        return { captions, lang };
+  const compactLanguages = languages.some(
+    (lang) => lang.startsWith("zh") || lang.startsWith("yue")
+  )
+    ? ["zh", "zh-CN", "zh-TW", "yue", "yue-HK"]
+    : ["en", "en-US", "en-GB"];
+
+  const attempts = await Promise.all(
+    compactLanguages.map(async (lang) => {
+      try {
+        const subtitles = await withTimeout(
+          getSubtitles({ videoID: videoId, lang }),
+          CAPTION_EXTRACTOR_TIMEOUT_MS
+        );
+        if (!subtitles || subtitles.length === 0) return null;
+        const captions: NormalizedCaption[] = subtitles
+          .map((line, index) => {
+            const startMs = Math.max(
+              0,
+              Math.round(Number.parseFloat(line.start || "0") * 1000)
+            );
+            const durationMs = Math.max(
+              0,
+              Math.round(Number.parseFloat(line.dur || "0") * 1000)
+            );
+            return {
+              text: (line.text || "").trim(),
+              startMs,
+              endMs: startMs + durationMs,
+              sequence: index + 1,
+            };
+          })
+          .filter((line) => line.text.length > 0);
+        return captions.length > 0 ? { captions, lang } : null;
+      } catch {
+        return null;
       }
-    } catch {
-      // Try next language.
-    }
+    })
+  );
+
+  for (const attempt of attempts) {
+    if (attempt) return attempt;
   }
   return null;
 }
@@ -321,15 +372,142 @@ interface SupadataCaption {
   lang: string;
 }
 
+interface SupadataTranscriptResponse {
+  content?: SupadataCaption[] | string;
+  lang?: string;
+  availableLangs?: string[];
+  jobId?: string;
+}
+
+type CaptionLanguageFamily = "chinese" | "english";
+
+function isChineseLanguageCode(lang: string | undefined): boolean {
+  const normalized = (lang ?? "").toLowerCase();
+  return (
+    normalized.startsWith("zh") ||
+    normalized.startsWith("yue") ||
+    normalized.startsWith("cmn")
+  );
+}
+
+function isEnglishLanguageCode(lang: string | undefined): boolean {
+  return (lang ?? "").toLowerCase().startsWith("en");
+}
+
+function matchesLanguageFamily(
+  lang: string | undefined,
+  family: CaptionLanguageFamily
+): boolean {
+  return family === "chinese"
+    ? isChineseLanguageCode(lang)
+    : isEnglishLanguageCode(lang);
+}
+
+function normalizeSupadataResponse(
+  data: SupadataTranscriptResponse,
+  requestedLang: string
+): { captions: NormalizedCaption[]; lang: string } | null {
+  const responseLang = data.lang || requestedLang;
+  const content = data.content;
+
+  if (Array.isArray(content) && content.length > 0) {
+    const captions = content
+      .map((item, idx) => ({
+        text: (item.text || "").trim(),
+        startMs: Math.max(0, Math.round(item.offset ?? 0)),
+        endMs: Math.max(
+          0,
+          Math.round((item.offset ?? 0) + (item.duration ?? 0))
+        ),
+        sequence: idx + 1,
+      }))
+      .filter((caption) => caption.text.length > 0);
+    return captions.length > 0 ? { captions, lang: responseLang } : null;
+  }
+
+  if (typeof content === "string" && content.trim().length > 0) {
+    const captions = content
+      .split("\n")
+      .map((line, idx) => ({
+        text: line.trim(),
+        startMs: 0,
+        endMs: 0,
+        sequence: idx + 1,
+      }))
+      .filter((caption) => caption.text.length > 0);
+    return captions.length > 0 ? { captions, lang: responseLang } : null;
+  }
+
+  return null;
+}
+
+async function requestSupadataTranscript(
+  videoId: string,
+  lang: string
+): Promise<{
+  result: { captions: NormalizedCaption[]; lang: string } | null;
+  availableLangs: string[];
+}> {
+  const apiKey = process.env.SUPADATA_API_KEY;
+  if (!apiKey) return { result: null, availableLangs: [] };
+
+  const url = new URL("https://api.supadata.ai/v1/transcript");
+  url.searchParams.set("url", `https://www.youtube.com/watch?v=${videoId}`);
+  url.searchParams.set("mode", "native");
+  url.searchParams.set("text", "false");
+  url.searchParams.set("lang", lang);
+
+  const startedAt = Date.now();
+  try {
+    const res = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          "x-api-key": apiKey,
+          Accept: "application/json",
+        },
+      },
+      SUPADATA_TIMEOUT_MS
+    );
+    const data = (await res
+      .json()
+      .catch(() => ({}))) as SupadataTranscriptResponse;
+    const availableLangs = Array.isArray(data.availableLangs)
+      ? data.availableLangs.filter(
+          (item): item is string => typeof item === "string"
+        )
+      : [];
+
+    if (!res.ok || res.status === 202 || data.jobId) {
+      console.warn(
+        `[supadata] Transcript unavailable for lang=${lang}, status=${res.status}, elapsedMs=${Date.now() - startedAt}`
+      );
+      return { result: null, availableLangs };
+    }
+
+    const result = normalizeSupadataResponse(data, lang);
+    console.log(
+      `[supadata] lang=${result?.lang ?? lang}, captions=${result?.captions.length ?? 0}, elapsedMs=${Date.now() - startedAt}`
+    );
+    return { result, availableLangs };
+  } catch (error) {
+    const reason = error instanceof Error ? error.name : "unknown_error";
+    console.warn(
+      `[supadata] Request failed for lang=${lang}, reason=${reason}, elapsedMs=${Date.now() - startedAt}`
+    );
+    return { result: null, availableLangs: [] };
+  }
+}
+
 /**
  * Fetch captions via Supadata API (paid service, highly reliable).
- * First tries without lang param (gets default/best available),
- * then tries specific Chinese language codes in priority order.
+ * Makes one native-mode request for the preferred language and, only when the
+ * provider advertises a matching regional variant, one targeted retry.
  * Returns null if API key is not configured or no captions found.
  */
-async function fetchViaSupadata(
+export async function fetchViaSupadata(
   videoId: string,
-  langCodes: string[]
+  family: CaptionLanguageFamily
 ): Promise<{ captions: NormalizedCaption[]; lang: string } | null> {
   const apiKey = process.env.SUPADATA_API_KEY;
   if (!apiKey) {
@@ -337,64 +515,103 @@ async function fetchViaSupadata(
     return null;
   }
 
-  // Try each language code, plus a no-lang attempt first to get the default
-  const attempts = [...langCodes];
-
-  for (const lang of attempts) {
-    try {
-      const url = `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&lang=${lang}`;
-      console.log(`[supadata] Trying lang=${lang} for video ${videoId}`);
-      const res = await fetch(url, {
-        headers: {
-          "x-api-key": apiKey,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        console.log(`[supadata] lang=${lang} returned ${res.status}: ${errText.slice(0, 200)}`);
-        continue;
-      }
-
-      const data = await res.json();
-      console.log(`[supadata] lang=${lang} response keys:`, Object.keys(data), "availableLangs:", data.availableLangs);
-
-      // content can be an array of caption objects or a string (plain text mode)
-      const content = data.content;
-      const responseLang = data.lang || lang;
-
-      if (Array.isArray(content) && content.length > 0) {
-        const captions: NormalizedCaption[] = content.map((item: SupadataCaption, idx: number) => ({
-          text: (item.text || "").trim(),
-          startMs: Math.round(item.offset ?? 0),
-          endMs: Math.round((item.offset ?? 0) + (item.duration ?? 0)),
-          sequence: idx + 1,
-        })).filter((c: NormalizedCaption) => c.text.length > 0);
-
-        if (captions.length > 0) {
-          console.log(`[supadata] Success: ${captions.length} captions for lang=${responseLang}`);
-          return { captions, lang: responseLang };
-        }
-      } else if (typeof content === "string" && content.trim().length > 0) {
-        // Plain text response — split into lines as individual captions
-        const lines = content.split("\n").filter((l: string) => l.trim().length > 0);
-        const captions: NormalizedCaption[] = lines.map((line: string, idx: number) => ({
-          text: line.trim(),
-          startMs: 0,
-          endMs: 0,
-          sequence: idx + 1,
-        }));
-        if (captions.length > 0) {
-          console.log(`[supadata] Success (plain text): ${captions.length} lines for lang=${responseLang}`);
-          return { captions, lang: responseLang };
-        }
-      }
-    } catch (err) {
-      console.error(`[supadata] Error for lang=${lang}:`, err);
-    }
+  const preferredLang = family === "chinese" ? "zh" : "en";
+  const first = await requestSupadataTranscript(videoId, preferredLang);
+  if (first.result && matchesLanguageFamily(first.result.lang, family)) {
+    return first.result;
   }
+
+  const availableMatch = first.availableLangs.find((lang) =>
+    matchesLanguageFamily(lang, family)
+  );
+  if (!availableMatch || availableMatch.toLowerCase() === preferredLang) {
+    return null;
+  }
+
+  const second = await requestSupadataTranscript(videoId, availableMatch);
+  if (second.result && matchesLanguageFamily(second.result.lang, family)) {
+    return second.result;
+  }
+
   return null;
+}
+
+function normalizeCaptionText(text: string): string {
+  return text
+    .replace(/([\p{Script=Han}])\s+(?=[\p{Script=Han}])/gu, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function joinCaptionText(left: string, right: string): string {
+  if (!left) return right;
+  if (!right) return left;
+  const noSpaceNeeded =
+    /[\p{Script=Han}]$/u.test(left) && /^[\p{Script=Han}]/u.test(right);
+  return `${left}${noSpaceNeeded ? "" : " "}${right}`;
+}
+
+/**
+ * Supadata can return word-sized, heavily overlapping captions. Rendering
+ * thousands of those rows blocks the transcript UI, so only granular feeds
+ * are coalesced into readable 4–6 second lines while preserving seek times.
+ */
+export function coalesceCaptions(
+  input: NormalizedCaption[]
+): NormalizedCaption[] {
+  if (input.length < 2) return input;
+
+  const sample = input.slice(0, Math.min(input.length, 200));
+  const averageTextLength =
+    sample.reduce(
+      (total, caption) => total + normalizeCaptionText(caption.text).length,
+      0
+    ) /
+    sample.length;
+  const averageStartGap =
+    sample.slice(1).reduce(
+      (total, caption, index) =>
+        total + Math.max(0, caption.startMs - sample[index].startMs),
+      0
+    ) / Math.max(1, sample.length - 1);
+  const isGranular =
+    input.length >= 1_000 ||
+    (input.length >= 200 && averageTextLength <= 8 && averageStartGap <= 1_200);
+
+  if (!isGranular) return input;
+
+  const result: NormalizedCaption[] = [];
+  let current: NormalizedCaption | null = null;
+
+  for (const rawCaption of input) {
+    const text = normalizeCaptionText(rawCaption.text);
+    if (!text) continue;
+
+    if (!current) {
+      current = { ...rawCaption, text, sequence: result.length + 1 };
+      continue;
+    }
+
+    const gapMs = rawCaption.startMs - current.endMs;
+    const spanMs = Math.max(current.endMs, rawCaption.endMs) - current.startMs;
+    const shouldBreak =
+      gapMs > 1_200 ||
+      spanMs >= 5_500 ||
+      current.text.length >= 30 ||
+      (spanMs >= 2_500 && /[。！？!?]$/u.test(current.text));
+
+    if (shouldBreak) {
+      result.push({ ...current, sequence: result.length + 1 });
+      current = { ...rawCaption, text, sequence: result.length + 1 };
+      continue;
+    }
+
+    current.text = joinCaptionText(current.text, text);
+    current.endMs = Math.max(current.endMs, rawCaption.endMs);
+  }
+
+  if (current) result.push({ ...current, sequence: result.length + 1 });
+  return result;
 }
 
 // ============================================================
@@ -417,7 +634,7 @@ export async function extractChineseCaptions(
   videoId: string
 ): Promise<{ captions: NormalizedCaption[]; lang: string } | null> {
   // Step 1: Try Supadata API first (bypasses YouTube PO Token blocks)
-  const supadataResult = await fetchViaSupadata(videoId, CHINESE_LANG_CODES);
+  const supadataResult = await fetchViaSupadata(videoId, "chinese");
   if (supadataResult) {
     return supadataResult;
   }
@@ -484,7 +701,7 @@ export async function extractEnglishCaptions(
 ): Promise<NormalizedCaption[] | null> {
   try {
     // Try Supadata first
-    const supadataResult = await fetchViaSupadata(videoId, ENGLISH_LANG_CODES);
+    const supadataResult = await fetchViaSupadata(videoId, "english");
     if (supadataResult) {
       return supadataResult.captions;
     }
@@ -585,7 +802,7 @@ export async function isYouTubeCaptionAccessBlocked(
     const toProbe = tracks.slice(0, 2);
     for (const track of toProbe) {
       if (!track?.baseUrl) continue;
-      const response = await fetch(track.baseUrl, {
+      const response = await fetchWithTimeout(track.baseUrl, {
         headers: { "User-Agent": BROWSER_UA },
       });
       const body = await response.text();
