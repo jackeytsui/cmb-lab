@@ -55,15 +55,15 @@ export function ManagementSummary({
 }: ManagementSummaryProps) {
   const courseAccesses = completion.reduce(
     (sum, row) => sum + row.enrolledStudents,
-    0,
+    0
   );
   const activeCourseAccesses = completion.reduce(
     (sum, row) => sum + row.activeStudents,
-    0,
+    0
   );
   const completedCourseAccesses = completion.reduce(
     (sum, row) => sum + row.completedStudents,
-    0,
+    0
   );
   const topDropoff = dropoff[0] ?? null;
 
@@ -78,7 +78,10 @@ export function ManagementSummary({
     {
       label: "Course engagement",
       value: activeCourseAccesses.toLocaleString(),
-      detail: `${percent(activeCourseAccesses, courseAccesses)}% of course accesses active in the period`,
+      detail: `${percent(
+        activeCourseAccesses,
+        courseAccesses
+      )}% of course accesses active in the period`,
       icon: MousePointerClick,
       tone: "text-blue-500 bg-blue-500/10",
     },
@@ -118,7 +121,10 @@ export function ManagementSummary({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
-          <div key={card.label} className="rounded-xl border border-border bg-card p-5">
+          <div
+            key={card.label}
+            className="rounded-xl border border-border bg-card p-5"
+          >
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-medium text-muted-foreground">
                 {card.label}
@@ -152,8 +158,8 @@ export function ManagementSummary({
             Onboarding follow-up
           </p>
           <p className="mt-2 text-lg font-semibold text-foreground">
-            {loading ? "—" : overview.inactiveStudentsNeverLoggedIn} students
-            never active
+            {loading ? "—" : overview.inactiveStudentsNeverLoggedIn} with no CMB
+            Lab activity
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             Prioritize login and setup support for this group.

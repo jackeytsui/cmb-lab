@@ -607,6 +607,7 @@ export async function getDropoffData(
         dropoffRate,
       };
     })
+    .filter((row) => row.dropoffCount > 0)
     .sort((a, b) => {
       if (a.dropoffRate !== b.dropoffRate) return b.dropoffRate - a.dropoffRate;
       return b.startedCount - a.startedCount;

@@ -22,7 +22,7 @@ function daysColor(days: number | null): string {
 }
 
 function formatLastActivity(iso: string | null, days: number | null): string {
-  if (!iso || days === null) return "Never";
+  if (!iso || days === null) return "No CMB Lab activity";
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days} days ago`;
@@ -40,11 +40,21 @@ function SkeletonRows() {
     <>
       {[1, 2, 3].map((i) => (
         <tr key={i} className="border-b border-border">
-          <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
-          <td className="px-4 py-3"><Skeleton className="h-4 w-36" /></td>
-          <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-          <td className="px-4 py-3"><Skeleton className="h-4 w-10" /></td>
-          <td className="px-4 py-3"><Skeleton className="h-4 w-10" /></td>
+          <td className="px-4 py-3">
+            <Skeleton className="h-4 w-28" />
+          </td>
+          <td className="px-4 py-3">
+            <Skeleton className="h-4 w-36" />
+          </td>
+          <td className="px-4 py-3">
+            <Skeleton className="h-4 w-20" />
+          </td>
+          <td className="px-4 py-3">
+            <Skeleton className="h-4 w-10" />
+          </td>
+          <td className="px-4 py-3">
+            <Skeleton className="h-4 w-10" />
+          </td>
         </tr>
       ))}
     </>
@@ -67,9 +77,11 @@ export function AtRiskTable({ data, loading }: AtRiskTableProps) {
           <tr className="border-b border-border">
             <th className="px-4 py-3 font-medium">Student</th>
             <th className="px-4 py-3 font-medium">Email</th>
-            <th className="px-4 py-3 font-medium">Last Activity</th>
+            <th className="px-4 py-3 font-medium">Last Recorded Activity</th>
             <th className="px-4 py-3 font-medium">Days Inactive</th>
-            <th className="px-4 py-3 font-medium">Lessons Completed in Period</th>
+            <th className="px-4 py-3 font-medium">
+              Lessons Completed in Period
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -91,8 +103,14 @@ export function AtRiskTable({ data, loading }: AtRiskTableProps) {
                   {formatLastActivity(row.lastActivity, row.daysSinceActivity)}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`font-medium ${daysColor(row.daysSinceActivity)}`}>
-                    {row.daysSinceActivity !== null ? row.daysSinceActivity : "-"}
+                  <span
+                    className={`font-medium ${daysColor(
+                      row.daysSinceActivity
+                    )}`}
+                  >
+                    {row.daysSinceActivity !== null
+                      ? row.daysSinceActivity
+                      : "-"}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">

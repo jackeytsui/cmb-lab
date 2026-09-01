@@ -31,7 +31,7 @@ const cards = [
   },
   {
     key: "inactiveStudentsNeverLoggedIn",
-    label: "Inactive (Never Logged In)",
+    label: "No Recorded Activity",
     accent: "text-blue-500",
     border: "border-blue-500/30",
   },
