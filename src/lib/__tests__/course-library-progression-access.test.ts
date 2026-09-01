@@ -5,6 +5,10 @@ import {
   getCurrentCourseLibraryModuleIndex,
   type CourseLibraryModuleProgress,
 } from "@/lib/course-library-progression";
+import {
+  courseLibraryProgressLockedHref,
+  hasCourseLibraryProgressLockedNotice,
+} from "@/lib/course-library-navigation";
 
 const modules: CourseLibraryModuleProgress[] = [
   { id: "chapter-1", lessonCount: 3, completedCount: 3 },
@@ -87,6 +91,19 @@ describe("Course Library roadmap authorization", () => {
     expect(coursePage).toContain("if (!canSeeCourse(course.id)) notFound()");
     expect(modulePage).toContain("canUserAccessCourseLibraryModule");
     expect(lessonPage).toContain("canUserAccessCourseLibraryLesson");
+    expect(modulePage).toContain("if (!row) notFound()");
+    expect(lessonPage).toContain("if (!row) notFound()");
+    expect(modulePage).toContain("if (!canSeeCourse(courseId)) notFound()");
+    expect(lessonPage).toContain("if (!canSeeCourse(courseId)) notFound()");
+    expect(modulePage).toContain(
+      "redirect(courseLibraryProgressLockedHref(courseId))",
+    );
+    expect(lessonPage).toContain(
+      "redirect(courseLibraryProgressLockedHref(courseId))",
+    );
+    expect(modulePage).toContain("if (!currentUser) notFound()");
+    expect(lessonPage).toContain("if (!currentUser) notFound()");
+    expect(coursePage).toContain("That lesson is not unlocked yet.");
 
     const guardedLessonRoutes = [
       "src/app/api/course-library/audio/[lessonId]/route.ts",
@@ -109,6 +126,20 @@ describe("Course Library roadmap authorization", () => {
         "canUserAccessCourseLibraryLesson",
       );
     }
+  });
+
+  it("builds and recognizes the locked-progress roadmap notice", () => {
+    expect(courseLibraryProgressLockedHref("course/with spaces")).toBe(
+      "/course-library/course%2Fwith%20spaces?notice=progress-locked",
+    );
+    expect(hasCourseLibraryProgressLockedNotice("progress-locked")).toBe(
+      true,
+    );
+    expect(
+      hasCourseLibraryProgressLockedNotice(["ignored", "progress-locked"]),
+    ).toBe(true);
+    expect(hasCourseLibraryProgressLockedNotice("ignored")).toBe(false);
+    expect(hasCourseLibraryProgressLockedNotice(undefined)).toBe(false);
   });
 
   it("uses the View As student identity for progress and interactive media", () => {

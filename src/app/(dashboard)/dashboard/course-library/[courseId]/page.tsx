@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, LockKeyhole } from "lucide-react";
 import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
 import { CourseMap, type CourseMapStop } from "@/components/course-library/CourseMap";
 import { db } from "@/db";
@@ -15,15 +15,26 @@ import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { getCurrentCourseLibraryModuleIndex } from "@/lib/course-library-progression";
+import { hasCourseLibraryProgressLockedNotice } from "@/lib/course-library-navigation";
 import { displayedCompletedLessonIds, hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
 import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgressNotice";
 
 interface PageProps {
   params: Promise<{ courseId: string }>;
+  searchParams?: Promise<{ notice?: string | string[] }>;
 }
 
-export default async function CourseLibraryCourseDetailPage({ params }: PageProps) {
-  const { courseId } = await params;
+export default async function CourseLibraryCourseDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
+  const [{ courseId }, query] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve<{ notice?: string | string[] }>({}),
+  ]);
+  const showProgressLockedNotice = hasCourseLibraryProgressLockedNotice(
+    query.notice,
+  );
   const currentUser = await getCurrentUser();
   const staffProgress = hasDefaultCourseCompletion(currentUser?.role);
 
@@ -234,6 +245,22 @@ export default async function CourseLibraryCourseDetailPage({ params }: PageProp
             </div>
           </div>
         </header>
+
+        {showProgressLockedNotice && (
+          <div
+            role="status"
+            className="mb-5 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/35 dark:text-amber-100"
+          >
+            <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
+            <div>
+              <p className="font-semibold">That lesson is not unlocked yet.</p>
+              <p className="mt-0.5 text-sm leading-relaxed text-amber-900/80 dark:text-amber-100/80">
+                We brought you back to your current course position. Complete
+                the current stop to unlock what comes next.
+              </p>
+            </div>
+          </div>
+        )}
 
         {staffProgress && <StaffCourseProgressNotice />}
 

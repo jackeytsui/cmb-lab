@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   ChevronLeft,
   Download as DownloadIcon,
@@ -44,6 +44,7 @@ import { signMediaPath } from "@/lib/signed-media-url";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
+import { courseLibraryProgressLockedHref } from "@/lib/course-library-navigation";
 import {
   isDiaryLesson,
   isListeningPracticeLesson,
@@ -151,11 +152,9 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
   if (!canSeeCourse(courseId)) notFound();
-  if (
-    !currentUser ||
-    !(await canUserAccessCourseLibraryLesson(currentUser, lessonId))
-  ) {
-    notFound();
+  if (!currentUser) notFound();
+  if (!(await canUserAccessCourseLibraryLesson(currentUser, lessonId))) {
+    redirect(courseLibraryProgressLockedHref(courseId));
   }
 
   const orderedLessons = await db

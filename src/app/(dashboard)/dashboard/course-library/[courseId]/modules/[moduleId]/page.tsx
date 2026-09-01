@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,6 +27,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
 import { canUserAccessCourseLibraryModule } from "@/lib/course-library-lesson-access";
+import { courseLibraryProgressLockedHref } from "@/lib/course-library-navigation";
 import { baseLessonType, isCantoneseLessonType } from "@/lib/lesson-language";
 import { cn } from "@/lib/utils";
 import { displayedCompletedLessonIds, hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
@@ -112,11 +113,9 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
 
   const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
   if (!canSeeCourse(courseId)) notFound();
-  if (
-    !currentUser ||
-    !(await canUserAccessCourseLibraryModule(currentUser, moduleId))
-  ) {
-    notFound();
+  if (!currentUser) notFound();
+  if (!(await canUserAccessCourseLibraryModule(currentUser, moduleId))) {
+    redirect(courseLibraryProgressLockedHref(courseId));
   }
 
   const mod = row.module;
