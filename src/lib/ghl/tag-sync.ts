@@ -28,7 +28,7 @@ async function getConfiguredPostPurchaseTagsForUser(
   userId: string,
 ): Promise<Set<PostPurchaseControlledTag> | null> {
   const user = await db.query.users.findFirst({
-    columns: { email: true },
+    columns: { email: true, assignedCoachId: true },
     where: eq(users.id, userId),
   });
   if (!user?.email) return null;
@@ -49,7 +49,14 @@ async function getConfiguredPostPurchaseTagsForUser(
   const configured = rows.filter((row) => row.productLine?.trim());
   if (configured.length === 0) return null;
 
-  return new Set(configured.flatMap((row) => derivePostPurchaseTags(row)));
+  return new Set(
+    configured.flatMap((row) =>
+      derivePostPurchaseTags({
+        ...row,
+        oneOnOneCoachAssigned: Boolean(user.assignedCoachId),
+      }),
+    ),
+  );
 }
 
 /**

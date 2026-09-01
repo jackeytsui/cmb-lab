@@ -12,6 +12,12 @@ export type PostPurchaseControlledTag =
 export type PostPurchaseEntitlementInput = {
   productLine?: string | string[] | null;
   addOnPurchased?: string | string[] | null;
+  /**
+   * When explicitly false, a 1:1 purchase is kept pending until CMB Lab has
+   * a real coach assignment. Omit this during the initial webhook so the
+   * provisioning flow can resolve the coach from the newly linked contacts.
+   */
+  oneOnOneCoachAssigned?: boolean | null;
 };
 
 export type PostPurchaseSourceRow = PostPurchaseEntitlementInput & {
@@ -96,7 +102,10 @@ export function derivePostPurchaseTags(
   if (products.some((value) => value.includes("improve canto"))) {
     expected.add("ic_student");
   }
-  if (addOns.some((value) => value.includes("1:1 coaching"))) {
+  if (
+    addOns.some((value) => value.includes("1:1 coaching")) &&
+    input.oneOnOneCoachAssigned !== false
+  ) {
     expected.add("1on1_student");
   }
   if (addOns.some((value) => value.includes("icgc"))) {

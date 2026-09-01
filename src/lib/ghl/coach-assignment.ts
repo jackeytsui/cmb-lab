@@ -1,8 +1,8 @@
 import "server-only";
 
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { studentTags, tags, users } from "@/db/schema";
+import { activeStudents, studentTags, tags, users } from "@/db/schema";
 import { fetchGhlContactDataForLink } from "@/lib/ghl/contact-fields";
 import {
   getActiveGhlLocations,
@@ -63,6 +63,21 @@ async function hasOneOnOneAccess(userId: string) {
   return Boolean(row);
 }
 
+async function hasOneOnOnePurchase(email: string) {
+  const [row] = await db
+    .select({ id: activeStudents.contactId })
+    .from(activeStudents)
+    .where(
+      and(
+        ilike(activeStudents.email, email),
+        ilike(activeStudents.courseEligibility, "YES"),
+        ilike(activeStudents.addOnPurchased, "%1:1 coaching%"),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
 async function activeStaff() {
   return db
     .select({ id: users.id, email: users.email, name: users.name })
@@ -93,7 +108,10 @@ export async function syncAssignedCoachFromGhl(params: {
   if (student.assignedCoachId) {
     return { status: "already_assigned", coachId: student.assignedCoachId };
   }
-  if (!(await hasOneOnOneAccess(params.userId))) {
+  if (
+    !(await hasOneOnOneAccess(params.userId)) &&
+    !(await hasOneOnOnePurchase(params.email))
+  ) {
     return { status: "not_entitled" };
   }
 
@@ -205,16 +223,26 @@ export async function reconcileMissingCoachAssignments(params?: {
   limit?: number;
 }) {
   const candidates = await db
-    .select({ id: users.id, email: users.email })
+    .selectDistinct({ id: users.id, email: users.email })
     .from(users)
-    .innerJoin(studentTags, eq(studentTags.userId, users.id))
-    .innerJoin(tags, eq(tags.id, studentTags.tagId))
+    .leftJoin(studentTags, eq(studentTags.userId, users.id))
+    .leftJoin(tags, eq(tags.id, studentTags.tagId))
+    .leftJoin(
+      activeStudents,
+      sql`lower(trim(${activeStudents.email})) = lower(trim(${users.email}))`,
+    )
     .where(
       and(
         eq(users.role, "student"),
         isNull(users.deletedAt),
         isNull(users.assignedCoachId),
-        eq(tags.name, "1on1_student"),
+        or(
+          eq(tags.name, "1on1_student"),
+          and(
+            ilike(activeStudents.courseEligibility, "YES"),
+            ilike(activeStudents.addOnPurchased, "%1:1 coaching%"),
+          ),
+        ),
       ),
     );
   const requested = params?.emails

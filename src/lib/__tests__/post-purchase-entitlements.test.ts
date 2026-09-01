@@ -104,6 +104,20 @@ describe("derivePostPurchaseTags", () => {
       addOnPurchased: [" CUSTOM COURSE ", "Custom course"],
     })).toEqual(["cmb_student", "custom_course_student"]);
   });
+
+  it("keeps 1:1 access pending while the GHL coach field is unresolved", () => {
+    expect(derivePostPurchaseTags({
+      productLine: "CMBP",
+      addOnPurchased: "1:1 coaching + Discord Private Channel, ICGC",
+      oneOnOneCoachAssigned: false,
+    })).toEqual(["cmb_student", "icgc_student"]);
+
+    expect(derivePostPurchaseTags({
+      productLine: "CMBP",
+      addOnPurchased: "1:1 coaching + Discord Private Channel",
+      oneOnOneCoachAssigned: true,
+    })).toEqual(["cmb_student", "1on1_student"]);
+  });
 });
 
 describe("shouldApplyInboundPostPurchaseTagChange", () => {

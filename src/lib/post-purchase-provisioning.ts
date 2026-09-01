@@ -70,6 +70,8 @@ async function ensureCmbUser(params: {
   let clerkUser = lookup.data[0] ?? null;
   const created = !clerkUser;
   const priorMetadata = clerkUser?.publicMetadata ?? {};
+  const portalAlreadyExpired =
+    priorMetadata.cmbPortalAccessStatus === "expired";
   const retryPostPurchaseInvitation =
     priorMetadata.invitedBy === "ghl_post_purchase" &&
     typeof priorMetadata.cmbPostPurchaseInviteSentAt !== "string";
@@ -77,8 +79,8 @@ async function ensureCmbUser(params: {
     role: DEFAULT_PLATFORM_ROLE,
     cmbInviteRole: DEFAULT_PLATFORM_ROLE,
     cmbInviteTags: params.expectedTags,
-    cmbPortalAccessStatus: "active",
-    cmbPortalAccessRevoked: false,
+    cmbPortalAccessStatus: portalAlreadyExpired ? "expired" : "active",
+    cmbPortalAccessRevoked: portalAlreadyExpired,
   };
   const invitationMetadata = {
     ...provisioningMetadata,
@@ -116,8 +118,10 @@ async function ensureCmbUser(params: {
         cmbInviteTags: mergedInviteTags,
       },
     });
-    await clerk.users.unbanUser(clerkUser.id).catch(() => {});
-    await clerk.users.unlockUser(clerkUser.id).catch(() => {});
+    if (!portalAlreadyExpired) {
+      await clerk.users.unbanUser(clerkUser.id).catch(() => {});
+      await clerk.users.unlockUser(clerkUser.id).catch(() => {});
+    }
   }
 
   const fullName = composeStudentName(params.firstName, params.lastName);
@@ -204,7 +208,32 @@ async function ensureCmbUser(params: {
     }
   }
 
-  return { dbUserId, created, invitation };
+  return { dbUserId, clerkUserId: clerkUser.id, created, invitation };
+}
+
+async function updateControlledInviteTags(
+  clerkUserId: string,
+  expectedTags: PostPurchaseControlledTag[],
+) {
+  const clerk = await clerkClient();
+  const clerkUser = await clerk.users.getUser(clerkUserId);
+  const existingInviteTags = Array.isArray(
+    clerkUser.publicMetadata?.cmbInviteTags,
+  )
+    ? clerkUser.publicMetadata.cmbInviteTags.filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  const controlledTags = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
+  const preservedInviteTags = existingInviteTags.filter(
+    (tag) => !controlledTags.has(tag.toLowerCase()),
+  );
+  await clerk.users.updateUserMetadata(clerkUserId, {
+    publicMetadata: {
+      ...(clerkUser.publicMetadata ?? {}),
+      cmbInviteTags: [...new Set([...preservedInviteTags, ...expectedTags])],
+    },
+  });
 }
 
 async function getControlledTagRows() {
@@ -485,8 +514,9 @@ export async function provisionPostPurchaseEntitlements(
     expectedTags,
   });
 
+  let resolvedSourceContactId = input.ghlContactId ?? null;
   if (input.ghlContactId && input.ghlLocationId) {
-    const resolvedSourceContactId = await syncControlledTagsToContact({
+    resolvedSourceContactId = await syncControlledTagsToContact({
       ghlContactId: input.ghlContactId,
       ghlLocationId: input.ghlLocationId,
       email,
@@ -514,23 +544,69 @@ export async function provisionPostPurchaseEntitlements(
     authoritativeEmailUpsert: true,
   });
 
-  await syncAssignedCoachFromGhl({
-    userId: ensured.dbUserId,
-    email,
-  }).catch((error) => {
-    console.error(
-      "[Post Purchase] Coach assignment reconciliation failed:",
-      error instanceof Error ? error.message : error,
+  let coachBackedOneOnOne = !expectedTags.includes("1on1_student");
+  if (expectedTags.includes("1on1_student")) {
+    try {
+      const coachResult = await syncAssignedCoachFromGhl({
+        userId: ensured.dbUserId,
+        email,
+      });
+      coachBackedOneOnOne =
+        coachResult.status === "assigned" ||
+        coachResult.status === "already_assigned";
+    } catch (error) {
+      console.error(
+        "[Post Purchase] Coach assignment reconciliation failed:",
+        error instanceof Error ? error.message : error,
+      );
+      coachBackedOneOnOne = false;
+    }
+  }
+
+  let finalExpectedTags = expectedTags;
+  let correctionPlan: Awaited<ReturnType<typeof applyCmbTags>> = {
+    add: [],
+    remove: [],
+  };
+  if (!coachBackedOneOnOne) {
+    finalExpectedTags = expectedTags.filter(
+      (tag) => tag !== "1on1_student",
     );
-  });
+    correctionPlan = await applyCmbTags({
+      userId: ensured.dbUserId,
+      expectedTags: finalExpectedTags,
+    });
+    if (resolvedSourceContactId && input.ghlLocationId) {
+      await syncControlledTagsToContact({
+        ghlContactId: resolvedSourceContactId,
+        ghlLocationId: input.ghlLocationId,
+        email,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        expectedTags: finalExpectedTags,
+      });
+    }
+    await syncControlledTagsToContact({
+      ghlContactId: courseContact.contactId,
+      ghlLocationId: courseContact.locationId,
+      email,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      expectedTags: finalExpectedTags,
+    });
+    await updateControlledInviteTags(
+      ensured.clerkUserId,
+      finalExpectedTags,
+    );
+  }
 
   return {
     action: ensured.created ? "created_user" : "existing_user",
     invitation: ensured.invitation,
     userId: ensured.dbUserId,
-    expectedTags,
-    tagsAdded: plan.add,
-    tagsRemoved: plan.remove,
+    expectedTags: finalExpectedTags,
+    tagsAdded: [...new Set([...plan.add, ...correctionPlan.add])],
+    tagsRemoved: [...new Set([...plan.remove, ...correctionPlan.remove])],
   };
 }
 
@@ -572,6 +648,7 @@ export async function reconcilePostPurchaseEntitlements(params?: {
     .select({
       userId: users.id,
       email: users.email,
+      assignedCoachId: users.assignedCoachId,
       tagName: tags.name,
     })
     .from(users)
@@ -592,12 +669,18 @@ export async function reconcilePostPurchaseEntitlements(params?: {
   );
   const usersByEmail = new Map<
     string,
-    { userId: string; tags: Set<string>; hasCourseContact: boolean }
+    {
+      userId: string;
+      assignedCoachId: string | null;
+      tags: Set<string>;
+      hasCourseContact: boolean;
+    }
   >();
   for (const row of existingTagRows) {
     const email = normalizeEmail(row.email);
     const entry = usersByEmail.get(email) ?? {
       userId: row.userId,
+      assignedCoachId: row.assignedCoachId,
       tags: new Set<string>(),
       hasCourseContact: courseLinkedUserIds.has(row.userId),
     };
@@ -623,12 +706,15 @@ export async function reconcilePostPurchaseEntitlements(params?: {
   for (const student of students) {
     stats.checked += 1;
     const email = normalizeEmail(student.email);
-    const expectedTags = derivePostPurchaseTags(student);
+    const existing = usersByEmail.get(email);
+    const expectedTags = derivePostPurchaseTags({
+      ...student,
+      oneOnOneCoachAssigned: Boolean(existing?.assignedCoachId),
+    });
     if (expectedTags.length === 0) {
       stats.skippedInvalid += 1;
       continue;
     }
-    const existing = usersByEmail.get(email);
     if (!shouldReconcilePostPurchaseStudent({
       userExists: Boolean(existing),
       currentTags: existing?.tags ?? [],

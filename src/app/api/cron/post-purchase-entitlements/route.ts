@@ -18,8 +18,10 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const dryRun = url.searchParams.get("dryRun") === "true";
   const resyncGhl = url.searchParams.get("resyncGhl") === "true";
-  const result = await reconcilePostPurchaseEntitlements({ dryRun, resyncGhl });
   const coachAssignments = await reconcileMissingCoachAssignments({ dryRun });
+  // Resolve GHL coach fields first so the entitlement pass can grant 1:1
+  // access only to students with a real CMB coach assignment.
+  const result = await reconcilePostPurchaseEntitlements({ dryRun, resyncGhl });
   await logSyncEvent({
     eventType: "post_purchase.entitlements_reconciled",
     direction: "outbound",
