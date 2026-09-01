@@ -32,7 +32,7 @@ export function getCoachingSessionPresentation(
   }
 
   if (/\beurope(?:an)?(?:\s+timezone)?\b/i.test(title)) {
-    return { language, languageLabel: "Mandarin", name: "CMB: Europe" };
+    return { language, languageLabel: "Mandarin", name: "CMB: EU Timezone" };
   }
 
   return { language, languageLabel: "Mandarin", name: "CMB: Group Coaching" };
