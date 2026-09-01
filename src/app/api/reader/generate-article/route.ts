@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { canonicalizeCantonesePassage } from "@/lib/cantonese-reader-script";
 
 const HSK_LEVELS: Record<string, string> = {
   "1": "HSK 1 (absolute beginner). Use only the simplest, most common words (about 150 words). Very short sentences. Topics: greetings, numbers, family, food, time.",
@@ -108,7 +109,10 @@ Generate an engaging article at this exact difficulty level.`;
       maxOutputTokens: 2048,
     });
 
-    const article = text.trim();
+    const generatedArticle = text.trim();
+    const article = isCantonese
+      ? await canonicalizeCantonesePassage(generatedArticle)
+      : generatedArticle;
     if (!article) {
       return NextResponse.json(
         { error: "Failed to generate article" },
@@ -121,6 +125,7 @@ Generate an engaging article at this exact difficulty level.`;
       topic: topic.trim(),
       level,
       language: isCantonese ? "zh-HK" : "zh-CN",
+      script: isCantonese ? "traditional" : (script ?? "simplified"),
     });
   } catch (error) {
     console.error("Article generation error:", error);

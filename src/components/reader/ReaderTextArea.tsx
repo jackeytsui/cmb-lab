@@ -74,6 +74,11 @@ export interface ReaderTextAreaProps {
   toneColorsEnabled?: boolean;
   /** A saved manual pinyin/jyutping value, one syllable per Han character. */
   romanizationOverride?: string | null;
+  /**
+   * Canonical text used to derive Cantonese Jyutping. This may differ from the
+   * rendered text when the reader is displaying a Simplified conversion.
+   */
+  romanizationSourceText?: string | null;
 }
 
 function findWordElement(target: EventTarget): HTMLElement | null {
@@ -109,6 +114,7 @@ export function ReaderTextArea({
   className: outerClassName,
   toneColorsEnabled = false,
   romanizationOverride,
+  romanizationSourceText,
 }: ReaderTextAreaProps) {
   const lastHoveredIndexRef = useRef<number | null>(null);
   const fallbackRef = useRef<HTMLDivElement>(null);
@@ -123,9 +129,10 @@ export function ReaderTextArea({
   const romanizationBySegment = useMemo(() => {
     const result = new Map<number, readonly (string | null)[]>();
     const fullText = segments.map((segment) => segment.text).join("");
+    const sourceText = romanizationSourceText?.trim() || fullText;
     const saved = romanizationOverride?.trim() ?? "";
     const contextRomanization =
-      saved || (showJyutping ? smartRomanise(fullText, "cantonese") : "");
+      saved || (showJyutping ? smartRomanise(sourceText, "cantonese") : "");
 
     if (!contextRomanization) return result;
 
@@ -139,7 +146,7 @@ export function ReaderTextArea({
       charOffset += charCount;
     });
     return result;
-  }, [segments, romanizationOverride, showJyutping]);
+  }, [segments, romanizationOverride, romanizationSourceText, showJyutping]);
 
   const handleMouseOver = useCallback(
     (e: React.MouseEvent) => {

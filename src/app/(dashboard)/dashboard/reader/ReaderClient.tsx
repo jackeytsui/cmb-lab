@@ -6,6 +6,11 @@ import { useCharacterPopup } from "@/hooks/useCharacterPopup";
 import { useTTS } from "@/hooks/useTTS";
 import { segmentText, type WordSegment } from "@/lib/segmenter";
 import { convertScript, ensureSimplifiedConverter } from "@/lib/chinese-convert";
+import {
+  canonicalizeCantonesePassage,
+  getCantonesePassageDisplayText,
+  getCantoneseReaderScriptMode,
+} from "@/lib/cantonese-reader-script";
 import { detectSentences } from "@/lib/sentences";
 import { ImportDialog } from "@/components/reader/ImportDialog";
 import { ReaderToolbar } from "@/components/reader/ReaderToolbar";
@@ -194,6 +199,10 @@ export function ReaderClient({
     : language === "mandarin"
       ? "zh-CN"
       : savedTtsLanguage;
+  const isCantoneseReader = ttsLanguage === "zh-HK";
+  const displayScriptMode = isCantoneseReader
+    ? getCantoneseReaderScriptMode(scriptMode)
+    : scriptMode;
 
   const walkthroughSteps = useMemo<WalkthroughStep[]>(
     () => [
@@ -413,6 +422,9 @@ export function ReaderClient({
 
   // Core text state
   const [rawText, setRawText] = useState(initialText ?? "");
+  const [romanizationSourceText, setRomanizationSourceText] = useState(
+    initialText ?? "",
+  );
   const [displayText, setDisplayText] = useState("");
   const [isConverting, setIsConverting] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -585,32 +597,52 @@ export function ReaderClient({
     [],
   );
 
-  // Script conversion
+  // Script conversion. Cantonese keeps one canonical Traditional source and
+  // derives the optional Simplified display from it. Jyutping always reads
+  // from that canonical source, never from the converted display text.
   useEffect(() => {
     if (!rawText) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDisplayText("");
+      setRomanizationSourceText("");
+      setIsConverting(false);
       return;
     }
 
-    if (scriptMode === "original") {
+    if (!isCantoneseReader && displayScriptMode === "original") {
       setDisplayText(rawText);
+      setRomanizationSourceText(rawText);
+      setIsConverting(false);
       return;
     }
 
     let cancelled = false;
     setIsConverting(true);
 
-    convertScript(rawText, "original", scriptMode)
-      .then(async (converted) => {
-        if (!cancelled) setDisplayText(converted);
-        // Pre-load the simplified converter so WordSpan can derive stable
-        // Mandarin pinyin from simplified characters synchronously
-        await ensureSimplifiedConverter();
-      })
+    const convertForDisplay = async () => {
+      const canonicalSource = isCantoneseReader
+        ? await canonicalizeCantonesePassage(rawText)
+        : rawText;
+      const converted = isCantoneseReader
+        ? await getCantonesePassageDisplayText(canonicalSource, displayScriptMode)
+        : await convertScript(rawText, "original", displayScriptMode);
+
+      if (!cancelled) {
+        setRomanizationSourceText(canonicalSource);
+        setDisplayText(converted);
+      }
+
+      // Pre-load the simplified converter so an optional Pinyin row remains
+      // stable even while the Cantonese reader displays Traditional text.
+      await ensureSimplifiedConverter();
+    };
+
+    convertForDisplay()
       .catch((err) => {
         console.error("T/S conversion failed:", err);
-        if (!cancelled) setDisplayText(rawText);
+        if (!cancelled) {
+          setRomanizationSourceText(rawText);
+          setDisplayText(rawText);
+        }
       })
       .finally(() => {
         if (!cancelled) setIsConverting(false);
@@ -619,7 +651,7 @@ export function ReaderClient({
     return () => {
       cancelled = true;
     };
-  }, [rawText, scriptMode]);
+  }, [displayScriptMode, isCantoneseReader, rawText]);
 
   // Client-side fallback segments
   const fallbackSegments: WordSegment[] = useMemo(
@@ -636,7 +668,6 @@ export function ReaderClient({
 
     // Clear stale segments immediately so fallback (Intl.Segmenter) is used
     // while the async jieba fetch is in flight
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setJiebaSegments(null);
 
     let cancelled = false;
@@ -892,7 +923,7 @@ export function ReaderClient({
           showJyutping={showJyutping}
           showEnglish={showEnglish}
           translationMode={translationMode}
-          scriptMode={scriptMode}
+          scriptMode={displayScriptMode}
           fontSize={fontSize}
           ttsLanguage={ttsLanguage}
           onShowPinyinChange={setShowPinyin}
@@ -903,7 +934,11 @@ export function ReaderClient({
             translatedKeyRef.current = "";
             setTranslationMode(mode);
           }}
-          onScriptModeChange={setScriptMode}
+          onScriptModeChange={(mode) => {
+            setScriptMode(
+              isCantoneseReader ? getCantoneseReaderScriptMode(mode) : mode,
+            );
+          }}
           onFontSizeChange={setFontSize}
           onTtsLanguageChange={setTtsLanguage}
           showLanguageSwitcher={!language}
@@ -960,6 +995,9 @@ export function ReaderClient({
           playingSentenceIndex={playingSentenceIndex}
           containerRef={readerContainerRef}
           toneColorsEnabled={toneColorsEnabled}
+          romanizationSourceText={
+            isCantoneseReader ? romanizationSourceText : undefined
+          }
         />
       </div>
 
@@ -1012,6 +1050,9 @@ export function ReaderClient({
         }}
         onSourceImported={(source) => {
           if (source === "generate") {
+            if (isCantoneseReader) {
+              setScriptMode("traditional");
+            }
             setHasGeneratedFromImportForTour(true);
             setGenerateActionSignal((prev) => prev + 1);
             trackAction("generate_passage");

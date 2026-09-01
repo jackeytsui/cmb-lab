@@ -12,10 +12,14 @@ const splitBankSegments: WordSegment[] = [
   { text: "行", index: 1, isWordLike: true },
 ];
 
-function renderCantonese(romanizationOverride?: string) {
+function renderCantonese(
+  romanizationOverride?: string,
+  segments = splitBankSegments,
+  romanizationSourceText?: string,
+) {
   return renderToStaticMarkup(
     <ReaderTextArea
-      segments={splitBankSegments}
+      segments={segments}
       showPinyin={false}
       showJyutping
       showEnglish={false}
@@ -28,6 +32,7 @@ function renderCantonese(romanizationOverride?: string) {
       translationCache={new Map()}
       onTranslationFetched={() => {}}
       romanizationOverride={romanizationOverride}
+      romanizationSourceText={romanizationSourceText}
     />,
   );
 }
@@ -47,5 +52,30 @@ describe("ReaderTextArea Cantonese romanisation", () => {
     expect(html).toContain("ngan4");
     expect(html).toContain("haang4");
     expect(html).not.toContain("hong4");
+  });
+
+  it("keeps Traditional-source Jyutping when Simplified characters are displayed", () => {
+    const traditionalSegments: WordSegment[] = [
+      { text: "一隻貓", index: 0, isWordLike: true },
+    ];
+    const simplifiedSegments: WordSegment[] = [
+      { text: "一只猫", index: 0, isWordLike: true },
+    ];
+    const source = "一隻貓";
+
+    const traditionalHtml = renderCantonese(
+      undefined,
+      traditionalSegments,
+      source,
+    );
+    const simplifiedHtml = renderCantonese(
+      undefined,
+      simplifiedSegments,
+      source,
+    );
+
+    expect(traditionalHtml).toContain("zek3");
+    expect(simplifiedHtml).toContain("zek3");
+    expect(simplifiedHtml).not.toContain("zi2");
   });
 });
