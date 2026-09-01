@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -10,6 +11,8 @@ import {
 import { relations } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { users } from "./users";
+import type { PlatformRole } from "@/lib/platform-roles";
+import type { AnnouncementAudienceMode } from "@/lib/announcement-audience";
 
 export const announcements = pgTable(
   "announcements",
@@ -19,6 +22,18 @@ export const announcements = pgTable(
     body: text("body").notNull(),
     linkUrl: text("link_url"),
     linkLabel: text("link_label"),
+    audienceMode: text("audience_mode")
+      .$type<AnnouncementAudienceMode>()
+      .notNull()
+      .default("all"),
+    audienceTagIds: jsonb("audience_tag_ids")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    audienceRoles: jsonb("audience_roles")
+      .$type<PlatformRole[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     isActive: boolean("is_active").notNull().default(true),
     createdBy: uuid("created_by")
       .notNull()

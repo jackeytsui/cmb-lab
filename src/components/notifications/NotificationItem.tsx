@@ -30,7 +30,11 @@ export function NotificationItem({
 
     // Navigate to link if provided
     if (notification.linkUrl) {
-      router.push(notification.linkUrl);
+      if (notification.linkUrl.startsWith("https://")) {
+        window.open(notification.linkUrl, "_blank", "noopener,noreferrer");
+      } else {
+        router.push(notification.linkUrl);
+      }
     }
   };
 

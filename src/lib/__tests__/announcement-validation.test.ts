@@ -39,4 +39,28 @@ describe("announcement validation", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it("accepts role-and-tag targeting", () => {
+    const result = announcementInputSchema.safeParse({
+      title: "ICGC update",
+      body: "This is only for current ICGC students.",
+      audienceMode: "targeted",
+      audienceTagIds: ["d5579b7d-76f1-4b43-8392-a4f2f38fc2fe"],
+      audienceRoles: ["student"],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an empty targeted audience", () => {
+    const result = announcementInputSchema.safeParse({
+      title: "Targeted update",
+      body: "This should not accidentally go to everyone.",
+      audienceMode: "targeted",
+      audienceTagIds: [],
+      audienceRoles: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
 });

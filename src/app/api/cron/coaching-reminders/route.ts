@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  or,
+} from "drizzle-orm";
 import { db } from "@/db";
 import {
   groupCoachingEventReminders,
@@ -13,24 +22,19 @@ import {
 } from "@/db/schema";
 import { GROUP_COACHING_EVENT_CONTENT_TYPE } from "@/lib/tag-feature-access";
 import { expandCoachingOccurrences } from "@/lib/group-coaching-recurrence";
+import { groupCoachingReminderKey } from "@/lib/group-coaching-session-state";
+import { sendCoachingReminderPush } from "@/lib/web-push";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-type ReminderKey = "one_hour" | "five_minutes" | "starting_now";
-
-function dueReminder(deltaMinutes: number): ReminderKey | null {
-  if (deltaMinutes <= 0 && deltaMinutes > -5) return "starting_now";
-  if (deltaMinutes <= 5 && deltaMinutes > 0) return "five_minutes";
-  if (deltaMinutes <= 60 && deltaMinutes > 45) return "one_hour";
-  return null;
-}
-
-const COPY: Record<ReminderKey, { title: string; lead: string }> = {
-  one_hour: { title: "ICGC starts in 1 hour", lead: "Get ready for" },
-  five_minutes: { title: "ICGC starts in 5 minutes", lead: "Starting soon:" },
-  starting_now: { title: "ICGC is starting now", lead: "Join now:" },
-};
+const COPY = {
+  one_hour: {
+    title: "Today's ICGC session starts in 1 hour",
+    lead: "Get ready for",
+  },
+  starting_now: { title: "ICGC is live now", lead: "Join now:" },
+} as const;
 
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -54,16 +58,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ skipped: true, reason: "icgc_tag_missing" });
   }
 
-  const [candidateEvents, audienceGrants, recipients] = await Promise.all([
+  const [candidateEvents, audienceGrants, restrictedEvents, recipients] =
+    await Promise.all([
     db
       .select({
         id: groupCoachingEvents.id,
         title: groupCoachingEvents.title,
         description: groupCoachingEvents.description,
         startsAt: groupCoachingEvents.startsAt,
+        meetingUrl: groupCoachingEvents.meetingUrl,
       })
       .from(groupCoachingEvents)
-      .where(eq(groupCoachingEvents.isCancelled, false))
+      .where(
+        and(
+          eq(groupCoachingEvents.isCancelled, false),
+          or(
+            gte(groupCoachingEvents.startsAt, windowStart),
+            ilike(groupCoachingEvents.description, "%Repeats every%"),
+          ),
+        ),
+      )
+      .orderBy(asc(groupCoachingEvents.startsAt))
       .limit(500),
     db
       .select({ contentId: tagContentGrants.contentId })
@@ -78,6 +93,15 @@ export async function GET(request: Request) {
         ),
       ),
     db
+      .selectDistinct({ contentId: tagContentGrants.contentId })
+      .from(tagContentGrants)
+      .where(
+        eq(
+          tagContentGrants.contentType,
+          GROUP_COACHING_EVENT_CONTENT_TYPE,
+        ),
+      ),
+    db
       .select({ id: users.id })
       .from(users)
       .innerJoin(studentTags, eq(studentTags.userId, users.id))
@@ -88,13 +112,16 @@ export async function GET(request: Request) {
           isNull(users.deletedAt),
         ),
       ),
-  ]);
+    ]);
 
   const candidateOccurrences = expandCoachingOccurrences(candidateEvents, {
     startsAt: windowStart,
     endsAt: windowEnd,
   });
   const grantedEventIds = new Set(audienceGrants.map((grant) => grant.contentId));
+  const restrictedEventIds = new Set(
+    restrictedEvents.map((grant) => grant.contentId),
+  );
   const recipientIds = recipients.map((recipient) => recipient.id);
   if (candidateOccurrences.length === 0 || recipientIds.length === 0) {
     return NextResponse.json({ events: 0, recipients: recipientIds.length, sent: 0 });
@@ -115,10 +142,15 @@ export async function GET(request: Request) {
 
   let processedEvents = 0;
   let sent = 0;
+  let pushSent = 0;
   for (const event of candidateOccurrences) {
-    if (!grantedEventIds.has(event.sourceEventId)) continue;
-    const deltaMinutes = (event.startsAt.getTime() - now.getTime()) / 60_000;
-    const reminderKey = dueReminder(deltaMinutes);
+    if (
+      restrictedEventIds.has(event.sourceEventId) &&
+      !grantedEventIds.has(event.sourceEventId)
+    ) {
+      continue;
+    }
+    const reminderKey = groupCoachingReminderKey(event.startsAt, now.getTime());
     if (!reminderKey || activeRecipientIds.length === 0) continue;
     processedEvents++;
 
@@ -144,15 +176,26 @@ export async function GET(request: Request) {
         category: "system" as const,
         title: copy.title,
         body: `${copy.lead} ${event.title}`,
-        linkUrl: "/dashboard/coaching/group-schedule",
+        linkUrl: event.meetingUrl,
         metadata: JSON.stringify({
           coachingEventId: event.sourceEventId,
           occurrenceStartsAt: event.startsAt.toISOString(),
           reminderKey,
+          meetingUrl: event.meetingUrl,
         }),
       })),
     );
+    const pushResult = await sendCoachingReminderPush(
+      {
+        id: `${event.sourceEventId}:${event.startsAt.toISOString()}:${reminderKey}`,
+        title: copy.title,
+        body: `${copy.lead} ${event.title}`,
+        linkUrl: event.meetingUrl,
+      },
+      claimed.map(({ userId }) => userId),
+    );
     sent += claimed.length;
+    pushSent += pushResult.sent;
   }
 
   return NextResponse.json({
@@ -160,5 +203,6 @@ export async function GET(request: Request) {
     recipients: activeRecipientIds.length,
     muted: mutedIds.size,
     sent,
+    pushSent,
   });
 }

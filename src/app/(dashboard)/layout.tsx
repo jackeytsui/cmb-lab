@@ -12,7 +12,12 @@ import { NotificationBellClient } from "@/components/notifications/NotificationB
 import { RouteThemeScope } from "@/components/layout/RouteThemeScope";
 import type { Roles } from "@/types/globals";
 import { db } from "@/db";
-import { announcements, assignmentSubmissions, users } from "@/db/schema";
+import {
+  announcements,
+  assignmentSubmissions,
+  studentTags,
+  users,
+} from "@/db/schema";
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { FEATURE_KEYS, resolvePermissions } from "@/lib/permissions";
 import { DEFAULT_STUDENT_FEATURES, ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
@@ -25,7 +30,10 @@ import { ViewAsBanner } from "@/components/admin/ViewAsBanner";
 import { LabAssistantWidget } from "@/components/lab-assistant/LabAssistantWidget";
 import { StudentContentGuard } from "@/components/layout/StudentContentGuard";
 import { composeStudentName } from "@/lib/student-name";
-import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
+import type { ActiveAnnouncement } from "@/components/announcements/AnnouncementBanner";
+import { IgcAnnouncementSlot } from "@/components/announcements/IgcAnnouncementSlot";
+import { getIgcCoachingAnnouncement } from "@/lib/group-coaching-announcement";
+import { announcementMatchesAudience } from "@/lib/announcement-audience";
 import {
   DEFAULT_PLATFORM_ROLE,
   hasFullFeatureAccess,
@@ -62,7 +70,7 @@ export default async function DashboardLayout({
 
   let dbUser = await db.query.users.findFirst({
     where: eq(users.clerkId, userId),
-    columns: { id: true, role: true },
+    columns: { id: true, role: true, timezone: true },
   });
 
   const clerkUser = await currentUser();
@@ -120,7 +128,7 @@ export default async function DashboardLayout({
 
     dbUser = await db.query.users.findFirst({
       where: eq(users.clerkId, userId),
-      columns: { id: true, role: true },
+      columns: { id: true, role: true, timezone: true },
     });
 
     if (dbUser) {
@@ -135,18 +143,34 @@ export default async function DashboardLayout({
   // "View As" impersonation: admin can view the app as another user
   const cookieStore = await cookies();
   const viewAsUserId = cookieStore.get("view_as_user_id")?.value;
-  let viewAsUser: { id: string; email: string; name: string | null; role: Roles } | null = null;
+  let viewAsUser: {
+    id: string;
+    email: string;
+    name: string | null;
+    role: Roles;
+    timezone: string;
+  } | null = null;
 
   if (viewAsUserId && role === "admin") {
     const target = await db.query.users.findFirst({
       where: eq(users.id, viewAsUserId),
-      columns: { id: true, email: true, name: true, role: true },
+      columns: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        timezone: true,
+      },
     });
     if (target) {
       viewAsUser = target;
       // Override role and dbUser for the impersonated user
       role = target.role as Roles;
-      dbUser = { id: target.id, role: target.role };
+      dbUser = {
+        id: target.id,
+        role: target.role,
+        timezone: target.timezone,
+      };
     }
   }
 
@@ -205,25 +229,63 @@ export default async function DashboardLayout({
         .catch(() => 0)
     : Promise.resolve(0);
 
-  const activeAnnouncementPromise = db.query.announcements
-    .findFirst({
-        where: eq(announcements.isActive, true),
-        orderBy: [desc(announcements.publishedAt)],
-        columns: {
-          id: true,
-          title: true,
-          body: true,
-          linkUrl: true,
-          linkLabel: true,
-        },
-      })
-    .then((announcement) => announcement ?? null)
-    // Deploys remain usable while the announcement migration is being applied.
-    .catch(() => null);
+  const loadActiveAnnouncement = async (): Promise<ActiveAnnouncement | null> => {
+    try {
+      const announcement =
+        (await db.query.announcements.findFirst({
+          where: eq(announcements.isActive, true),
+          orderBy: [desc(announcements.publishedAt)],
+          columns: {
+            id: true,
+            title: true,
+            body: true,
+            linkUrl: true,
+            linkLabel: true,
+            audienceMode: true,
+            audienceTagIds: true,
+            audienceRoles: true,
+          },
+        })) ?? null;
+      if (!announcement) return null;
 
-  const [assignmentFeedbackUnread, activeAnnouncement] = await Promise.all([
+      const tagIds =
+        announcement.audienceMode === "targeted" &&
+        announcement.audienceTagIds.length > 0 &&
+        dbUser
+          ? (
+              await db
+                .select({ tagId: studentTags.tagId })
+                .from(studentTags)
+                .where(eq(studentTags.userId, dbUser.id))
+            ).map((row) => row.tagId)
+          : [];
+
+      return announcementMatchesAudience(announcement, { role, tagIds })
+        ? announcement
+        : null;
+    } catch {
+      // Keep the app usable while the announcement migration is being applied.
+      return null;
+    }
+  };
+
+  const loadCoachingAnnouncement = async (): Promise<ActiveAnnouncement | null> => {
+    if (role !== "student" || !dbUser) return null;
+    try {
+      return await getIgcCoachingAnnouncement(dbUser.id, dbUser.timezone);
+    } catch {
+      return null;
+    }
+  };
+
+  const [
+    assignmentFeedbackUnread,
+    activeAnnouncement,
+    activeCoachingAnnouncement,
+  ] = await Promise.all([
     assignmentFeedbackPromise,
-    activeAnnouncementPromise,
+    loadActiveAnnouncement(),
+    loadCoachingAnnouncement(),
   ]);
 
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
@@ -255,9 +317,11 @@ export default async function DashboardLayout({
             <NotificationBellClient />
           </div>
         </header>
-        {activeAnnouncement ? (
-          <AnnouncementBanner announcement={activeAnnouncement} />
-        ) : null}
+        <IgcAnnouncementSlot
+          initialAnnouncement={activeCoachingAnnouncement}
+          fallbackAnnouncement={activeAnnouncement}
+          pollCoaching={role === "student"}
+        />
         <div className="min-w-0 flex-1 overflow-auto">
           <RouteThemeScope>{children}</RouteThemeScope>
         </div>

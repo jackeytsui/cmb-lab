@@ -1,7 +1,7 @@
 import "server-only";
 
 import webPush from "web-push";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   notificationPreferences,
@@ -14,6 +14,13 @@ type AnnouncementPushPayload = {
   title: string;
   body: string;
   linkUrl: string | null;
+};
+
+type CoachingReminderPushPayload = {
+  id: string;
+  title: string;
+  body: string;
+  linkUrl: string;
 };
 
 export function getWebPushPublicKey() {
@@ -43,10 +50,14 @@ function getPushStatusCode(error: unknown) {
   return typeof statusCode === "number" ? statusCode : null;
 }
 
-export async function sendAnnouncementPush(
+async function sendPush(
   announcement: AnnouncementPushPayload,
+  options?: { userIds?: string[]; tagPrefix?: string },
 ) {
   if (!configureWebPush()) return { sent: 0, removed: 0 };
+  if (options?.userIds && options.userIds.length === 0) {
+    return { sent: 0, removed: 0 };
+  }
 
   const subscriptions = await db
     .selectDistinct({
@@ -67,6 +78,7 @@ export async function sendAnnouncementPush(
     .where(
       and(
         isNull(users.deletedAt),
+        options?.userIds ? inArray(users.id, options.userIds) : undefined,
         or(
           isNull(notificationPreferences.muted),
           eq(notificationPreferences.muted, false),
@@ -78,7 +90,7 @@ export async function sendAnnouncementPush(
     title: announcement.title,
     body: announcement.body,
     url: announcement.linkUrl || "/dashboard",
-    tag: `announcement:${announcement.id}`,
+    tag: `${options?.tagPrefix || "announcement"}:${announcement.id}`,
   });
   let sent = 0;
   let removed = 0;
@@ -118,4 +130,19 @@ export async function sendAnnouncementPush(
   }
 
   return { sent, removed };
+}
+
+export async function sendAnnouncementPush(
+  announcement: AnnouncementPushPayload,
+  userIds?: string[],
+) {
+  return sendPush(announcement, { userIds });
+}
+
+/** Send an opted-in browser alert only to the supplied ICGC students. */
+export async function sendCoachingReminderPush(
+  reminder: CoachingReminderPushPayload,
+  userIds: string[],
+) {
+  return sendPush(reminder, { userIds, tagPrefix: "icgc-reminder" });
 }

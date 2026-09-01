@@ -11,6 +11,8 @@ import {
   Loader2,
   Megaphone,
   Send,
+  Tags,
+  UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +20,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import type { PlatformRole } from "@/lib/platform-roles";
+
+export type AnnouncementAudienceTag = {
+  id: string;
+  name: string;
+  color: string;
+  type: "coach" | "system";
+};
 
 export type AdminAnnouncement = {
   id: string;
@@ -25,6 +35,9 @@ export type AdminAnnouncement = {
   body: string;
   linkUrl: string | null;
   linkLabel: string | null;
+  audienceMode: "all" | "targeted";
+  audienceTagIds: string[];
+  audienceRoles: PlatformRole[];
   isActive: boolean;
   publishedAt: string;
   archivedAt: string | null;
@@ -41,8 +54,12 @@ function formatDate(value: string) {
 
 export function AnnouncementManager({
   initialAnnouncements,
+  audienceTags,
+  audienceRoles,
 }: {
   initialAnnouncements: AdminAnnouncement[];
+  audienceTags: AnnouncementAudienceTag[];
+  audienceRoles: Array<{ value: PlatformRole; label: string }>;
 }) {
   const router = useRouter();
   const [announcements, setAnnouncements] = useState(initialAnnouncements);
@@ -50,10 +67,48 @@ export function AnnouncementManager({
   const [body, setBody] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
+  const [audienceMode, setAudienceMode] = useState<"all" | "targeted">("all");
+  const [audienceTagIds, setAudienceTagIds] = useState<string[]>([]);
+  const [selectedRoles, setSelectedRoles] = useState<PlatformRole[]>([]);
   const [publishing, setPublishing] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
 
   const activeAnnouncement = announcements.find((item) => item.isActive);
+  const hasTargetedAudience =
+    audienceTagIds.length > 0 || selectedRoles.length > 0;
+
+  function audienceLabel(announcement: AdminAnnouncement) {
+    if (announcement.audienceMode === "all") return "Everyone";
+
+    const roleLabels = audienceRoles
+      .filter((option) => announcement.audienceRoles.includes(option.value))
+      .map((option) => option.label);
+    const tagNames = audienceTags
+      .filter((tag) => announcement.audienceTagIds.includes(tag.id))
+      .map((tag) => tag.name);
+    return [
+      roleLabels.length > 0 ? `Roles: ${roleLabels.join(", ")}` : null,
+      tagNames.length > 0 ? `Tags: ${tagNames.join(", ")}` : null,
+    ]
+      .filter(Boolean)
+      .join(" + ");
+  }
+
+  function toggleAudienceTag(tagId: string) {
+    setAudienceTagIds((current) =>
+      current.includes(tagId)
+        ? current.filter((id) => id !== tagId)
+        : [...current, tagId],
+    );
+  }
+
+  function toggleAudienceRole(role: PlatformRole) {
+    setSelectedRoles((current) =>
+      current.includes(role)
+        ? current.filter((item) => item !== role)
+        : [...current, role],
+    );
+  }
 
   async function publishAnnouncement(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,7 +118,15 @@ export function AnnouncementManager({
       const response = await fetch("/api/admin/announcements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, body, linkUrl, linkLabel }),
+        body: JSON.stringify({
+          title,
+          body,
+          linkUrl,
+          linkLabel,
+          audienceMode,
+          audienceTagIds,
+          audienceRoles: selectedRoles,
+        }),
       });
       const result = (await response.json()) as {
         error?: string;
@@ -73,6 +136,9 @@ export function AnnouncementManager({
           body: string;
           linkUrl: string | null;
           linkLabel: string | null;
+          audienceMode: "all" | "targeted";
+          audienceTagIds: string[];
+          audienceRoles: PlatformRole[];
           publishedAt: string;
           notificationCount: number;
         };
@@ -99,6 +165,9 @@ export function AnnouncementManager({
       setBody("");
       setLinkUrl("");
       setLinkLabel("");
+      setAudienceMode("all");
+      setAudienceTagIds([]);
+      setSelectedRoles([]);
       toast.success(
         `Announcement published and sent to ${next.notificationCount} account${next.notificationCount === 1 ? "" : "s"}`,
       );
@@ -113,7 +182,7 @@ export function AnnouncementManager({
   }
 
   async function archiveAnnouncement(id: string) {
-    if (!window.confirm("Remove this banner for everyone?")) return;
+    if (!window.confirm("Remove this live banner?")) return;
     setArchivingId(id);
 
     try {
@@ -131,7 +200,7 @@ export function AnnouncementManager({
             : item,
         ),
       );
-      toast.success("Banner removed for everyone");
+      toast.success("Banner removed");
       router.refresh();
     } catch (error) {
       toast.error(
@@ -161,8 +230,8 @@ export function AnnouncementManager({
           Announcements
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-          Publish one unmistakable banner across CMB Lab. Everyone also gets an
-          in-app notification, plus browser push if they enabled alerts.
+          Publish one unmistakable banner across CMB Lab. Send it to everyone,
+          or restrict it by platform role and student tag.
         </p>
       </header>
 
@@ -242,12 +311,125 @@ export function AnnouncementManager({
               </div>
             </div>
 
+            <fieldset className="space-y-4 rounded-xl border border-border bg-muted/25 p-4">
+              <legend className="px-1 text-sm font-semibold">Audience</legend>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Targeted announcements are only shown and notified to matching
+                accounts. When both roles and tags are selected, a person must
+                match a selected role and at least one selected tag.
+              </p>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3">
+                  <input
+                    type="radio"
+                    name="announcement-audience"
+                    value="all"
+                    checked={audienceMode === "all"}
+                    onChange={() => setAudienceMode("all")}
+                    className="mt-1 size-4 accent-indigo-600"
+                  />
+                  <span>
+                    <span className="flex items-center gap-1.5 text-sm font-semibold">
+                      <UsersRound className="size-4" aria-hidden="true" />
+                      Everyone
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                      Every active CMB Lab account.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card p-3">
+                  <input
+                    type="radio"
+                    name="announcement-audience"
+                    value="targeted"
+                    checked={audienceMode === "targeted"}
+                    onChange={() => setAudienceMode("targeted")}
+                    className="mt-1 size-4 accent-indigo-600"
+                  />
+                  <span>
+                    <span className="flex items-center gap-1.5 text-sm font-semibold">
+                      <Tags className="size-4" aria-hidden="true" />
+                      Specific people
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                      Match selected roles, tags, or both.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              {audienceMode === "targeted" ? (
+                <div className="grid gap-4 border-t border-border pt-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm font-semibold">Platform roles</p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">
+                      {audienceRoles.map((option) => (
+                        <label
+                          key={option.value}
+                          className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedRoles.includes(option.value)}
+                            onChange={() => toggleAudienceRole(option.value)}
+                            className="size-4 accent-indigo-600"
+                          />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold">Student tags</p>
+                    <div className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded-md border border-border bg-card p-2">
+                      {audienceTags.length === 0 ? (
+                        <p className="px-2 py-3 text-xs text-muted-foreground">
+                          No tags are available yet.
+                        </p>
+                      ) : (
+                        audienceTags.map((tag) => (
+                          <label
+                            key={tag.id}
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={audienceTagIds.includes(tag.id)}
+                              onChange={() => toggleAudienceTag(tag.id)}
+                              className="size-4 accent-indigo-600"
+                            />
+                            <span
+                              className="size-2.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: tag.color }}
+                              aria-hidden="true"
+                            />
+                            <span className="min-w-0 truncate">{tag.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {!hasTargetedAudience ? (
+                    <p className="text-xs font-medium text-amber-700 md:col-span-2 dark:text-amber-300">
+                      Select at least one role or tag before publishing.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </fieldset>
+
             {(title.trim() || body.trim()) && (
-              <div className="overflow-hidden rounded-xl bg-gradient-to-r from-indigo-700 via-violet-700 to-fuchsia-700 p-4 text-white shadow-sm">
+              <div className="announcement-gradient-copy overflow-hidden rounded-xl bg-gradient-to-r from-indigo-700 via-violet-700 to-fuchsia-700 p-4 text-white shadow-sm">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-100">
                   Banner preview
                 </p>
-                <p className="mt-1 font-bold">{title.trim() || "Your headline"}</p>
+                <p className="announcement-gradient-copy mt-1 font-bold">
+                  {title.trim() || "Your headline"}
+                </p>
                 <p className="mt-1 text-sm leading-5 text-white/90">
                   {body.trim() || "Your message"}
                 </p>
@@ -257,7 +439,12 @@ export function AnnouncementManager({
             <Button
               type="submit"
               size="lg"
-              disabled={publishing || title.trim().length < 3 || body.trim().length < 3}
+              disabled={
+                publishing ||
+                title.trim().length < 3 ||
+                body.trim().length < 3 ||
+                (audienceMode === "targeted" && !hasTargetedAudience)
+              }
               className="w-full bg-indigo-600 hover:bg-indigo-700"
             >
               {publishing ? (
@@ -265,7 +452,7 @@ export function AnnouncementManager({
               ) : (
                 <Send className="size-4" aria-hidden="true" />
               )}
-              {publishing ? "Publishing…" : "Publish banner & notify everyone"}
+              {publishing ? "Publishing…" : "Publish banner & notify audience"}
             </Button>
           </div>
         </form>
@@ -275,7 +462,7 @@ export function AnnouncementManager({
             <h2 className="text-lg font-semibold">Currently live</h2>
             {activeAnnouncement ? (
               <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800 shadow-none dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                Live for everyone
+                Live for {audienceLabel(activeAnnouncement)}
               </Badge>
             ) : (
               <Badge variant="outline">No live banner</Badge>
@@ -287,6 +474,9 @@ export function AnnouncementManager({
               <p className="font-semibold">{activeAnnouncement.title}</p>
               <p className="mt-1 text-sm leading-5 opacity-80">
                 {activeAnnouncement.body}
+              </p>
+              <p className="mt-2 text-xs font-medium opacity-70">
+                Audience: {audienceLabel(activeAnnouncement)}
               </p>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <span className="text-xs opacity-70">
@@ -314,7 +504,7 @@ export function AnnouncementManager({
               <Megaphone className="mx-auto size-7 text-muted-foreground/60" aria-hidden="true" />
               <p className="mt-2 text-sm font-medium">Nothing is live right now</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Use the form to reach every active CMB Lab account.
+                Use the form to reach the audience you choose.
               </p>
             </div>
           )}
@@ -350,6 +540,7 @@ export function AnnouncementManager({
                     </p>
                     <p className="mt-2 text-xs text-muted-foreground">
                       {formatDate(announcement.publishedAt)} · {announcement.authorName || announcement.authorEmail}
+                      {" · "}Audience: {audienceLabel(announcement)}
                     </p>
                   </div>
                   {announcement.linkUrl ? (

@@ -180,6 +180,12 @@
   color: var(--foreground) !important;
 }
 
+/* Gradient announcement surfaces must keep white copy inside the light admin
+   theme, whose legacy normalization intentionally remaps generic text-white. */
+[data-admin-theme="true"] .announcement-gradient-copy {
+  color: #ffffff !important;
+}
+
 [data-admin-theme="true"] .text-zinc-400,
 [data-admin-theme="true"] .text-zinc-500,
 [data-admin-theme="true"] .text-zinc-600 {

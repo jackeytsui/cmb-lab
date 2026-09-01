@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { db, getNeonSql } from "@/db";
-import { announcements, users } from "@/db/schema";
+import { announcements, tags, users } from "@/db/schema";
 import { getRealUser, hasMinimumRole } from "@/lib/auth";
 import { announcementInputSchema } from "@/lib/announcement-validation";
 import { sendAnnouncementPush } from "@/lib/web-push";
@@ -18,6 +18,9 @@ export async function GET() {
       body: announcements.body,
       linkUrl: announcements.linkUrl,
       linkLabel: announcements.linkLabel,
+      audienceMode: announcements.audienceMode,
+      audienceTagIds: announcements.audienceTagIds,
+      audienceRoles: announcements.audienceRoles,
       isActive: announcements.isActive,
       publishedAt: announcements.publishedAt,
       archivedAt: announcements.archivedAt,
@@ -52,7 +55,37 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { title, body, linkUrl, linkLabel } = parsed.data;
+  const {
+    title,
+    body,
+    linkUrl,
+    linkLabel,
+    audienceMode,
+    audienceTagIds: rawAudienceTagIds,
+    audienceRoles: rawAudienceRoles,
+  } = parsed.data;
+  const audienceTagIds =
+    audienceMode === "targeted"
+      ? Array.from(new Set(rawAudienceTagIds))
+      : [];
+  const audienceRoles =
+    audienceMode === "targeted"
+      ? Array.from(new Set(rawAudienceRoles))
+      : [];
+
+  if (audienceTagIds.length > 0) {
+    const validTags = await db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(inArray(tags.id, audienceTagIds));
+    if (validTags.length !== audienceTagIds.length) {
+      return NextResponse.json(
+        { error: "One or more audience tags no longer exist" },
+        { status: 400 },
+      );
+    }
+  }
+
   const notificationLink = linkUrl || "/dashboard";
   const sql = getNeonSql();
 
@@ -65,11 +98,36 @@ export async function POST(request: NextRequest) {
         RETURNING id
       ), inserted AS (
         INSERT INTO announcements (
-          title, body, link_url, link_label, is_active, created_by
+          title,
+          body,
+          link_url,
+          link_label,
+          audience_mode,
+          audience_tag_ids,
+          audience_roles,
+          is_active,
+          created_by
         ) VALUES (
-          ${title}, ${body}, ${linkUrl ?? null}, ${linkLabel ?? null}, true, ${admin.id}
+          ${title},
+          ${body},
+          ${linkUrl ?? null},
+          ${linkLabel ?? null},
+          ${audienceMode},
+          ${JSON.stringify(audienceTagIds)}::jsonb,
+          ${JSON.stringify(audienceRoles)}::jsonb,
+          true,
+          ${admin.id}
         )
-        RETURNING id, title, body, link_url, link_label, published_at
+        RETURNING
+          id,
+          title,
+          body,
+          link_url,
+          link_label,
+          audience_mode,
+          audience_tag_ids,
+          audience_roles,
+          published_at
       ), notified AS (
         INSERT INTO notifications (
           user_id, type, category, title, body, link_url, metadata
@@ -85,6 +143,24 @@ export async function POST(request: NextRequest) {
         FROM users u
         CROSS JOIN inserted i
         WHERE u.deleted_at IS NULL
+          AND (
+            i.audience_mode = 'all'
+            OR (
+              (
+                jsonb_array_length(i.audience_roles) = 0
+                OR i.audience_roles ? u.role::text
+              )
+              AND (
+                jsonb_array_length(i.audience_tag_ids) = 0
+                OR EXISTS (
+                  SELECT 1
+                  FROM student_tags st
+                  WHERE st.user_id = u.id
+                    AND i.audience_tag_ids ? st.tag_id::text
+                )
+              )
+            )
+          )
           AND NOT EXISTS (
             SELECT 1
             FROM notification_preferences np
@@ -100,8 +176,15 @@ export async function POST(request: NextRequest) {
         i.body,
         i.link_url AS "linkUrl",
         i.link_label AS "linkLabel",
+        i.audience_mode AS "audienceMode",
+        i.audience_tag_ids AS "audienceTagIds",
+        i.audience_roles AS "audienceRoles",
         i.published_at AS "publishedAt",
-        (SELECT count(*)::int FROM notified) AS "notificationCount"
+        (SELECT count(*)::int FROM notified) AS "notificationCount",
+        COALESCE(
+          (SELECT json_agg(notified.user_id) FROM notified),
+          '[]'::json
+        ) AS "recipientIds"
       FROM inserted i
     `;
 
@@ -111,14 +194,23 @@ export async function POST(request: NextRequest) {
       body: string;
       linkUrl: string | null;
       linkLabel: string | null;
+      audienceMode: "all" | "targeted";
+      audienceTagIds: string[];
+      audienceRoles: string[];
       publishedAt: string;
       notificationCount: number;
+      recipientIds: string[];
     }>)[0];
     if (!announcement) throw new Error("Announcement insert returned no row");
 
+    const { recipientIds, ...publicAnnouncement } = announcement;
+
     after(async () => {
       try {
-        await sendAnnouncementPush(announcement);
+        await sendAnnouncementPush(
+          publicAnnouncement,
+          publicAnnouncement.audienceMode === "all" ? undefined : recipientIds,
+        );
       } catch (error) {
         console.error(
           "[announcements] Push delivery job failed:",
@@ -127,7 +219,10 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ announcement }, { status: 201 });
+    return NextResponse.json(
+      { announcement: publicAnnouncement },
+      { status: 201 },
+    );
   } catch (error) {
     console.error(
       "[announcements] Publish failed:",
