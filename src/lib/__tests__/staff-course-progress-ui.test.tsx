@@ -8,7 +8,13 @@ const mocks = vi.hoisted(() => ({
   role: "coach", rows: [] as unknown[], map: vi.fn(), select: vi.fn(), fetch: vi.fn(),
 }));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: async () => ({ id: "effective-viewer", role: mocks.role }) }));
-vi.mock("@/lib/tag-feature-access", () => ({ getCourseLibraryCourseAccess: async () => () => true }));
+vi.mock("@/lib/tag-feature-access", () => ({
+  getCourseLibraryCourseAccess: async () => () => true,
+  getCourseLibraryCourseAccessPolicy: async () => ({
+    canAccessCourse: () => true,
+    showLockedBlueprintRoadmap: false,
+  }),
+}));
 vi.mock("@/lib/course-library-lesson-access", () => ({ canUserAccessCourseLibraryModule: async () => true }));
 vi.mock("@/components/course-library/CourseLibraryGate", () => ({ CourseLibraryGate: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("@/components/course-library/CourseMap", () => ({ CourseMap: (props: unknown) => { mocks.map(props); return <div>Map</div>; } }));

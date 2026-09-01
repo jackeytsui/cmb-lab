@@ -74,12 +74,17 @@ describe("Course Library roadmap authorization", () => {
   });
 
   it("guards pages and every lesson content, media, and mutation route", () => {
+    const coursePage = source(
+      "src/app/(dashboard)/dashboard/course-library/[courseId]/page.tsx",
+    );
     const modulePage = source(
       "src/app/(dashboard)/dashboard/course-library/[courseId]/modules/[moduleId]/page.tsx",
     );
     const lessonPage = source(
       "src/app/(dashboard)/dashboard/course-library/[courseId]/lessons/[lessonId]/page.tsx",
     );
+    expect(coursePage).toContain("getCourseLibraryCourseAccess");
+    expect(coursePage).toContain("if (!canSeeCourse(course.id)) notFound()");
     expect(modulePage).toContain("canUserAccessCourseLibraryModule");
     expect(lessonPage).toContain("canUserAccessCourseLibraryLesson");
 

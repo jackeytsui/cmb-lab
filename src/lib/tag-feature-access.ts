@@ -190,6 +190,11 @@ export const COURSE_LIBRARY_COURSE_CONTENT_TYPE = "course_library_course";
 /** Tag-targeted live group coaching sessions. */
 export const GROUP_COACHING_EVENT_CONTENT_TYPE = "group_coaching_event";
 
+export type CourseLibraryCourseAccessPolicy = {
+  canAccessCourse: (courseId: string) => boolean;
+  showLockedBlueprintRoadmap: boolean;
+};
+
 /**
  * Whether the Course Library tab/pages are visible to this user.
  * Access is tag-driven, not feature/role-plan-driven:
@@ -241,11 +246,14 @@ export async function canViewCourseLibrary(
  *   or a per-student manual/system grant.
  * - Staff (admin/coach) always see everything.
  */
-export async function getCourseLibraryCourseAccess(
+export async function getCourseLibraryCourseAccessPolicy(
   user: { id: string; role?: string | null } | null | undefined
-): Promise<(courseId: string) => boolean> {
+): Promise<CourseLibraryCourseAccessPolicy> {
   if (user && isStaffRole(user.role)) {
-    return () => true;
+    return {
+      canAccessCourse: () => true,
+      showLockedBlueprintRoadmap: false,
+    };
   }
 
   const [grantedIds, restrictedIds, courses, userTagRows] = await Promise.all([
@@ -303,18 +311,35 @@ export async function getCourseLibraryCourseAccess(
       .map((course) => course.id),
   );
 
-  return (courseId: string) => {
-    // GHL progress is authoritative for core Blueprint enrollment. The broad
-    // cmb_student content grant makes the library feature visible, but it must
-    // not unlock Intermediate or Advanced ahead of the student's current
-    // level. Manual/system per-student grants are the precise access list.
-    return resolveCourseLibraryCourseAccess({
-      isCustomized: customIds.has(courseId),
-      isCoreProgressCourse: coreCourseIds.has(courseId),
-      progressGated,
-      hasPerStudentGrant: perStudentGrantedIds.has(courseId),
-      baseAllowed:
-        !restrictedIds.has(courseId) || grantedIds.has(courseId),
-    });
+  return {
+    // Show the complete three-level roadmap only to a progress-gated Blueprint
+    // student with a precise enrollment. This does not grant access to later
+    // courses; it only lets the library render them as locked previews.
+    showLockedBlueprintRoadmap:
+      progressGated &&
+      [...coreCourseIds].some((courseId) =>
+        perStudentGrantedIds.has(courseId),
+      ),
+    canAccessCourse: (courseId: string) => {
+      // GHL progress is authoritative for core Blueprint enrollment. The broad
+      // cmb_student content grant makes the library feature visible, but it must
+      // not unlock Intermediate or Advanced ahead of the student's current
+      // level. Manual/system per-student grants are the precise access list.
+      return resolveCourseLibraryCourseAccess({
+        isCustomized: customIds.has(courseId),
+        isCoreProgressCourse: coreCourseIds.has(courseId),
+        progressGated,
+        hasPerStudentGrant: perStudentGrantedIds.has(courseId),
+        baseAllowed:
+          !restrictedIds.has(courseId) || grantedIds.has(courseId),
+      });
+    },
   };
+}
+
+export async function getCourseLibraryCourseAccess(
+  user: { id: string; role?: string | null } | null | undefined
+): Promise<(courseId: string) => boolean> {
+  const policy = await getCourseLibraryCourseAccessPolicy(user);
+  return policy.canAccessCourse;
 }

@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { BookOpen } from "lucide-react";
 import { CourseLibraryGate } from "@/components/course-library/CourseLibraryGate";
+import { CourseLibraryCourseCard } from "@/components/course-library/CourseLibraryCourseCard";
 import { db } from "@/db";
 import {
   courseLibraryCourses,
@@ -11,8 +11,9 @@ import {
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { visibleCourseStatuses } from "@/lib/course-library-access";
-import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { getCourseLibraryCourseAccessPolicy } from "@/lib/tag-feature-access";
 import { courseCoverImagePath } from "@/lib/course-cover-image";
+import { getCourseLibraryCardStates } from "@/lib/course-library-roadmap-visibility";
 import { displayedCompletedLessonCount, hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
 import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgressNotice";
 
@@ -23,7 +24,7 @@ export const metadata = {
 export default async function CourseLibraryStudentPage() {
   const currentUser = await getCurrentUser();
   const statuses = visibleCourseStatuses(currentUser?.role);
-  const canSeeCourse = await getCourseLibraryCourseAccess(currentUser);
+  const accessPolicy = await getCourseLibraryCourseAccessPolicy(currentUser);
 
   const allCourses = await db
     .select()
@@ -36,9 +37,18 @@ export default async function CourseLibraryStudentPage() {
     )
     .orderBy(asc(courseLibraryCourses.sortOrder));
 
-  // Tag-based visibility: courses with tag grants are only shown to students
-  // holding one of the granting tags (managed in Admin > Tag Management).
-  const courses = allCourses.filter((course) => canSeeCourse(course.id));
+  const cardStates = getCourseLibraryCardStates({
+    courses: allCourses,
+    canAccessCourse: accessPolicy.canAccessCourse,
+    showLockedBlueprintRoadmap: accessPolicy.showLockedBlueprintRoadmap,
+  });
+  // Tag-based visibility still protects private courses. Later Blueprint
+  // levels are the only denied courses that can appear, and only as locked
+  // roadmap previews for an enrolled student.
+  const courses = allCourses.filter((course) => cardStates.has(course.id));
+  const hasLockedBlueprintCourse = courses.some(
+    (course) => cardStates.get(course.id)?.locked,
+  );
 
   const courseIds = courses.map((course) => course.id);
   const progressByCourse = new Map<
@@ -106,7 +116,9 @@ export default async function CourseLibraryStudentPage() {
         <header>
           <h1 className="text-2xl font-bold text-foreground">Course Library</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Browse available courses and track your progress.
+            {hasLockedBlueprintCourse
+              ? "Your full learning path is shown below. Complete each level to unlock the next."
+              : "Browse available courses and track your progress."}
           </p>
         </header>
 
@@ -122,6 +134,7 @@ export default async function CourseLibraryStudentPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {courses.map((course) => {
+              const cardState = cardStates.get(course.id)!;
               const progress = progressByCourse.get(course.id) ?? {
                 totalLessons: 0,
                 completedLessons: 0,
@@ -134,50 +147,22 @@ export default async function CourseLibraryStudentPage() {
                   : 0;
 
               return (
-                <Link
+                <CourseLibraryCourseCard
                   key={course.id}
-                  href={`/dashboard/course-library/${course.id}`}
-                  className="group rounded-lg border border-border bg-card overflow-hidden hover:border-primary/40 transition-colors"
-                >
-                  <div className="aspect-video bg-muted relative">
-                    {course.coverImageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={courseCoverImagePath(course.id, course.updatedAt)}
-                        alt={course.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
-                        <BookOpen className="w-12 h-12" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3">
-                    <h2 className="text-sm font-semibold text-foreground line-clamp-1">
-                      {course.title}
-                    </h2>
-                    {course.summary && (
-                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                        {course.summary}
-                      </p>
-                    )}
-                    <div className="mt-3 space-y-1.5">
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-primary transition-all"
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                        <span>
-                          {progress.completedLessons} of {progress.totalLessons} done
-                        </span>
-                        <span>{percent}%</span>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
+                  courseId={course.id}
+                  title={course.title}
+                  summary={course.summary}
+                  coverImageSrc={
+                    course.coverImageUrl
+                      ? courseCoverImagePath(course.id, course.updatedAt)
+                      : null
+                  }
+                  completedLessons={progress.completedLessons}
+                  totalLessons={progress.totalLessons}
+                  percent={percent}
+                  locked={cardState.locked}
+                  unlockRequirement={cardState.unlockRequirement}
+                />
               );
             })}
           </div>
