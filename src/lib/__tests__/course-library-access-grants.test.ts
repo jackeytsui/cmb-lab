@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getPerStudentGrantedCourseIds,
   hasPerStudentCourseGrant,
+  resolveCourseLibraryCourseAccess,
 } from "@/lib/course-library-access-grants";
 
 describe("Course Library per-student grants", () => {
@@ -55,5 +56,27 @@ describe("Course Library per-student grants", () => {
       "regular-blueprint-course",
       "customized-course",
     ]);
+  });
+
+  it("does not let a broad student tag bypass core GHL progress access", () => {
+    expect(
+      resolveCourseLibraryCourseAccess({
+        isCustomized: false,
+        isCoreProgressCourse: true,
+        progressGated: true,
+        hasPerStudentGrant: false,
+        baseAllowed: true,
+      }),
+    ).toBe(false);
+
+    expect(
+      resolveCourseLibraryCourseAccess({
+        isCustomized: false,
+        isCoreProgressCourse: true,
+        progressGated: true,
+        hasPerStudentGrant: true,
+        baseAllowed: true,
+      }),
+    ).toBe(true);
   });
 });

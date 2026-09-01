@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCourseProgressPlan,
+  diffCourseProgressAccess,
   parseGhlCourseProgress,
   type CourseStructure,
   type GhlProgressFieldIds,
@@ -113,6 +114,15 @@ describe("GHL Blueprint progress planning", () => {
     );
   });
 
+  it("starts students with no GHL progress values in Foundations", () => {
+    const snapshot = parseGhlCourseProgress([], fieldIds);
+    const plan = buildCourseProgressPlan(snapshot, courses);
+
+    expect(plan.status).toBe("no-progress-values");
+    expect(plan.accessCourseIds).toEqual(["foundations"]);
+    expect(plan.lessonCompletions).toEqual([]);
+  });
+
   it("completes all Blueprint courses for a finished student", () => {
     const snapshot = parseGhlCourseProgress(
       fields({ level: "Finished_CMBP_Course", lesson: 13 }),
@@ -145,5 +155,28 @@ describe("GHL Blueprint progress planning", () => {
 
     expect(plan.status).toBe("invalid-lesson-number");
     expect(plan.lessonCompletions).toEqual([]);
+  });
+
+  it("adds missing level access and removes stale later-course access", () => {
+    const changes = diffCourseProgressAccess({
+      currentByCourse: new Map([
+        ["foundations", new Set(["student-1"])],
+        ["intermediate", new Set(["student-1"])],
+        ["advanced", new Set(["student-1", "unchecked-student"])],
+      ]),
+      expectedByCourse: new Map([
+        ["foundations", new Set(["student-1", "student-2"])],
+        ["intermediate", new Set(["student-1"])],
+        ["advanced", new Set<string>()],
+      ]),
+      scopedUserIds: new Set(["student-1", "student-2"]),
+    });
+
+    expect(changes.toAdd).toEqual([
+      { courseId: "foundations", userId: "student-2" },
+    ]);
+    expect(changes.toRemove).toEqual([
+      { courseId: "advanced", userId: "student-1" },
+    ]);
   });
 });

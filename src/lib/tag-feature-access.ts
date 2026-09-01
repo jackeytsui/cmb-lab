@@ -13,7 +13,9 @@ import { isStaffRole } from "@/lib/platform-roles";
 import {
   getPerStudentGrantedCourseIds,
   hasPerStudentCourseGrant,
+  resolveCourseLibraryCourseAccess,
 } from "@/lib/course-library-access-grants";
+import { BLUEPRINT_COURSE_TITLES } from "@/lib/ghl/course-progress-plan";
 
 type FeatureOverrideState = {
   allow: Set<FeatureKey>;
@@ -246,7 +248,7 @@ export async function getCourseLibraryCourseAccess(
     return () => true;
   }
 
-  const [grantedIds, restrictedIds, courses] = await Promise.all([
+  const [grantedIds, restrictedIds, courses, userTagRows] = await Promise.all([
     user
       ? getUserContentGrants(user.id, COURSE_LIBRARY_COURSE_CONTENT_TYPE)
       : Promise.resolve(new Set<string>()),
@@ -260,6 +262,13 @@ export async function getCourseLibraryCourseAccess(
       })
       .from(courseLibraryCourses)
       .where(isNull(courseLibraryCourses.deletedAt)),
+    user
+      ? db
+          .select({ name: tags.name })
+          .from(studentTags)
+          .innerJoin(tags, eq(tags.id, studentTags.tagId))
+          .where(eq(studentTags.userId, user.id))
+      : Promise.resolve([]),
   ]);
 
   const customIds = new Set(
@@ -267,16 +276,45 @@ export async function getCourseLibraryCourseAccess(
       .filter((course) => /customized/i.test(course.title))
       .map((course) => course.id)
   );
+  const perStudentGrantedIds = user
+    ? getPerStudentGrantedCourseIds(courses, user.id)
+    : new Set<string>();
   if (user) {
     // Per-student grants apply to every restricted course. Previously these
     // were only checked on customized courses, so migrated students without a
     // matching tag could open Course Library but not their granted course.
-    for (const courseId of getPerStudentGrantedCourseIds(courses, user.id))
+    for (const courseId of perStudentGrantedIds)
       grantedIds.add(courseId);
   }
 
+  const normalizedTags = new Set(
+    userTagRows.map((row) => row.name.trim().toLowerCase()),
+  );
+  const progressGated =
+    normalizedTags.has("cmb_student") &&
+    !normalizedTags.has("whitelisted");
+  const coreCourseIds = new Set(
+    courses
+      .filter((course) =>
+        Object.values(BLUEPRINT_COURSE_TITLES).includes(
+          course.title as (typeof BLUEPRINT_COURSE_TITLES)[keyof typeof BLUEPRINT_COURSE_TITLES],
+        ),
+      )
+      .map((course) => course.id),
+  );
+
   return (courseId: string) => {
-    if (customIds.has(courseId)) return grantedIds.has(courseId);
-    return !restrictedIds.has(courseId) || grantedIds.has(courseId);
+    // GHL progress is authoritative for core Blueprint enrollment. The broad
+    // cmb_student content grant makes the library feature visible, but it must
+    // not unlock Intermediate or Advanced ahead of the student's current
+    // level. Manual/system per-student grants are the precise access list.
+    return resolveCourseLibraryCourseAccess({
+      isCustomized: customIds.has(courseId),
+      isCoreProgressCourse: coreCourseIds.has(courseId),
+      progressGated,
+      hasPerStudentGrant: perStudentGrantedIds.has(courseId),
+      baseAllowed:
+        !restrictedIds.has(courseId) || grantedIds.has(courseId),
+    });
   };
 }

@@ -63,6 +63,43 @@ export interface CourseProgressPlan {
     | "lesson-module-not-found";
 }
 
+export interface CourseAccessChange {
+  courseId: string;
+  userId: string;
+}
+
+/**
+ * Compare the system-managed access roster with the latest successful GHL
+ * audit. Only audited users are eligible for removal, so a transient fetch
+ * failure can never lock out an unchecked student.
+ */
+export function diffCourseProgressAccess(params: {
+  currentByCourse: ReadonlyMap<string, ReadonlySet<string>>;
+  expectedByCourse: ReadonlyMap<string, ReadonlySet<string>>;
+  scopedUserIds: ReadonlySet<string>;
+}): { toAdd: CourseAccessChange[]; toRemove: CourseAccessChange[] } {
+  const toAdd: CourseAccessChange[] = [];
+  const toRemove: CourseAccessChange[] = [];
+  const courseIds = new Set([
+    ...params.currentByCourse.keys(),
+    ...params.expectedByCourse.keys(),
+  ]);
+
+  for (const courseId of courseIds) {
+    const current = params.currentByCourse.get(courseId) ?? new Set<string>();
+    const expected = params.expectedByCourse.get(courseId) ?? new Set<string>();
+    for (const userId of params.scopedUserIds) {
+      if (expected.has(userId) && !current.has(userId)) {
+        toAdd.push({ courseId, userId });
+      } else if (!expected.has(userId) && current.has(userId)) {
+        toRemove.push({ courseId, userId });
+      }
+    }
+  }
+
+  return { toAdd, toRemove };
+}
+
 const BLUEPRINT_LEVELS: BlueprintLevel[] = [
   "Foundations",
   "Intermediate",
@@ -189,6 +226,8 @@ export function buildCourseProgressPlan(
   }
 
   if (!snapshot.hasAnyProgressValue) {
+    const foundations = courseByLevel.get("Foundations");
+    if (foundations) accessCourseIds.add(foundations.id);
     return {
       accessCourseIds: [...accessCourseIds],
       lessonCompletions: [...lessonCompletions.values()],

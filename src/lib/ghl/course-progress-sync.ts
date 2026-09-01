@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, getNeonSql } from "@/db";
 import {
   courseLibraryCourses,
@@ -18,6 +18,7 @@ import {
   BLUEPRINT_COURSE_TITLES,
   GHL_PROGRESS_CONCEPTS,
   buildCourseProgressPlan,
+  diffCourseProgressAccess,
   parseGhlCourseProgress,
   type BlueprintLevel,
   type CourseStructure,
@@ -28,7 +29,11 @@ interface GhlSearchContact {
   id: string;
   email?: string;
   tags?: string[];
-  customFields?: Array<{ id: string; value: unknown }>;
+  customFields?: Array<{
+    id: string;
+    value: unknown;
+    fieldValue?: unknown;
+  }>;
 }
 
 interface GhlSearchResponse {
@@ -43,6 +48,9 @@ export interface CourseProgressSyncResult {
   missingMappings: string[];
   locationsChecked: number;
   contactsChecked: number;
+  rosterStudents: number;
+  rosterStudentsChecked: number;
+  rosterStudentsUnchecked: number;
   contactsWithoutEmail: number;
   contactsWithoutUser: number;
   contactsWithDuplicateUsers: number;
@@ -51,10 +59,12 @@ export interface CourseProgressSyncResult {
   linksToUpdate: number;
   tagsToAdd: number;
   courseAccessToAdd: number;
+  courseAccessToRemove: number;
   lessonCompletionsPlanned: number;
   lessonCompletionsToAdd: number;
   lessonCompletionsAlreadyPresent: number;
   planStatuses: Record<string, number>;
+  rosterPlanStatuses: Record<string, number>;
 }
 
 type LinkPlan = {
@@ -86,10 +96,23 @@ function chunks<T>(items: T[], size: number): T[][] {
   return result;
 }
 
-async function fetchCmbLabContacts(location: {
-  ghlLocationId: string;
-  apiToken: string;
-}): Promise<GhlSearchContact[]> {
+function normalizeContact(contact: GhlSearchContact): GhlSearchContact {
+  return {
+    ...contact,
+    customFields: (contact.customFields ?? []).map((field) => ({
+      id: field.id,
+      value: field.value ?? field.fieldValue,
+    })),
+  };
+}
+
+async function fetchContactsWithTag(
+  location: {
+    ghlLocationId: string;
+    apiToken: string;
+  },
+  tag: string,
+): Promise<GhlSearchContact[]> {
   const client = createGhlClient(location.apiToken);
   const contacts: GhlSearchContact[] = [];
   let page = 1;
@@ -100,9 +123,9 @@ async function fetchCmbLabContacts(location: {
       locationId: location.ghlLocationId,
       page,
       pageLimit: 100,
-      filters: [{ field: "tags", operator: "contains", value: "cmb_lab" }],
+      filters: [{ field: "tags", operator: "contains", value: tag }],
     });
-    const batch = response.data.contacts ?? [];
+    const batch = (response.data.contacts ?? []).map(normalizeContact);
     contacts.push(...batch);
     total = Number(
       response.data.total ?? response.data.totalCount ?? contacts.length,
@@ -112,6 +135,40 @@ async function fetchCmbLabContacts(location: {
   }
 
   return contacts;
+}
+
+async function fetchCmbLabContacts(location: {
+  ghlLocationId: string;
+  apiToken: string;
+}, linkedContactIds: string[]): Promise<GhlSearchContact[]> {
+  const client = createGhlClient(location.apiToken);
+  const taggedBatches = await Promise.all([
+    fetchContactsWithTag(location, "cmb_lab"),
+    fetchContactsWithTag(location, "cmb_student"),
+  ]);
+  const contactsById = new Map(
+    taggedBatches.flat().map((contact) => [contact.id, contact]),
+  );
+
+  // Local CMB enrollment is the final source of roster coverage. A few valid
+  // Course contacts predate one or both discovery tags, so fetch those linked
+  // contacts directly instead of silently omitting them from the audit.
+  const missingLinkedIds = linkedContactIds.filter(
+    (contactId) => !contactsById.has(contactId),
+  );
+  for (const batch of chunks(missingLinkedIds, 10)) {
+    const responses = await Promise.all(
+      batch.map((contactId) =>
+        client.get<{ contact: GhlSearchContact }>(`/contacts/${contactId}`),
+      ),
+    );
+    for (const response of responses) {
+      const contact = normalizeContact(response.data.contact);
+      contactsById.set(contact.id, contact);
+    }
+  }
+
+  return [...contactsById.values()];
 }
 
 async function loadProgressFieldIds(): Promise<{
@@ -239,6 +296,9 @@ export async function syncGhlCourseProgress({
     missingMappings,
     locationsChecked: 0,
     contactsChecked: 0,
+    rosterStudents: 0,
+    rosterStudentsChecked: 0,
+    rosterStudentsUnchecked: 0,
     contactsWithoutEmail: 0,
     contactsWithoutUser: 0,
     contactsWithDuplicateUsers: 0,
@@ -247,12 +307,15 @@ export async function syncGhlCourseProgress({
     linksToUpdate: 0,
     tagsToAdd: 0,
     courseAccessToAdd: 0,
+    courseAccessToRemove: 0,
     lessonCompletionsPlanned: 0,
     lessonCompletionsToAdd: 0,
     lessonCompletionsAlreadyPresent: 0,
     planStatuses: {},
+    rosterPlanStatuses: {},
   };
   if (!fieldIds) return emptyResult;
+  const configuredLocationId = process.env.GHL_LOCATION_ID?.trim();
 
   const [
     locations,
@@ -261,11 +324,13 @@ export async function syncGhlCourseProgress({
     tagRows,
     assignedTagRows,
     courseData,
+    linkedRoster,
   ] = await Promise.all([
     db
       .select({
         ghlLocationId: ghlLocations.ghlLocationId,
         apiToken: ghlLocations.apiToken,
+        name: ghlLocations.name,
       })
       .from(ghlLocations)
       .where(eq(ghlLocations.isActive, true)),
@@ -286,14 +351,56 @@ export async function syncGhlCourseProgress({
       .select({ userId: studentTags.userId, tagId: studentTags.tagId })
       .from(studentTags),
     loadCourseStructures(),
+    db
+      .select({
+        userId: ghlContacts.userId,
+        contactId: ghlContacts.ghlContactId,
+        locationId: ghlContacts.ghlLocationId,
+      })
+      .from(ghlContacts)
+      .innerJoin(users, eq(users.id, ghlContacts.userId))
+      .innerJoin(
+        ghlLocations,
+        eq(ghlLocations.ghlLocationId, ghlContacts.ghlLocationId),
+      )
+      .where(
+        and(
+          eq(ghlContacts.syncStatus, "active"),
+          eq(ghlLocations.isActive, true),
+          eq(users.role, "student"),
+          isNull(users.deletedAt),
+          configuredLocationId
+            ? eq(ghlContacts.ghlLocationId, configuredLocationId)
+            : sql`(${ghlLocations.name} ILIKE '%course%' OR ${ghlLocations.name} ILIKE '%cmbp%')`,
+          sql`EXISTS (
+            SELECT 1
+            FROM ${studentTags}
+            INNER JOIN ${tags} ON ${tags.id} = ${studentTags.tagId}
+            WHERE ${studentTags.userId} = ${ghlContacts.userId}
+              AND LOWER(${tags.name}) = 'cmb_student'
+          )`,
+        ),
+      ),
   ]);
 
+  const courseLocations = locations.filter((location) =>
+    configuredLocationId
+      ? location.ghlLocationId === configuredLocationId
+      : /course|cmbp/i.test(location.name),
+  );
   const contactsByLocation = await Promise.all(
-    locations.map(async (location) => ({
+    courseLocations.map(async (location) => ({
       location,
-      contacts: await fetchCmbLabContacts(location),
+      contacts: await fetchCmbLabContacts(
+        location,
+        linkedRoster
+          .filter((link) => link.locationId === location.ghlLocationId)
+          .map((link) => link.contactId),
+      ),
     })),
   );
+  const rosterUserIds = new Set(linkedRoster.map((link) => link.userId));
+  const checkedRosterUserIds = new Set<string>();
 
   const usersByEmail = new Map<string, typeof activeUsers>();
   for (const user of activeUsers) {
@@ -321,12 +428,19 @@ export async function syncGhlCourseProgress({
 
   const linkPlans: LinkPlan[] = [];
   const tagsToAdd = new Map<string, { userId: string; tagId: string }>();
-  const accessToAdd = new Map<string, { courseId: string; userId: string }>();
+  const expectedAccessByCourse = new Map(
+    courseData.courses.map((course) => [course.id, new Set<string>()]),
+  );
+  const scopedUserIds = new Set<string>();
   const completionPlans = new Map<
     string,
     { userId: string; lessonId: string; completedAt: Date }
   >();
-  const result = { ...emptyResult, locationsChecked: locations.length };
+  const result = {
+    ...emptyResult,
+    locationsChecked: courseLocations.length,
+    rosterStudents: rosterUserIds.size,
+  };
   const syncedAt = new Date();
 
   for (const { location, contacts } of contactsByLocation) {
@@ -407,12 +521,12 @@ export async function syncGhlCourseProgress({
         syncedAt,
       );
       incrementCount(result.planStatuses, plan.status);
-      for (const courseId of plan.accessCourseIds) {
-        const key = `${courseId}:${user.id}`;
-        if (
-          !courseData.systemAccessUserIdsByCourse.get(courseId)?.has(user.id)
-        ) {
-          accessToAdd.set(key, { courseId, userId: user.id });
+      if (rosterUserIds.has(user.id)) {
+        incrementCount(result.rosterPlanStatuses, plan.status);
+        checkedRosterUserIds.add(user.id);
+        scopedUserIds.add(user.id);
+        for (const courseId of plan.accessCourseIds) {
+          expectedAccessByCourse.get(courseId)?.add(user.id);
         }
       }
       for (const completion of plan.lessonCompletions) {
@@ -433,7 +547,16 @@ export async function syncGhlCourseProgress({
   }
 
   result.tagsToAdd = tagsToAdd.size;
-  result.courseAccessToAdd = accessToAdd.size;
+  result.rosterStudentsChecked = checkedRosterUserIds.size;
+  result.rosterStudentsUnchecked = rosterUserIds.size - checkedRosterUserIds.size;
+  const { toAdd: accessToAdd, toRemove: accessToRemove } =
+    diffCourseProgressAccess({
+      currentByCourse: courseData.systemAccessUserIdsByCourse,
+      expectedByCourse: expectedAccessByCourse,
+      scopedUserIds,
+    });
+  result.courseAccessToAdd = accessToAdd.length;
+  result.courseAccessToRemove = accessToRemove.length;
   result.lessonCompletionsPlanned = completionPlans.size;
 
   const candidateUserIds = [...new Set(
@@ -506,34 +629,25 @@ export async function syncGhlCourseProgress({
       .onConflictDoNothing();
   }
 
-  const sql = getNeonSql();
-  const accessByCourse = new Map<string, string[]>();
-  for (const row of accessToAdd.values()) {
-    const userIds = accessByCourse.get(row.courseId) ?? [];
-    userIds.push(row.userId);
-    accessByCourse.set(row.courseId, userIds);
-  }
-  for (const [courseId, userIds] of accessByCourse) {
-    await sql`
-      UPDATE course_library_courses
-      SET system_access_user_ids = (
-        SELECT COALESCE(jsonb_agg(user_id), '[]'::jsonb)
-        FROM (
-          SELECT DISTINCT user_id
-          FROM jsonb_array_elements_text(
-            COALESCE(system_access_user_ids, '[]'::jsonb) ||
-            ${JSON.stringify(userIds)}::jsonb
-          ) AS ids(user_id)
-        ) AS unique_ids
-      ),
-      updated_at = NOW()
-      WHERE id = ${courseId}::uuid
-    `;
+  const neonSql = getNeonSql();
+  for (const course of courseData.courses) {
+    const current =
+      courseData.systemAccessUserIdsByCourse.get(course.id) ?? new Set<string>();
+    const expected = expectedAccessByCourse.get(course.id) ?? new Set<string>();
+    const next = new Set(
+      [...current].filter((userId) => !scopedUserIds.has(userId)),
+    );
+    for (const userId of expected) next.add(userId);
+
+    await db
+      .update(courseLibraryCourses)
+      .set({ systemAccessUserIds: [...next], updatedAt: syncedAt })
+      .where(eq(courseLibraryCourses.id, course.id));
   }
 
   for (const batch of chunks(completionsToAdd, 2_000)) {
     if (!batch.length) continue;
-    await sql`
+    await neonSql`
       WITH progress_rows AS (
         SELECT user_id, lesson_id, completed_at
         FROM jsonb_to_recordset(${JSON.stringify(
