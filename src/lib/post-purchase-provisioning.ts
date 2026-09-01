@@ -16,6 +16,7 @@ import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { assignTag, removeTag } from "@/lib/tags";
 import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
 import { composeStudentName } from "@/lib/student-name";
+import { syncAssignedCoachFromGhl } from "@/lib/ghl/coach-assignment";
 import {
   canReassignAuthoritativeGhlContact,
   aggregatePostPurchaseStudents,
@@ -511,6 +512,16 @@ export async function provisionPostPurchaseEntitlements(
     ghlContactId: courseContact.contactId,
     ghlLocationId: courseContact.locationId,
     authoritativeEmailUpsert: true,
+  });
+
+  await syncAssignedCoachFromGhl({
+    userId: ensured.dbUserId,
+    email,
+  }).catch((error) => {
+    console.error(
+      "[Post Purchase] Coach assignment reconciliation failed:",
+      error instanceof Error ? error.message : error,
+    );
   });
 
   return {

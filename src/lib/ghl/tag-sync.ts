@@ -22,6 +22,7 @@ import {
   shouldApplyInboundPostPurchaseTagChange,
   type PostPurchaseControlledTag,
 } from "@/lib/post-purchase-entitlements";
+import { syncAssignedCoachFromGhl } from "@/lib/ghl/coach-assignment";
 
 async function getConfiguredPostPurchaseTagsForUser(
   userId: string,
@@ -315,8 +316,14 @@ export async function linkAndSyncTagsFromGhl(
   linkedLocations: number;
   tagsApplied: number;
   tagsIgnored: number;
+  coachAssignment: string;
 }> {
-  const stats = { linkedLocations: 0, tagsApplied: 0, tagsIgnored: 0 };
+  const stats = {
+    linkedLocations: 0,
+    tagsApplied: 0,
+    tagsIgnored: 0,
+    coachAssignment: "not_checked",
+  };
 
   let links;
   try {
@@ -346,10 +353,19 @@ export async function linkAndSyncTagsFromGhl(
       if (!client) continue;
 
       const response = await client.get<{
-        contact: { tags?: string[] };
+        contact: {
+          tags?: string[];
+          customFields?: Array<{ id: string; value: unknown }>;
+          timezone?: string;
+          firstName?: string;
+          lastName?: string;
+          email?: string;
+          phone?: string;
+        };
       }>(`/contacts/${link.ghlContactId}`);
 
-      const ghlTags = response.data.contact.tags ?? [];
+      const contact = response.data.contact;
+      const ghlTags = contact.tags ?? [];
 
       for (const tagName of ghlTags) {
         const tag = await findTagByName(tagName);
@@ -381,7 +397,15 @@ export async function linkAndSyncTagsFromGhl(
       await db
         .update(ghlContacts)
         .set({
-          cachedData: { tags: ghlTags },
+          cachedData: {
+            tags: ghlTags,
+            customFields: contact.customFields ?? [],
+            timezone: contact.timezone ?? null,
+            firstName: contact.firstName ?? null,
+            lastName: contact.lastName ?? null,
+            email: contact.email ?? null,
+            phone: contact.phone ?? null,
+          },
           lastFetchedAt: new Date(),
         })
         .where(eq(ghlContacts.ghlContactId, link.ghlContactId));
@@ -391,6 +415,17 @@ export async function linkAndSyncTagsFromGhl(
         error instanceof Error ? error.message : error
       );
     }
+  }
+
+  try {
+    const coach = await syncAssignedCoachFromGhl({ userId, email });
+    stats.coachAssignment = coach.status;
+  } catch (error) {
+    stats.coachAssignment = "failed";
+    console.error(
+      "[GHL Link Sync] Failed to reconcile coach assignment:",
+      error instanceof Error ? error.message : error,
+    );
   }
 
   return stats;
