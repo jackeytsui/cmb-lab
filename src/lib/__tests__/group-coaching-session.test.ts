@@ -29,7 +29,7 @@ describe("group coaching session presentation", () => {
     ["(BEGINNER) Friday Inner Circle Group Coaching", "CMB: Foundation"],
     ["Foundation Monday coaching", "CMB: Foundation"],
     ["CMB ALL LEVELS Monday coaching", "CMB: All Levels"],
-    ["(EUROPE TIMEZONE) Thursday Inner Circle Group Coaching", "CMB: Europe"],
+    ["(EUROPE TIMEZONE) Thursday Inner Circle Group Coaching", "CMB: EU Timezone"],
   ])("standardizes %s as %s", (title, expectedName) => {
     expect(getCoachingSessionPresentation(title).name).toBe(expectedName);
   });
