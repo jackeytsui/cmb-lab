@@ -9,7 +9,7 @@ import { isStaffRole } from "@/lib/platform-roles";
 export default async function UploadsPage() {
   const currentUser = await getRealUser();
   if (!currentUser || !isStaffRole(currentUser.role)) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   let uploads: (typeof videoUploads.$inferSelect)[] = [];

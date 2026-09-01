@@ -122,7 +122,7 @@ export function VideoThreadPlayer({
   resumeSessionId,
   resumeStepId,
   courseLessonId,
-  completionHref = "/dashboard",
+  completionHref = "/home",
   completionLabel = "Back to Dashboard",
 }: VideoThreadPlayerProps) {
   // Determine initial step: resume from lastStepId if it exists in steps, otherwise first step

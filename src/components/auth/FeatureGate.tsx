@@ -82,7 +82,7 @@ export async function FeatureGate({
 
   // Send coaches back to their teaching workspace instead of an upgrade dead end.
   if (isFeatureDisabledForRole(user.role, feature)) {
-    redirect("/dashboard/course-library");
+    redirect("/course-library");
   }
 
   if (await userCanUseFeature(user, feature)) {

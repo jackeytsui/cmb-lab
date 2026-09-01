@@ -84,7 +84,7 @@ export async function getStudyToday(userId: string) {
       detail: "Spaced repetition reviews keep retention high.",
       priority: 100,
       estimatedMinutes: Math.max(10, Math.ceil(dueTodayCount / 6)),
-      href: "/dashboard/srs",
+      href: "/srs",
     });
   }
 
@@ -99,7 +99,7 @@ export async function getStudyToday(userId: string) {
       : "Try one practice set to maintain progress.",
     priority: weakPracticeAttempts > 0 ? 80 : 45,
     estimatedMinutes: weakPracticeAttempts > 0 ? 20 : 15,
-    href: "/dashboard/practice",
+    href: "/practice",
   });
 
   recommendations.push({
@@ -111,7 +111,7 @@ export async function getStudyToday(userId: string) {
       : "Quick tone drills to protect pronunciation gains.",
     priority: avgTone < 75 ? 70 : 40,
     estimatedMinutes: 10,
-    href: "/dashboard/tone",
+    href: "/tone",
   });
 
   if (bookmarkedGrammar.length > 0) {
@@ -122,7 +122,7 @@ export async function getStudyToday(userId: string) {
       detail: `You have ${bookmarkedGrammar.length} saved grammar items ready for revision.`,
       priority: 35,
       estimatedMinutes: 10,
-      href: "/dashboard/grammar",
+      href: "/grammar",
     });
   }
 

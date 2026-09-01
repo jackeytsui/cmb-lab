@@ -13,5 +13,5 @@ export default async function ReaderPage({
   if (params.lessonId) query.set("lessonId", params.lessonId);
   if (params.onboarding) query.set("onboarding", params.onboarding);
   const suffix = query.size > 0 ? `?${query.toString()}` : "";
-  redirect(`/dashboard/reader/mandarin${suffix}`);
+  redirect(`/reader/mandarin${suffix}`);
 }

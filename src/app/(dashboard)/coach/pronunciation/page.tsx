@@ -92,12 +92,12 @@ export default async function CoachPronunciationPage() {
   // Verify coach role
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const access = await getStaffStudentAccessContext();
   if (access.status !== "authorized") {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   let pronunciationAttempts: PronunciationAttemptDisplay[] = [];

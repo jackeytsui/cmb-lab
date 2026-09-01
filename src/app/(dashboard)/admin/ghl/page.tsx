@@ -17,7 +17,7 @@ import { AutoTagRuleEditor } from "@/components/tags/AutoTagRuleEditor";
 export default async function GhlSettingsPage() {
   const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return (

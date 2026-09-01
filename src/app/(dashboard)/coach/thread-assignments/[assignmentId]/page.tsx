@@ -17,7 +17,7 @@ export default async function CoachThreadAssignmentProgressPage(props: {
 }) {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const { assignmentId } = await props.params;
@@ -27,7 +27,7 @@ export default async function CoachThreadAssignmentProgressPage(props: {
 
   const access = await getStaffStudentAccessContext();
   if (access.status !== "authorized") {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const data = await getThreadAssignmentProgress(

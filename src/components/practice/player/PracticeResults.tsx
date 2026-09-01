@@ -267,7 +267,7 @@ export function PracticeResults({
         </button>
         <button
           type="button"
-          onClick={() => router.push(nextAction?.href || "/dashboard")}
+          onClick={() => router.push(nextAction?.href || "/home")}
           className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors flex items-center justify-center gap-2"
         >
           {nextAction ? nextAction.label : "Done"}

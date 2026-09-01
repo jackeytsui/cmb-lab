@@ -45,7 +45,7 @@ export default function AdminLessonDetailPage({ params }: PageProps) {
       const response = await fetch(`/api/admin/lessons/${lessonId}`);
       if (!response.ok) {
         if (response.status === 403) {
-          router.push("/dashboard");
+          router.push("/home");
           return;
         }
         if (response.status === 404) {

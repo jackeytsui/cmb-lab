@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Canto to Mando Blueprint LMS",
     short_name: "Canto to Mando",
     description: "Interactive Mandarin & Cantonese learning platform",
-    start_url: "/dashboard",
+    start_url: "/home",
     display: "standalone",
     background_color: "#030712",
     theme_color: "#030712",

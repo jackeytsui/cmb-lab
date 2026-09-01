@@ -21,7 +21,7 @@ import { ExerciseListClient } from "./ExerciseListClient";
 export default async function ExercisesPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   // Fetch practice sets directly from DB (server component, no self-fetch)

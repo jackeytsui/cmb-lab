@@ -29,8 +29,8 @@ export type NavSection = {
 
 function isActive(pathname: string, url: string): boolean {
   // Home represents the dashboard index, not every nested learning route.
-  if (url === "/dashboard") {
-    return pathname === "/dashboard";
+  if (url === "/home") {
+    return pathname === "/home";
   }
   // Exact match or prefix match with path separator
   return pathname === url || pathname.startsWith(url + "/");

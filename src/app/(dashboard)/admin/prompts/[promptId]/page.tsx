@@ -47,7 +47,7 @@ export default async function AdminPromptDetailPage({ params }: PageProps) {
   // Verify user has coach or admin role
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const { promptId } = await params;

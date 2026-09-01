@@ -26,7 +26,7 @@ interface PageProps {
 export default async function CourseLibraryEditorPage({ params }: PageProps) {
   const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const isAdmin = await checkRole("admin");

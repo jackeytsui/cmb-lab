@@ -12,7 +12,7 @@ import { AnalyticsDashboard } from "./AnalyticsDashboard";
 export default async function AnalyticsPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return (

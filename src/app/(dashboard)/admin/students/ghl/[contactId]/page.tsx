@@ -16,7 +16,7 @@ export default async function ActiveStudentDetailPage({ params }: PageProps) {
   // Verify user has coach+ role
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const { contactId } = await params;

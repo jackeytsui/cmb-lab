@@ -294,7 +294,7 @@ export function AnnouncementManager({
                   value={linkUrl}
                   onChange={(event) => setLinkUrl(event.target.value)}
                   maxLength={500}
-                  placeholder="/dashboard/coaching/group-schedule"
+                  placeholder="/coaching/group-schedule"
                   inputMode="url"
                 />
               </div>

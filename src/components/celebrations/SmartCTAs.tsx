@@ -80,7 +80,7 @@ export function SmartCTAs({
 
       {/* Tertiary CTA: Dashboard link (always shown) */}
       <Link
-        href="/dashboard"
+        href="/home"
         onClick={onDismiss}
         className="inline-flex items-center gap-1 text-zinc-400 hover:text-white text-sm underline-offset-4 hover:underline transition-colors"
       >

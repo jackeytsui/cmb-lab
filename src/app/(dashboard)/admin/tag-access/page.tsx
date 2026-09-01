@@ -4,7 +4,7 @@ import { TagAccessClient } from "./TagAccessClient";
 
 export default async function TagAccessPage() {
   const hasAccess = await hasMinimumRole("admin");
-  if (!hasAccess) redirect("/dashboard");
+  if (!hasAccess) redirect("/home");
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">

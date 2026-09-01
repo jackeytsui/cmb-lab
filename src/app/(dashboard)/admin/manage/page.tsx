@@ -95,7 +95,7 @@ function filterForCoach(sections: PortalSection[], isCoach: boolean): PortalSect
 export default async function AdminManagePortalPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const isAdmin = await checkRole("admin");

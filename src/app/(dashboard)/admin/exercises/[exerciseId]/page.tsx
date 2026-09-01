@@ -26,7 +26,7 @@ export default async function EditExercisePage({
 }) {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const { exerciseId } = await params;

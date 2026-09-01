@@ -63,7 +63,7 @@ const CHECKLIST = [
 export default async function AdminDevToolkitPage() {
   const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return (

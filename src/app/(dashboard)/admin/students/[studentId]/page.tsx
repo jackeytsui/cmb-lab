@@ -208,14 +208,14 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
   // Authorize with the real account, then apply a safe admin View As projection.
   const realActor = await getRealUser();
   if (!realActor || !hasMinimumPlatformRole(realActor.role, "coach")) {
-    redirect("/dashboard");
+    redirect("/home");
   }
   const actor =
     realActor.role === "admin"
       ? (await getCurrentUser()) ?? realActor
       : realActor;
   if (!hasMinimumPlatformRole(actor.role, "coach")) {
-    redirect("/dashboard");
+    redirect("/home");
   }
   const isAdmin = actor.role === "admin";
   const canManuallyUnlockCourseLibrary =

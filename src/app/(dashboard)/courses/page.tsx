@@ -41,7 +41,7 @@ export default async function MyCoursesPage() {
 
     // Classic LTO students don't get regular courses — send them to Accelerator
     if (!isCoachOrAbove && (await userHasLtoStudentTag(user.id))) {
-      redirect("/dashboard/accelerator");
+      redirect("/accelerator");
     }
 
     let userCourses: {

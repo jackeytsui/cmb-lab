@@ -222,12 +222,12 @@ export default async function SubmissionDetailPage({ params }: PageProps) {
   // Check coach role
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const access = await getStaffStudentAccessContext();
   if (access.status !== "authorized") {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   // Query submission directly from DB (replaces broken self-fetch pattern)

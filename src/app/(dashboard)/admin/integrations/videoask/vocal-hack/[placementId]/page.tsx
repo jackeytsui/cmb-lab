@@ -11,7 +11,7 @@ export default async function VocalHackPlacementReviewPage({
 }: {
   params: Promise<{ placementId: string }>;
 }) {
-  if (!(await hasMinimumRole("admin"))) redirect("/dashboard");
+  if (!(await hasMinimumRole("admin"))) redirect("/home");
   const { placementId } = await params;
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">

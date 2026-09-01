@@ -46,7 +46,7 @@ export default async function PracticePage() {
     <FeatureGate feature="practice_sets">
       <div className="container mx-auto px-4 py-8">
         <Link
-          href="/dashboard"
+          href="/home"
           className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />

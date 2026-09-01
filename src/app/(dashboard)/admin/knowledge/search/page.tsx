@@ -10,7 +10,7 @@ import { SearchPageClient } from "./SearchPageClient";
 export default async function KnowledgeSearchPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return <SearchPageClient />;

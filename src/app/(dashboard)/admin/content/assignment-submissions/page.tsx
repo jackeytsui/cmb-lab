@@ -8,7 +8,7 @@ import { AssignmentSubmissionsClient } from "./AssignmentSubmissionsClient";
 export default async function AssignmentSubmissionsPage() {
   const reviewer = await getAnyAssignmentReviewer();
   if (!reviewer) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const courses = await db

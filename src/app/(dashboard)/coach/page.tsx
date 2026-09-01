@@ -26,12 +26,12 @@ export default async function CoachDashboardPage() {
   // Verify user has coach role or higher
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const access = await getStaffStudentAccessContext();
   if (access.status !== "authorized") {
-    redirect("/dashboard");
+    redirect("/home");
   }
   const displayName = access.actor.name?.trim().split(/\s+/)[0] || "Coach";
 

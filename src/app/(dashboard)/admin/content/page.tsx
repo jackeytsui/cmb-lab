@@ -5,7 +5,7 @@ import { ContentManagementClient } from "./ContentManagementClient";
 export default async function ContentManagementPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return (

@@ -4,10 +4,24 @@ import {
   DEFAULT_PLATFORM_ROLE,
   normalizePlatformRole,
 } from "@/lib/platform-roles";
+import { CLEAN_STUDENT_PROTECTED_ROUTE_PATTERNS } from "@/lib/student-route-aliases";
 
 const isCoachRoute = createRouteMatcher(["/coach(.*)"]);
 const isSignUpRoute = createRouteMatcher(["/sign-up(.*)"]);
 const isStudentAllowedRoute = createRouteMatcher([
+  "/course-library(.*)",
+  "/reader(.*)",
+  "/listening(.*)",
+  "/coaching(.*)",
+  "/audio-courses(.*)",
+  "/flashcards(.*)",
+  "/grammar(.*)",
+  "/practice(.*)",
+  "/srs(.*)",
+  "/tone(.*)",
+  "/accelerator(.*)",
+  "/notepad(.*)",
+  "/assignment-feedback(.*)",
   "/dashboard/course-library(.*)",
   "/dashboard/reader(.*)",
   "/dashboard/listening(.*)",
@@ -25,6 +39,7 @@ const isStudentAllowedRoute = createRouteMatcher([
   "/settings(.*)",
 ]);
 const isProtectedRoute = createRouteMatcher([
+  ...CLEAN_STUDENT_PROTECTED_ROUTE_PATTERNS,
   "/dashboard(.*)",
   "/coach(.*)",
   "/courses(.*)",
@@ -67,9 +82,9 @@ export const proxy = clerkMiddleware(async (auth, req) => {
 
   const { sessionClaims, userId } = await auth();
 
-  // If already signed in and visiting sign-in page, redirect to dashboard
+  // If already signed in and visiting sign-in page, redirect to student home.
   if (userId && createRouteMatcher(["/sign-in(.*)"])(req)) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(new URL("/home", req.url));
   }
 
   // Allow public routes
@@ -105,7 +120,10 @@ export const proxy = clerkMiddleware(async (auth, req) => {
   // intercept the dashboard index here, a valid admin/coach can be mistaken for
   // a student and sent to the reader before the database role is consulted.
   const isDashboardEntry =
-    req.nextUrl.pathname === "/dashboard" || req.nextUrl.pathname === "/dashboard/";
+    req.nextUrl.pathname === "/dashboard" ||
+    req.nextUrl.pathname === "/dashboard/" ||
+    req.nextUrl.pathname === "/home" ||
+    req.nextUrl.pathname === "/home/";
 
   // Student routes are intentionally limited to the core learning paths.
   if (
@@ -114,7 +132,7 @@ export const proxy = clerkMiddleware(async (auth, req) => {
     !isDashboardEntry &&
     !isStudentAllowedRoute(req)
   ) {
-    return NextResponse.redirect(new URL("/dashboard/reader", req.url));
+    return NextResponse.redirect(new URL("/reader", req.url));
   }
 
   return NextResponse.next();

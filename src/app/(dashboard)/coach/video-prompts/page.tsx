@@ -5,7 +5,7 @@ import { VideoPromptsClient } from "./VideoPromptsClient";
 export default async function CoachVideoPromptsPage() {
   const isCoach = await hasMinimumRole("coach");
   if (!isCoach) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return <VideoPromptsClient />;

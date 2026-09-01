@@ -10,7 +10,7 @@ interface PageProps {
 export default async function BuilderPage({ params }: PageProps) {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const { setId } = await params;

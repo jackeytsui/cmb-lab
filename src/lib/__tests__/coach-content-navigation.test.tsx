@@ -39,19 +39,19 @@ describe("coach content navigation", () => {
 
   it("removes both Accelerator groups for coaches even with all feature grants", () => {
     const html = renderToStaticMarkup(<AppSidebar role="coach" enabledFeatures={[...FEATURE_KEYS]} />);
-    expect(html).not.toContain("/dashboard/accelerator");
+    expect(html).not.toContain("url&quot;:&quot;/accelerator&quot;");
     expect(html).not.toContain("Mandarin Accelerator");
-    expect(html).toContain("/dashboard/course-library");
+    expect(html).toContain("/course-library");
     expect(html).toContain("/admin/course-library");
     expect(html).toContain("/admin/content/assignment-submissions");
   });
 
   it.each(["student", "admin"] as Roles[])("retains both groups for entitled %s accounts", (role) => {
     const html = renderToStaticMarkup(<AppSidebar role={role} enabledFeatures={[...FEATURE_KEYS]} />);
-    expect(html).toContain("/dashboard/accelerator");
-    expect(html).toContain("/dashboard/accelerator-extra/audio");
-    expect(html).toContain("/dashboard/accelerator-extra/tone-mastery");
-    expect(html).toContain("/dashboard/accelerator-extra/listening-training");
+    expect(html).toContain("url&quot;:&quot;/accelerator&quot;");
+    expect(html).toContain("/accelerator-extra/audio");
+    expect(html).toContain("/accelerator-extra/tone-mastery");
+    expect(html).toContain("/accelerator-extra/listening-training");
   });
 
   it("retains admin Accelerator management shortcuts", async () => {

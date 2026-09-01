@@ -183,7 +183,7 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
     <CourseLibraryGate key={currentUser?.id}>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Link
-          href={`/dashboard/course-library/${courseId}`}
+          href={`/course-library/${courseId}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ChevronLeft className="w-4 h-4" />
@@ -246,7 +246,7 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
               return (
                 <Link
                   key={lesson.id}
-                  href={`/dashboard/course-library/${courseId}/lessons/${lesson.id}`}
+                  href={`/course-library/${courseId}/lessons/${lesson.id}`}
                   className={cn(
                     "flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors",
                     isCompleted && "bg-emerald-500/5",
@@ -277,7 +277,7 @@ export default async function CourseLibraryModulePage({ params }: PageProps) {
 
         {nextModule && (staffProgress || isModuleComplete) && (
           <Link
-            href={`/dashboard/course-library/${courseId}/modules/${nextModule.id}`}
+            href={`/course-library/${courseId}/modules/${nextModule.id}`}
             className="mt-6 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 hover:bg-muted/30 transition-colors"
           >
             <div>

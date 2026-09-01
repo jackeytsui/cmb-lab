@@ -183,7 +183,7 @@ function EmptyState() {
         Practice speaking with the AI tutor in your lessons to see your conversation history here.
       </p>
       <Link
-        href="/dashboard"
+        href="/home"
         className="inline-flex items-center justify-center mt-6 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
       >
         Start Learning
@@ -230,7 +230,7 @@ export default function MyConversationsPage() {
     <div className="container mx-auto px-4 py-8">
         {/* Back link */}
         <Link
-          href="/dashboard"
+          href="/home"
           className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />

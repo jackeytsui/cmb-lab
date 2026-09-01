@@ -13,5 +13,5 @@ export default async function CoachingMaterialPage() {
     redirect("/sign-in");
   }
 
-  redirect("/dashboard/coaching/one-on-one");
+  redirect("/coaching/one-on-one");
 }

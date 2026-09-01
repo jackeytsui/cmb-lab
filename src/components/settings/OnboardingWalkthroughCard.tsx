@@ -12,7 +12,7 @@ export function OnboardingWalkthroughCard() {
       const doneKey = `cmb.onboarding.walkthrough.done.v1.${user?.id ?? "anonymous"}`;
       window.localStorage.removeItem(doneKey);
     }
-    router.push("/dashboard/reader?onboarding=1");
+    router.push("/reader?onboarding=1");
   };
 
   return (

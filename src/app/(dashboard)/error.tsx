@@ -36,7 +36,7 @@ export default function DashboardError({
             Try again
           </button>
           <Link
-            href="/dashboard"
+            href="/home"
             className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
           >
             <Home className="w-4 h-4" />

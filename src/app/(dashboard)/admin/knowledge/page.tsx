@@ -24,7 +24,7 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 export default async function AdminKnowledgePage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   let entries: { id: string; title: string; status: string; categoryId: string | null; categoryName: string | null; updatedAt: string }[] = [];

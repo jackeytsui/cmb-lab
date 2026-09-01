@@ -117,7 +117,7 @@ export function CourseLibraryCourseCard(props: CourseLibraryCourseCardProps) {
   if (!props.locked) {
     return (
       <Link
-        href={`/dashboard/course-library/${props.courseId}`}
+        href={`/course-library/${props.courseId}`}
         className={cardClassName}
       >
         {body}

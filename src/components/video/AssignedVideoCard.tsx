@@ -29,7 +29,7 @@ export function AssignedVideoCard({ assignment }: AssignedVideoCardProps) {
 
   return (
     <Link
-      href={`/dashboard/listening?videoId=${assignment.youtubeVideoId}`}
+      href={`/listening?videoId=${assignment.youtubeVideoId}`}
       className="group block rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden hover:border-blue-500/50 transition-colors"
     >
       {/* Thumbnail */}

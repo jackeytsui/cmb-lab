@@ -83,7 +83,7 @@ export default async function LessonPlayerPage({ params }: PageProps) {
   if (!isCoachOrAbove) {
     // Classic LTO students don't get regular lessons — send them to Accelerator
     if (await userHasLtoStudentTag(user.id)) {
-      redirect("/dashboard/accelerator");
+      redirect("/accelerator");
     }
     const permissions = await resolvePermissions(user.id);
     const hasAccess = await canAccessLesson(permissions, lessonId);
@@ -172,7 +172,7 @@ export default async function LessonPlayerPage({ params }: PageProps) {
         {/* Open in Reader link */}
         {hasReadableText && (
           <Link
-            href={`/dashboard/reader?lessonId=${lessonId}`}
+            href={`/reader?lessonId=${lessonId}`}
             className="inline-flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors mb-4"
           >
             <BookOpenText className="w-4 h-4" />

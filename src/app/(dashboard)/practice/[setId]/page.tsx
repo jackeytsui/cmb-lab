@@ -49,10 +49,10 @@ export default async function PracticePage({ params }: PageProps) {
   const isCoachOrAbove = await hasMinimumRole("coach");
   if (!isCoachOrAbove) {
     if (await userHasLtoStudentTag(currentUser.id)) {
-      redirect("/dashboard/accelerator");
+      redirect("/accelerator");
     }
     if (!(await canUserAccessPracticeSet(currentUser.id, setId))) {
-      redirect("/dashboard/practice");
+      redirect("/practice");
     }
   }
 

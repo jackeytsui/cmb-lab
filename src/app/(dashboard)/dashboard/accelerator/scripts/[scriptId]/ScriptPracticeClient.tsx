@@ -374,7 +374,7 @@ export default function ScriptPracticeClient({
       {/* Header */}
       <div className="flex items-center justify-between">
         <Link
-          href="/dashboard/accelerator/scripts"
+          href="/accelerator/scripts"
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -566,7 +566,7 @@ export default function ScriptPracticeClient({
       <div className="sticky bottom-0 z-40 -mx-4 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="max-w-3xl mx-auto flex items-center justify-between px-4 py-3">
           {prevScriptId ? (
-            <Link href={`/dashboard/accelerator/scripts/${prevScriptId}`}>
+            <Link href={`/accelerator/scripts/${prevScriptId}`}>
               <Button variant="outline" className="gap-2">
                 <ArrowLeft className="w-4 h-4" />
                 Previous
@@ -590,7 +590,7 @@ export default function ScriptPracticeClient({
           </div>
 
           {nextScriptId ? (
-            <Link href={`/dashboard/accelerator/scripts/${nextScriptId}`}>
+            <Link href={`/accelerator/scripts/${nextScriptId}`}>
               <Button className="gap-2">
                 Next
                 <ArrowRight className="w-4 h-4" />

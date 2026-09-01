@@ -205,7 +205,7 @@ export function DiaryViewer({
               <>
                 Your diary has been reviewed.{" "}
                 <Link
-                  href={`/dashboard/assignment-feedback/${submission.id}`}
+                  href={`/assignment-feedback/${submission.id}`}
                   className="underline font-medium"
                 >
                   View your feedback

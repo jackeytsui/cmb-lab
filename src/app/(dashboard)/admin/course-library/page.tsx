@@ -15,7 +15,7 @@ export const metadata = {
 export default async function CourseLibraryAdminPage() {
   const hasAccess = await hasCourseContentAccess();
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const isAdmin = await checkRole("admin");

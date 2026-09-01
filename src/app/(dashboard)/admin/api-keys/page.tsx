@@ -5,7 +5,7 @@ import { AdminApiKeysClient } from "./AdminApiKeysClient";
 export default async function AdminApiKeysPage() {
   const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return <AdminApiKeysClient />;

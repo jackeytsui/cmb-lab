@@ -34,7 +34,7 @@ export default async function VideoAskIntegrationPage({
     lessonId?: string | string[];
   }>;
 }) {
-  if (!(await hasMinimumRole("admin"))) redirect("/dashboard");
+  if (!(await hasMinimumRole("admin"))) redirect("/home");
 
   const params = await searchParams;
   const connected = Array.isArray(params.connected)

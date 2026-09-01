@@ -56,12 +56,12 @@ function getStatusBadge(status: string) {
 export default async function ThreadReviewsPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const access = await getStaffStudentAccessContext();
   if (access.status !== "authorized") {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const sessions = await db

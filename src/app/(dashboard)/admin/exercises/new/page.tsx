@@ -24,7 +24,7 @@ export default async function NewExercisePage({
 }) {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const { setId } = await searchParams;

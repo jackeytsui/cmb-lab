@@ -23,7 +23,7 @@ export default async function AdminPromptsPage() {
   // Verify user has coach or admin role
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   // Fetch all prompts

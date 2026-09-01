@@ -46,7 +46,7 @@ export default async function AdminAILogsPage() {
   // Verify user has admin role
   const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   let initialLogs: AILog[] = [];

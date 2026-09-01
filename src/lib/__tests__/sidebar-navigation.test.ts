@@ -18,7 +18,7 @@ describe("sidebar navigation", () => {
     expect(overviewStart).toBeLessThan(adminStart);
     expect(overviewSection).toContain('minRole: "student"');
     expect(overviewSection).toContain(
-      'title: "Home", url: "/dashboard", icon: House',
+      'title: "Home", url: "/home", icon: House',
     );
 
     expect(adminStart).toBeGreaterThan(-1);

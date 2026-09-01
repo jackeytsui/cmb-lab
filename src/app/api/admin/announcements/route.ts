@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const notificationLink = linkUrl || "/dashboard";
+  const notificationLink = linkUrl || "/home";
   const sql = getNeonSql();
 
   try {

@@ -9,6 +9,7 @@ describe("student route access", () => {
       "utf8",
     );
 
+    expect(middleware).toContain('"/assignment-feedback(.*)"');
     expect(middleware).toContain('"/dashboard/assignment-feedback(.*)"');
   });
 
@@ -23,16 +24,16 @@ describe("student route access", () => {
     );
 
     for (const route of [
-      "/dashboard/grammar",
-      "/dashboard/practice",
-      "/dashboard/srs",
-      "/dashboard/tone",
+      "/grammar",
+      "/practice",
+      "/srs",
+      "/tone",
     ]) {
       expect(study).toContain(`href: "${route}"`);
       expect(middleware).toContain(`"${route}(.*)"`);
     }
 
-    // Practice cards leave /dashboard for the interactive quiz player.
+    // Practice cards leave the landing page for the interactive quiz player.
     expect(middleware).toContain('"/practice(.*)"');
   });
 
@@ -43,8 +44,9 @@ describe("student route access", () => {
     );
 
     expect(middleware).toContain(
-      'req.nextUrl.pathname === "/dashboard" || req.nextUrl.pathname === "/dashboard/"',
+      'req.nextUrl.pathname === "/dashboard"',
     );
+    expect(middleware).toContain('req.nextUrl.pathname === "/home"');
     expect(middleware).toContain("!isDashboardEntry");
   });
 

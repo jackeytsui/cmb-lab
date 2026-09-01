@@ -17,7 +17,7 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 export default async function NewKnowledgeEntryPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   // Fetch categories for the dropdown

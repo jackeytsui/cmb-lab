@@ -82,7 +82,7 @@ const DASHBOARD_SHORTCUTS: DashboardShortcut[] = [
   {
     title: "Course Library",
     description: "Continue your courses and see lesson progress.",
-    href: "/dashboard/course-library",
+    href: "/course-library",
     feature: "course_library",
     icon: BookOpenText,
     accent: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
@@ -90,7 +90,7 @@ const DASHBOARD_SHORTCUTS: DashboardShortcut[] = [
   {
     title: "Mandarin Accelerator",
     description: "Follow your guided practice plan and learning path.",
-    href: "/dashboard/accelerator",
+    href: "/accelerator",
     feature: "mandarin_accelerator",
     icon: Gauge,
     accent: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
@@ -98,7 +98,7 @@ const DASHBOARD_SHORTCUTS: DashboardShortcut[] = [
   {
     title: "Audio Course",
     description: "Learn through audio-first lessons and exercises.",
-    href: "/dashboard/audio-courses",
+    href: "/audio-courses",
     feature: "audio_courses",
     icon: AudioLines,
     accent: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -106,7 +106,7 @@ const DASHBOARD_SHORTCUTS: DashboardShortcut[] = [
   {
     title: "Mandarin AI Reader",
     description: "Read Mandarin with pinyin, translation, and audio tools.",
-    href: "/dashboard/reader/mandarin",
+    href: "/reader/mandarin",
     feature: "dictionary_reader",
     icon: BookOpenText,
     accent: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
@@ -114,7 +114,7 @@ const DASHBOARD_SHORTCUTS: DashboardShortcut[] = [
   {
     title: "Cantonese AI Reader",
     description: "Read Cantonese with jyutping, translation, and audio tools.",
-    href: "/dashboard/reader/cantonese",
+    href: "/reader/cantonese",
     feature: "dictionary_reader",
     icon: BookOpenText,
     accent: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
@@ -122,7 +122,7 @@ const DASHBOARD_SHORTCUTS: DashboardShortcut[] = [
   {
     title: "YouTube Listening Lab",
     description: "Train your listening with guided video practice.",
-    href: "/dashboard/listening",
+    href: "/listening",
     feature: "listening_lab",
     icon: Headphones,
     accent: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
@@ -130,7 +130,7 @@ const DASHBOARD_SHORTCUTS: DashboardShortcut[] = [
   {
     title: "Notepad",
     description: "Keep your vocabulary, examples, and study notes together.",
-    href: "/dashboard/notepad",
+    href: "/notepad",
     feature: "notepad",
     icon: NotebookPen,
     accent: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
@@ -198,9 +198,9 @@ function DashboardContent({
 }: DashboardContentProps) {
   const primaryCourse = learningCourses[0];
   const primaryHref = primaryCourse?.nextLessonId
-    ? `/dashboard/course-library/${primaryCourse.id}/lessons/${primaryCourse.nextLessonId}`
+    ? `/course-library/${primaryCourse.id}/lessons/${primaryCourse.nextLessonId}`
     : primaryCourse
-      ? `/dashboard/course-library/${primaryCourse.id}`
+      ? `/course-library/${primaryCourse.id}`
       : shortcuts[0]?.href;
 
   return (
@@ -252,7 +252,7 @@ function DashboardContent({
               )}
             </h2>
             <Link
-              href="/dashboard/practice"
+              href="/practice"
               className="text-sm text-primary transition-opacity hover:opacity-80"
             >
               View all &rarr;
@@ -289,7 +289,7 @@ function DashboardContent({
               )}
             </h2>
             <Link
-              href="/dashboard/listening/history"
+              href="/listening/history"
               className="text-sm text-primary transition-opacity hover:opacity-80"
             >
               View all &rarr;

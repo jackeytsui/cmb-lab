@@ -1145,7 +1145,7 @@ export function ListeningClient() {
     if (isListeningStage) return;
     const done = window.localStorage.getItem(onboardingDoneKey) === "done";
     if (!done) {
-      router.replace("/dashboard/reader?onboarding=1");
+      router.replace("/reader?onboarding=1");
     }
   }, [isListeningStage, onboardingDoneKey, router, user]);
 
@@ -1172,7 +1172,7 @@ export function ListeningClient() {
           </p>
         </div>
         <Link
-          href="/dashboard/listening/history"
+          href="/listening/history"
           data-tour-id="listening-history-link"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >

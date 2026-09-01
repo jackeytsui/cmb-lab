@@ -40,7 +40,7 @@ interface PageProps {
 export default async function EditKnowledgeEntryPage({ params }: PageProps) {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const { entryId } = await params;

@@ -5,7 +5,7 @@ import { PracticeResultsPanel } from "@/components/coach/PracticeResultsPanel";
 export default async function CoachPracticeResultsPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return (

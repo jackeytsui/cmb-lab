@@ -169,7 +169,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         category: "feedback",
         title: `"${lessonTitle}" has been reviewed`,
         body: `Your Vocal Hack recordings for "${lessonTitle}" have been reviewed. Tap to see your coach's feedback.`,
-        linkUrl: `/dashboard/assignment-feedback/${submissionId}`,
+        linkUrl: `/assignment-feedback/${submissionId}`,
         metadata: { submissionId, lessonId: submission.lessonId },
       });
     } catch (err) {

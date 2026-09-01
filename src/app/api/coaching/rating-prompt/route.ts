@@ -56,8 +56,8 @@ export async function GET() {
       title: session.title,
       href:
         session.type === "one_on_one"
-          ? "/dashboard/coaching/one-on-one"
-          : "/dashboard/coaching/inner-circle",
+          ? "/coaching/one-on-one"
+          : "/coaching/inner-circle",
     },
   });
 }

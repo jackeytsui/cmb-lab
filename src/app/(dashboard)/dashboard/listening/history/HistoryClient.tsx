@@ -24,7 +24,7 @@ export function HistoryClient({ entries }: HistoryClientProps) {
         <p className="text-muted-foreground mt-2 max-w-md mx-auto">
           Start by pasting a YouTube URL in the{" "}
           <Link
-            href="/dashboard/listening"
+            href="/listening"
             className="text-emerald-500 hover:text-emerald-400 underline"
           >
             Listening Lab
@@ -40,7 +40,7 @@ export function HistoryClient({ entries }: HistoryClientProps) {
       {entries.map((entry) => (
         <Link
           key={entry.id}
-          href={`/dashboard/listening?videoId=${entry.youtubeVideoId}`}
+          href={`/listening?videoId=${entry.youtubeVideoId}`}
           className="group block rounded-lg border border-border bg-card/70 shadow-sm hover:shadow-md hover:border-primary/30 transition-all"
         >
           {/* Thumbnail */}

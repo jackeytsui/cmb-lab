@@ -92,7 +92,7 @@ export async function NativeVideoThreadLesson({
         resumeSessionId={existingSession?.id ?? null}
         resumeStepId={existingSession?.lastStepId ?? null}
         courseLessonId={lessonId}
-        completionHref={`/dashboard/course-library/${courseId}/modules/${moduleId}`}
+        completionHref={`/course-library/${courseId}/modules/${moduleId}`}
         completionLabel="Back to course"
       />
       <CourseLibraryLessonControls

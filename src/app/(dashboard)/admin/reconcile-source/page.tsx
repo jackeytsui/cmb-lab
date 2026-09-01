@@ -3,7 +3,7 @@ import { hasMinimumRole } from "@/lib/auth";
 import { ReconcileSourceClient } from "./ReconcileSourceClient";
 
 export default async function ReconcileSourcePage() {
-  if (!(await hasMinimumRole("admin"))) redirect("/dashboard");
+  if (!(await hasMinimumRole("admin"))) redirect("/home");
 
   return (
     <main className="container mx-auto max-w-5xl px-4 py-8">

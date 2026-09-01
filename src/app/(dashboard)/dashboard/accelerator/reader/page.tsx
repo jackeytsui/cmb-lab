@@ -124,7 +124,7 @@ async function CuratedPassagesList() {
                 {/* Open in Reader button */}
                 <div className="px-5 pb-4">
                   <Link
-                    href={`/dashboard/accelerator/reader/${passage.id}`}
+                    href={`/accelerator/reader/${passage.id}`}
                     className="inline-flex items-center gap-2 rounded-lg border border-border bg-accent/50 px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
                   >
                     <BookOpen className="w-4 h-4" />

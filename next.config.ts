@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import {
+  getStudentRouteRedirects,
+  getStudentRouteRewrites,
+} from "./src/lib/student-route-aliases";
 
 const isDev = process.env.NODE_ENV === "development";
 const clerkFrontendApi = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API;
@@ -32,6 +36,15 @@ const cspHeaderEmbeddable = cspHeader
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["jieba-wasm"],
+  async redirects() {
+    return getStudentRouteRedirects();
+  },
+  async rewrites() {
+    return {
+      // Preserve real routes such as /practice/[setId] before applying aliases.
+      afterFiles: getStudentRouteRewrites(),
+    };
+  },
   async headers() {
     return [
       {

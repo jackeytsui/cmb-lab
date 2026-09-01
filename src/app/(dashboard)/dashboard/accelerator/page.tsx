@@ -139,7 +139,7 @@ async function AcceleratorDashboard() {
   const sections: SectionProgress[] = [
     {
       label: "Practice Plan",
-      href: "/dashboard/accelerator/practice-plan",
+      href: "/accelerator/practice-plan",
       icon: <ClipboardList className="w-5 h-5" />,
       completed: completedKeys.has("practice_plan") ? 1 : 0,
       total: 1,
@@ -147,7 +147,7 @@ async function AcceleratorDashboard() {
     },
     {
       label: "Starter Pack",
-      href: "/dashboard/accelerator/starter-pack",
+      href: "/accelerator/starter-pack",
       icon: <Package className="w-5 h-5" />,
       completed: completedKeys.has("starter_pack") ? 1 : 0,
       total: 1,
@@ -155,7 +155,7 @@ async function AcceleratorDashboard() {
     },
     {
       label: "Typing Unlock Kit",
-      href: "/dashboard/accelerator/typing",
+      href: "/accelerator/typing",
       icon: <Keyboard className="w-5 h-5" />,
       completed: typingDone.count,
       total: typingTotal.count,
@@ -163,7 +163,7 @@ async function AcceleratorDashboard() {
     },
     {
       label: "Conversation Scripts",
-      href: "/dashboard/accelerator/scripts",
+      href: "/accelerator/scripts",
       icon: <MessageSquare className="w-5 h-5" />,
       completed: scriptsDone.count,
       total: scriptsTotal.count,
@@ -171,7 +171,7 @@ async function AcceleratorDashboard() {
     },
     {
       label: "Curated Passages",
-      href: "/dashboard/accelerator/reader",
+      href: "/accelerator/reader",
       icon: <BookOpen className="w-5 h-5" />,
       completed: passagesDone.count,
       total: passagesTotal.count,
@@ -204,7 +204,7 @@ async function AcceleratorDashboard() {
   if (hasAudioAccelerator) {
     extraSections.push({
       label: "Audio Accelerator Edition",
-      href: "/dashboard/accelerator-extra/audio",
+      href: "/accelerator-extra/audio",
       icon: <AudioLines className="w-5 h-5" />,
       completed: 0,
       total: 1,
@@ -220,7 +220,7 @@ async function AcceleratorDashboard() {
       .where(eq(toneMasteryProgress.userId, user.id));
     extraSections.push({
       label: "Tone Mastery",
-      href: "/dashboard/accelerator-extra/tone-mastery",
+      href: "/accelerator-extra/tone-mastery",
       icon: <Music className="w-5 h-5" />,
       completed: toneDone.count,
       total: toneTotal.count,
@@ -236,7 +236,7 @@ async function AcceleratorDashboard() {
       .where(eq(listeningProgress.userId, user.id));
     extraSections.push({
       label: "Listening Training",
-      href: "/dashboard/accelerator-extra/listening-training",
+      href: "/accelerator-extra/listening-training",
       icon: <Ear className="w-5 h-5" />,
       completed: listenDone.count,
       total: listenTotal.count,

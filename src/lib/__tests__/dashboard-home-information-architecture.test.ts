@@ -64,9 +64,9 @@ describe("dashboard home information architecture", () => {
     const sidebar = source("src/components/layout/AppSidebar.tsx");
 
     expect(sidebar).toContain('label: "Overview"');
-    expect(sidebar).toContain('title: "Home", url: "/dashboard"');
-    expect(sidebar).toContain('url: "/dashboard/reader/mandarin"');
-    expect(sidebar).toContain('url: "/dashboard/reader/cantonese"');
+    expect(sidebar).toContain('title: "Home", url: "/home"');
+    expect(sidebar).toContain('url: "/reader/mandarin"');
+    expect(sidebar).toContain('url: "/reader/cantonese"');
   });
 
   it("keeps the language-neutral reader URL as a compatibility redirect", () => {
@@ -75,18 +75,17 @@ describe("dashboard home information architecture", () => {
     );
 
     expect(readerIndex).toContain(
-      "redirect(`/dashboard/reader/mandarin${suffix}`)",
+      "redirect(`/reader/mandarin${suffix}`)",
     );
     expect(readerIndex).toContain('query.set("lessonId", params.lessonId)');
     expect(readerIndex).toContain('query.set("onboarding", params.onboarding)');
   });
 
-  it("marks Home active only on the dashboard index", () => {
+  it("marks Home active only on the clean home URL", () => {
     const navigation = source("src/components/layout/NavMain.tsx");
-    const homeCase = navigation.split('if (url === "/dashboard")')[1].split("}")[0];
+    const homeCase = navigation.split('if (url === "/home")')[1].split("}")[0];
 
-    expect(homeCase).toContain('return pathname === "/dashboard"');
+    expect(homeCase).toContain('return pathname === "/home"');
     expect(homeCase).not.toContain("startsWith");
   });
 });
-

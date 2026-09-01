@@ -39,7 +39,7 @@ async function CuratedPassageReader({ params }: PageProps) {
   return (
     <div className="container mx-auto px-4 py-6 space-y-4">
       <Link
-        href="/dashboard/accelerator/reader"
+        href="/accelerator/reader"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />

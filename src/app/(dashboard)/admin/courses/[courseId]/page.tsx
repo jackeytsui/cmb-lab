@@ -35,7 +35,7 @@ export default function AdminCourseDetailPage({ params }: PageProps) {
       const response = await fetch(`/api/admin/courses/${courseId}`);
       if (!response.ok) {
         if (response.status === 403) {
-          router.push("/dashboard");
+          router.push("/home");
           return;
         }
         if (response.status === 404) {

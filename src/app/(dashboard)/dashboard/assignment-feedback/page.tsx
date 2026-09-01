@@ -73,7 +73,7 @@ export default async function AssignmentFeedbackPage() {
             return (
               <Link
                 key={row.id}
-                href={`/dashboard/assignment-feedback/${row.id}`}
+                href={`/assignment-feedback/${row.id}`}
                 className="block rounded-lg border border-border bg-card p-4 hover:bg-muted/30 transition-colors"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">

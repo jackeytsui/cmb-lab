@@ -5,7 +5,7 @@ import LtoReportClient from "./LtoReportClient";
 
 export default async function AcceleratorReportsPage() {
   const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) redirect("/dashboard");
+  if (!hasAccess) redirect("/home");
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-6 max-w-5xl">

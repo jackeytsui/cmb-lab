@@ -45,7 +45,7 @@ export default function AssessmentsClient() {
         {assessments.map((assessment) => (
           <Link
             key={assessment.id}
-            href={`/dashboard/assessments/${assessment.id}`}
+            href={`/assessments/${assessment.id}`}
             className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 hover:border-zinc-700"
           >
             <div className="text-xs uppercase tracking-wide text-zinc-500">

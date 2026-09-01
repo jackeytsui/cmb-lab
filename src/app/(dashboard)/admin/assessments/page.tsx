@@ -6,7 +6,7 @@ export default async function AdminAssessmentsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
   const canManage = await hasMinimumRole("coach");
-  if (!canManage) redirect("/dashboard");
+  if (!canManage) redirect("/home");
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-6">

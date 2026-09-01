@@ -11,8 +11,8 @@ import { courseCoverImagePath } from "@/lib/course-cover-image";
 
 function courseHref(course: DashboardLearningCourse) {
   return course.nextLessonId
-    ? `/dashboard/course-library/${course.id}/lessons/${course.nextLessonId}`
-    : `/dashboard/course-library/${course.id}`;
+    ? `/course-library/${course.id}/lessons/${course.nextLessonId}`
+    : `/course-library/${course.id}`;
 }
 
 function actionLabel(course: DashboardLearningCourse) {
@@ -103,7 +103,7 @@ export function DashboardLearningSection({
           </p>
         </div>
         <Link
-          href="/dashboard/course-library"
+          href="/course-library"
           className="hidden shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:opacity-80 sm:inline-flex"
         >
           View all
@@ -216,7 +216,7 @@ export function DashboardLearningSection({
       ) : null}
 
       <Link
-        href="/dashboard/course-library"
+        href="/course-library"
         className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:opacity-80 sm:hidden"
       >
         View all courses

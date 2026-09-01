@@ -146,7 +146,7 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
 
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   if (!z.string().uuid().safeParse(sessionId).success) {
@@ -155,7 +155,7 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
 
   const access = await getStaffStudentAccessContext();
   if (access.status !== "authorized") {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const [sessionAccess] = await db

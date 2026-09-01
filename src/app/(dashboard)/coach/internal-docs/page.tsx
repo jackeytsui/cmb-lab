@@ -4,7 +4,7 @@ import { CoachInternalDocsClient } from "./CoachInternalDocsClient";
 
 export default async function CoachInternalDocsPage() {
   const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) redirect("/dashboard");
+  if (!hasAccess) redirect("/home");
 
   return (
     <div className="mx-auto w-full max-w-none px-4 py-8">

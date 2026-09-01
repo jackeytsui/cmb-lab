@@ -499,7 +499,7 @@ function StudentTable({
                       Progress &amp; unlock
                     </Link>
                     <Link
-                      href={`/dashboard/coaching/one-on-one?student=${encodeURIComponent(student.email)}`}
+                      href={`/coaching/one-on-one?student=${encodeURIComponent(student.email)}`}
                       className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:border-primary/40 hover:text-primary transition-colors"
                     >
                       <FileText className="size-3.5" />

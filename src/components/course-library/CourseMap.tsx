@@ -174,7 +174,7 @@ function StopNode({
   const locked = state === "locked";
   const completed = state === "completed";
   const current = state === "current";
-  const href = `/dashboard/course-library/${courseId}/modules/${stop.id}`;
+  const href = `/course-library/${courseId}/modules/${stop.id}`;
   const label = stop.shortTitle?.trim() || stop.title;
 
   const disc = (
@@ -473,7 +473,7 @@ export function CourseMap({ courseId, stops, currentIndex, staffProgress = false
               onClick={() => {
                 if (jumpTarget) {
                   router.push(
-                    `/dashboard/course-library/${courseId}/modules/${jumpTarget.id}`,
+                    `/course-library/${courseId}/modules/${jumpTarget.id}`,
                   );
                 }
               }}

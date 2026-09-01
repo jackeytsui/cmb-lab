@@ -13,12 +13,12 @@ import type { VideoAssignment } from "@/db/schema/video";
 export default async function CoachVideoAssignmentsPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const access = await getStaffStudentAccessContext();
   if (access.status !== "authorized") {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const assignments = await listCoachVideoAssignments(

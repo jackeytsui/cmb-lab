@@ -85,7 +85,7 @@ describe("coach Accelerator exclusions", () => {
 
   it.each(EXCLUDED)("redirects coach direct links for %s back to Course Library", async (feature) => {
     await expect(FeatureGate({ feature, children: <p>Accelerator content</p> }))
-      .rejects.toThrow("Redirect: /dashboard/course-library");
+      .rejects.toThrow("Redirect: /course-library");
   });
 
   it("renders permitted content normally", async () => {

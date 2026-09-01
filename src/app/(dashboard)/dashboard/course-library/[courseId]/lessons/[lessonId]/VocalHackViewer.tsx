@@ -216,7 +216,7 @@ export function VocalHackViewer({
               <>
                 Your recordings have been reviewed.{" "}
                 <Link
-                  href={`/dashboard/assignment-feedback/${submission.id}`}
+                  href={`/assignment-feedback/${submission.id}`}
                   className="underline font-medium"
                 >
                   View your feedback

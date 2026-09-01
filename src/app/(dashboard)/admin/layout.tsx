@@ -20,7 +20,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           "assignment_review_text",
         )
       : false;
-    if (!canReview) redirect("/dashboard");
+    if (!canReview) redirect("/home");
   }
 
   return <>{children}</>;

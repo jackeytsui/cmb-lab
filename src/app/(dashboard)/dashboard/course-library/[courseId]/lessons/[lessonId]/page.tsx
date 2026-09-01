@@ -186,7 +186,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
       ? orderedLessons[currentLessonIndex + 1]?.lessonId ?? null
       : null;
   const nextHref = nextLessonId
-    ? `/dashboard/course-library/${courseId}/lessons/${nextLessonId}`
+    ? `/course-library/${courseId}/lessons/${nextLessonId}`
     : null;
 
   const progress = currentUser
@@ -430,7 +430,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
     <CourseLibraryGate key={`${currentUser?.id}:${lessonId}`}>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <a
-          href={`/dashboard/course-library/${courseId}/modules/${row.moduleId}`}
+          href={`/course-library/${courseId}/modules/${row.moduleId}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ChevronLeft className="w-4 h-4" />

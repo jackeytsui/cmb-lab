@@ -5,7 +5,7 @@ import { AudioCourseManager } from "@/components/admin/AudioCourseManager";
 export default async function AdminAudioCoursePage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return (

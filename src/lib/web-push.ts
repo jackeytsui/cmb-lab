@@ -89,7 +89,7 @@ async function sendPush(
   const payload = JSON.stringify({
     title: announcement.title,
     body: announcement.body,
-    url: announcement.linkUrl || "/dashboard",
+    url: announcement.linkUrl || "/home",
     tag: `${options?.tagPrefix || "announcement"}:${announcement.id}`,
   });
   let sent = 0;

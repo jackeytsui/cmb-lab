@@ -46,7 +46,7 @@ export function OtpFirstSignIn() {
   // Auto-redirect if already signed in
   useEffect(() => {
     if (isSignedIn) {
-      window.location.href = "/dashboard";
+      window.location.href = "/home";
     }
   }, [isSignedIn]);
 
@@ -69,7 +69,7 @@ export function OtpFirstSignIn() {
           if (result.createdSessionId) {
             await setSignUpActive?.({ session: result.createdSessionId });
           }
-          window.location.href = "/dashboard";
+          window.location.href = "/home";
           return;
         }
 
@@ -93,7 +93,7 @@ export function OtpFirstSignIn() {
                 if (updated.createdSessionId) {
                   await setSignUpActive?.({ session: updated.createdSessionId });
                 }
-                window.location.href = "/dashboard";
+                window.location.href = "/home";
                 return;
               }
             } catch (updateErr) {
@@ -128,7 +128,7 @@ export function OtpFirstSignIn() {
   async function activateSession(createdSessionId: string | null) {
     if (!createdSessionId || !setActive) return;
     await setActive({ session: createdSessionId });
-    router.push("/dashboard");
+    router.push("/home");
   }
 
   // Step 1: Send OTP
@@ -278,7 +278,7 @@ export function OtpFirstSignIn() {
         <div className="space-y-3 rounded-lg border border-emerald-700 bg-emerald-900/40 p-4 text-center">
           <p className="text-sm text-emerald-200">You&apos;re already signed in.</p>
           <a
-            href="/dashboard"
+            href="/home"
             className="inline-block w-full rounded-lg bg-blue-600 px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-700 transition-colors"
           >
             Go to Dashboard

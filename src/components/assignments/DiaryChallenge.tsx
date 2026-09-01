@@ -169,7 +169,7 @@ export function DiaryChallenge({ lessonId, confirmationMessage }: DiaryChallleng
           <p className="text-xs text-zinc-500">
             Tip: Use the{" "}
             <a
-              href={`/dashboard/reader`}
+              href={`/reader`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-cyan-400 hover:text-cyan-300"

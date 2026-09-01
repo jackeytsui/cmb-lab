@@ -136,7 +136,7 @@ async function ScriptsContent() {
           return (
             <Link
               key={script.id}
-              href={`/dashboard/accelerator/scripts/${script.id}`}
+              href={`/accelerator/scripts/${script.id}`}
               className="block group"
             >
               <div className="border border-border rounded-xl p-5 bg-card hover:bg-accent hover:border-border transition-colors h-full flex flex-col">

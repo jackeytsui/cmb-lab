@@ -11,12 +11,12 @@ import { ThreadAssignmentsClient } from "./ThreadAssignmentsClient";
 export default async function CoachThreadAssignmentsPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const access = await getStaffStudentAccessContext();
   if (access.status !== "authorized") {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const assignments = await listCoachThreadAssignments(

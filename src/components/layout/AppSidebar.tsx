@@ -75,7 +75,7 @@ const navSections: NavSectionWithRoleAndFeature[] = [
   {
     label: "Overview",
     minRole: "student",
-    items: [{ title: "Home", url: "/dashboard", icon: House }],
+    items: [{ title: "Home", url: "/home", icon: House }],
   },
   {
     label: "Admin",
@@ -95,13 +95,13 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     items: [
       {
         title: "Course Library",
-        url: "/dashboard/course-library",
+        url: "/course-library",
         icon: BookOpenText,
         featureKey: "course_library",
       },
       {
         title: "Audio Course",
-        url: "/dashboard/audio-courses",
+        url: "/audio-courses",
         icon: AudioLines,
         featureKey: "audio_courses",
       },
@@ -113,25 +113,25 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     items: [
       {
         title: "Mandarin AI Reader",
-        url: "/dashboard/reader/mandarin",
+        url: "/reader/mandarin",
         icon: BookOpenText,
         featureKey: "dictionary_reader",
       },
       {
         title: "Cantonese AI Reader",
-        url: "/dashboard/reader/cantonese",
+        url: "/reader/cantonese",
         icon: BookOpenText,
         featureKey: "dictionary_reader",
       },
       {
         title: "YouTube Listening Lab",
-        url: "/dashboard/listening",
+        url: "/listening",
         icon: Headphones,
         featureKey: "listening_lab",
       },
       {
         title: "Notepad",
-        url: "/dashboard/notepad",
+        url: "/notepad",
         icon: NotebookPen,
         featureKey: "notepad",
       },
@@ -143,25 +143,25 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     items: [
       {
         title: "1:1 Coaching",
-        url: "/dashboard/coaching/one-on-one",
+        url: "/coaching/one-on-one",
         icon: FileText,
         featureKey: "one_on_one_coaching",
       },
       {
         title: "Inner Circle Group Coaching",
-        url: "/dashboard/coaching/inner-circle",
+        url: "/coaching/inner-circle",
         icon: UsersRound,
         featureKey: "inner_circle_group_coaching",
       },
       {
         title: "Group Coaching Schedule",
-        url: "/dashboard/coaching/group-schedule",
+        url: "/coaching/group-schedule",
         icon: CalendarDays,
         featureKey: "group_coaching_schedule",
       },
       {
         title: "Assignment Feedback",
-        url: "/dashboard/assignment-feedback",
+        url: "/assignment-feedback",
         icon: ClipboardList,
         featureKey: "assignment_feedback",
       },
@@ -173,43 +173,43 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     items: [
       {
         title: "My Progress",
-        url: "/dashboard/accelerator",
+        url: "/accelerator",
         icon: LayoutDashboard,
         featureKey: "mandarin_accelerator",
       },
       {
         title: "Practice Plan",
-        url: "/dashboard/accelerator/practice-plan",
+        url: "/accelerator/practice-plan",
         icon: ClipboardList,
         featureKey: "mandarin_accelerator",
       },
       {
         title: "Typing Unlock Kit",
-        url: "/dashboard/accelerator/typing",
+        url: "/accelerator/typing",
         icon: Keyboard,
         featureKey: "mandarin_accelerator",
       },
       {
         title: "Conversation Scripts",
-        url: "/dashboard/accelerator/scripts",
+        url: "/accelerator/scripts",
         icon: MessageSquare,
         featureKey: "mandarin_accelerator",
       },
       {
         title: "AI Reader",
-        url: "/dashboard/accelerator/reader",
+        url: "/accelerator/reader",
         icon: BookOpenText,
         featureKey: "mandarin_accelerator",
       },
       {
         title: "Starter Pack",
-        url: "/dashboard/accelerator/starter-pack",
+        url: "/accelerator/starter-pack",
         icon: Package,
         featureKey: "mandarin_accelerator",
       },
       {
         title: "Book a Call",
-        url: "/dashboard/accelerator/book-a-call",
+        url: "/accelerator/book-a-call",
         icon: CalendarCheck,
         featureKey: "mandarin_accelerator",
       },
@@ -221,19 +221,19 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     items: [
       {
         title: "Audio Accelerator Edition",
-        url: "/dashboard/accelerator-extra/audio",
+        url: "/accelerator-extra/audio",
         icon: AudioLines,
         featureKey: "audio_accelerator_edition",
       },
       {
         title: "Tone Mastery",
-        url: "/dashboard/accelerator-extra/tone-mastery",
+        url: "/accelerator-extra/tone-mastery",
         icon: Music,
         featureKey: "tone_mastery",
       },
       {
         title: "Listening Training",
-        url: "/dashboard/accelerator-extra/listening-training",
+        url: "/accelerator-extra/listening-training",
         icon: Ear,
         featureKey: "listening_training",
       },
@@ -245,7 +245,7 @@ const navSections: NavSectionWithRoleAndFeature[] = [
     items: [
       {
         title: "Flashcards",
-        url: "/dashboard/flashcards",
+        url: "/flashcards",
         icon: Layers,
         featureKey: "flashcards",
       },
@@ -296,7 +296,7 @@ export function AppSidebar({
         )
         .filter((item) => !item.featureKey || featureSet.has(item.featureKey))
         .map((item) =>
-          item.url === "/dashboard/assignment-feedback"
+          item.url === "/assignment-feedback"
             ? { ...item, badge: assignmentFeedbackUnread }
             : item,
         );
@@ -310,7 +310,7 @@ export function AppSidebar({
         {/* Expanded: logo + text + collapse button */}
         <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
           <Link
-            href="/dashboard"
+            href="/home"
             className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1 transition-colors hover:bg-sidebar-accent/30"
           >
             <div className="-translate-y-1 h-10 w-10 shrink-0 overflow-hidden rounded-lg">

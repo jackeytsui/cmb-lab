@@ -55,7 +55,7 @@ export default function GrammarPatternPage() {
   return (
     <div className="container mx-auto px-4 py-8 space-y-6">
       <div className="flex items-center justify-between">
-        <Link href="/dashboard/grammar" className="text-sm text-zinc-400 hover:text-zinc-200">
+        <Link href="/grammar" className="text-sm text-zinc-400 hover:text-zinc-200">
           ← Back to Grammar Library
         </Link>
         <button

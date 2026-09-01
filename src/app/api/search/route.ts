@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
         title: courseLibraryCourses.title,
         description: courseLibraryCourses.summary,
         type: sql<string>`'course'`,
-        href: sql<string>`'/dashboard/course-library/' || ${courseLibraryCourses.id}::text`,
+        href: sql<string>`'/course-library/' || ${courseLibraryCourses.id}::text`,
         relevance: sql<number>`
           CASE
             WHEN ${courseLibraryCourses.title} ILIKE ${pattern} THEN 10
@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
         type: sql<string>`'lesson'`,
         courseId: courseLibraryCourses.id,
         courseTitle: courseLibraryCourses.title,
-        href: sql<string>`'/dashboard/course-library/' || ${courseLibraryCourses.id}::text`,
+        href: sql<string>`'/course-library/' || ${courseLibraryCourses.id}::text`,
         relevance: sql<number>`
           CASE
             WHEN ${courseLibraryLessons.title} ILIKE ${pattern} THEN 10

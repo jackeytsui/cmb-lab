@@ -22,7 +22,7 @@ export function AssignedThreadCard({ assignment }: AssignedThreadCardProps) {
 
   return (
     <Link
-      href={`/dashboard/threads/${assignment.threadId}`}
+      href={`/threads/${assignment.threadId}`}
       className="group block rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden hover:border-purple-500/50 transition-colors"
     >
       {/* Thread visual header */}

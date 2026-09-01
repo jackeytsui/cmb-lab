@@ -253,7 +253,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         body: `Your submission for "${lessonTitle}" has been reviewed${
           typeof finalScore === "number" ? ` — score ${finalScore}%` : ""
         }. Tap to see your feedback.`,
-        linkUrl: `/dashboard/assignment-feedback/${submissionId}`,
+        linkUrl: `/assignment-feedback/${submissionId}`,
         metadata: { submissionId, lessonId: submission.lessonId },
       });
     } catch (err) {

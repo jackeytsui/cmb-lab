@@ -51,7 +51,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
   if (!isCoachOrAbove) {
     // Classic LTO students don't get regular courses — send them to Accelerator
     if (await userHasLtoStudentTag(user.id)) {
-      redirect("/dashboard/accelerator");
+      redirect("/accelerator");
     }
     permissions = await resolvePermissions(user.id);
     if (!permissions.canAccessCourse(courseId)) {
@@ -330,7 +330,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
       <div className="container mx-auto px-4 py-8">
           {/* Back link */}
           <Link
-            href="/dashboard"
+            href="/home"
             className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
           >
             <ChevronLeft className="w-4 h-4 mr-1" />
@@ -481,7 +481,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
       <div className="container mx-auto px-4 py-8">
         {/* Back link */}
         <Link
-          href="/dashboard"
+          href="/home"
           className="inline-flex items-center text-zinc-400 hover:text-white mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />

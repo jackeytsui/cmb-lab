@@ -40,7 +40,7 @@ export default async function AdminStudentsPage({
   // Verify user has coach+ role
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   // Parse search params

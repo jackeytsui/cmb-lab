@@ -114,7 +114,7 @@ export default function GrammarLibraryClient() {
                 {items.map((pattern) => (
                   <Link
                     key={pattern.id}
-                    href={`/dashboard/grammar/${pattern.id}`}
+                    href={`/grammar/${pattern.id}`}
                     className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 transition-colors hover:border-zinc-700"
                   >
                     <div className="flex items-center gap-2 text-xs text-zinc-500">

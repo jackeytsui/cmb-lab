@@ -20,12 +20,12 @@ import { CoachStudentsClient } from "./CoachStudentsClient";
 export default async function CoachStudentsPage() {
   const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const currentDbUser = await getCurrentUser();
   if (!currentDbUser) {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   const isAdmin = currentDbUser.role === "admin";

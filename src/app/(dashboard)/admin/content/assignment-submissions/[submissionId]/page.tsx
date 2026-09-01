@@ -30,7 +30,7 @@ interface PageProps {
 
 export default async function AssignmentReviewPage({ params }: PageProps) {
   const reviewer = await getAnyAssignmentReviewer();
-  if (!reviewer) redirect("/dashboard");
+  if (!reviewer) redirect("/home");
 
   const { submissionId } = await params;
 
