@@ -27,7 +27,13 @@ export type StudentCourseLibraryProgressModule = {
 export type StudentCourseLibraryProgressCourse = {
   id: string;
   title: string;
+  hasAccess: boolean;
   modules: StudentCourseLibraryProgressModule[];
+};
+
+type LoadStudentCourseLibraryProgressOptions = {
+  /** Staff progress tools can include published courses not assigned yet. */
+  includeUnassignedPublished?: boolean;
 };
 
 /**
@@ -37,10 +43,13 @@ export type StudentCourseLibraryProgressCourse = {
  * This is shared by the staff chapter-unlock control and the student profile
  * summary so both surfaces use the same tag/manual/system access policy.
  */
-export async function loadStudentCourseLibraryProgress(student: {
-  id: string;
-  role: string;
-}): Promise<StudentCourseLibraryProgressCourse[]> {
+export async function loadStudentCourseLibraryProgress(
+  student: {
+    id: string;
+    role: string;
+  },
+  options: LoadStudentCourseLibraryProgressOptions = {}
+): Promise<StudentCourseLibraryProgressCourse[]> {
   const canAccessCourse = await getCourseLibraryCourseAccess(student);
   const rows = await db
     .select({
@@ -59,28 +68,28 @@ export async function loadStudentCourseLibraryProgress(student: {
       courseLibraryModules,
       and(
         eq(courseLibraryModules.courseId, courseLibraryCourses.id),
-        isNull(courseLibraryModules.deletedAt),
-      ),
+        isNull(courseLibraryModules.deletedAt)
+      )
     )
     .leftJoin(
       courseLibraryLessons,
       and(
         eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
-        isNull(courseLibraryLessons.deletedAt),
-      ),
+        isNull(courseLibraryLessons.deletedAt)
+      )
     )
     .leftJoin(
       courseLibraryLessonProgress,
       and(
         eq(courseLibraryLessonProgress.lessonId, courseLibraryLessons.id),
-        eq(courseLibraryLessonProgress.userId, student.id),
-      ),
+        eq(courseLibraryLessonProgress.userId, student.id)
+      )
     )
     .where(
       and(
         eq(courseLibraryCourses.status, "published"),
-        isNull(courseLibraryCourses.deletedAt),
-      ),
+        isNull(courseLibraryCourses.deletedAt)
+      )
     )
     .orderBy(
       asc(courseLibraryCourses.sortOrder),
@@ -88,17 +97,23 @@ export async function loadStudentCourseLibraryProgress(student: {
       asc(courseLibraryModules.sortOrder),
       asc(courseLibraryModules.title),
       asc(courseLibraryLessons.sortOrder),
-      asc(courseLibraryLessons.title),
+      asc(courseLibraryLessons.title)
     );
 
   const courseMap = new Map<string, StudentCourseLibraryProgressCourse>();
 
   for (const row of rows) {
-    if (!canAccessCourse(row.courseId)) continue;
+    const hasAccess = canAccessCourse(row.courseId);
+    if (!hasAccess && !options.includeUnassignedPublished) continue;
 
     let course = courseMap.get(row.courseId);
     if (!course) {
-      course = { id: row.courseId, title: row.courseTitle, modules: [] };
+      course = {
+        id: row.courseId,
+        title: row.courseTitle,
+        hasAccess,
+        modules: [],
+      };
       courseMap.set(row.courseId, course);
     }
 

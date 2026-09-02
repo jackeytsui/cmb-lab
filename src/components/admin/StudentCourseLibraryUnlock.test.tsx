@@ -24,6 +24,7 @@ describe("StudentCourseLibraryUnlock", () => {
             {
               id: "course-1",
               title: "Intermediate",
+              hasAccess: true,
               completedLessons: 3,
               totalLessons: 5,
               currentModuleId: "module-2",
@@ -85,23 +86,89 @@ describe("StudentCourseLibraryUnlock", () => {
             },
           ],
         }),
-      }),
+      })
     );
 
     render(
       <StudentCourseLibraryUnlock
         studentId="student-1"
         studentName="Katarina"
-      />,
+      />
     );
 
     const lessonSelect = await screen.findByLabelText("Lesson to open next");
 
     expect((lessonSelect as HTMLSelectElement).value).toBe("lesson-3");
-    expect(screen.getByText(/0 earlier lessons will be completed/)).toBeTruthy();
-    expect(screen.getByText(/1 completed lesson will be reopened/)).toBeTruthy();
+    expect(
+      screen.getByText(/0 earlier lessons will be completed/)
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/1 completed lesson will be reopened/)
+    ).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Set as next lesson" })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Set as next lesson" })
+      ).toBeTruthy();
     });
+  });
+
+  it("shows unassigned published courses and offers to grant only the selected course", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          courses: [
+            {
+              id: "course-advanced",
+              title: "Advanced",
+              hasAccess: false,
+              completedLessons: 0,
+              totalLessons: 1,
+              currentModuleId: "module-advanced",
+              currentLessonId: "lesson-advanced",
+              modules: [
+                {
+                  id: "module-advanced",
+                  title: "Advanced Lesson 1",
+                  shortTitle: null,
+                  lessonCount: 1,
+                  completedLessons: 0,
+                  isComplete: false,
+                  isCurrent: true,
+                  lessons: [
+                    {
+                      id: "lesson-advanced",
+                      title: "Advanced Foundations",
+                      lessonType: "video",
+                      isComplete: false,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      })
+    );
+
+    render(
+      <StudentCourseLibraryUnlock
+        studentId="student-1"
+        studentName="Katarina"
+      />
+    );
+
+    expect(
+      await screen.findByText("Course access will be granted")
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("option", { name: "Advanced — not assigned" })
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Grant course & set next lesson",
+      })
+    ).toBeTruthy();
   });
 });

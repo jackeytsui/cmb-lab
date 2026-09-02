@@ -5,6 +5,7 @@ import {
   BookOpenCheck,
   CheckCircle2,
   CircleDot,
+  KeyRound,
   Loader2,
   LocateFixed,
   ShieldCheck,
@@ -43,6 +44,7 @@ type ChapterSummary = {
 type CourseSummary = {
   id: string;
   title: string;
+  hasAccess: boolean;
   completedLessons: number;
   totalLessons: number;
   currentModuleId: string | null;
@@ -59,6 +61,7 @@ type ProgressResponse = {
     targetLessonTitle?: string;
     lessonsCompleted?: number;
     lessonsReopened?: number;
+    courseAccessGranted?: boolean;
   };
   error?: string;
 };
@@ -76,7 +79,7 @@ function selectionForCourse(course: CourseSummary | undefined) {
   if (!course) return { moduleId: "", lessonId: "" };
 
   const currentModule = course.modules.find((module) =>
-    module.lessons.some((lesson) => lesson.id === course.currentLessonId),
+    module.lessons.some((lesson) => lesson.id === course.currentLessonId)
   );
   const fallbackModule =
     currentModule ??
@@ -84,7 +87,7 @@ function selectionForCourse(course: CourseSummary | undefined) {
     null;
   const fallbackLesson =
     fallbackModule?.lessons.find(
-      (lesson) => lesson.id === course.currentLessonId,
+      (lesson) => lesson.id === course.currentLessonId
     ) ?? fallbackModule?.lessons[0];
 
   return {
@@ -110,11 +113,13 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
       try {
         const response = await fetch(
           `/api/admin/students/${studentId}/course-library-unlock`,
-          { signal },
+          { signal }
         );
         const data = (await response.json()) as ProgressResponse;
         if (!response.ok) {
-          throw new Error(data.error || "Failed to load Course Library progress");
+          throw new Error(
+            data.error || "Failed to load Course Library progress"
+          );
         }
 
         const nextCourses = data.courses ?? [];
@@ -125,19 +130,22 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         setSelectedModuleId(selection.moduleId);
         setSelectedLessonId(selection.lessonId);
       } catch (loadError) {
-        if (loadError instanceof DOMException && loadError.name === "AbortError") {
+        if (
+          loadError instanceof DOMException &&
+          loadError.name === "AbortError"
+        ) {
           return;
         }
         setError(
           loadError instanceof Error
             ? loadError.message
-            : "Failed to load Course Library progress",
+            : "Failed to load Course Library progress"
         );
       } finally {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [studentId],
+    [studentId]
   );
 
   useEffect(() => {
@@ -157,7 +165,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
   const orderedLessons =
     selectedCourse?.modules.flatMap((module) => module.lessons) ?? [];
   const selectedLessonIndex = orderedLessons.findIndex(
-    (lesson) => lesson.id === selectedLessonId,
+    (lesson) => lesson.id === selectedLessonId
   );
   const lessonsToComplete =
     selectedLessonIndex >= 0
@@ -171,7 +179,9 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
           .slice(selectedLessonIndex)
           .filter((lesson) => lesson.isComplete).length
       : 0;
-  const hasChanges = lessonsToComplete > 0 || lessonsToReopen > 0;
+  const needsCourseAccess = selectedCourse?.hasAccess === false;
+  const hasChanges =
+    needsCourseAccess || lessonsToComplete > 0 || lessonsToReopen > 0;
 
   const handleCourseChange = (courseId: string) => {
     const course = courses.find((item) => item.id === courseId);
@@ -182,10 +192,11 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
   };
 
   const handleModuleChange = (moduleId: string) => {
-    const chapter = selectedCourse?.modules.find((item) => item.id === moduleId);
+    const chapter = selectedCourse?.modules.find(
+      (item) => item.id === moduleId
+    );
     const lesson =
-      chapter?.lessons.find((item) => !item.isComplete) ??
-      chapter?.lessons[0];
+      chapter?.lessons.find((item) => !item.isComplete) ?? chapter?.lessons[0];
     setSelectedModuleId(moduleId);
     setSelectedLessonId(lesson?.id ?? "");
   };
@@ -205,25 +216,32 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
             courseId: selectedCourse.id,
             targetLessonId: selectedLesson.id,
           }),
-        },
+        }
       );
       const data = (await response.json()) as ProgressResponse;
       if (!response.ok) {
-        throw new Error(data.error || "Failed to update Course Library progress");
+        throw new Error(
+          data.error || "Failed to update Course Library progress"
+        );
       }
 
       if (data.courses) setCourses(data.courses);
       setConfirmOpen(false);
       const completed = data.result?.lessonsCompleted ?? lessonsToComplete;
       const reopened = data.result?.lessonsReopened ?? lessonsToReopen;
+      const granted = data.result?.courseAccessGranted ?? needsCourseAccess;
       toast.success(
-        `${selectedLesson.title} is now ${studentName}'s next lesson. ${completed} prerequisite lesson${completed === 1 ? "" : "s"} completed; ${reopened} lesson${reopened === 1 ? "" : "s"} reopened.`,
+        `${granted ? `${selectedCourse.title} access granted. ` : ""}${
+          selectedLesson.title
+        } is now ${studentName}'s next lesson. ${completed} prerequisite lesson${
+          completed === 1 ? "" : "s"
+        } completed; ${reopened} lesson${reopened === 1 ? "" : "s"} reopened.`
       );
     } catch (updateError) {
       toast.error(
         updateError instanceof Error
           ? updateError.message
-          : "Failed to update Course Library progress",
+          : "Failed to update Course Library progress"
       );
     } finally {
       setSaving(false);
@@ -263,11 +281,10 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
       <div className="rounded-lg border border-dashed border-border bg-card p-6 text-center">
         <BookOpenCheck className="mx-auto size-8 text-muted-foreground" />
         <p className="mt-2 text-sm font-medium text-foreground">
-          No assigned Course Library courses
+          No published Course Library courses
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Assign a published course through the student&apos;s tags or course
-          visibility before changing progress.
+          Publish a course before granting access or changing progress here.
         </p>
       </div>
     );
@@ -285,10 +302,10 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
               Set the student&apos;s next lesson
             </h3>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-              Move forward to unlock content or move backward to resume an
-              earlier lesson. CMB Lab adjusts only completion flags; quiz
-              answers, submissions, recordings, notes, and viewing history are
-              preserved.
+              Choose any published course. If it is not assigned yet, saving
+              grants only that course. Moving forward or backward adjusts only
+              completion flags; quiz answers, submissions, recordings, notes,
+              and viewing history are preserved.
             </p>
           </div>
         </div>
@@ -309,6 +326,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
             {courses.map((course) => (
               <option key={course.id} value={course.id}>
                 {course.title}
+                {course.hasAccess ? "" : " — not assigned"}
               </option>
             ))}
           </select>
@@ -331,10 +349,10 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
                 {chapter.lessonCount === 0
                   ? " — no lessons"
                   : chapter.isComplete
-                    ? " — complete"
-                    : chapter.isCurrent
-                      ? " — current"
-                      : ""}
+                  ? " — complete"
+                  : chapter.isCurrent
+                  ? " — current"
+                  : ""}
               </option>
             ))}
           </select>
@@ -354,8 +372,8 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
                 {lesson.id === selectedCourse?.currentLessonId
                   ? " — next"
                   : lesson.isComplete
-                    ? " — complete"
-                    : ""}
+                  ? " — complete"
+                  : ""}
               </option>
             ))}
           </select>
@@ -363,16 +381,31 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
       </div>
 
       {selectedCourse && selectedLesson ? (
-        <div className="mt-4 grid gap-3 rounded-lg bg-muted/40 px-4 py-3 text-sm md:grid-cols-3">
+        <div className="mt-4 grid gap-3 rounded-lg bg-muted/40 px-4 py-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+          <span
+            className={`inline-flex items-center gap-1.5 ${
+              needsCourseAccess
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-emerald-700 dark:text-emerald-300"
+            }`}
+          >
+            <KeyRound className="size-4" aria-hidden="true" />
+            {needsCourseAccess
+              ? "Course access will be granted"
+              : "Student has course access"}
+          </span>
           <span className="inline-flex items-center gap-1.5 text-foreground">
-            <CheckCircle2 className="size-4 text-emerald-500" aria-hidden="true" />
+            <CheckCircle2
+              className="size-4 text-emerald-500"
+              aria-hidden="true"
+            />
             {selectedCourse.completedLessons} / {selectedCourse.totalLessons}{" "}
             lessons complete
           </span>
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <CircleDot className="size-4 text-primary" aria-hidden="true" />
-            {lessonsToComplete} earlier lesson{lessonsToComplete === 1 ? "" : "s"}{" "}
-            will be completed
+            {lessonsToComplete} earlier lesson
+            {lessonsToComplete === 1 ? "" : "s"} will be completed
           </span>
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <CircleDot className="size-4 text-amber-500" aria-hidden="true" />
@@ -389,7 +422,11 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
           disabled={!selectedLesson || !hasChanges}
         >
           <LocateFixed aria-hidden="true" />
-          {hasChanges ? "Set as next lesson" : "Already the next lesson"}
+          {needsCourseAccess
+            ? "Grant course & set next lesson"
+            : hasChanges
+            ? "Set as next lesson"
+            : "Already the next lesson"}
         </Button>
       </div>
 
@@ -397,15 +434,23 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Set {selectedLesson?.title ?? "this lesson"} as next?
+              {needsCourseAccess
+                ? `Grant ${selectedCourse?.title ?? "course"} and set `
+                : "Set "}
+              {selectedLesson?.title ?? "this lesson"} as next?
             </AlertDialogTitle>
             <AlertDialogDescription className="leading-6">
+              {needsCourseAccess
+                ? `This grants ${studentName} access only to ${
+                    selectedCourse?.title ?? "the selected course"
+                  }. `
+                : ""}
               This will complete {lessonsToComplete} unfinished prerequisite
               lesson{lessonsToComplete === 1 ? "" : "s"} and reopen{" "}
               {lessonsToReopen} completed lesson
-              {lessonsToReopen === 1 ? "" : "s"} from the selected lesson
-              onward for {studentName}. Existing quiz answers, submissions,
-              recordings, notes, and viewing history will not be deleted.
+              {lessonsToReopen === 1 ? "" : "s"} from the selected lesson onward
+              for {studentName}. Existing quiz answers, submissions, recordings,
+              notes, and viewing history will not be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -418,7 +463,11 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
               }}
             >
               {saving ? <Loader2 className="animate-spin" /> : <LocateFixed />}
-              {saving ? "Updating…" : "Confirm next lesson"}
+              {saving
+                ? "Updating…"
+                : needsCourseAccess
+                ? "Grant access & confirm"
+                : "Confirm next lesson"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
