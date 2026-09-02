@@ -32,6 +32,7 @@ import { COMPLETE_COURSE_TARGET } from "@/lib/course-library-self-restore";
 export type ProgressRestoreCourseOption = {
   id: string;
   title: string;
+  currentlyLocked: boolean;
   completedLessons: number;
   totalLessons: number;
   modules: Array<{
@@ -81,11 +82,19 @@ export function CourseLibraryProgressRestoreBanner({ courses }: Props) {
 
       setHidden(true);
       setRestoreOpen(false);
-      toast.success(
-        `Progress restored. ${result.lessonsCompleted} lesson${
-          result.lessonsCompleted === 1 ? "" : "s"
-        } marked complete.`,
-      );
+      const updates = [
+        result.lessonsCompleted > 0
+          ? `${result.lessonsCompleted} lesson${
+              result.lessonsCompleted === 1 ? "" : "s"
+            } marked complete`
+          : null,
+        result.coursesUnlocked > 0
+          ? `${result.coursesUnlocked} Blueprint level${
+              result.coursesUnlocked === 1 ? "" : "s"
+            } unlocked`
+          : null,
+      ].filter(Boolean);
+      toast.success(`Progress restored. ${updates.join(" and ")}.`);
       router.refresh();
     });
   };
@@ -120,8 +129,8 @@ export function CourseLibraryProgressRestoreBanner({ courses }: Props) {
               </h2>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
                 Coming from GoHighLevel? You can use this once to choose the
-                next lesson in each course you already own. Earlier lessons will
-                be marked complete; your existing work will stay intact.
+                next lesson in each assigned course. Locked Blueprint levels are
+                included; your existing work will stay intact.
               </p>
             </div>
           </div>
@@ -155,8 +164,10 @@ export function CourseLibraryProgressRestoreBanner({ courses }: Props) {
             <DialogTitle>Restore your Course Library progress</DialogTitle>
             <DialogDescription className="leading-6">
               This is available once. Select the lesson you should open next for
-              any course that needs updating. Only courses already assigned to
-              you appear here. Progress can only move forward, and no answers,
+              any course that needs updating. Assigned courses appear here, and
+              students enrolled in the full Canto to Mando Blueprint can choose
+              Foundations, Intermediate, or Advanced even when a later level is
+              currently locked. Progress can only move forward, and no answers,
               recordings, submissions, notes, or viewing history will be
               deleted.
             </DialogDescription>
@@ -175,13 +186,20 @@ export function CourseLibraryProgressRestoreBanner({ courses }: Props) {
                   >
                     {course.title}
                   </label>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <CheckCircle2
-                      className="size-3.5 text-emerald-500"
-                      aria-hidden="true"
-                    />
-                    {course.completedLessons} / {course.totalLessons} complete
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {course.currentlyLocked ? (
+                      <span className="rounded-full bg-primary/10 px-2 py-1 font-medium text-primary">
+                        Unlocks when confirmed
+                      </span>
+                    ) : null}
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                      <CheckCircle2
+                        className="size-3.5 text-emerald-500"
+                        aria-hidden="true"
+                      />
+                      {course.completedLessons} / {course.totalLessons} complete
+                    </span>
+                  </div>
                 </div>
                 <select
                   id={`restore-course-${course.id}`}

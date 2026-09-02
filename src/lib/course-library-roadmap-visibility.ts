@@ -19,7 +19,7 @@ export type CourseLibraryCardState = {
   unlockRequirement: string | null;
 };
 
-function blueprintLevelForTitle(title: string): BlueprintLevel | null {
+export function blueprintLevelForTitle(title: string): BlueprintLevel | null {
   return (
     BLUEPRINT_LEVELS.find(
       (level) => BLUEPRINT_COURSE_TITLES[level] === title,

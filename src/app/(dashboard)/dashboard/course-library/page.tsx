@@ -35,10 +35,10 @@ export default async function CourseLibraryStudentPage() {
   const statuses = visibleCourseStatuses(currentUser?.role);
   const canSelfRestore = Boolean(
     currentUser &&
-      realUser &&
-      currentUser.role === "student" &&
-      realUser.role === "student" &&
-      currentUser.id === realUser.id
+    realUser &&
+    currentUser.role === "student" &&
+    realUser.role === "student" &&
+    currentUser.id === realUser.id,
   );
   const [accessPolicy, allCourses] = await Promise.all([
     getCourseLibraryCourseAccessPolicy(currentUser),
@@ -48,8 +48,8 @@ export default async function CourseLibraryStudentPage() {
       .where(
         and(
           isNull(courseLibraryCourses.deletedAt),
-          inArray(courseLibraryCourses.status, statuses)
-        )
+          inArray(courseLibraryCourses.status, statuses),
+        ),
       )
       .orderBy(asc(courseLibraryCourses.sortOrder)),
   ]);
@@ -60,13 +60,17 @@ export default async function CourseLibraryStudentPage() {
           .select({ id: courseLibraryProgressRestoreDecisions.id })
           .from(courseLibraryProgressRestoreDecisions)
           .where(
-            eq(courseLibraryProgressRestoreDecisions.userId, currentUser.id)
+            eq(courseLibraryProgressRestoreDecisions.userId, currentUser.id),
           )
           .limit(1)
       : [];
   const restoreCourses =
     canSelfRestore && currentUser && restoreDecisionRows.length === 0
-      ? await loadStudentCourseLibraryProgress(currentUser)
+      ? await loadStudentCourseLibraryProgress(currentUser, {
+          canAccessCourse: accessPolicy.canAccessCourse,
+          includeLockedBlueprintRoadmap:
+            accessPolicy.showLockedBlueprintRoadmap,
+        })
       : [];
 
   const cardStates = getCourseLibraryCardStates({
@@ -79,7 +83,7 @@ export default async function CourseLibraryStudentPage() {
   // roadmap previews for an enrolled student.
   const courses = allCourses.filter((course) => cardStates.has(course.id));
   const hasLockedBlueprintCourse = courses.some(
-    (course) => cardStates.get(course.id)?.locked
+    (course) => cardStates.get(course.id)?.locked,
   );
 
   const courseIds = courses.map((course) => course.id);
@@ -94,11 +98,11 @@ export default async function CourseLibraryStudentPage() {
         courseId: courseLibraryCourses.id,
         totalLessons:
           sql<number>`COUNT(DISTINCT ${courseLibraryLessons.id})`.as(
-            "total_lessons"
+            "total_lessons",
           ),
         completedLessons:
           sql<number>`COUNT(DISTINCT CASE WHEN ${courseLibraryLessonProgress.completedAt} IS NOT NULL THEN ${courseLibraryLessonProgress.lessonId} END)`.as(
-            "completed_lessons"
+            "completed_lessons",
           ),
       })
       .from(courseLibraryCourses)
@@ -106,29 +110,29 @@ export default async function CourseLibraryStudentPage() {
         courseLibraryModules,
         and(
           eq(courseLibraryModules.courseId, courseLibraryCourses.id),
-          isNull(courseLibraryModules.deletedAt)
-        )
+          isNull(courseLibraryModules.deletedAt),
+        ),
       )
       .leftJoin(
         courseLibraryLessons,
         and(
           eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
-          isNull(courseLibraryLessons.deletedAt)
-        )
+          isNull(courseLibraryLessons.deletedAt),
+        ),
       )
       .leftJoin(
         courseLibraryLessonProgress,
         and(
           eq(courseLibraryLessonProgress.lessonId, courseLibraryLessons.id),
-          eq(courseLibraryLessonProgress.userId, currentUser.id)
-        )
+          eq(courseLibraryLessonProgress.userId, currentUser.id),
+        ),
       )
       .where(
         and(
           isNull(courseLibraryCourses.deletedAt),
           inArray(courseLibraryCourses.status, statuses),
-          inArray(courseLibraryCourses.id, courseIds)
-        )
+          inArray(courseLibraryCourses.id, courseIds),
+        ),
       )
       .groupBy(courseLibraryCourses.id);
 
@@ -138,7 +142,7 @@ export default async function CourseLibraryStudentPage() {
         completedLessons: displayedCompletedLessonCount(
           currentUser.role,
           Number(row.totalLessons ?? 0),
-          Number(row.completedLessons ?? 0)
+          Number(row.completedLessons ?? 0),
         ),
       });
     }
@@ -150,16 +154,17 @@ export default async function CourseLibraryStudentPage() {
           .map((course) => {
             const totalLessons = course.modules.reduce(
               (total, module) => total + module.lessonIds.length,
-              0
+              0,
             );
             const completedLessons = course.modules.reduce(
               (total, module) => total + module.completedLessonIds.length,
-              0
+              0,
             );
 
             return {
               id: course.id,
               title: course.title,
+              currentlyLocked: !course.hasAccess,
               totalLessons,
               completedLessons,
               modules: course.modules.map((module) => ({
@@ -212,7 +217,7 @@ export default async function CourseLibraryStudentPage() {
               const percent =
                 progress.totalLessons > 0
                   ? Math.round(
-                      (progress.completedLessons / progress.totalLessons) * 100
+                      (progress.completedLessons / progress.totalLessons) * 100,
                     )
                   : 0;
 

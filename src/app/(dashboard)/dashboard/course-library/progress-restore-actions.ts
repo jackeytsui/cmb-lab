@@ -5,6 +5,8 @@ import { z } from "zod";
 import { getNeonSql } from "@/db";
 import { getCurrentUser, getRealUser } from "@/lib/auth";
 import { loadStudentCourseLibraryProgress } from "@/lib/course-library-student-progress";
+import { getCourseLibraryCourseAccessPolicy } from "@/lib/tag-feature-access";
+import { BLUEPRINT_COURSE_TITLES } from "@/lib/ghl/course-progress-plan";
 import {
   COMPLETE_COURSE_TARGET,
   planCourseLibrarySelfRestore,
@@ -18,7 +20,7 @@ const restoreSelectionSchema = z.object({
 const restoreSchema = z.array(restoreSelectionSchema).min(1).max(20);
 
 export type ProgressRestoreResult =
-  | { success: true; lessonsCompleted: number }
+  | { success: true; lessonsCompleted: number; coursesUnlocked: number }
   | { success: false; error: string };
 
 function isTrueStudent(
@@ -65,18 +67,30 @@ export async function restoreCourseLibraryProgressOnce(
   }
 
   try {
-    // This loader applies the existing tag/manual/system entitlement policy,
-    // so a student can never use restoration to acquire another course.
-    const courses = await loadStudentCourseLibraryProgress(currentUser);
+    // The existing entitlement policy remains authoritative. The sole
+    // exception is a locked level in the student's own three-course Blueprint
+    // roadmap, which this one-time migration restore may deliberately unlock.
+    const accessPolicy = await getCourseLibraryCourseAccessPolicy(currentUser);
+    const courses = await loadStudentCourseLibraryProgress(currentUser, {
+      canAccessCourse: accessPolicy.canAccessCourse,
+      includeLockedBlueprintRoadmap: accessPolicy.showLockedBlueprintRoadmap,
+    });
     const plan = planCourseLibrarySelfRestore({
       courses,
       selections: parsed.data,
     });
-    if (plan.missingCompletionLessonIds.length === 0) {
+    const courseIdsToUnlock = plan.selections.flatMap((selection) => {
+      const course = courses.find((item) => item.id === selection.courseId);
+      return course && !course.hasAccess ? [course.id] : [];
+    });
+    if (
+      plan.missingCompletionLessonIds.length === 0 &&
+      courseIdsToUnlock.length === 0
+    ) {
       return {
         success: false,
         error:
-          "Those choices do not move your progress forward. Choose a later lesson or keep your current progress.",
+          "Those choices do not move your progress forward or unlock another Blueprint level. Choose a later lesson or keep your current progress.",
       };
     }
     const restoredAt = new Date();
@@ -86,6 +100,7 @@ export async function restoreCourseLibraryProgressOnce(
       userEmail: currentUser.email,
       selections: plan.selections,
       lessonsCompleted: plan.missingCompletionLessonIds.length,
+      courseIdsUnlocked: courseIdsToUnlock,
       forwardOnly: true,
       preservedFields: [
         "video_watched_percent",
@@ -145,6 +160,31 @@ export async function restoreCourseLibraryProgressOnce(
         END
         RETURNING lesson_id
       ),
+      unlock_rows AS (
+        SELECT course_id
+        FROM jsonb_to_recordset(${JSON.stringify(
+          courseIdsToUnlock.map((courseId) => ({ course_id: courseId })),
+        )}::jsonb) AS rows(course_id uuid)
+      ),
+      access_granted AS (
+        UPDATE course_library_courses AS course
+        SET allowed_user_ids = COALESCE(course.allowed_user_ids, '[]'::jsonb)
+          || jsonb_build_array(claimed.user_id::text),
+          updated_at = NOW()
+        FROM claimed
+        CROSS JOIN unlock_rows
+        WHERE course.id = unlock_rows.course_id
+          AND course.deleted_at IS NULL
+          AND course.status = 'published'
+          AND course.title IN (
+            ${BLUEPRINT_COURSE_TITLES.Foundations},
+            ${BLUEPRINT_COURSE_TITLES.Intermediate},
+            ${BLUEPRINT_COURSE_TITLES.Advanced}
+          )
+          AND NOT COALESCE(course.allowed_user_ids, '[]'::jsonb)
+            @> jsonb_build_array(claimed.user_id::text)
+        RETURNING course.id
+      ),
       audited AS (
         INSERT INTO sync_events
           (event_type, direction, status, entity_type, entity_id, payload, processed_at)
@@ -174,6 +214,7 @@ export async function restoreCourseLibraryProgressOnce(
     return {
       success: true,
       lessonsCompleted: plan.missingCompletionLessonIds.length,
+      coursesUnlocked: courseIdsToUnlock.length,
     };
   } catch (error) {
     console.error("Failed to restore Course Library progress:", error);
@@ -241,7 +282,7 @@ export async function dismissCourseLibraryProgressRestore(): Promise<ProgressRes
     }
 
     revalidateCourseLibrary([]);
-    return { success: true, lessonsCompleted: 0 };
+    return { success: true, lessonsCompleted: 0, coursesUnlocked: 0 };
   } catch (error) {
     console.error("Failed to dismiss Course Library progress restore:", error);
     return {

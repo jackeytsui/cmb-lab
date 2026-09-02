@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CourseLibraryProgressRestoreBanner } from "@/components/course-library/CourseLibraryProgressRestoreBanner";
 
 const COURSE_ID = "a3a5a4bf-d8b3-47f1-a101-dbbec725cda0";
+const INTERMEDIATE_ID = "84fa5ac3-7980-43af-aabe-0371f36aef44";
 const LESSON_ID = "02790dee-f595-40de-a301-1990eed161fb";
 
 const mocks = vi.hoisted(() => ({
@@ -23,7 +24,7 @@ vi.mock(
   () => ({
     restoreCourseLibraryProgressOnce: mocks.restore,
     dismissCourseLibraryProgressRestore: mocks.dismiss,
-  })
+  }),
 );
 vi.mock("sonner", () => ({
   toast: { success: mocks.success, error: mocks.error },
@@ -33,6 +34,7 @@ const courses = [
   {
     id: COURSE_ID,
     title: "Foundations",
+    currentlyLocked: false,
     completedLessons: 2,
     totalLessons: 10,
     modules: [
@@ -44,12 +46,35 @@ const courses = [
       },
     ],
   },
+  {
+    id: INTERMEDIATE_ID,
+    title: "Intermediate",
+    currentlyLocked: true,
+    completedLessons: 0,
+    totalLessons: 8,
+    modules: [
+      {
+        id: "intermediate-module",
+        title: "Intermediate introduction",
+        shortTitle: null,
+        lessons: [{ id: "intermediate-lesson", title: "Welcome" }],
+      },
+    ],
+  },
 ];
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.restore.mockResolvedValue({ success: true, lessonsCompleted: 7 });
-  mocks.dismiss.mockResolvedValue({ success: true, lessonsCompleted: 0 });
+  mocks.restore.mockResolvedValue({
+    success: true,
+    lessonsCompleted: 7,
+    coursesUnlocked: 0,
+  });
+  mocks.dismiss.mockResolvedValue({
+    success: true,
+    lessonsCompleted: 0,
+    coursesUnlocked: 0,
+  });
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -60,13 +85,17 @@ describe("CourseLibraryProgressRestoreBanner", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Unlock the Courses" }));
     expect(screen.getByText(/This is available once/)).toBeTruthy();
-    expect(screen.getByText(/Only courses already assigned/)).toBeTruthy();
+    expect(
+      screen.getByText(/Foundations, Intermediate, or Advanced/),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Intermediate")).toBeTruthy();
+    expect(screen.getByText("Unlocks when confirmed")).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Foundations"), {
       target: { value: LESSON_ID },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Use my one-time restore" })
+      screen.getByRole("button", { name: "Use my one-time restore" }),
     );
 
     await waitFor(() => {
@@ -83,11 +112,11 @@ describe("CourseLibraryProgressRestoreBanner", () => {
     fireEvent.click(
       screen.getByRole("button", {
         name: "Permanently dismiss progress restoration",
-      })
+      }),
     );
     expect(screen.getByText("Dismiss this permanently?")).toBeTruthy();
     fireEvent.click(
-      screen.getByRole("button", { name: "Dismiss permanently" })
+      screen.getByRole("button", { name: "Dismiss permanently" }),
     );
 
     await waitFor(() => {

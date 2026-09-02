@@ -9,29 +9,36 @@ function source(relativePath: string) {
 describe("Course Library one-time progress restore wiring", () => {
   it("shows the offer only to the true student before a terminal decision", () => {
     const page = source(
-      "src/app/(dashboard)/dashboard/course-library/page.tsx"
+      "src/app/(dashboard)/dashboard/course-library/page.tsx",
     );
 
     expect(page).toContain("currentUser.id === realUser.id");
     expect(page).toContain("courseLibraryProgressRestoreDecisions");
     expect(page).toContain("restoreDecisionRows.length === 0");
     expect(page).toContain("CourseLibraryProgressRestoreBanner");
+    expect(page).toContain("includeLockedBlueprintRoadmap");
   });
 
-  it("uses a durable unique decision and never changes course entitlements", () => {
+  it("uses a durable unique decision and only grants a selected locked Blueprint level", () => {
     const migration = source(
-      "src/db/migrations/0110_course_library_progress_restore.sql"
+      "src/db/migrations/0110_course_library_progress_restore.sql",
     );
     const action = source(
-      "src/app/(dashboard)/dashboard/course-library/progress-restore-actions.ts"
+      "src/app/(dashboard)/dashboard/course-library/progress-restore-actions.ts",
     );
+    const progressLoader = source("src/lib/course-library-student-progress.ts");
 
     expect(migration).toContain(
-      'CREATE UNIQUE INDEX IF NOT EXISTS "course_library_progress_restore_decisions_user_unique"'
+      'CREATE UNIQUE INDEX IF NOT EXISTS "course_library_progress_restore_decisions_user_unique"',
     );
     expect(action).toContain("ON CONFLICT (user_id) DO NOTHING");
-    expect(action).toContain("loadStudentCourseLibraryProgress(currentUser)");
-    expect(action).not.toContain("allowed_user_ids");
+    expect(action).toContain("loadStudentCourseLibraryProgress(currentUser,");
+    expect(action).toContain("includeLockedBlueprintRoadmap");
+    expect(action).toContain("FROM claimed");
+    expect(action).toContain("CROSS JOIN unlock_rows");
+    expect(action).toContain("allowed_user_ids");
     expect(action).not.toContain("system_access_user_ids");
+    expect(progressLoader).toContain("blueprintLevelForTitle(row.courseTitle)");
+    expect(progressLoader).toContain("includeLockedBlueprintRoadmap");
   });
 });

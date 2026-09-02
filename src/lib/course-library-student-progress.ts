@@ -9,6 +9,7 @@ import {
   courseLibraryModules,
 } from "@/db/schema";
 import { getCourseLibraryCourseAccess } from "@/lib/tag-feature-access";
+import { blueprintLevelForTitle } from "@/lib/course-library-roadmap-visibility";
 
 export type StudentCourseLibraryProgressModule = {
   id: string;
@@ -32,8 +33,12 @@ export type StudentCourseLibraryProgressCourse = {
 };
 
 type LoadStudentCourseLibraryProgressOptions = {
+  /** Reuse a policy already loaded by the calling Server Component/action. */
+  canAccessCourse?: (courseId: string) => boolean;
   /** Staff progress tools can include published courses not assigned yet. */
   includeUnassignedPublished?: boolean;
+  /** Migration restore can include locked levels in an enrolled Blueprint path. */
+  includeLockedBlueprintRoadmap?: boolean;
 };
 
 /**
@@ -48,9 +53,10 @@ export async function loadStudentCourseLibraryProgress(
     id: string;
     role: string;
   },
-  options: LoadStudentCourseLibraryProgressOptions = {}
+  options: LoadStudentCourseLibraryProgressOptions = {},
 ): Promise<StudentCourseLibraryProgressCourse[]> {
-  const canAccessCourse = await getCourseLibraryCourseAccess(student);
+  const canAccessCourse =
+    options.canAccessCourse ?? (await getCourseLibraryCourseAccess(student));
   const rows = await db
     .select({
       courseId: courseLibraryCourses.id,
@@ -68,28 +74,28 @@ export async function loadStudentCourseLibraryProgress(
       courseLibraryModules,
       and(
         eq(courseLibraryModules.courseId, courseLibraryCourses.id),
-        isNull(courseLibraryModules.deletedAt)
-      )
+        isNull(courseLibraryModules.deletedAt),
+      ),
     )
     .leftJoin(
       courseLibraryLessons,
       and(
         eq(courseLibraryLessons.moduleId, courseLibraryModules.id),
-        isNull(courseLibraryLessons.deletedAt)
-      )
+        isNull(courseLibraryLessons.deletedAt),
+      ),
     )
     .leftJoin(
       courseLibraryLessonProgress,
       and(
         eq(courseLibraryLessonProgress.lessonId, courseLibraryLessons.id),
-        eq(courseLibraryLessonProgress.userId, student.id)
-      )
+        eq(courseLibraryLessonProgress.userId, student.id),
+      ),
     )
     .where(
       and(
         eq(courseLibraryCourses.status, "published"),
-        isNull(courseLibraryCourses.deletedAt)
-      )
+        isNull(courseLibraryCourses.deletedAt),
+      ),
     )
     .orderBy(
       asc(courseLibraryCourses.sortOrder),
@@ -97,14 +103,24 @@ export async function loadStudentCourseLibraryProgress(
       asc(courseLibraryModules.sortOrder),
       asc(courseLibraryModules.title),
       asc(courseLibraryLessons.sortOrder),
-      asc(courseLibraryLessons.title)
+      asc(courseLibraryLessons.title),
     );
 
   const courseMap = new Map<string, StudentCourseLibraryProgressCourse>();
 
   for (const row of rows) {
     const hasAccess = canAccessCourse(row.courseId);
-    if (!hasAccess && !options.includeUnassignedPublished) continue;
+    const isLockedBlueprintRestoreOption = Boolean(
+      options.includeLockedBlueprintRoadmap &&
+      blueprintLevelForTitle(row.courseTitle),
+    );
+    if (
+      !hasAccess &&
+      !options.includeUnassignedPublished &&
+      !isLockedBlueprintRestoreOption
+    ) {
+      continue;
+    }
 
     let course = courseMap.get(row.courseId);
     if (!course) {

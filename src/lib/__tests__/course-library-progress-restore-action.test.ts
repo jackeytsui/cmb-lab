@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const USER_ID = "a15d2d2d-428d-41c3-adf7-adbfc965ec75";
 const COURSE_ID = "a3a5a4bf-d8b3-47f1-a101-dbbec725cda0";
+const INTERMEDIATE_ID = "84fa5ac3-7980-43af-aabe-0371f36aef44";
 const LESSON_1 = "f0af3007-f2a7-44f8-a424-0f5ac3438ff0";
 const LESSON_2 = "0dcf365c-10b0-4bb6-88f5-d700988c9f25";
 const LESSON_3 = "02790dee-f595-40de-a301-1990eed161fb";
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   loadProgress: vi.fn(),
   neonSql: vi.fn(),
   revalidatePath: vi.fn(),
+  showLockedBlueprintRoadmap: true,
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -20,6 +22,12 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/course-library-student-progress", () => ({
   loadStudentCourseLibraryProgress: mocks.loadProgress,
+}));
+vi.mock("@/lib/tag-feature-access", () => ({
+  getCourseLibraryCourseAccessPolicy: async () => ({
+    canAccessCourse: () => true,
+    showLockedBlueprintRoadmap: mocks.showLockedBlueprintRoadmap,
+  }),
 }));
 vi.mock("@/db", () => ({
   getNeonSql: () => mocks.neonSql,
@@ -39,6 +47,7 @@ beforeEach(() => {
     role: "student",
   };
   mocks.realUser = { ...mocks.currentUser };
+  mocks.showLockedBlueprintRoadmap = true;
   mocks.loadProgress.mockResolvedValue([
     {
       id: COURSE_ID,
@@ -65,7 +74,7 @@ describe("one-time Course Library progress restore actions", () => {
       await restoreCourseLibraryProgressOnce([
         { courseId: COURSE_ID, target: LESSON_3 },
       ]),
-    ).toEqual({ success: true, lessonsCompleted: 1 });
+    ).toEqual({ success: true, lessonsCompleted: 1, coursesUnlocked: 0 });
 
     expect(mocks.neonSql).toHaveBeenCalledTimes(1);
     const [strings, ...values] = mocks.neonSql.mock.calls[0];
@@ -76,6 +85,7 @@ describe("one-time Course Library progress restore actions", () => {
     );
     expect(statement).toContain("ON CONFLICT (user_id) DO NOTHING");
     expect(statement).toContain("INSERT INTO course_library_lesson_progress");
+    expect(statement).toContain("access_granted AS");
     expect(statement).toContain("completed_at = COALESCE");
     expect(statement).not.toContain("completed_at = NULL");
     expect(statement).not.toContain("DELETE FROM");
@@ -110,16 +120,59 @@ describe("one-time Course Library progress restore actions", () => {
     expect(mocks.neonSql).not.toHaveBeenCalled();
   });
 
-  it("does not write when a selection is outside existing entitlements", async () => {
+  it("does not write when a selection is outside assigned courses and the Blueprint roadmap", async () => {
     const result = await restoreCourseLibraryProgressOnce([
       {
-        courseId: "84fa5ac3-7980-43af-aabe-0371f36aef44",
+        courseId: INTERMEDIATE_ID,
         target: LESSON_3,
       },
     ]);
 
     expect(result.success).toBe(false);
     expect(mocks.neonSql).not.toHaveBeenCalled();
+  });
+
+  it("can atomically unlock a later assigned Blueprint level without fabricating lesson progress", async () => {
+    mocks.loadProgress.mockResolvedValue([
+      {
+        id: INTERMEDIATE_ID,
+        title: "The Canto to Mando Blueprint - Intermediate",
+        hasAccess: false,
+        modules: [
+          {
+            id: "intermediate-module",
+            title: "Intermediate introduction",
+            shortTitle: null,
+            lessonIds: [LESSON_1, LESSON_2],
+            completedLessonIds: [],
+            lessons: [],
+          },
+        ],
+      },
+    ]);
+
+    expect(
+      await restoreCourseLibraryProgressOnce([
+        { courseId: INTERMEDIATE_ID, target: LESSON_1 },
+      ]),
+    ).toEqual({ success: true, lessonsCompleted: 0, coursesUnlocked: 1 });
+
+    expect(mocks.loadProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ id: USER_ID }),
+      expect.objectContaining({ includeLockedBlueprintRoadmap: true }),
+    );
+    const [strings, ...values] = mocks.neonSql.mock.calls[0];
+    const statement = Array.from(strings as TemplateStringsArray).join("?");
+    expect(statement).toContain("UPDATE course_library_courses AS course");
+    expect(statement).toContain("allowed_user_ids");
+    expect(statement).toContain("course.title IN");
+    expect(statement).toContain("course.status = 'published'");
+    expect(statement).not.toContain("system_access_user_ids");
+    expect(values).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(`\"course_id\":\"${INTERMEDIATE_ID}\"`),
+      ]),
+    );
   });
 
   it("reports a replay when the unique claim was not acquired", async () => {
@@ -143,7 +196,7 @@ describe("one-time Course Library progress restore actions", () => {
     ).toEqual({
       success: false,
       error:
-        "Those choices do not move your progress forward. Choose a later lesson or keep your current progress.",
+        "Those choices do not move your progress forward or unlock another Blueprint level. Choose a later lesson or keep your current progress.",
     });
     expect(mocks.neonSql).not.toHaveBeenCalled();
   });
@@ -152,6 +205,7 @@ describe("one-time Course Library progress restore actions", () => {
     expect(await dismissCourseLibraryProgressRestore()).toEqual({
       success: true,
       lessonsCompleted: 0,
+      coursesUnlocked: 0,
     });
     const [strings] = mocks.neonSql.mock.calls[0];
     const statement = Array.from(strings as TemplateStringsArray).join("?");
