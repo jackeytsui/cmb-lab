@@ -128,9 +128,9 @@ export function CourseLibraryProgressRestoreBanner({ courses }: Props) {
                 Restore your migrated course progress
               </h2>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-                Coming from GoHighLevel? You can use this once to choose the
-                next lesson in each assigned course. Locked Blueprint levels are
-                included; your existing work will stay intact.
+                You can use this once to choose the next lesson in each assigned
+                course. Locked Blueprint levels are included; your existing work
+                will stay intact.
               </p>
             </div>
           </div>
