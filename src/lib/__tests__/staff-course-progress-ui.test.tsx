@@ -7,7 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   role: "coach", rows: [] as unknown[], map: vi.fn(), select: vi.fn(), fetch: vi.fn(),
 }));
-vi.mock("@/lib/auth", () => ({ getCurrentUser: async () => ({ id: "effective-viewer", role: mocks.role }) }));
+vi.mock("@/lib/auth", () => ({
+  getCurrentUser: async () => ({ id: "effective-viewer", role: mocks.role }),
+  getRealUser: async () => ({ id: "real-actor", role: "admin" }),
+}));
+vi.mock("@/lib/course-library-student-progress", () => ({
+  loadStudentCourseLibraryProgress: async () => [],
+}));
 vi.mock("@/lib/tag-feature-access", () => ({
   getCourseLibraryCourseAccess: async () => () => true,
   getCourseLibraryCourseAccessPolicy: async () => ({
@@ -18,6 +24,9 @@ vi.mock("@/lib/tag-feature-access", () => ({
 vi.mock("@/lib/course-library-lesson-access", () => ({ canUserAccessCourseLibraryModule: async () => true }));
 vi.mock("@/components/course-library/CourseLibraryGate", () => ({ CourseLibraryGate: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("@/components/course-library/CourseMap", () => ({ CourseMap: (props: unknown) => { mocks.map(props); return <div>Map</div>; } }));
+vi.mock("@/components/course-library/CourseLibraryProgressRestoreBanner", () => ({
+  CourseLibraryProgressRestoreBanner: () => null,
+}));
 vi.mock("@/lib/course-cover-image", () => ({ courseCoverImagePath: () => "/cover" }));
 vi.mock("next/navigation", () => ({
   notFound: () => { throw new Error("not found"); },

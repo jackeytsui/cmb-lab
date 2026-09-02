@@ -44,14 +44,14 @@ export const courseLibraryLessonTypeEnum = pgEnum(
     "listening_practice_canto",
     "vocal_hack_canto",
     "diary_canto",
-  ],
+  ]
 );
 
 // Visual style of a module's stop on the student roadmap:
 // lesson = dark blue, cm_school = light blue, custom_goal = yellow.
 export const courseLibraryModuleMapStyleEnum = pgEnum(
   "course_library_module_map_style",
-  ["lesson", "cm_school", "custom_goal"],
+  ["lesson", "cm_school", "custom_goal"]
 );
 
 // Course visibility:
@@ -60,7 +60,7 @@ export const courseLibraryModuleMapStyleEnum = pgEnum(
 // - published: visible to everyone with the course_library feature
 export const courseLibraryCourseStatusEnum = pgEnum(
   "course_library_course_status",
-  ["draft", "preview", "published"],
+  ["draft", "preview", "published"]
 );
 
 // Top-level course container.
@@ -103,7 +103,7 @@ export const courseLibraryCourses = pgTable(
     index("course_library_courses_sort_idx").on(table.sortOrder),
     index("course_library_courses_published_idx").on(table.isPublished),
     index("course_library_courses_status_idx").on(table.status),
-  ],
+  ]
 );
 
 // Module inside a course.
@@ -134,7 +134,7 @@ export const courseLibraryModules = pgTable(
   (table) => [
     index("course_library_modules_course_idx").on(table.courseId),
     index("course_library_modules_sort_idx").on(table.sortOrder),
-  ],
+  ]
 );
 
 // A single lesson. `lessonType` determines the shape of `content`.
@@ -159,7 +159,7 @@ export const courseLibraryLessons = pgTable(
   (table) => [
     index("course_library_lessons_module_idx").on(table.moduleId),
     index("course_library_lessons_sort_idx").on(table.sortOrder),
-  ],
+  ]
 );
 
 // Per-user per-lesson progress record.
@@ -186,10 +186,10 @@ export const courseLibraryLessonProgress = pgTable(
   (table) => [
     uniqueIndex("course_library_lesson_progress_user_lesson_unique").on(
       table.userId,
-      table.lessonId,
+      table.lessonId
     ),
     index("course_library_lesson_progress_user_idx").on(table.userId),
-  ],
+  ]
 );
 
 // Explicit per-student exceptions to the sequential roadmap. A grant unlocks
@@ -210,11 +210,35 @@ export const courseLibraryModuleJumpGrants = pgTable(
   (table) => [
     uniqueIndex("course_library_module_jump_grants_user_module_unique").on(
       table.userId,
-      table.moduleId,
+      table.moduleId
     ),
     index("course_library_module_jump_grants_user_idx").on(table.userId),
     index("course_library_module_jump_grants_module_idx").on(table.moduleId),
-  ],
+  ]
+);
+
+// One terminal choice for the migration progress-restoration prompt. The
+// unique user index is the server-side guarantee that a student can either
+// restore once or dismiss once, regardless of browser or device.
+export const courseLibraryProgressRestoreDecisions = pgTable(
+  "course_library_progress_restore_decisions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    decision: text("decision").$type<"used" | "dismissed">().notNull(),
+    selections: jsonb("selections")
+      .$type<Array<{ courseId: string; target: string }>>()
+      .notNull()
+      .default([]),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("course_library_progress_restore_decisions_user_unique").on(
+      table.userId
+    ),
+  ]
 );
 
 /** Persistent scratchpad shown beside Course Library video lessons. */
@@ -238,10 +262,10 @@ export const courseLibraryLessonNotes = pgTable(
   (table) => [
     uniqueIndex("course_library_lesson_notes_user_lesson_unique").on(
       table.userId,
-      table.lessonId,
+      table.lessonId
     ),
     index("course_library_lesson_notes_lesson_idx").on(table.lessonId),
-  ],
+  ]
 );
 
 export const flashcardSaves = pgTable(
@@ -271,11 +295,11 @@ export const flashcardSaves = pgTable(
   (table) => [
     uniqueIndex("flashcard_saves_user_content_key_unique").on(
       table.userId,
-      table.contentKey,
+      table.contentKey
     ),
     index("flashcard_saves_user_id_idx").on(table.userId),
     index("flashcard_saves_source_type_idx").on(table.sourceType),
-  ],
+  ]
 );
 
 // ---------------------------------------------------------------------------
@@ -290,7 +314,7 @@ export const courseLibraryCoursesRelations = relations(
       fields: [courseLibraryCourses.createdBy],
       references: [users.id],
     }),
-  }),
+  })
 );
 
 export const courseLibraryModulesRelations = relations(
@@ -302,7 +326,7 @@ export const courseLibraryModulesRelations = relations(
     }),
     lessons: many(courseLibraryLessons),
     jumpGrants: many(courseLibraryModuleJumpGrants),
-  }),
+  })
 );
 
 export const courseLibraryModuleJumpGrantsRelations = relations(
@@ -316,7 +340,17 @@ export const courseLibraryModuleJumpGrantsRelations = relations(
       fields: [courseLibraryModuleJumpGrants.moduleId],
       references: [courseLibraryModules.id],
     }),
-  }),
+  })
+);
+
+export const courseLibraryProgressRestoreDecisionsRelations = relations(
+  courseLibraryProgressRestoreDecisions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [courseLibraryProgressRestoreDecisions.userId],
+      references: [users.id],
+    }),
+  })
 );
 
 export const courseLibraryLessonsRelations = relations(
@@ -328,7 +362,7 @@ export const courseLibraryLessonsRelations = relations(
     }),
     progress: many(courseLibraryLessonProgress),
     notes: many(courseLibraryLessonNotes),
-  }),
+  })
 );
 
 export const courseLibraryLessonProgressRelations = relations(
@@ -342,7 +376,7 @@ export const courseLibraryLessonProgressRelations = relations(
       fields: [courseLibraryLessonProgress.lessonId],
       references: [courseLibraryLessons.id],
     }),
-  }),
+  })
 );
 
 export const courseLibraryLessonNotesRelations = relations(
@@ -356,7 +390,7 @@ export const courseLibraryLessonNotesRelations = relations(
       fields: [courseLibraryLessonNotes.lessonId],
       references: [courseLibraryLessons.id],
     }),
-  }),
+  })
 );
 
 // ---------------------------------------------------------------------------
@@ -383,6 +417,8 @@ export type CourseLibraryModuleJumpGrant =
   typeof courseLibraryModuleJumpGrants.$inferSelect;
 export type NewCourseLibraryModuleJumpGrant =
   typeof courseLibraryModuleJumpGrants.$inferInsert;
+export type CourseLibraryProgressRestoreDecision =
+  typeof courseLibraryProgressRestoreDecisions.$inferSelect;
 export type CourseLibraryLessonNote =
   typeof courseLibraryLessonNotes.$inferSelect;
 
@@ -415,7 +451,10 @@ export interface CourseLibraryTextContent {
   attachments?: CourseLibraryAttachment[];
 }
 
-export type CourseLibraryQuizQuestionType = "single" | "multiple" | "true_false";
+export type CourseLibraryQuizQuestionType =
+  | "single"
+  | "multiple"
+  | "true_false";
 
 export interface CourseLibraryQuizOption {
   id: string;

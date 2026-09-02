@@ -13,10 +13,10 @@ const studentLibrarySource = readFileSync(
 describe("student course-library progress query", () => {
   it("does not count soft-deleted modules or lessons", () => {
     const moduleFilter = studentLibrarySource.match(
-      /\.leftJoin\(\s*courseLibraryModules,[\s\S]*?\),\s*\)\s*\.leftJoin/,
+      /\.leftJoin\(\s*courseLibraryModules,[\s\S]*?\)\s*,?\s*\)\s*\.leftJoin/,
     )?.[0];
     const lessonFilter = studentLibrarySource.match(
-      /\.leftJoin\(\s*courseLibraryLessons,[\s\S]*?\),\s*\)\s*\.leftJoin/,
+      /\.leftJoin\(\s*courseLibraryLessons,[\s\S]*?\)\s*,?\s*\)\s*\.leftJoin/,
     )?.[0];
 
     expect(moduleFilter).toContain("isNull(courseLibraryModules.deletedAt)");
