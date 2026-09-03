@@ -23,6 +23,7 @@ interface StudentRow {
   email: string;
   assignedCoachId: string | null;
   coachName: string | null;
+  additionalCoachNames?: string[];
   coachEmail: string | null;
   createdAt: string;
   avgRating1on1: number | null;
@@ -475,6 +476,9 @@ function StudentTable({
                     {student.coachName || student.coachEmail || (
                       <span className="text-muted-foreground">—</span>
                     )}
+                    {student.additionalCoachNames?.map((name, index) => (
+                      <div key={`${name}-${index}`} className="text-xs text-muted-foreground">{name} (shared)</div>
+                    ))}
                   </td>
                 )}
                 <td className="px-4 py-3 text-center">

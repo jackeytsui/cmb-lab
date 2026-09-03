@@ -84,7 +84,7 @@ export async function POST(
           columns: {
             email: true,
             name: true,
-            assignedCoachId: true,
+            assignedCoachId: true, additionalCoachIds: true,
           },
         },
         lesson: { columns: { title: true } },
@@ -97,6 +97,7 @@ export async function POST(
         actorUserId: access.actor.id,
         actorRole: access.actor.role,
         assignedCoachId: submission.user.assignedCoachId,
+        additionalCoachIds: submission.user.additionalCoachIds,
       })
     ) {
       return NextResponse.json(
@@ -239,7 +240,7 @@ export async function GET(
     const submission = await db.query.submissions.findFirst({
       where: eq(submissions.id, submissionId),
       columns: { id: true },
-      with: { user: { columns: { assignedCoachId: true } } },
+      with: { user: { columns: { assignedCoachId: true, additionalCoachIds: true } } },
     });
     if (
       !submission ||
@@ -247,6 +248,7 @@ export async function GET(
         actorUserId: access.actor.id,
         actorRole: access.actor.role,
         assignedCoachId: submission.user.assignedCoachId,
+        additionalCoachIds: submission.user.additionalCoachIds,
       })
     ) {
       return NextResponse.json(

@@ -32,7 +32,7 @@ async function authorizeStudentTagAccess(studentId: string) {
       eq(users.role, "student"),
       isNull(users.deletedAt),
     ),
-    columns: { assignedCoachId: true },
+    columns: { assignedCoachId: true, additionalCoachIds: true },
   });
   if (
     !student ||
@@ -40,6 +40,7 @@ async function authorizeStudentTagAccess(studentId: string) {
       actorUserId: access.actor.id,
       actorRole: access.actor.role,
       assignedCoachId: student.assignedCoachId,
+      additionalCoachIds: student.additionalCoachIds,
     })
   ) {
     return {

@@ -162,6 +162,7 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
     .select({
       id: videoThreadSessions.id,
       assignedCoachId: users.assignedCoachId,
+      additionalCoachIds: users.additionalCoachIds,
     })
     .from(videoThreadSessions)
     .innerJoin(users, eq(videoThreadSessions.studentId, users.id))
@@ -174,6 +175,7 @@ export default async function ThreadReviewSessionPage({ params }: PageProps) {
       actorUserId: access.actor.id,
       actorRole: access.actor.role,
       assignedCoachId: sessionAccess.assignedCoachId,
+      additionalCoachIds: sessionAccess.additionalCoachIds,
     })
   ) {
     notFound();

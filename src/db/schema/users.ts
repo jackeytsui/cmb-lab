@@ -26,6 +26,8 @@ export const users = pgTable("users", {
   longestStreak: integer("longest_streak").notNull().default(0),
   showCohortRankings: boolean("show_cohort_rankings").notNull().default(false),
   assignedCoachId: uuid("assigned_coach_id"),
+  // Shared student access; the primary coach remains the GHL/onboarding owner.
+  additionalCoachIds: uuid("additional_coach_ids").array().notNull().default([]),
   coachingGoals: text("coaching_goals"),
   coachingLevel: text("coaching_level"), // "CMB Foundation" | "CMB Intermediate" | "CMB Advanced"
   coachingLessonNumber: text("coaching_lesson_number"), // e.g. "Lesson 5" or "Chapter 3"

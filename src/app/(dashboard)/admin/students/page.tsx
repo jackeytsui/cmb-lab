@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { clerkClient } from "@clerk/nextjs/server";
@@ -11,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { StudentInvitePanel } from "@/components/admin/StudentInvitePanel";
 import { db } from "@/db";
 import { users, studentTags, tags } from "@/db/schema";
-import { and, count, desc, eq, gte, lte, ilike, isNull, or, inArray, asc } from "drizzle-orm";
+import { and, count, desc, eq, gte, lte, ilike, isNull, or, inArray, asc, sql } from "drizzle-orm";
 import { UsersManageTable } from "@/components/admin/UsersManageTable";
 import { UsersFilterBar } from "@/components/admin/UsersFilterBar";
 import {
@@ -113,9 +114,9 @@ export default async function AdminStudentsPage({
 
       // Coach filter
       const coachClause = filterCoachId === "unassigned"
-        ? isNull(users.assignedCoachId)
+        ? and(isNull(users.assignedCoachId), sql`cardinality(${users.additionalCoachIds}) = 0`)
         : filterCoachId
-          ? eq(users.assignedCoachId, filterCoachId)
+          ? studentAssignedToCoach(filterCoachId)
           : undefined;
 
       // Created date range filter
@@ -192,6 +193,7 @@ export default async function AdminStudentsPage({
             role: users.role,
             createdAt: users.createdAt,
             assignedCoachId: users.assignedCoachId,
+            additionalCoachIds: users.additionalCoachIds,
           })
           .from(users)
           .where(whereClause)
@@ -271,9 +273,10 @@ export default async function AdminStudentsPage({
             createdAt: item.createdAt,
             portalAccessStatus,
             assignedCoachId: item.assignedCoachId ?? null,
-            assignedCoachName: item.assignedCoachId
-              ? coachMap.get(item.assignedCoachId) ?? null
-              : null,
+            assignedCoachName: [
+              ...(item.assignedCoachId ? [item.assignedCoachId] : []),
+              ...item.additionalCoachIds.filter((id) => id !== item.assignedCoachId),
+            ].map((id) => coachMap.get(id) ?? "Unavailable coach").join(", ") || null,
             tagIds: tagsByUser.get(item.id) ?? [],
           };
         })

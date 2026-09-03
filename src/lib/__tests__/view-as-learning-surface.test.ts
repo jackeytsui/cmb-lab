@@ -87,7 +87,7 @@ describe("View As learning-surface fidelity", () => {
 
     expect(picker).toContain("getStaffStudentAccessContext");
     expect(picker).toContain(
-      "eq(users.assignedCoachId, access.actor.id)",
+      "studentAssignedToCoach(access.actor.id)",
     );
     expect(picker).not.toContain("getRealUser");
 

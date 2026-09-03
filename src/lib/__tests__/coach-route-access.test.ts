@@ -68,10 +68,10 @@ describe("coach route access", () => {
 
     expect(dashboard).toContain("getStaffStudentAccessContext");
     expect(submissionList).toContain(
-      "eq(users.assignedCoachId, access.actor.id)",
+      "studentAssignedToCoach(access.actor.id)",
     );
     expect(submissionDetail).toContain(
-      "eq(users.assignedCoachId, coachUserId)",
+      "studentAssignedToCoach(coachUserId)",
     );
     expect(feedback.match(/canStaffAccessStudent\(/g)).toHaveLength(2);
     expect(notes).toContain("canAccessSubmission");
@@ -94,10 +94,10 @@ describe("coach route access", () => {
     expect(conversationList).toContain("<h1");
     expect(conversationList).toContain("Conversations");
     expect(conversationList).toContain(
-      "eq(users.assignedCoachId, access.actor.id)",
+      "studentAssignedToCoach(access.actor.id)",
     );
     expect(conversationDetail).toContain(
-      "eq(users.assignedCoachId, access.actor.id)",
+      "studentAssignedToCoach(access.actor.id)",
     );
     expect(conversationListApi).toContain("canStaffAccessStudent");
     expect(conversationDetailApi).toContain("canStaffAccessStudent");
@@ -117,13 +117,13 @@ describe("coach route access", () => {
 
     expect(pronunciation).toContain("getStaffStudentAccessContext");
     expect(pronunciation).toContain(
-      "eq(users.assignedCoachId, access.actor.id)",
+      "studentAssignedToCoach(access.actor.id)",
     );
     expect(pronunciation).toContain("<h1");
     expect(practiceResultsApi).toContain("getStaffStudentAccessContext");
     expect(practiceResultsApi).toContain("access.actor.id");
     expect(practiceResultsQuery).toContain(
-      "eq(users.assignedCoachId, assignedCoachId)",
+      "studentAssignedToCoach(assignedCoachId)",
     );
   });
 
@@ -145,11 +145,11 @@ describe("coach route access", () => {
     );
 
     expect(threadList).toContain(
-      "eq(users.assignedCoachId, access.actor.id)",
+      "studentAssignedToCoach(access.actor.id)",
     );
     expect(threadDetail).toContain("canStaffAccessStudent");
     expect(submissionsApi).toContain(
-      "eq(users.assignedCoachId, access.actor.id)",
+      "studentAssignedToCoach(access.actor.id)",
     );
     expect(submissionDetailApi).toContain("canStaffAccessStudent");
     expect(submissionResponseApi).toContain("canStaffAccessStudent");

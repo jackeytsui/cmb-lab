@@ -15,6 +15,23 @@ const base = {
 };
 
 describe("coach student data scope", () => {
+  it("shares one student with multiple coaches without opening unrelated students", () => {
+    const student = { assignedCoachId: "jane", additionalCoachIds: ["tiffany", "third-coach"] };
+    for (const actorUserId of ["jane", "tiffany", "third-coach"]) {
+      expect(canStaffAccessStudent({ ...student, actorUserId, actorRole: "coach" })).toBe(true);
+      expect(canAccessCoachingStudent({ ...student, actorUserId, actorRole: "coach", studentUserId: "learner" })).toBe(true);
+    }
+    expect(canStaffAccessStudent({ ...student, actorUserId: "unrelated", actorRole: "coach" })).toBe(false);
+    expect(canStaffAccessStudent({ ...student, actorUserId: "tiffany", actorRole: "student" })).toBe(false);
+    expect(canAccessCoachingStudent({ ...student, actorUserId: "learner", actorRole: "student", studentUserId: "someone-else" })).toBe(false);
+  });
+
+  it("revokes only the removed coach and supports a shared coach without a primary", () => {
+    expect(canStaffAccessStudent({ actorUserId: "tiffany", actorRole: "coach", assignedCoachId: "jane", additionalCoachIds: [] })).toBe(false);
+    expect(canStaffAccessStudent({ actorUserId: "jane", actorRole: "coach", assignedCoachId: "jane", additionalCoachIds: [] })).toBe(true);
+    expect(canStaffAccessStudent({ actorUserId: "tiffany", actorRole: "coach", assignedCoachId: null, additionalCoachIds: ["tiffany"] })).toBe(true);
+  });
+
   it("always confines non-admin staff to their own assigned students", () => {
     expect(resolveCoachStudentScope(base)).toBe("coach-real");
     expect(

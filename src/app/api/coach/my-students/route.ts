@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -27,7 +28,7 @@ export async function GET() {
 
   // Coaches see only their assigned students; admins see all
   if (access.actor.role !== "admin") {
-    conditions.push(eq(users.assignedCoachId, access.actor.id));
+    conditions.push(studentAssignedToCoach(access.actor.id));
   }
 
   const studentRows = await db

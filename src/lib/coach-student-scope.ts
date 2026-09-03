@@ -1,4 +1,4 @@
-import type { PlatformRole } from "@/lib/platform-roles";
+import { isStaffRole, type PlatformRole } from "@/lib/platform-roles";
 
 type CoachStudentScopeInput = {
   realUserId: string;
@@ -13,6 +13,7 @@ type StaffStudentAccessInput = {
   actorUserId: string;
   actorRole: PlatformRole;
   assignedCoachId: string | null;
+  additionalCoachIds?: readonly string[] | null;
 };
 
 type CoachingStudentAccessInput = StaffStudentAccessInput & {
@@ -54,8 +55,12 @@ export function canStaffAccessStudent({
   actorUserId,
   actorRole,
   assignedCoachId,
+  additionalCoachIds,
 }: StaffStudentAccessInput): boolean {
-  return actorRole === "admin" || assignedCoachId === actorUserId;
+  return actorRole === "admin" || (isStaffRole(actorRole) && (
+    assignedCoachId === actorUserId ||
+    (additionalCoachIds ?? []).includes(actorUserId)
+  ));
 }
 
 /**
@@ -67,11 +72,13 @@ export function canAccessCoachingStudent({
   actorRole,
   studentUserId,
   assignedCoachId,
+  additionalCoachIds,
 }: CoachingStudentAccessInput): boolean {
   if (actorRole === "student") return actorUserId === studentUserId;
   return canStaffAccessStudent({
     actorUserId,
     actorRole,
     assignedCoachId,
+    additionalCoachIds,
   });
 }

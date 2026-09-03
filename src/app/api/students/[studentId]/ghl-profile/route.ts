@@ -37,7 +37,7 @@ export async function GET(
     const { studentId } = await params;
     const student = await db.query.users.findFirst({
       where: and(eq(users.id, studentId), isNull(users.deletedAt)),
-      columns: { assignedCoachId: true },
+      columns: { assignedCoachId: true, additionalCoachIds: true },
     });
     if (
       !student ||
@@ -45,6 +45,7 @@ export async function GET(
         actorUserId: access.actor.id,
         actorRole: access.actor.role,
         assignedCoachId: student.assignedCoachId,
+        additionalCoachIds: student.additionalCoachIds,
       })
     ) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });

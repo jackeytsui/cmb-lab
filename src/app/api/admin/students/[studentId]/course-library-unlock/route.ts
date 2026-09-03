@@ -87,7 +87,7 @@ async function getStudent(studentId: string) {
       name: true,
       email: true,
       role: true,
-      assignedCoachId: true,
+      assignedCoachId: true, additionalCoachIds: true,
     },
   });
 }
@@ -138,6 +138,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       actorUserId: authorization.actor.id,
       actorRole: authorization.actor.role,
       assignedCoachId: student.assignedCoachId,
+      additionalCoachIds: student.additionalCoachIds,
     })
   ) {
     return NextResponse.json({ error: "Student not found" }, { status: 404 });
@@ -185,6 +186,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       actorUserId: authorization.actor.id,
       actorRole: authorization.actor.role,
       assignedCoachId: student.assignedCoachId,
+      additionalCoachIds: student.additionalCoachIds,
     })
   ) {
     return NextResponse.json({ error: "Student not found" }, { status: 404 });

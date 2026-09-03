@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import {
   eq,
   and,
@@ -159,7 +160,7 @@ export async function getPracticeResults(
   const allConditions = buildWhereConditions(filters, false);
 
   if (assignedCoachId) {
-    const assignmentCondition = eq(users.assignedCoachId, assignedCoachId);
+    const assignmentCondition = studentAssignedToCoach(assignedCoachId);
     completedConditions.push(assignmentCondition);
     allConditions.push(assignmentCondition);
   }

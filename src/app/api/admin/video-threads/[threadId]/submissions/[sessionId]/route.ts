@@ -36,6 +36,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
         id: videoThreadSessions.id,
         threadId: videoThreadSessions.threadId,
         assignedCoachId: users.assignedCoachId,
+        additionalCoachIds: users.additionalCoachIds,
       })
       .from(videoThreadSessions)
       .innerJoin(users, eq(videoThreadSessions.studentId, users.id))
@@ -49,6 +50,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
         actorUserId: access.actor.id,
         actorRole: access.actor.role,
         assignedCoachId: sessionAccess.assignedCoachId,
+        additionalCoachIds: sessionAccess.additionalCoachIds,
       })
     ) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });

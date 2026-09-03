@@ -243,11 +243,11 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
     });
     if (isAdmin) {
       // Only administrators can reassign a student's coach.
-      const { and: andFn, isNull: isNullFn } = await import("drizzle-orm");
+      const { and: andFn, isNull: isNullFn, or: orFn } = await import("drizzle-orm");
       coaches = await db
         .select({ id: users.id, name: users.name, email: users.email })
         .from(users)
-        .where(andFn(isNullFn(users.deletedAt), eq(users.role, "coach")))
+        .where(andFn(isNullFn(users.deletedAt), orFn(eq(users.role, "coach"), eq(users.role, "admin"))))
         .orderBy(users.name);
     }
   } catch {
@@ -276,6 +276,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
       actorUserId: actor.id,
       actorRole: actor.role,
       assignedCoachId: student.assignedCoachId ?? null,
+      additionalCoachIds: student.additionalCoachIds,
     })
   ) {
     notFound();
@@ -678,14 +679,16 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         <section className="mb-8">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <UserCheck className="w-5 h-5 text-cyan-400" />
-            Assigned Coach
+            Assigned Coaches
           </h2>
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
             <p className="text-sm text-zinc-400 mb-3">
-              Assign a coach to this student for 1:1 coaching sessions.
+              Keep a primary coach and add other coaches when a student is shared.
             </p>
             <AssignCoachDropdown
+              key={`${student.id}:${student.assignedCoachId}:${student.additionalCoachIds.join(",")}`}
               studentId={studentId}
+              additionalCoachIds={student.additionalCoachIds}
               currentCoachId={student.assignedCoachId ?? null}
               currentCoachName={
                 student.assignedCoachId

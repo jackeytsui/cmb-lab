@@ -11,6 +11,7 @@ type AuthorizedCoachingStudent = {
     id: string;
     email: string;
     assignedCoachId: string | null;
+    additionalCoachIds: string[];
   };
 };
 
@@ -47,7 +48,7 @@ export async function getCoachingStudentAccess(
     columns: {
       id: true,
       email: true,
-      assignedCoachId: true,
+      assignedCoachId: true, additionalCoachIds: true,
     },
   });
   if (!student) {
@@ -60,6 +61,7 @@ export async function getCoachingStudentAccess(
       actorRole: actor.role,
       studentUserId: student.id,
       assignedCoachId: student.assignedCoachId,
+      additionalCoachIds: student.additionalCoachIds,
     })
   ) {
     return { ok: false, status: 403, error: "Forbidden" };

@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -90,7 +91,7 @@ export default async function ConversationDetailPage({ params }: PageProps) {
           ? eq(conversations.id, conversationId)
           : and(
               eq(conversations.id, conversationId),
-              eq(users.assignedCoachId, access.actor.id),
+              studentAssignedToCoach(access.actor.id),
             ),
       )
       .limit(1);

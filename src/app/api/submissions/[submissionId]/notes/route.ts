@@ -18,7 +18,7 @@ async function canAccessSubmission(
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, submissionId),
     columns: { id: true, userId: true },
-    with: { user: { columns: { assignedCoachId: true } } },
+    with: { user: { columns: { assignedCoachId: true, additionalCoachIds: true } } },
   });
   if (
     !submission ||
@@ -26,6 +26,7 @@ async function canAccessSubmission(
       actorUserId: actor.id,
       actorRole: actor.role,
       assignedCoachId: submission.user.assignedCoachId,
+      additionalCoachIds: submission.user.additionalCoachIds,
     })
   ) {
     return null;

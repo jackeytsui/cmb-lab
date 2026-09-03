@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { hasMinimumRole } from "@/lib/auth";
@@ -112,7 +113,7 @@ async function getSubmission(
           ? eq(submissions.id, submissionId)
           : and(
               eq(submissions.id, submissionId),
-              eq(users.assignedCoachId, coachUserId),
+              studentAssignedToCoach(coachUserId),
             ),
       )
       .limit(1);

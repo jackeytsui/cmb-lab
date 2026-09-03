@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { vocabularyListAssignments, vocabularyLists, users } from "@/db/schema";
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
     isNull(users.deletedAt),
   ];
   if (currentUser.role !== "admin") {
-    studentConditions.push(eq(users.assignedCoachId, currentUser.id));
+    studentConditions.push(studentAssignedToCoach(currentUser.id));
   }
   const eligibleStudents = await db
     .select({ id: users.id })

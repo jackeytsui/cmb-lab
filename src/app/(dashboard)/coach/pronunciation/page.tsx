@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
@@ -132,7 +133,7 @@ export default async function CoachPronunciationPage() {
           gte(practiceAttempts.completedAt, thirtyDaysAgo),
           access.actor.role === "admin"
             ? undefined
-            : eq(users.assignedCoachId, access.actor.id)
+            : studentAssignedToCoach(access.actor.id)
         )
       )
       .orderBy(desc(practiceAttempts.completedAt))

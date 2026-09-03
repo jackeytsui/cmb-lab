@@ -82,6 +82,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         moduleTitle: modules.title,
         courseTitle: courses.title,
         assignedCoachId: users.assignedCoachId,
+        additionalCoachIds: users.additionalCoachIds,
       })
       .from(conversations)
       .innerJoin(lessons, eq(conversations.lessonId, lessons.id))
@@ -110,6 +111,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           actorUserId: access.actor.id,
           actorRole: access.actor.role,
           assignedCoachId: conversation.assignedCoachId,
+          additionalCoachIds: conversation.additionalCoachIds,
         })
       ) {
         return NextResponse.json(

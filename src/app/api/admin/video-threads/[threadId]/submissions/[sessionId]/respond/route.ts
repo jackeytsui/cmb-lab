@@ -34,6 +34,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       .select({
         id: videoThreadSessions.id,
         assignedCoachId: users.assignedCoachId,
+        additionalCoachIds: users.additionalCoachIds,
       })
       .from(videoThreadSessions)
       .innerJoin(users, eq(videoThreadSessions.studentId, users.id))
@@ -50,6 +51,7 @@ export async function POST(req: Request, { params }: RouteParams) {
         actorUserId: access.actor.id,
         actorRole: access.actor.role,
         assignedCoachId: session.assignedCoachId,
+        additionalCoachIds: session.additionalCoachIds,
       })
     ) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { hasMinimumRole } from "@/lib/auth";
+import { coachAssignmentUpdate } from "@/lib/coach-assignment-change";
 
 /**
  * POST /api/admin/students/bulk-assign-coach
- * Assign a coach to multiple students at once.
+ * Assign a primary coach to multiple students; preserve additional coaches.
  * Body: { studentIds: string[], coachId: string | null }
  * Requires admin role.
  */
@@ -17,29 +19,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hasAccess = await hasMinimumRole("coach");
+  const hasAccess = await hasMinimumRole("admin");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = (await request.json()) as {
-    studentIds: string[];
-    coachId: string | null;
-  };
-
-  if (!Array.isArray(body.studentIds) || body.studentIds.length === 0) {
+  const parsed = z.object({
+    studentIds: z.array(z.uuid()).min(1).max(1000),
+    coachId: z.uuid().nullable(),
+  }).strict().safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "studentIds must be a non-empty array" },
+        { error: "Provide valid student IDs and a primary coach or null" },
       { status: 400 },
     );
   }
-
-  const coachId = body.coachId ?? null;
+  const body = parsed.data;
+  const coachId = body.coachId;
 
   // Validate the coach exists and is coach/admin (if assigning)
   if (coachId) {
     const coach = await db.query.users.findFirst({
-      where: eq(users.id, coachId),
+      where: and(eq(users.id, coachId), isNull(users.deletedAt)),
       columns: { id: true, role: true },
     });
     if (!coach || (coach.role !== "coach" && coach.role !== "admin")) {
@@ -53,8 +54,8 @@ export async function POST(request: NextRequest) {
   // Update all students
   const updated = await db
     .update(users)
-    .set({ assignedCoachId: coachId })
-    .where(inArray(users.id, body.studentIds))
+    .set(coachAssignmentUpdate({ coachId }))
+    .where(and(inArray(users.id, body.studentIds), eq(users.role, "student"), isNull(users.deletedAt)))
     .returning({ id: users.id });
 
   return NextResponse.json({

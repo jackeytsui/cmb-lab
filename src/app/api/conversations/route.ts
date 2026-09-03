@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       }
       const student = await db.query.users.findFirst({
         where: and(eq(users.id, studentId), isNull(users.deletedAt)),
-        columns: { id: true, role: true, assignedCoachId: true },
+        columns: { id: true, role: true, assignedCoachId: true, additionalCoachIds: true },
       });
       if (
         !student ||
@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
           actorUserId: access.actor.id,
           actorRole: access.actor.role,
           assignedCoachId: student.assignedCoachId,
+          additionalCoachIds: student.additionalCoachIds,
         })
       ) {
         return NextResponse.json(

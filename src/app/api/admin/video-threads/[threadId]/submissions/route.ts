@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import {
@@ -55,7 +56,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
           ? eq(videoThreadSessions.threadId, threadId)
           : and(
               eq(videoThreadSessions.threadId, threadId),
-              eq(users.assignedCoachId, access.actor.id),
+              studentAssignedToCoach(access.actor.id),
             ),
       )
       .orderBy(desc(videoThreadSessions.startedAt));

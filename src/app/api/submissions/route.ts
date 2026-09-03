@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { NextRequest, NextResponse } from "next/server";
 import { getRealUser } from "@/lib/auth";
 import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
     const conditions = [eq(submissions.status, status)];
     if (studentId) conditions.push(eq(submissions.userId, studentId));
     if (access.actor.role !== "admin") {
-      conditions.push(eq(users.assignedCoachId, access.actor.id));
+      conditions.push(studentAssignedToCoach(access.actor.id));
     }
 
     // 4. Build and execute query with joins

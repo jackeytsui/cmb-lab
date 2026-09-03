@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
@@ -69,13 +70,13 @@ export default async function CoachConversationsPage({
       : studentIdFilter
         ? and(
             eq(conversations.userId, studentIdFilter),
-            eq(users.assignedCoachId, access.actor.id),
+            studentAssignedToCoach(access.actor.id),
           )
-        : eq(users.assignedCoachId, access.actor.id);
+        : studentAssignedToCoach(access.actor.id);
   const studentWhere =
     access.actor.role === "admin"
       ? undefined
-      : eq(users.assignedCoachId, access.actor.id);
+      : studentAssignedToCoach(access.actor.id);
 
   // Wrap DB queries in try/catch -- auth stays outside
   let conversationList;

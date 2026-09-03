@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
             eq(users.role, "student"),
             isNull(users.deletedAt),
           ),
-          columns: { assignedCoachId: true },
+          columns: { assignedCoachId: true, additionalCoachIds: true },
         });
         if (
           !student ||
@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
             actorUserId: currentUser.id,
             actorRole: currentUser.role,
             assignedCoachId: student.assignedCoachId,
+            additionalCoachIds: student.additionalCoachIds,
           })
         ) {
           results.push({

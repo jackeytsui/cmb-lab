@@ -1,7 +1,8 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, coachingSessions, coachingSessionRatings } from "@/db/schema";
-import { and, eq, avg, count, isNull, or, ilike, sql } from "drizzle-orm";
+import { and, eq, avg, count, isNull, or, ilike, sql, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getCurrentUser, getRealUser } from "@/lib/auth";
 import { excludeWhitelistedUsersSql } from "@/lib/analytics-whitelist";
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
     requestedCoachId: coachIdFilter,
   });
   if (targetCoachId) {
-    conditions.push(eq(users.assignedCoachId, targetCoachId));
+    conditions.push(studentAssignedToCoach(targetCoachId));
   }
 
   // Fetch students with their assigned coach name
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest) {
       name: users.name,
       email: users.email,
       assignedCoachId: users.assignedCoachId,
+      additionalCoachIds: users.additionalCoachIds,
       coachName: coach.name,
       coachEmail: coach.email,
       createdAt: users.createdAt,
@@ -130,6 +132,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const sharedIds = [...new Set(studentRows.flatMap((student) => student.additionalCoachIds))];
+  const sharedCoaches = sharedIds.length ? await db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .where(and(inArray(users.id, sharedIds), isNull(users.deletedAt))) : [];
+  const sharedCoachNames = new Map(sharedCoaches.map((coach) => [coach.id, coach.name || coach.email]));
+
   const students = studentRows.map((s) => {
     const ratings = ratingMap.get(s.id);
     return {
@@ -139,6 +148,8 @@ export async function GET(request: NextRequest) {
       assignedCoachId: s.assignedCoachId,
       coachName: s.coachName,
       coachEmail: s.coachEmail,
+      additionalCoachNames: s.additionalCoachIds.filter((id) => id !== s.assignedCoachId)
+        .map((id) => sharedCoachNames.get(id) ?? "Unavailable coach"),
       createdAt: s.createdAt,
       avgRating1on1: ratings?.one_on_one ?? null,
       avgRatingInnerCircle: ratings?.inner_circle ?? null,

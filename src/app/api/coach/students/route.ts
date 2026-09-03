@@ -1,3 +1,4 @@
+import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -24,7 +25,7 @@ export async function GET() {
       excludeWhitelistedUsersSql(users.id),
     ];
     if (user.role !== "admin") {
-      conditions.push(eq(users.assignedCoachId, user.id));
+      conditions.push(studentAssignedToCoach(user.id));
     }
 
     const studentList = await db
