@@ -30,7 +30,7 @@ interface TagBadgeProps {
  * TagBadge - Inline color-coded tag pill.
  *
  * - Coach tags: solid border, filled style
- * - System tags: dashed border with "SYS" label for distinction
+ * - Legacy source metadata stays internal; no tag is presented as staff-locked
  * - Background uses tag color at 20% opacity, text in tag color
  * - Optional remove button on hover
  */
@@ -39,7 +39,7 @@ export function TagBadge({
   color,
   type,
   onRemove,
-  showSystemIndicator = true,
+  showSystemIndicator = false,
 }: TagBadgeProps) {
   const showSystemStyle = type === "system" && showSystemIndicator;
 
