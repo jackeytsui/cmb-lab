@@ -11,6 +11,8 @@
 export interface CorrectionRange {
   startOffset: number;
   endOffset: number;
+  operation?: "replace" | "delete" | "insert";
+  suggestedChinese?: string;
 }
 
 export interface ScorableSentence {
@@ -124,11 +126,19 @@ export function calculateTextAssignmentScore(
   let total = 0;
   let corrected = 0;
   for (const sentence of sentences) {
-    total += countChineseCharacters(sentence.chineseText);
+    const inserted = sentence.corrections.reduce(
+      (count, correction) =>
+        correction.operation === "insert"
+          ? countChineseCharacters(correction.suggestedChinese ?? "") + count
+          : count,
+      0,
+    );
+    total += countChineseCharacters(sentence.chineseText) + inserted;
     corrected += countCorrectedChineseCharacters(
       sentence.chineseText,
       sentence.corrections,
     );
+    corrected += inserted;
   }
   if (total === 0) return null;
   return Math.round(((total - corrected) / total) * 100);

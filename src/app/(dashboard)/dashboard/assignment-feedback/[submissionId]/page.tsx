@@ -16,6 +16,7 @@ import { lessonLanguage } from "@/lib/lesson-language";
 import { CorrectedSentence } from "@/components/assignments/CorrectedSentence";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import { AssignmentReviewRecording } from "@/components/student/AssignmentReviewRecording";
+import { applyCorrectionChanges } from "@/lib/assignment-corrections";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +99,23 @@ export default async function AssignmentFeedbackDetailPage({
       ? lessonContent.description
       : "";
   const lang = lessonLanguage(row.lessonType);
+  const correctionDtosBySentence = new Map(
+    sentences.map((sentence) => [
+      sentence.id,
+      corrections
+        .filter((correction) => correction.sentenceId === sentence.id)
+        .map((correction) => ({
+          id: correction.id,
+          operation: correction.operation,
+          startOffset: correction.startOffset,
+          endOffset: correction.endOffset,
+          originalText: correction.originalText,
+          suggestedChinese: correction.suggestedChinese,
+          suggestedPinyin: correction.suggestedPinyin,
+          suggestedEnglish: correction.suggestedEnglish,
+        })),
+    ]),
+  );
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
@@ -283,20 +301,24 @@ export default async function AssignmentFeedbackDetailPage({
                 text={sentence.chineseText}
                 lang={lang}
                 pinyin={sentence.generatedPinyin}
-                corrections={corrections
-                  .filter((c) => c.sentenceId === sentence.id)
-                  .map((c) => ({
-                    id: c.id,
-                    startOffset: c.startOffset,
-                    endOffset: c.endOffset,
-                    suggestedChinese: c.suggestedChinese,
-                    suggestedPinyin: c.suggestedPinyin,
-                    suggestedEnglish: c.suggestedEnglish,
-                  }))}
+                corrections={correctionDtosBySentence.get(sentence.id) ?? []}
               />
               <p className="text-lg text-muted-foreground italic">
                 {sentence.generatedEnglish}
               </p>
+              {(correctionDtosBySentence.get(sentence.id)?.length ?? 0) > 0 && (
+                <div className="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-3 py-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                    Suggested sentence
+                  </span>
+                  <p className="mt-0.5 text-lg text-foreground">
+                    {applyCorrectionChanges(
+                      sentence.chineseText,
+                      correctionDtosBySentence.get(sentence.id) ?? [],
+                    )}
+                  </p>
+                </div>
+              )}
             </div>
           ),
         )}

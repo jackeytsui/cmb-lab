@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Loader2, Play, Square, X } from "lucide-react";
+import { Fragment, useMemo } from "react";
+import { Loader2, Play, Plus, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTTS } from "@/hooks/useTTS";
 import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
@@ -13,6 +13,10 @@ import {
   ASSIGNMENT_CHAR_SIZE,
   type CharAnnotation,
 } from "@/lib/mandarin-annotate";
+import {
+  correctionOperation,
+  type AssignmentCorrectionOperation,
+} from "@/lib/assignment-corrections";
 
 // ---------------------------------------------------------------------------
 // Offset-based correction rendering, in the coaching-notes style.
@@ -31,6 +35,7 @@ import {
 
 export interface RenderableCorrection {
   id: string;
+  operation?: AssignmentCorrectionOperation;
   startOffset: number;
   endOffset: number;
   suggestedChinese: string;
@@ -54,6 +59,10 @@ interface CorrectedSentenceProps {
    * via jieba (Cantonese has no jieba/tone-sandhi pipeline).
    */
   pinyin?: string;
+  /** Reveal selectable + targets between characters in reviewer insertion mode. */
+  showInsertionPoints?: boolean;
+  /** Called with the exact UTF-16 position chosen by the reviewer. */
+  onSelectInsertionPoint?: (offset: number) => void;
 }
 
 function CorrectionBubble({
@@ -66,6 +75,30 @@ function CorrectionBubble({
   lang?: "mandarin" | "cantonese";
 }) {
   const { speak, stop, isPlaying, isLoading } = useTTS();
+  const operation = correctionOperation(correction);
+
+  if (operation === "delete") {
+    return (
+      <span className="relative mt-2 block w-max select-none rounded-md border border-red-500/35 bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400">
+        <span
+          aria-hidden
+          className="absolute -top-[6px] left-1/2 -ml-[5px] h-2.5 w-2.5 rotate-45 border-l border-t border-red-500/35 bg-red-500/10"
+        />
+        Remove
+        {onRemove && (
+          <button
+            type="button"
+            onClick={() => onRemove(correction.id)}
+            className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600"
+            title="Remove this review change"
+            aria-label="Remove this review change"
+          >
+            <X className="h-2.5 w-2.5" />
+          </button>
+        )}
+      </span>
+    );
+  }
 
   const handleSpeak = () => {
     if (isPlaying) {
@@ -91,11 +124,15 @@ function CorrectionBubble({
           type="button"
           onClick={() => onRemove(correction.id)}
           className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600"
-          title="Remove correction"
+          title="Remove this review change"
+          aria-label="Remove this review change"
         >
           <X className="h-2.5 w-2.5" />
         </button>
       )}
+      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+        {operation === "insert" ? "+ Add" : "Replace with"}
+      </span>
       <span className="flex items-start gap-1.5">
         {/* Suggested correction with romanisation stacked on top of each char.
             Render from the stored/reviewer-edited pinyin whenever we have it, so
@@ -148,6 +185,8 @@ export function CorrectedSentence({
   className,
   lang = "mandarin",
   pinyin,
+  showInsertionPoints = false,
+  onSelectInsertionPoint,
 }: CorrectedSentenceProps) {
   // Jieba-backed per-character annotations for Mandarin (same pipeline as the
   // coaching page), with a synchronous fallback for first paint. The hook must
@@ -164,9 +203,9 @@ export function CorrectedSentence({
   // Corrections don't overlap (enforced upstream), so a correction's chars are
   // always contiguous in offset order.
   const groups = useMemo<RenderGroup[]>(() => {
-    const sorted = [...corrections].sort(
-      (a, b) => a.startOffset - b.startOffset,
-    );
+    const sorted = corrections
+      .filter((correction) => correctionOperation(correction) !== "insert")
+      .sort((a, b) => a.startOffset - b.startOffset);
     const correctionAt = (offset: number) =>
       sorted.find((c) => offset >= c.startOffset && offset < c.endOffset) ??
       null;
@@ -184,44 +223,118 @@ export function CorrectedSentence({
     return result;
   }, [annotations, corrections]);
 
+  const insertions = useMemo(
+    () =>
+      new Map(
+        corrections
+          .filter((correction) => correctionOperation(correction) === "insert")
+          .map((correction) => [correction.startOffset, correction]),
+      ),
+    [corrections],
+  );
+
+  const rangedCorrections = useMemo(
+    () =>
+      corrections.filter(
+        (correction) => correctionOperation(correction) !== "insert",
+      ),
+    [corrections],
+  );
+
+  const renderBoundary = (offset: number, key: string) => {
+    const insertion = insertions.get(offset);
+    if (insertion) {
+      return (
+        <span
+          key={`insertion-${insertion.id}-${key}`}
+          className="mx-0.5 inline-flex flex-col items-center align-top"
+        >
+          <span
+            aria-hidden
+            className="mt-4 h-6 border-l-2 border-emerald-500"
+          />
+          <CorrectionBubble
+            correction={insertion}
+            onRemove={onRemoveCorrection}
+            lang={lang}
+          />
+        </span>
+      );
+    }
+
+    const insideChangedRange = rangedCorrections.some(
+      (correction) =>
+        offset > correction.startOffset && offset < correction.endOffset,
+    );
+    if (!showInsertionPoints || !onSelectInsertionPoint || insideChangedRange) {
+      return null;
+    }
+
+    return (
+      <span
+        key={`insert-target-${offset}-${key}`}
+        className="group/insert relative inline-flex w-2 -mx-1 items-center justify-center self-stretch align-top"
+      >
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectInsertionPoint(offset);
+          }}
+          className="absolute top-4 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-emerald-500/60 bg-background text-emerald-600 opacity-55 shadow-sm transition hover:scale-110 hover:bg-emerald-500 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          title="Add missing words here"
+          aria-label={`Add missing words at position ${offset + 1}`}
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </span>
+    );
+  };
+
   return (
     <div className={cn("leading-relaxed", className)}>
-      {groups.map((group, gi) =>
-        group.correction ? (
-          <span
+      {groups.map((group, gi) => {
+        const firstOffset = group.chars[0]?.offset ?? 0;
+        return group.correction ? (
+          <Fragment
             key={`corrected-${group.correction.id}-${gi}`}
-            className="mx-0.5 inline-flex flex-col items-center align-top"
           >
-            <span className="inline-flex items-end">
-              {group.chars.map((ann) => (
-                <AnnotatedChar
-                  key={ann.offset}
-                  ann={ann}
-                  fontSize={fontSize}
-                  struck
-                  dataOffset={ann.offset}
-                  lang={lang}
-                />
-              ))}
+            {renderBoundary(firstOffset, `corrected-${gi}`)}
+            <span className="mx-0.5 inline-flex flex-col items-center align-top">
+              <span className="inline-flex items-end">
+                {group.chars.map((ann) => (
+                  <AnnotatedChar
+                    key={ann.offset}
+                    ann={ann}
+                    fontSize={fontSize}
+                    struck
+                    dataOffset={ann.offset}
+                    lang={lang}
+                  />
+                ))}
+              </span>
+              <CorrectionBubble
+                correction={group.correction}
+                onRemove={onRemoveCorrection}
+                lang={lang}
+              />
             </span>
-            <CorrectionBubble
-              correction={group.correction}
-              onRemove={onRemoveCorrection}
-              lang={lang}
-            />
-          </span>
+          </Fragment>
         ) : (
           group.chars.map((ann) => (
-            <AnnotatedChar
-              key={ann.offset}
-              ann={ann}
-              fontSize={fontSize}
-              dataOffset={ann.offset}
-              lang={lang}
-            />
+            <span key={ann.offset} className="contents">
+              {renderBoundary(ann.offset, `plain-${gi}-${ann.offset}`)}
+              <AnnotatedChar
+                ann={ann}
+                fontSize={fontSize}
+                dataOffset={ann.offset}
+                lang={lang}
+              />
+            </span>
           ))
-        ),
-      )}
+        );
+      })}
+      {renderBoundary(text.length, "end")}
     </div>
   );
 }

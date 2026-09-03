@@ -226,6 +226,7 @@ export default async function AssignmentReviewPage({
         .filter((c) => c.sentenceId === sentence.id)
         .map((c) => ({
           id: c.id,
+          operation: c.operation,
           startOffset: c.startOffset,
           endOffset: c.endOffset,
           originalText: c.originalText,

@@ -183,6 +183,11 @@ export const assignmentCorrections = pgTable(
     startOffset: integer("start_offset").notNull(),
     endOffset: integer("end_offset").notNull(),
     originalText: text("original_text").notNull(),
+    operation: text("operation", {
+      enum: ["replace", "delete", "insert"],
+    })
+      .notNull()
+      .default("replace"),
     suggestedChinese: text("suggested_chinese").notNull(),
     suggestedPinyin: text("suggested_pinyin").notNull().default(""),
     suggestedEnglish: text("suggested_english").notNull().default(""),

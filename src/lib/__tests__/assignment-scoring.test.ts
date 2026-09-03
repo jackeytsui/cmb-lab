@@ -154,6 +154,42 @@ describe("calculateTextAssignmentScore", () => {
     ).toBe(0);
   });
 
+  it("counts inserted Chinese characters as omitted characters", () => {
+    expect(
+      calculateTextAssignmentScore([
+        {
+          chineseText: "我去学校",
+          corrections: [
+            {
+              operation: "insert",
+              startOffset: 1,
+              endOffset: 1,
+              suggestedChinese: "今天",
+            },
+          ],
+        },
+      ]),
+    ).toBe(67); // 4 original correct characters out of 6 expected
+  });
+
+  it("does not penalize punctuation-only insertions", () => {
+    expect(
+      calculateTextAssignmentScore([
+        {
+          chineseText: "我很好",
+          corrections: [
+            {
+              operation: "insert",
+              startOffset: 3,
+              endOffset: 3,
+              suggestedChinese: "。",
+            },
+          ],
+        },
+      ]),
+    ).toBe(100);
+  });
+
   it("returns null for submissions without Chinese characters", () => {
     expect(
       calculateTextAssignmentScore([{ chineseText: "hello", corrections: [] }]),

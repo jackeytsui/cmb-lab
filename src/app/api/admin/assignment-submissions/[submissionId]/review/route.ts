@@ -15,9 +15,11 @@ import {
 } from "@/lib/assignment-review";
 import {
   calculateTextAssignmentScore,
-  hasOverlappingRanges,
-  isValidCorrectionRange,
 } from "@/lib/assignment-scoring";
+import {
+  hasConflictingCorrectionChanges,
+  isValidCorrectionChange,
+} from "@/lib/assignment-corrections";
 import { sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { createNotification } from "@/lib/notifications";
 
@@ -26,10 +28,11 @@ interface RouteParams {
 }
 
 const correctionSchema = z.object({
+  operation: z.enum(["replace", "delete", "insert"]).default("replace"),
   startOffset: z.number().int().min(0),
-  endOffset: z.number().int().min(1),
-  originalText: z.string().min(1).max(2000),
-  suggestedChinese: z.string().min(1).max(2000),
+  endOffset: z.number().int().min(0),
+  originalText: z.string().max(2000),
+  suggestedChinese: z.string().max(2000),
   suggestedPinyin: z.string().max(4000).default(""),
   suggestedEnglish: z.string().max(4000).default(""),
 });
@@ -139,22 +142,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 400 },
       );
     }
-    if (hasOverlappingRanges(corrections)) {
+    if (hasConflictingCorrectionChanges(corrections)) {
       return NextResponse.json(
-        { error: "Corrections in one sentence must not overlap." },
+        {
+          error:
+            "Corrections in one sentence must not overlap or share an insertion point.",
+        },
         { status: 400 },
       );
     }
     for (const correction of corrections) {
-      if (
-        !isValidCorrectionRange(correction, sentence.chineseText.length) ||
-        sentence.chineseText.slice(
-          correction.startOffset,
-          correction.endOffset,
-        ) !== correction.originalText
-      ) {
+      if (!isValidCorrectionChange(correction, sentence.chineseText)) {
         return NextResponse.json(
-          { error: "A correction has an invalid character range." },
+          { error: "A correction has an invalid operation or character range." },
           { status: 400 },
         );
       }
@@ -205,6 +205,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     (review.verdict === "correct" ? [] : review.corrections).map(
       (correction) => ({
         sentenceId: review.sentenceId,
+        operation: correction.operation,
         startOffset: correction.startOffset,
         endOffset: correction.endOffset,
         originalText: correction.originalText,

@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Highlighter, Loader2, Plus, Replace, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
@@ -14,15 +14,18 @@ import {
   MandarinSentenceInput,
   type MandarinSentenceValue,
 } from "@/components/assignments/MandarinSentenceInput";
+import { calculateTextAssignmentScore } from "@/lib/assignment-scoring";
 import {
-  calculateTextAssignmentScore,
-  hasOverlappingRanges,
-} from "@/lib/assignment-scoring";
+  applyCorrectionChanges,
+  hasConflictingCorrectionChanges,
+  type AssignmentCorrectionOperation,
+} from "@/lib/assignment-corrections";
 import { isLoomUrl, sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { StudentSubmissionRecording } from "@/components/assignments/StudentSubmissionRecording";
 
 export interface ReviewCorrectionDto extends RenderableCorrection {
   originalText: string;
+  operation?: AssignmentCorrectionOperation;
 }
 
 export interface ReviewSentenceDto {
@@ -69,6 +72,7 @@ interface SentenceReviewState {
 
 interface PendingSelection {
   sentenceId: string;
+  operation?: "replace" | "insert";
   startOffset: number;
   endOffset: number;
   originalText: string;
@@ -160,6 +164,9 @@ export function ReviewClient({
   const [correctionDraft, setCorrectionDraft] =
     useState<MandarinSentenceValue | null>(null);
   const [correctionGenerating, setCorrectionGenerating] = useState(false);
+  const [insertionModeSentenceId, setInsertionModeSentenceId] = useState<
+    string | null
+  >(null);
   const [overrideInput, setOverrideInput] = useState<string>(
     submission.scoreOverridden && submission.finalScore !== null
       ? String(submission.finalScore)
@@ -183,7 +190,14 @@ export function ReviewClient({
           return {
             chineseText: sentence.chineseText,
             corrections:
-              state.verdict === "correct" ? [] : state.corrections,
+              state.verdict === "correct"
+                ? []
+                : state.corrections.map((correction) => ({
+                    startOffset: correction.startOffset,
+                    endOffset: correction.endOffset,
+                    operation: correction.operation,
+                    suggestedChinese: correction.suggestedChinese,
+                  })),
           };
         }),
       ),
@@ -216,17 +230,14 @@ export function ReviewClient({
 
     const state = reviews[sentence.id];
     const candidate = {
+      operation: "replace" as const,
       startOffset: offsets.start,
       endOffset: offsets.end,
+      originalText: sentence.chineseText.slice(offsets.start, offsets.end),
+      suggestedChinese: "candidate",
     };
     if (
-      hasOverlappingRanges([
-        ...state.corrections.map((c) => ({
-          startOffset: c.startOffset,
-          endOffset: c.endOffset,
-        })),
-        candidate,
-      ])
+      hasConflictingCorrectionChanges([...state.corrections, candidate])
     ) {
       toast.error(
         "That selection overlaps an existing correction. Remove it first.",
@@ -241,14 +252,16 @@ export function ReviewClient({
       endOffset: offsets.end,
       originalText: sentence.chineseText.slice(offsets.start, offsets.end),
     });
+    setInsertionModeSentenceId(null);
     setCorrectionDraft(null);
     window.getSelection()?.removeAllRanges();
   };
 
   const commitCorrection = () => {
-    if (!pendingSelection || !correctionDraft) return;
+    if (!pendingSelection?.operation || !correctionDraft) return;
     const correction: ReviewCorrectionDto = {
       id: `new-${crypto.randomUUID()}`,
+      operation: pendingSelection.operation,
       startOffset: pendingSelection.startOffset,
       endOffset: pendingSelection.endOffset,
       originalText: pendingSelection.originalText,
@@ -268,6 +281,64 @@ export function ReviewClient({
     }));
     setPendingSelection(null);
     setCorrectionDraft(null);
+  };
+
+  const commitDeletion = () => {
+    if (!pendingSelection || pendingSelection.originalText === "") return;
+    const correction: ReviewCorrectionDto = {
+      id: `new-${crypto.randomUUID()}`,
+      operation: "delete",
+      startOffset: pendingSelection.startOffset,
+      endOffset: pendingSelection.endOffset,
+      originalText: pendingSelection.originalText,
+      suggestedChinese: "",
+      suggestedPinyin: "",
+      suggestedEnglish: "",
+    };
+    setReviews((prev) => ({
+      ...prev,
+      [pendingSelection.sentenceId]: {
+        verdict: "needs_correction",
+        corrections: [
+          ...prev[pendingSelection.sentenceId].corrections,
+          correction,
+        ].sort((a, b) => a.startOffset - b.startOffset),
+      },
+    }));
+    setPendingSelection(null);
+    setCorrectionDraft(null);
+  };
+
+  const selectInsertionPoint = (sentence: ReviewSentenceDto, offset: number) => {
+    const candidate: ReviewCorrectionDto = {
+      id: "candidate",
+      operation: "insert",
+      startOffset: offset,
+      endOffset: offset,
+      originalText: "",
+      suggestedChinese: "candidate",
+      suggestedPinyin: "",
+      suggestedEnglish: "",
+    };
+    if (
+      hasConflictingCorrectionChanges([
+        ...reviews[sentence.id].corrections,
+        candidate,
+      ])
+    ) {
+      toast.error("That position is already part of another review change.");
+      return;
+    }
+
+    setPendingSelection({
+      sentenceId: sentence.id,
+      operation: "insert",
+      startOffset: offset,
+      endOffset: offset,
+      originalText: "",
+    });
+    setCorrectionDraft(null);
+    setInsertionModeSentenceId(null);
   };
 
   const removeCorrection = (sentenceId: string, correctionId: string) => {
@@ -299,6 +370,9 @@ export function ReviewClient({
       setPendingSelection(null);
       setCorrectionDraft(null);
     }
+    if (verdict === "correct" && insertionModeSentenceId === sentenceId) {
+      setInsertionModeSentenceId(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -317,7 +391,7 @@ export function ReviewClient({
     );
     if (incomplete) {
       toast.error(
-        "A sentence is marked as needing correction but has no corrections. Highlight the incorrect part to add one.",
+        "A sentence is marked as needing correction but has no review changes. Replace, remove, or add words first.",
       );
       return;
     }
@@ -336,6 +410,7 @@ export function ReviewClient({
                 sentenceId: sentence.id,
                 verdict: state.verdict,
                 corrections: state.corrections.map((c) => ({
+                  operation: c.operation ?? "replace",
                   startOffset: c.startOffset,
                   endOffset: c.endOffset,
                   originalText: c.originalText,
@@ -437,6 +512,62 @@ export function ReviewClient({
         </div>
       </div>
 
+      <section
+        aria-labelledby="review-options-guide"
+        className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-5"
+      >
+        <div className="flex items-center gap-2">
+          <Highlighter className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+          <h2
+            id="review-options-guide"
+            className="text-sm font-semibold text-foreground"
+          >
+            Reviewer guide
+          </h2>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          These options work for both Mandarin and Cantonese. Generated{" "}
+          {submission.lang === "cantonese" ? "Jyutping" : "Pinyin"} and English
+          remain editable before you save a suggestion.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-md border border-border/70 bg-background/70 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Replace className="h-3.5 w-3.5 text-emerald-600" />
+              Replace words
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Highlight existing text, choose Replace, then enter the corrected
+              wording.
+            </p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-background/70 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+              Remove words
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Highlight unnecessary text and choose Remove. It will appear
+              crossed out for the student.
+            </p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-background/70 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Plus className="h-3.5 w-3.5 text-emerald-600" />
+              Add missing words
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Choose Add missing words, then click the + at the exact insertion
+              point.
+            </p>
+          </div>
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Use the × on any saved change to undo it. The Suggested sentence
+          preview shows all changes combined.
+        </p>
+      </section>
+
       {/* Assignment description */}
       {submission.assignmentDescription && (
         <div className="rounded-lg border border-border bg-card p-5">
@@ -464,6 +595,11 @@ export function ReviewClient({
         {submission.sentences.map((sentence, idx) => {
           const state = reviews[sentence.id];
           const isSelecting = pendingSelection?.sentenceId === sentence.id;
+          const isInsertionMode = insertionModeSentenceId === sentence.id;
+          const suggestedSentence = applyCorrectionChanges(
+            sentence.chineseText,
+            state.corrections,
+          );
           return (
             <div
               key={sentence.id}
@@ -512,31 +648,121 @@ export function ReviewClient({
                   onRemoveCorrection={(correctionId) =>
                     removeCorrection(sentence.id, correctionId)
                   }
+                  showInsertionPoints={isInsertionMode}
+                  onSelectInsertionPoint={(offset) =>
+                    selectInsertionPoint(sentence, offset)
+                  }
                 />
               </div>
               <p className="text-lg text-muted-foreground italic">
                 {sentence.generatedEnglish}
               </p>
-              <p className="text-[11px] text-muted-foreground/70">
-                Highlight the incorrect part of the sentence to add a
-                correction.
-              </p>
+              {state.corrections.length > 0 && (
+                <div className="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-3 py-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                    Suggested sentence
+                  </span>
+                  <p className="mt-0.5 text-lg text-foreground">
+                    {suggestedSentence}
+                  </p>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-muted-foreground/70">
+                  Highlight text to replace or remove it.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInsertionModeSentenceId(
+                      isInsertionMode ? null : sentence.id,
+                    );
+                    setPendingSelection(null);
+                    setCorrectionDraft(null);
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                    isInsertionMode
+                      ? "border-emerald-500 bg-emerald-500 text-white"
+                      : "border-border bg-background text-foreground hover:bg-accent",
+                  )}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {isInsertionMode ? "Cancel adding" : "Add missing words"}
+                </button>
+              </div>
+              {isInsertionMode && (
+                <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
+                  Click a green + between characters to choose where the missing
+                  words belong.
+                </p>
+              )}
 
-              {isSelecting && pendingSelection && (
-                <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 space-y-2">
+              {isSelecting && pendingSelection && !pendingSelection.operation && (
+                <div className="rounded-md border border-sky-500/40 bg-sky-500/5 p-3">
                   <p className="text-xs text-muted-foreground">
-                    Correcting:{" "}
-                    <span className="text-red-500 line-through decoration-2">
+                    Selected:{" "}
+                    <span className="font-medium text-red-500">
                       {pendingSelection.originalText}
                     </span>
                   </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPendingSelection((current) =>
+                          current ? { ...current, operation: "replace" } : null,
+                        )
+                      }
+                      className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                    >
+                      <Replace className="h-3.5 w-3.5" />
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={commitDeletion}
+                      className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingSelection(null)}
+                      className="px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {isSelecting && pendingSelection?.operation && (
+                <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {pendingSelection.operation === "insert" ? (
+                      "Adding missing words at the selected position"
+                    ) : (
+                      <>
+                        Replacing:{" "}
+                        <span className="text-red-500 line-through decoration-2">
+                          {pendingSelection.originalText}
+                        </span>
+                      </>
+                    )}
+                  </p>
                   <MandarinSentenceInput
-                    key={`${pendingSelection.sentenceId}:${pendingSelection.startOffset}:${pendingSelection.endOffset}`}
+                    key={`${pendingSelection.sentenceId}:${pendingSelection.operation}:${pendingSelection.startOffset}:${pendingSelection.endOffset}`}
                     value={correctionDraft}
                     onValueChange={setCorrectionDraft}
                     onGeneratingChange={setCorrectionGenerating}
-                    placeholder="Type the suggested correction, then press Enter..."
-                    editButtonLabel="Edit correction"
+                    placeholder={
+                      pendingSelection.operation === "insert"
+                        ? "Type the missing words, then press Enter..."
+                        : "Type the replacement, then press Enter..."
+                    }
+                    editButtonLabel="Edit suggestion"
                     lang={submission.lang}
                     compact
                     autoFocus
@@ -559,7 +785,9 @@ export function ReviewClient({
                       disabled={!correctionDraft || correctionGenerating}
                       className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                     >
-                      Add correction
+                      {pendingSelection.operation === "insert"
+                        ? "Add words"
+                        : "Save replacement"}
                     </button>
                   </div>
                 </div>
