@@ -13,6 +13,12 @@ export type PostPurchaseEntitlementInput = {
   productLine?: string | string[] | null;
   addOnPurchased?: string | string[] | null;
   /**
+   * Legacy rosters store active 1:1 access in dedicated eligibility/end-date
+   * fields instead of Add-on Purchased. The caller must set this only after
+   * confirming that eligibility is YES and the 1:1 end date has not passed.
+   */
+  oneOnOneEligibilityActive?: boolean | null;
+  /**
    * When explicitly false, a 1:1 purchase is kept pending until CMB Lab has
    * a real coach assignment. Omit this during the initial webhook so the
    * provisioning flow can resolve the coach from the newly linked contacts.
@@ -32,6 +38,7 @@ export type AggregatedPostPurchaseStudent = {
   lastName: string | null;
   productLine: string[];
   addOnPurchased: string[];
+  oneOnOneEligibilityActive: boolean;
   sourceRows: number;
 };
 
@@ -85,6 +92,9 @@ export function aggregatePostPurchaseStudents(
     addOnPurchased: uniqueRawValues(
       entries.map((entry) => entry.addOnPurchased),
     ),
+    oneOnOneEligibilityActive: entries.some(
+      (entry) => entry.oneOnOneEligibilityActive === true,
+    ),
     sourceRows: entries.length,
   }));
 }
@@ -102,10 +112,10 @@ export function derivePostPurchaseTags(
   if (products.some((value) => value.includes("improve canto"))) {
     expected.add("ic_student");
   }
-  if (
-    addOns.some((value) => value.includes("1:1 coaching")) &&
-    input.oneOnOneCoachAssigned !== false
-  ) {
+  const hasOneOnOneEntitlement =
+    addOns.some((value) => value.includes("1:1 coaching")) ||
+    input.oneOnOneEligibilityActive === true;
+  if (hasOneOnOneEntitlement && input.oneOnOneCoachAssigned !== false) {
     expected.add("1on1_student");
   }
   if (addOns.some((value) => value.includes("icgc"))) {

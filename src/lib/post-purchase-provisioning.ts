@@ -1,7 +1,7 @@
 import "server-only";
 
 import { clerkClient } from "@clerk/nextjs/server";
-import { and, eq, ilike, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, ilike, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   activeStudents,
@@ -628,6 +628,13 @@ export async function reconcilePostPurchaseEntitlements(params?: {
       lastName: activeStudents.lastName,
       productLine: activeStudents.productLine,
       addOnPurchased: activeStudents.addOnPurchased,
+      oneOnOneEligibilityActive: sql<boolean>`
+        lower(trim(coalesce(${activeStudents.col1on1Eligibility}, ''))) = 'yes'
+        and (
+          ${activeStudents.col1on1EndDate} is null
+          or ${activeStudents.col1on1EndDate}::date >= current_date
+        )
+      `,
     })
     .from(activeStudents)
     .where(
@@ -735,6 +742,7 @@ export async function reconcilePostPurchaseEntitlements(params?: {
         lastName: student.lastName,
         productLine: student.productLine,
         addOnPurchased: student.addOnPurchased,
+        oneOnOneEligibilityActive: student.oneOnOneEligibilityActive,
       });
       stats.provisioned += 1;
       if (result.action === "created_user") stats.usersCreated += 1;

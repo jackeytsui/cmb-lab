@@ -7,7 +7,7 @@
 
 import { db } from "@/db";
 import { activeStudents, ghlContacts, tags, users } from "@/db/schema";
-import { and, eq, ilike, isNotNull } from "drizzle-orm";
+import { and, eq, ilike, isNotNull, sql } from "drizzle-orm";
 import { getGhlClientForLocation } from "@/lib/ghl/client";
 import {
   findOrLinkContact,
@@ -37,6 +37,13 @@ async function getConfiguredPostPurchaseTagsForUser(
     .select({
       productLine: activeStudents.productLine,
       addOnPurchased: activeStudents.addOnPurchased,
+      oneOnOneEligibilityActive: sql<boolean>`
+        lower(trim(coalesce(${activeStudents.col1on1Eligibility}, ''))) = 'yes'
+        and (
+          ${activeStudents.col1on1EndDate} is null
+          or ${activeStudents.col1on1EndDate}::date >= current_date
+        )
+      `,
     })
     .from(activeStudents)
     .where(

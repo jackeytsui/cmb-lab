@@ -27,6 +27,18 @@ describe("coaching entitlement source of truth", () => {
     expect(backfill).not.toContain("activeIds");
   });
 
+  it("preserves current legacy 1:1 eligibility in scheduled and inbound reconciliation", () => {
+    const provisioning = source("src/lib/post-purchase-provisioning.ts");
+    const tagSync = source("src/lib/ghl/tag-sync.ts");
+
+    for (const implementation of [provisioning, tagSync]) {
+      expect(implementation).toContain("activeStudents.col1on1Eligibility");
+      expect(implementation).toContain("activeStudents.col1on1EndDate");
+      expect(implementation).toContain("oneOnOneEligibilityActive");
+      expect(implementation).toContain("current_date");
+    }
+  });
+
   it("reports effective access after tag overrides in admin attribution", () => {
     const route = source("src/app/api/admin/roles/analytics/route.ts");
     const panel = source(

@@ -32,9 +32,27 @@ describe("aggregatePostPurchaseStudents", () => {
         lastName: "Example",
         productLine: ["CMBP", "Improve Canto"],
         addOnPurchased: ["1:1 coaching", "ICGC"],
+        oneOnOneEligibilityActive: false,
         sourceRows: 2,
       },
     ]);
+  });
+
+  it("unions active legacy 1:1 eligibility across duplicate source rows", () => {
+    expect(
+      aggregatePostPurchaseStudents([
+        {
+          email: "student@example.com",
+          productLine: "Improve Canto",
+          oneOnOneEligibilityActive: false,
+        },
+        {
+          email: "student@example.com",
+          productLine: "Improve Canto",
+          oneOnOneEligibilityActive: true,
+        },
+      ]),
+    ).toMatchObject([{ oneOnOneEligibilityActive: true }]);
   });
 });
 
@@ -117,6 +135,26 @@ describe("derivePostPurchaseTags", () => {
       addOnPurchased: "1:1 coaching + Discord Private Channel",
       oneOnOneCoachAssigned: true,
     })).toEqual(["cmb_student", "1on1_student"]);
+  });
+
+  it("honors active legacy 1:1 eligibility without reviving expired access", () => {
+    expect(derivePostPurchaseTags({
+      productLine: "Improve Canto",
+      oneOnOneEligibilityActive: true,
+      oneOnOneCoachAssigned: true,
+    })).toEqual(["ic_student", "1on1_student"]);
+
+    expect(derivePostPurchaseTags({
+      productLine: "Improve Canto",
+      oneOnOneEligibilityActive: false,
+      oneOnOneCoachAssigned: true,
+    })).toEqual(["ic_student"]);
+
+    expect(derivePostPurchaseTags({
+      productLine: "Improve Canto",
+      oneOnOneEligibilityActive: true,
+      oneOnOneCoachAssigned: false,
+    })).toEqual(["ic_student"]);
   });
 });
 
