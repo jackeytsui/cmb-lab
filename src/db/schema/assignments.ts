@@ -17,6 +17,7 @@ import {
   courseLibraryLessons,
   courseLibraryModules,
 } from "./course-library";
+import type { AssignmentReviewDraft } from "@/lib/assignment-review-draft";
 
 // ---------------------------------------------------------------------------
 // Assignment Submissions — structured student submissions for assignment-type
@@ -91,6 +92,14 @@ export const assignmentSubmissions = pgTable(
     studentAudioUrl: text("student_audio_url"),
     // Optional reviewer comment (rich text HTML, same convention as lesson content).
     extraComment: text("extra_comment"),
+    // Private, server-side reviewer work in progress. Keeping this separate
+    // prevents partial re-review edits from changing feedback students can see.
+    reviewDraft: jsonb("review_draft").$type<AssignmentReviewDraft>(),
+    reviewDraftSavedAt: timestamp("review_draft_saved_at"),
+    reviewDraftReviewerId: uuid("review_draft_reviewer_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
     // When the student first opened the reviewed feedback (unread badge state).
     studentViewedAt: timestamp("student_viewed_at"),
     metadata: jsonb("metadata"),

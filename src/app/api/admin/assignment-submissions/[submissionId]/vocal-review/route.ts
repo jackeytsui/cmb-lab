@@ -149,6 +149,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       reviewedAt: now,
       recordingUrl,
       extraComment: normalizeExtraComment(parsed.data.extraComment),
+      reviewDraft: null,
+      reviewDraftSavedAt: null,
+      reviewDraftReviewerId: null,
       // New/updated feedback is unread again.
       studentViewedAt: null,
     })

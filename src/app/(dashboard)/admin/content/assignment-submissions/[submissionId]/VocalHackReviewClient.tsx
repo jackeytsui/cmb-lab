@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle2, Loader2, Plus, Send, Sparkles, Trash2 } from "lucide-react";
@@ -15,6 +15,9 @@ import {
   adjustedPinyinToneCursor,
   applyPinyinToneNumbers,
 } from "@/lib/pinyin-tone-input";
+import { ReviewerAutosaveStatus } from "@/components/assignments/ReviewerAutosaveStatus";
+import { useReviewerAutosave } from "@/hooks/useReviewerAutosave";
+import type { VocalHackReviewDraft } from "@/lib/assignment-review-draft";
 
 // ---------------------------------------------------------------------------
 // Vocal Hack review: listen to each recording (seekable) and, per sentence,
@@ -57,6 +60,8 @@ export interface VocalHackReviewDto {
   moduleTitle: string;
   courseTitle: string;
   assignmentDescription: string;
+  reviewDraft: VocalHackReviewDraft | null;
+  reviewDraftSavedAt: string | null;
   sentences: VocalHackReviewSentenceDto[];
 }
 
@@ -85,21 +90,52 @@ export function VocalHackReviewClient({
   const router = useRouter();
   const [entries, setEntries] = useState<Record<string, CorrectionEntry[]>>(
     () => {
+      const draftBySentenceId = new Map(
+        submission.reviewDraft?.sentences.map((sentence) => [
+          sentence.sentenceId,
+          sentence.corrections,
+        ]) ?? [],
+      );
       const initial: Record<string, CorrectionEntry[]> = {};
       for (const s of submission.sentences) {
-        initial[s.id] = s.corrections.map(toEntry);
+        initial[s.id] = (draftBySentenceId.get(s.id) ?? s.corrections).map(
+          toEntry,
+        );
       }
       return initial;
     },
   );
   const [extraComment, setExtraComment] = useState(
-    submission.extraComment ?? "",
+    submission.reviewDraft?.extraComment ?? submission.extraComment ?? "",
   );
   const [recordingUrl, setRecordingUrl] = useState(
-    submission.recordingUrl ?? "",
+    submission.reviewDraft?.recordingUrl ?? submission.recordingUrl ?? "",
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const reviewDraft = useMemo<VocalHackReviewDraft>(
+    () => ({
+      version: 1,
+      kind: "vocal_hack",
+      sentences: submission.sentences.map((sentence) => ({
+        sentenceId: sentence.id,
+        corrections: entries[sentence.id].map((entry) => ({
+          chinese: entry.chinese,
+          pinyin: entry.pinyin,
+          english: entry.english,
+        })),
+      })),
+      extraComment,
+      recordingUrl,
+    }),
+    [entries, extraComment, recordingUrl, submission.sentences],
+  );
+  const autosave = useReviewerAutosave({
+    endpoint: `/api/admin/assignment-submissions/${submission.id}/review-draft`,
+    value: reviewDraft,
+    initialSavedAt: submission.reviewDraftSavedAt,
+  });
 
   const patchEntry = (
     sentenceId: string,
@@ -175,6 +211,7 @@ export function VocalHackReviewClient({
     setSubmitting(true);
     setError(null);
     try {
+      await autosave.prepareForSubmit();
       const res = await fetch(
         `/api/admin/assignment-submissions/${submission.id}/vocal-review`,
         {
@@ -198,13 +235,16 @@ export function VocalHackReviewClient({
       );
       const data = await res.json();
       if (!res.ok) {
+        autosave.resumeAfterSubmitError();
         setError(data.error || "Failed to submit review");
         return;
       }
+      autosave.markSubmitted();
       toast.success("Review submitted — the student has been notified.");
       router.push(returnHref);
       router.refresh();
     } catch {
+      autosave.resumeAfterSubmitError();
       setError("Network error — please try again.");
     } finally {
       setSubmitting(false);
@@ -243,6 +283,17 @@ export function VocalHackReviewClient({
             }}
           />
         )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-4 py-3">
+        <ReviewerAutosaveStatus
+          status={autosave.status}
+          onRetry={() => void autosave.retry()}
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Corrections, comments, and the recording link are saved privately as
+          you work. Complete review when the feedback is ready for the student.
+        </p>
       </div>
 
       <div className="space-y-5">

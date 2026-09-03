@@ -22,6 +22,9 @@ import {
 } from "@/lib/assignment-corrections";
 import { isLoomUrl, sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { StudentSubmissionRecording } from "@/components/assignments/StudentSubmissionRecording";
+import { ReviewerAutosaveStatus } from "@/components/assignments/ReviewerAutosaveStatus";
+import { useReviewerAutosave } from "@/hooks/useReviewerAutosave";
+import type { TextAssignmentReviewDraft } from "@/lib/assignment-review-draft";
 
 export interface ReviewCorrectionDto extends RenderableCorrection {
   originalText: string;
@@ -60,6 +63,8 @@ export interface ReviewSubmissionDto {
   assignmentDescription: string;
   /** Student's own recording (Diary reads their entry aloud); URL to play. */
   studentAudioUrl?: string | null;
+  reviewDraft: TextAssignmentReviewDraft | null;
+  reviewDraftSavedAt: string | null;
   sentences: ReviewSentenceDto[];
 }
 
@@ -146,18 +151,27 @@ export function ReviewClient({
   const isRereview = submission.status === "reviewed";
 
   const [reviews, setReviews] = useState<Record<string, SentenceReviewState>>(
-    () =>
-      Object.fromEntries(
+    () => {
+      const draftBySentenceId = new Map(
+        submission.reviewDraft?.sentences.map((sentence) => [
+          sentence.sentenceId,
+          sentence,
+        ]) ?? [],
+      );
+      return Object.fromEntries(
         submission.sentences.map((sentence) => [
           sentence.id,
           {
-            verdict:
+            verdict: draftBySentenceId.get(sentence.id)?.verdict ??
               sentence.reviewVerdict ??
               (sentence.corrections.length > 0 ? "needs_correction" : "correct"),
-            corrections: sentence.corrections,
+            corrections:
+              draftBySentenceId.get(sentence.id)?.corrections ??
+              sentence.corrections,
           },
         ]),
-      ),
+      );
+    },
   );
   const [pendingSelection, setPendingSelection] =
     useState<PendingSelection | null>(null);
@@ -168,19 +182,53 @@ export function ReviewClient({
     string | null
   >(null);
   const [overrideInput, setOverrideInput] = useState<string>(
-    submission.scoreOverridden && submission.finalScore !== null
-      ? String(submission.finalScore)
-      : "",
+    submission.reviewDraft?.overrideInput ??
+      (submission.scoreOverridden && submission.finalScore !== null
+        ? String(submission.finalScore)
+        : ""),
   );
   const [extraComment, setExtraComment] = useState(
-    submission.extraComment ?? "",
+    submission.reviewDraft?.extraComment ?? submission.extraComment ?? "",
   );
   const [recordingUrl, setRecordingUrl] = useState(
-    submission.recordingUrl ?? "",
+    submission.reviewDraft?.recordingUrl ?? submission.recordingUrl ?? "",
   );
   const [submitting, setSubmitting] = useState(false);
 
   const sentenceRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const reviewDraft = useMemo<TextAssignmentReviewDraft>(
+    () => ({
+      version: 1,
+      kind: "text_assignment",
+      sentences: submission.sentences.map((sentence) => {
+        const state = reviews[sentence.id];
+        return {
+          sentenceId: sentence.id,
+          verdict: state.verdict,
+          corrections: state.corrections.map((correction) => ({
+            id: correction.id,
+            operation: correction.operation ?? "replace",
+            startOffset: correction.startOffset,
+            endOffset: correction.endOffset,
+            originalText: correction.originalText,
+            suggestedChinese: correction.suggestedChinese,
+            suggestedPinyin: correction.suggestedPinyin,
+            suggestedEnglish: correction.suggestedEnglish,
+          })),
+        };
+      }),
+      overrideInput,
+      extraComment,
+      recordingUrl,
+    }),
+    [extraComment, overrideInput, recordingUrl, reviews, submission.sentences],
+  );
+  const autosave = useReviewerAutosave({
+    endpoint: `/api/admin/assignment-submissions/${submission.id}/review-draft`,
+    value: reviewDraft,
+    initialSavedAt: submission.reviewDraftSavedAt,
+  });
 
   const autoScore = useMemo(
     () =>
@@ -398,6 +446,7 @@ export function ReviewClient({
 
     setSubmitting(true);
     try {
+      await autosave.prepareForSubmit();
       const res = await fetch(
         `/api/admin/assignment-submissions/${submission.id}/review`,
         {
@@ -428,13 +477,16 @@ export function ReviewClient({
       );
       const data = await res.json().catch(() => null);
       if (!res.ok) {
+        autosave.resumeAfterSubmitError();
         toast.error(data?.error || "Failed to submit review");
         return;
       }
+      autosave.markSubmitted();
       toast.success(isRereview ? "Review updated" : "Review submitted");
       router.push(returnHref);
       router.refresh();
     } catch {
+      autosave.resumeAfterSubmitError();
       toast.error("Failed to submit review");
     } finally {
       setSubmitting(false);
@@ -512,6 +564,17 @@ export function ReviewClient({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-4 py-3">
+        <ReviewerAutosaveStatus
+          status={autosave.status}
+          onRetry={() => void autosave.retry()}
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Drafts stay private. Submit Review makes the feedback visible to the
+          student.
+        </p>
+      </div>
+
       <section
         aria-labelledby="review-options-guide"
         className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-5"
@@ -564,7 +627,8 @@ export function ReviewClient({
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
           Use the × on any saved change to undo it. The Suggested sentence
-          preview shows all changes combined.
+          preview shows all changes combined. Your review draft autosaves as
+          you work.
         </p>
       </section>
 

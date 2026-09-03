@@ -27,6 +27,7 @@ import {
   sanitizeAssignmentReviewReturnHref,
   type AssignmentSubmissionSearchParams,
 } from "@/lib/assignment-review-navigation";
+import { parseAssignmentReviewDraft } from "@/lib/assignment-review-draft";
 
 interface PageProps {
   params: Promise<{ submissionId: string }>;
@@ -106,6 +107,11 @@ export default async function AssignmentReviewPage({
     where: eq(assignmentSubmissionSentences.submissionId, submissionId),
     orderBy: [asc(assignmentSubmissionSentences.sortOrder)],
   });
+  const reviewDraft = parseAssignmentReviewDraft(
+    row.submission.reviewDraft,
+    row.submission.assignmentType,
+    sentences.map((sentence) => sentence.id),
+  );
 
   // Vocal Hack reviews use their own client (audio + corrected-sentence boxes).
   if (row.submission.assignmentType === "vocal_hack") {
@@ -136,6 +142,12 @@ export default async function AssignmentReviewPage({
       courseTitle: row.courseTitle,
       assignmentDescription:
         typeof vhContent.description === "string" ? vhContent.description : "",
+      reviewDraft:
+        reviewDraft?.kind === "vocal_hack" ? reviewDraft : null,
+      reviewDraftSavedAt:
+        reviewDraft?.kind === "vocal_hack"
+          ? (row.submission.reviewDraftSavedAt?.toISOString() ?? null)
+          : null,
       sentences: sentences.map((sentence) => ({
         id: sentence.id,
         promptLabel: sentence.promptLabel,
@@ -214,6 +226,12 @@ export default async function AssignmentReviewPage({
       typeof lessonContent.description === "string"
         ? lessonContent.description
         : "",
+    reviewDraft:
+      reviewDraft?.kind === "text_assignment" ? reviewDraft : null,
+    reviewDraftSavedAt:
+      reviewDraft?.kind === "text_assignment"
+        ? (row.submission.reviewDraftSavedAt?.toISOString() ?? null)
+        : null,
     sentences: sentences.map((sentence) => ({
       id: sentence.id,
       promptLabel: sentence.promptLabel,
