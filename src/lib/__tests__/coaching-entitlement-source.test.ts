@@ -27,16 +27,16 @@ describe("coaching entitlement source of truth", () => {
     expect(backfill).not.toContain("activeIds");
   });
 
-  it("preserves current legacy 1:1 eligibility in scheduled and inbound reconciliation", () => {
+  it("preserves legacy 1:1 eligibility while treating GHL as additive", () => {
     const provisioning = source("src/lib/post-purchase-provisioning.ts");
     const tagSync = source("src/lib/ghl/tag-sync.ts");
 
-    for (const implementation of [provisioning, tagSync]) {
-      expect(implementation).toContain("activeStudents.col1on1Eligibility");
-      expect(implementation).toContain("activeStudents.col1on1EndDate");
-      expect(implementation).toContain("oneOnOneEligibilityActive");
-      expect(implementation).toContain("current_date");
-    }
+    expect(provisioning).toContain("activeStudents.col1on1Eligibility");
+    expect(provisioning).toContain("activeStudents.col1on1EndDate");
+    expect(provisioning).toContain("oneOnOneEligibilityActive");
+    expect(provisioning).toContain("current_date");
+    expect(tagSync).not.toContain("activeStudents.col1on1Eligibility");
+    expect(tagSync).toContain('reason: "additive_access_policy"');
   });
 
   it("reports effective access after tag overrides in admin attribution", () => {

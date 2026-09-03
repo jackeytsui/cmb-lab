@@ -9,7 +9,7 @@ const createTagSchema = z.object({
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a valid hex color"),
-  type: z.enum(["coach", "system"]).optional(),
+  type: z.literal("coach").optional(),
   description: z
     .string()
     .max(500, "Description must be 500 characters or less")
@@ -18,7 +18,7 @@ const createTagSchema = z.object({
 
 /**
  * GET /api/admin/tags
- * List all tags. Accepts optional ?type=coach|system query param.
+ * List all tags. The legacy type filter remains read-only for compatibility.
  * Reading tag definitions is available to coaches and administrators.
  */
 export async function GET(request: NextRequest) {

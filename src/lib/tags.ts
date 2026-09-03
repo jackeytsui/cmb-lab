@@ -8,7 +8,7 @@ import type { Tag } from "@/db/schema";
 export async function createTag(data: {
   name: string;
   color: string;
-  type?: "coach" | "system";
+  type?: "coach";
   description?: string;
   createdBy?: string;
 }): Promise<Tag> {
@@ -17,7 +17,7 @@ export async function createTag(data: {
     .values({
       name: data.name,
       color: data.color,
-      type: data.type ?? "coach",
+      type: "coach",
       description: data.description,
       createdBy: data.createdBy,
     })

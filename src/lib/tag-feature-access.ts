@@ -25,7 +25,7 @@ type FeatureOverrideState = {
 const FEATURE_KEY_SET = new Set<string>(FEATURE_KEYS);
 
 /**
- * Classic LTO students (users with the `LTO_student` system tag) are an
+ * Classic LTO students (users with the legacy `LTO_student` access tag) are an
  * exclusive cohort that should only see Mandarin Accelerator content. These
  * features are hard-denied in code so the deny takes effect even if the
  * per-tag DB grants aren't configured.
@@ -98,7 +98,7 @@ export async function getUserFeatureTagOverrides(userId: string): Promise<Featur
 }
 
 /**
- * True if the user has the `LTO_student` system tag. Used to gate
+ * True if the user has the `LTO_student` access tag. Used to gate
  * regular-student routes that don't correspond to a single feature key.
  */
 export async function userHasLtoStudentTag(userId: string): Promise<boolean> {

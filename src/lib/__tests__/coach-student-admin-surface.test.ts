@@ -76,14 +76,21 @@ describe("coach student administration boundary", () => {
     const migration = source(
       "src/db/migrations/0111_staff_tag_overrides.sql"
     );
+    const additiveMigration = source(
+      "src/db/migrations/0112_additive_staff_controlled_tags.sql"
+    );
+    const coachingAccess = source("src/lib/coaching-access.ts");
 
     expect(tagSync).toContain("shouldApplyTagChangeAgainstStaffOverride");
     expect(tagSync).toContain('reason: "staff_override_off"');
-    expect(tagSync).toContain('reason: "staff_override_on"');
+    expect(tagSync).toContain('reason: "additive_access_policy"');
+    expect(tagSync).not.toContain("await removeTag(userId");
     expect(courseProgressSync).toContain("staffForcedOffTagKeys");
     expect(inactiveCron).toContain("shouldApplyAutomatedTagChange");
     expect(clerkWebhook).toContain("shouldApplyAutomatedTagChange");
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS "student_tag_overrides"');
     expect(migration).toContain('WHERE "assigned_by" IS NOT NULL');
+    expect(additiveMigration).toContain('SET "type" = \'coach\'');
+    expect(coachingAccess).not.toContain('type: "system"');
   });
 });

@@ -146,9 +146,11 @@ export function planPostPurchaseTagReconciliation(params: {
     add: POST_PURCHASE_CONTROLLED_TAGS.filter(
       (tag) => expected.has(tag) && !current.has(tag)
     ),
-    remove: POST_PURCHASE_CONTROLLED_TAGS.filter(
-      (tag) => !expected.has(tag) && current.has(tag)
-    ),
+    // Access synchronization is deliberately additive. A missing source tag
+    // can mean that an older purchase, a spreadsheet fallback, or a manual
+    // grant has not made it into that source yet. Only an explicit staff
+    // force-off may remove access.
+    remove: [] as PostPurchaseControlledTag[],
   };
 }
 
@@ -210,14 +212,10 @@ export function shouldApplyInboundPostPurchaseTagChange(params: {
   action: "add" | "remove";
   expectedTags: Iterable<PostPurchaseControlledTag> | null;
 }) {
-  if (params.expectedTags === null) return true;
-
-  const normalizedTag = params.tagName.trim().toLowerCase();
-  const controlled = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
-  if (!controlled.has(normalizedTag)) return true;
-
-  const expected = new Set<string>(params.expectedTags);
-  return params.action === "add"
-    ? expected.has(normalizedTag)
-    : !expected.has(normalizedTag);
+  // GHL is an additive entitlement source, not a revocation source. Accept a
+  // grant even when another snapshot has not caught up, and ignore removals.
+  // Explicit admin/coach removals are handled through durable staff overrides.
+  void params.tagName;
+  void params.expectedTags;
+  return params.action === "add";
 }

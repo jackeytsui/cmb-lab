@@ -13,7 +13,7 @@ import {
 } from "@/db/schema";
 import { getGhlClientForLocation } from "@/lib/ghl/client";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
-import { assignTag, removeTag } from "@/lib/tags";
+import { assignTag } from "@/lib/tags";
 import { DEFAULT_PLATFORM_ROLE } from "@/lib/platform-roles";
 import { composeStudentName } from "@/lib/student-name";
 import { syncAssignedCoachFromGhl } from "@/lib/ghl/coach-assignment";
@@ -104,12 +104,8 @@ async function ensureCmbUser(params: {
           (value): value is string => typeof value === "string"
         )
       : [];
-    const controlledTags = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
-    const preservedInviteTags = existingInviteTags.filter(
-      (tag) => !controlledTags.has(tag.toLowerCase())
-    );
     const mergedInviteTags = [
-      ...new Set([...preservedInviteTags, ...params.expectedTags]),
+      ...new Set([...existingInviteTags, ...params.expectedTags]),
     ];
     await clerk.users.updateUserMetadata(clerkUser.id, {
       publicMetadata: {
@@ -224,14 +220,10 @@ async function updateControlledInviteTags(
         (value): value is string => typeof value === "string"
       )
     : [];
-  const controlledTags = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
-  const preservedInviteTags = existingInviteTags.filter(
-    (tag) => !controlledTags.has(tag.toLowerCase())
-  );
   await clerk.users.updateUserMetadata(clerkUserId, {
     publicMetadata: {
       ...(clerkUser.publicMetadata ?? {}),
-      cmbInviteTags: [...new Set([...preservedInviteTags, ...expectedTags])],
+      cmbInviteTags: [...new Set([...existingInviteTags, ...expectedTags])],
     },
   });
 }
@@ -273,12 +265,6 @@ async function applyCmbTags(params: {
       source: "webhook",
     });
   }
-  for (const tagName of plan.remove) {
-    await removeTag(params.userId, tagRows.get(tagName)!.id, {
-      source: "webhook",
-    });
-  }
-
   return plan;
 }
 
@@ -333,16 +319,6 @@ async function syncControlledTagsToContact(params: {
       tags: tagsToAdd,
     });
   }
-  const expected = new Set(params.expectedTags);
-  const tagsToRemove = POST_PURCHASE_CONTROLLED_TAGS.filter(
-    (tagName) => !expected.has(tagName) && currentTags.has(tagName)
-  );
-  if (tagsToRemove.length > 0) {
-    await client.delete(`/contacts/${contactId}/tags`, {
-      tags: tagsToRemove,
-    });
-  }
-
   return contactId;
 }
 

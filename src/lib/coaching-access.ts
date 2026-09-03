@@ -34,7 +34,7 @@ export async function ensureBaselineStudentCoachingTags() {
         .values({
           name: definition.name,
           color: definition.color,
-          type: "system",
+          type: "coach",
           description: definition.description,
         })
         .returning({ id: tags.id, name: tags.name });

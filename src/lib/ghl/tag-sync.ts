@@ -6,78 +6,18 @@
 // No prefix: tags sync with their exact name across both platforms.
 
 import { db } from "@/db";
-import { activeStudents, ghlContacts, tags, users } from "@/db/schema";
-import { and, eq, ilike, isNotNull, sql } from "drizzle-orm";
+import { ghlContacts, tags, users } from "@/db/schema";
+import { eq, ilike } from "drizzle-orm";
 import { getGhlClientForLocation } from "@/lib/ghl/client";
 import { findOrLinkContact, getGhlContactLinks } from "@/lib/ghl/contacts";
 import { markOutboundChange, isEchoWebhook } from "@/lib/ghl/echo-detection";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
-import { assignTag, removeTag } from "@/lib/tags";
+import { assignTag } from "@/lib/tags";
 import { clerkClient } from "@clerk/nextjs/server";
-import {
-  applyPostPurchaseTagOverrides,
-  derivePostPurchaseTags,
-  POST_PURCHASE_CONTROLLED_TAGS,
-  shouldApplyInboundPostPurchaseTagChange,
-  type PostPurchaseControlledTag,
-} from "@/lib/post-purchase-entitlements";
+import { shouldApplyInboundPostPurchaseTagChange } from "@/lib/post-purchase-entitlements";
 import { syncAssignedCoachFromGhl } from "@/lib/ghl/coach-assignment";
-import {
-  getStaffTagOverrides,
-  type StaffTagOverride,
-} from "@/lib/staff-tag-overrides";
+import { getStaffTagOverrides } from "@/lib/staff-tag-overrides";
 import { shouldApplyTagChangeAgainstStaffOverride } from "@/lib/tag-override-policy";
-
-async function getConfiguredPostPurchaseTagsForUser(
-  userId: string,
-  staffOverrides: StaffTagOverride[],
-): Promise<Set<PostPurchaseControlledTag> | null> {
-  const user = await db.query.users.findFirst({
-    columns: { email: true, assignedCoachId: true },
-    where: eq(users.id, userId),
-  });
-  if (!user?.email) return null;
-
-  const rows = await db
-    .select({
-      productLine: activeStudents.productLine,
-      addOnPurchased: activeStudents.addOnPurchased,
-      oneOnOneEligibilityActive: sql<boolean>`
-        lower(trim(coalesce(${activeStudents.col1on1Eligibility}, ''))) = 'yes'
-        and (
-          ${activeStudents.col1on1EndDate} is null
-          or ${activeStudents.col1on1EndDate}::date >= current_date
-        )
-      `,
-    })
-    .from(activeStudents)
-    .where(
-      and(
-        ilike(activeStudents.email, user.email),
-        ilike(activeStudents.courseEligibility, "YES"),
-        isNotNull(activeStudents.productLine),
-      ),
-    );
-  const configured = rows.filter((row) => row.productLine?.trim());
-  const controlledTagNames = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
-  const managedOverrides = staffOverrides.filter((override) =>
-    controlledTagNames.has(override.tagName.trim().toLowerCase()),
-  );
-  if (configured.length === 0 && managedOverrides.length === 0) return null;
-
-  const sourceExpectedTags = configured.flatMap((row) =>
-    derivePostPurchaseTags({
-      ...row,
-      oneOnOneCoachAssigned: Boolean(user.assignedCoachId),
-    }),
-  );
-  return new Set(
-    applyPostPurchaseTagOverrides({
-      expectedTags: sourceExpectedTags,
-      overrides: managedOverrides,
-    }),
-  );
-}
 
 /**
  * Sync a tag change from LMS to GHL across ALL linked locations.
@@ -216,10 +156,6 @@ export async function processInboundTagUpdate(
       override.isAssigned,
     ]),
   );
-  const configuredPostPurchaseTags = await getConfiguredPostPurchaseTagsForUser(
-    userId,
-    staffOverrides,
-  );
 
   // Process additions — only for tags that exist in CMB Lab
   for (const tagName of addedTags) {
@@ -244,24 +180,6 @@ export async function processInboundTagUpdate(
         entityId: tagName,
         ghlContactId,
         payload: { reason: "staff_override_off" },
-      });
-      continue;
-    }
-
-    if (
-      !shouldApplyInboundPostPurchaseTagChange({
-        tagName,
-        action: "add",
-        expectedTags: configuredPostPurchaseTags,
-      })
-    ) {
-      await logSyncEvent({
-        eventType: "tag.add_skipped",
-        direction: "inbound",
-        entityType: "tag",
-        entityId: tagName,
-        ghlContactId,
-        payload: { reason: "post_purchase_not_entitled" },
       });
       continue;
     }
@@ -292,7 +210,10 @@ export async function processInboundTagUpdate(
     });
   }
 
-  // Process removals — only for tags that exist in CMB Lab
+  // GHL is an additive source. A missing/removed GHL tag must never silently
+  // revoke CMB access because historical purchases and staff grants can live
+  // outside a single GHL contact. Explicit admin/coach removals still work via
+  // setStaffTagOverride() and outbound syncTagToGhl().
   for (const tagName of removedTags) {
     const isEcho = await isEchoWebhook(ghlContactId, "tag", tagName);
     if (isEcho) {
@@ -300,29 +221,10 @@ export async function processInboundTagUpdate(
     }
 
     if (
-      !shouldApplyTagChangeAgainstStaffOverride({
-        overrideIsAssigned: staffOverrideByName.get(
-          tagName.trim().toLowerCase(),
-        ),
-        action: "remove",
-      })
-    ) {
-      await logSyncEvent({
-        eventType: "tag.remove_skipped",
-        direction: "inbound",
-        entityType: "tag",
-        entityId: tagName,
-        ghlContactId,
-        payload: { reason: "staff_override_on" },
-      });
-      continue;
-    }
-
-    if (
       !shouldApplyInboundPostPurchaseTagChange({
         tagName,
         action: "remove",
-        expectedTags: configuredPostPurchaseTags,
+        expectedTags: null,
       })
     ) {
       await logSyncEvent({
@@ -331,38 +233,18 @@ export async function processInboundTagUpdate(
         entityType: "tag",
         entityId: tagName,
         ghlContactId,
-        payload: { reason: "post_purchase_entitlement" },
+        payload: { reason: "additive_access_policy" },
       });
       continue;
     }
-
-    const tag = await findTagByName(tagName);
-    if (!tag) {
-      continue; // Tag doesn't exist in CMB Lab, nothing to remove
-    }
-
-    // Only auto-remove system (GHL-originated) tags. Do NOT remove coach tags.
-    if (tag.type !== "system") {
-      await logSyncEvent({
-        eventType: "tag.remove_skipped",
-        direction: "inbound",
-        entityType: "tag",
-        entityId: tagName,
-        ghlContactId,
-        payload: { reason: "coach_tag_protected", lmsTagId: tag.id },
-      });
-      continue;
-    }
-
-    await removeTag(userId, tag.id, { source: "webhook" });
 
     await logSyncEvent({
-      eventType: "tag.remove",
+      eventType: "tag.remove_skipped",
       direction: "inbound",
       entityType: "tag",
       entityId: tagName,
       ghlContactId,
-      payload: { lmsTagId: tag.id, lmsTagName: tagName },
+      payload: { reason: "additive_access_policy" },
     });
   }
 

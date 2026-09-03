@@ -208,7 +208,7 @@ describe("derivePostPurchaseTags", () => {
 });
 
 describe("shouldApplyInboundPostPurchaseTagChange", () => {
-  it("keeps configured post-purchase access authoritative across GHL locations", () => {
+  it("treats GHL as an additive entitlement source", () => {
     const expected = ["cmb_student", "icgc_student"] as const;
 
     expect(
@@ -224,14 +224,14 @@ describe("shouldApplyInboundPostPurchaseTagChange", () => {
         action: "add",
         expectedTags: expected,
       })
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldApplyInboundPostPurchaseTagChange({
         tagName: "manual_vip",
         action: "remove",
         expectedTags: expected,
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
@@ -256,13 +256,13 @@ describe("planPostPurchaseTagReconciliation", () => {
     ).toEqual({ add: ["custom_course_student"], remove: [] });
   });
 
-  it("adds missing entitlements and removes only controlled stale tags", () => {
+  it("adds missing entitlements without revoking existing access", () => {
     expect(
       planPostPurchaseTagReconciliation({
         currentTags: ["cmb_student", "1on1_student", "manual_vip"],
         expectedTags: ["cmb_student", "icgc_student"],
       })
-    ).toEqual({ add: ["icgc_student"], remove: ["1on1_student"] });
+    ).toEqual({ add: ["icgc_student"], remove: [] });
   });
 });
 
