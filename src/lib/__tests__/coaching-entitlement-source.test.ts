@@ -50,4 +50,19 @@ describe("coaching entitlement source of truth", () => {
     expect(panel).toContain("Effective feature access");
     expect(panel).toContain("Removed by tags");
   });
+
+  it("keeps a student's own historical 1:1 material visible without granting an active package", () => {
+    const layout = source("src/app/(dashboard)/layout.tsx");
+    const featureAccess = source("src/lib/feature-access.ts");
+    const historyAccess = source("src/lib/coaching-history-access.ts");
+    const sessionsRoute = source("src/app/api/coaching/sessions/route.ts");
+
+    expect(layout).toContain("hasOneOnOneCoachingHistory");
+    expect(featureAccess).toContain("hasOneOnOneCoachingHistory");
+    expect(featureAccess).toContain('feature === "one_on_one_coaching"');
+    expect(historyAccess).toContain('eq(coachingSessions.type, "one_on_one")');
+    expect(historyAccess).toContain("lower(trim(");
+    expect(sessionsRoute).toContain("ilike(coachingSessions.studentEmail, studentEmail)");
+    expect(sessionsRoute).toContain('hasMinimumRole("coach")');
+  });
 });

@@ -39,6 +39,7 @@ import {
   hasFullFeatureAccess,
   filterFeaturesForRole,
 } from "@/lib/platform-roles";
+import { hasOneOnOneCoachingHistory } from "@/lib/coaching-history-access";
 
 export const dynamic = "force-dynamic";
 
@@ -196,7 +197,16 @@ export default async function DashboardLayout({
 
   if (dbUser && enabledFeatures && !hasFullFeatureAccess(role)) {
     const overrides = await getUserFeatureTagOverrides(dbUser.id);
-    enabledFeatures = Array.from(applyFeatureTagOverrides(enabledFeatures, overrides));
+    const effectiveFeatures = applyFeatureTagOverrides(enabledFeatures, overrides);
+    if (
+      role === "student" &&
+      !effectiveFeatures.has("one_on_one_coaching") &&
+      !overrides.deny.has("one_on_one_coaching") &&
+      (await hasOneOnOneCoachingHistory(dbUser.id))
+    ) {
+      effectiveFeatures.add("one_on_one_coaching");
+    }
+    enabledFeatures = Array.from(effectiveFeatures);
   }
 
   // Course Library tab is tag-driven, not plan/feature-driven: staff always

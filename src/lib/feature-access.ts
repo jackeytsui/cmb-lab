@@ -5,6 +5,7 @@ import {
   hasFeatureWithTagOverrides,
 } from "@/lib/tag-feature-access";
 import { hasFullFeatureAccess, isFeatureDisabledForRole } from "@/lib/platform-roles";
+import { hasOneOnOneCoachingHistory } from "@/lib/coaching-history-access";
 
 /**
  * Authoritative feature entitlement check shared by pages and API routes.
@@ -32,9 +33,22 @@ export async function userCanUseFeature(
       feature === "listening_lab" ||
       feature === "coaching_material");
 
-  return hasFeatureWithTagOverrides(
+  const hasCurrentAccess = hasFeatureWithTagOverrides(
     feature,
     forcedAllowed || permissions.canUseFeature(feature),
     overrides,
   );
+  if (hasCurrentAccess) return true;
+
+  // A finished/expired 1:1 package must not erase the student's own archive.
+  // Explicit deny tags (notably the LTO cohort) still take precedence.
+  if (
+    user.role === "student" &&
+    feature === "one_on_one_coaching" &&
+    !overrides.deny.has(feature)
+  ) {
+    return hasOneOnOneCoachingHistory(user.id);
+  }
+
+  return false;
 }

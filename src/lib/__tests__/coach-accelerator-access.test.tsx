@@ -7,6 +7,7 @@ import { FEATURE_KEYS, type FeatureKey } from "@/lib/feature-definitions";
 
 const mocks = vi.hoisted(() => ({
   user: vi.fn(), permissions: vi.fn(), overrides: vi.fn(), applyOverrides: vi.fn(),
+  oneOnOneHistory: vi.fn(),
   select: vi.fn(), insert: vi.fn(), delete: vi.fn(), execute: vi.fn(), management: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
@@ -17,6 +18,9 @@ vi.mock("@/lib/permissions", () => ({ resolvePermissions: mocks.permissions }));
 vi.mock("@/lib/tag-feature-access", () => ({
   getUserFeatureTagOverrides: mocks.overrides, hasFeatureWithTagOverrides: mocks.applyOverrides,
   getRestrictedContentIds: vi.fn(), getUserContentGrants: vi.fn(),
+}));
+vi.mock("@/lib/coaching-history-access", () => ({
+  hasOneOnOneCoachingHistory: mocks.oneOnOneHistory,
 }));
 vi.mock("@/db", () => ({ db: {
   select: mocks.select, insert: mocks.insert, delete: mocks.delete, execute: mocks.execute,
@@ -45,6 +49,7 @@ beforeEach(() => {
   mocks.permissions.mockResolvedValue({ canUseFeature: () => true });
   mocks.overrides.mockResolvedValue({ allow: new Set(EXCLUDED), deny: new Set() });
   mocks.applyOverrides.mockReturnValue(true);
+  mocks.oneOnOneHistory.mockResolvedValue(false);
   mocks.management.mockResolvedValue(false);
 });
 
@@ -74,6 +79,28 @@ describe("coach Accelerator exclusions", () => {
     expect(mocks.permissions).toHaveBeenCalledWith(student.id);
     mocks.applyOverrides.mockReturnValue(false);
     expect(await userCanUseFeature(student, feature)).toBe(false);
+  });
+
+  it("preserves a student's own historical 1:1 archive without restoring an active package", async () => {
+    const student = { id: "student-id", role: "student" };
+    mocks.applyOverrides.mockReturnValue(false);
+    mocks.oneOnOneHistory.mockResolvedValue(true);
+
+    expect(await userCanUseFeature(student, "one_on_one_coaching")).toBe(true);
+    expect(mocks.oneOnOneHistory).toHaveBeenCalledWith(student.id);
+  });
+
+  it("keeps explicit deny tags authoritative over historical 1:1 access", async () => {
+    const student = { id: "student-id", role: "student" };
+    mocks.applyOverrides.mockReturnValue(false);
+    mocks.overrides.mockResolvedValue({
+      allow: new Set(),
+      deny: new Set(["one_on_one_coaching"]),
+    });
+    mocks.oneOnOneHistory.mockResolvedValue(true);
+
+    expect(await userCanUseFeature(student, "one_on_one_coaching")).toBe(false);
+    expect(mocks.oneOnOneHistory).not.toHaveBeenCalled();
   });
 
   it("denies Extra Pack audio even through podcast access while keeping standard audio", async () => {
