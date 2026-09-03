@@ -2540,6 +2540,12 @@ function VocalHackLessonForm({
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [translatingId, setTranslatingId] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [transcribingIds, setTranscribingIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [transcriptionErrors, setTranscriptionErrors] = useState<
+    Record<string, string>
+  >({});
   const [uploadPct, setUploadPct] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -2617,6 +2623,57 @@ function VocalHackLessonForm({
       generateEnglish(sentence.id, sentence.chinese);
   };
 
+  const transcribeUploadedVideo = async (id: string, videoUrl: string) => {
+    setTranscribingIds((prev) => new Set(prev).add(id));
+    setTranscriptionErrors((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    updateSentence(id, { chinese: "", pinyin: "", english: "" });
+    try {
+      const response = await fetch(
+        "/api/admin/course-library/vocal-hack-transcribe",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videoUrl, language: lang }),
+        },
+      );
+      const result = (await response.json().catch(() => null)) as {
+        chinese?: string;
+        pinyin?: string;
+        english?: string;
+        error?: string;
+      } | null;
+      if (
+        !response.ok ||
+        !result?.chinese?.trim() ||
+        !result.pinyin?.trim() ||
+        !result.english?.trim()
+      ) {
+        throw new Error(result?.error || "Automatic transcription failed");
+      }
+      updateSentence(id, {
+        chinese: result.chinese.trim(),
+        pinyin: result.pinyin.trim(),
+        english: result.english.trim(),
+      });
+    } catch (transcriptionError) {
+      const message =
+        transcriptionError instanceof Error
+          ? transcriptionError.message
+          : "Automatic transcription failed";
+      setTranscriptionErrors((prev) => ({ ...prev, [id]: message }));
+    } finally {
+      setTranscribingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
   const handleUploadVideo = async (
     id: string,
     e: React.ChangeEvent<HTMLInputElement>,
@@ -2635,8 +2692,11 @@ function VocalHackLessonForm({
         setUploadPct,
       );
       updateSentence(id, { videoUrl: result.url });
-    } catch {
-      // ignore — admin can retry
+      await transcribeUploadedVideo(id, result.url);
+    } catch (uploadError) {
+      const message =
+        uploadError instanceof Error ? uploadError.message : "Upload failed";
+      setTranscriptionErrors((prev) => ({ ...prev, [id]: message }));
     } finally {
       setUploadingId(null);
       setUploadPct(0);
@@ -2705,9 +2765,9 @@ function VocalHackLessonForm({
               Sentences ({sentences.length})
             </h3>
             <p className="text-xs text-muted-foreground">
-              Upload the coach video and type the Chinese — pinyin and English
-              auto-generate (editable). Students record themselves reading each
-              sentence and submit for review.
+              Upload the coach video and the Chinese, {romanLabel}, and English
+              will be generated automatically (all remain editable). Students
+              record themselves reading each sentence and submit for review.
             </p>
           </div>
           <button
@@ -2796,9 +2856,14 @@ function VocalHackLessonForm({
                             accept="video/mp4,video/quicktime,video/webm"
                             className="hidden"
                             onChange={(e) => handleUploadVideo(sentence.id, e)}
-                            disabled={uploadingId === sentence.id}
+                            disabled={
+                              uploadingId === sentence.id ||
+                              transcribingIds.has(sentence.id)
+                            }
                           />
-                          {uploadingId === sentence.id
+                          {transcribingIds.has(sentence.id)
+                            ? "Transcribing…"
+                            : uploadingId === sentence.id
                             ? `Uploading… ${uploadPct}%`
                             : "Replace"}
                         </label>
@@ -2811,12 +2876,17 @@ function VocalHackLessonForm({
                         accept="video/mp4,video/quicktime,video/webm"
                         className="hidden"
                         onChange={(e) => handleUploadVideo(sentence.id, e)}
-                        disabled={uploadingId === sentence.id}
+                        disabled={
+                          uploadingId === sentence.id ||
+                          transcribingIds.has(sentence.id)
+                        }
                       />
                       <div className="rounded-md border border-dashed border-border bg-muted/30 p-4 text-center hover:bg-muted/50 transition-colors">
                         <Upload className="mx-auto mb-1 h-5 w-5 text-muted-foreground/40" />
                         <p className="text-xs text-muted-foreground">
-                          {uploadingId === sentence.id
+                          {transcribingIds.has(sentence.id)
+                            ? `Transcribing ${lang === "cantonese" ? "Cantonese" : "Mandarin"}…`
+                            : uploadingId === sentence.id
                             ? `Uploading… ${uploadPct}%`
                             : "Upload coach video (MP4, MOV, WebM)"}
                         </p>
@@ -2826,6 +2896,32 @@ function VocalHackLessonForm({
                 </div>
 
                 <div className="min-w-0 flex-1 space-y-2">
+                {transcribingIds.has(sentence.id) ? (
+                  <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Transcribing the {lang === "cantonese" ? "Cantonese in Traditional Chinese" : "Mandarin in Simplified Chinese"}, then generating {romanLabel} and English…
+                  </div>
+                ) : transcriptionErrors[sentence.id] ? (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
+                    <p>
+                      {sentence.videoUrl
+                        ? "Video uploaded, but automatic transcription failed: "
+                        : "Video upload failed: "}
+                      {transcriptionErrors[sentence.id]}
+                    </p>
+                    {sentence.videoUrl ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          transcribeUploadedVideo(sentence.id, sentence.videoUrl!)
+                        }
+                        className="mt-1 font-medium text-primary hover:underline"
+                      >
+                        Retry transcription
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1">
                     Chinese sentence
@@ -2837,7 +2933,10 @@ function VocalHackLessonForm({
                       updateSentence(sentence.id, { chinese: e.target.value })
                     }
                     onBlur={() => handleChineseBlur(sentence)}
-                    placeholder="例如：这是例句"
+                    placeholder={
+                      lang === "cantonese" ? "例如：呢個係例句" : "例如：这是例句"
+                    }
+                    disabled={transcribingIds.has(sentence.id)}
                     className="w-full rounded-md border border-border bg-card px-3 py-2 text-base"
                   />
                 </div>
@@ -2872,6 +2971,7 @@ function VocalHackLessonForm({
                       updateSentence(sentence.id, { pinyin: e.target.value })
                     }
                     placeholder={lang === "cantonese" ? "nei5 hou2" : "zhè shì lì jù"}
+                    disabled={transcribingIds.has(sentence.id)}
                     className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
                   />
                   {mismatch ? (
@@ -2914,6 +3014,7 @@ function VocalHackLessonForm({
                       updateSentence(sentence.id, { english: e.target.value })
                     }
                     placeholder="This is an example sentence"
+                    disabled={transcribingIds.has(sentence.id)}
                     className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
                   />
                 </div>
@@ -2941,7 +3042,7 @@ function VocalHackLessonForm({
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || transcribingIds.size > 0}
             className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {saving ? (
