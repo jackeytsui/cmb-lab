@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { ChevronDown, ChevronRight, BookOpen, User, Loader2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  BookOpen,
+  User,
+  Loader2,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { StudentAccessManager } from "@/components/coach/StudentAccessManager";
 import { TagBadge } from "@/components/tags/TagBadge";
@@ -37,11 +43,17 @@ interface StudentListWithTagsProps {
  * - TagManager popover ("+") for assigning/creating tags
  * - Server-side tag filtering via /api/admin/students?tagIds=
  */
-export function StudentListWithTags({ students: initialStudents }: StudentListWithTagsProps) {
-  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
+export function StudentListWithTags({
+  students: initialStudents,
+}: StudentListWithTagsProps) {
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(
+    null
+  );
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [students, setStudents] = useState(initialStudents);
-  const [fetchedStudents, setFetchedStudents] = useState<Student[] | null>(null);
+  const [fetchedStudents, setFetchedStudents] = useState<Student[] | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -72,12 +84,16 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
       setLoading(true);
       setError(null);
       try {
-        const url = `/api/admin/students?tagIds=${selectedTagIds.join(",")}&limit=100`;
+        const url = `/api/admin/students?tagIds=${selectedTagIds.join(
+          ","
+        )}&limit=100`;
         const res = await fetch(url, { signal: controller.signal });
 
         if (!res.ok) {
           // If API returns error (e.g. 403), fall back to client-side filtering
-          console.warn(`Tag filter API returned ${res.status}, using client-side filtering`);
+          console.warn(
+            `Tag filter API returned ${res.status}, using client-side filtering`
+          );
           const clientFiltered = students.filter((s) =>
             s.tags.some((t) => selectedTagIds.includes(t.id))
           );
@@ -89,7 +105,12 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
         const data = await res.json();
         // Map API response to Student interface
         const mapped: Student[] = (data.students || []).map(
-          (s: { id: string; name: string | null; email: string; tags: Tag[] }) => ({
+          (s: {
+            id: string;
+            name: string | null;
+            email: string;
+            tags: Tag[];
+          }) => ({
             id: s.id,
             name: s.name,
             email: s.email,
@@ -127,9 +148,7 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
   // Collect all unique tags across all students for the TagManager
   const allTags = useMemo(() => {
     const tagMap = new Map<string, Tag>();
-    students.forEach((s) =>
-      s.tags.forEach((t) => tagMap.set(t.id, t))
-    );
+    students.forEach((s) => s.tags.forEach((t) => tagMap.set(t.id, t)));
     return Array.from(tagMap.values());
   }, [students]);
 
@@ -145,7 +164,12 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
       if (res.ok) {
         const data = await res.json();
         const mapped: Student[] = (data.students || []).map(
-          (s: { id: string; name: string | null; email: string; tags: Tag[] }) => ({
+          (s: {
+            id: string;
+            name: string | null;
+            email: string;
+            tags: Tag[];
+          }) => ({
             id: s.id,
             name: s.name,
             email: s.email,
@@ -224,8 +248,12 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
 
                   {/* Student info */}
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-foreground">{displayName}</div>
-                    <div className="text-sm text-muted-foreground">{student.email}</div>
+                    <div className="font-medium text-foreground">
+                      {displayName}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {student.email}
+                    </div>
                   </div>
                 </button>
 
@@ -245,6 +273,7 @@ export function StudentListWithTags({ students: initialStudents }: StudentListWi
                       currentTags={student.tags}
                       allTags={allTags}
                       onTagsChange={handleTagsChange}
+                      canManageDefinitions={false}
                     />
                   </div>
 

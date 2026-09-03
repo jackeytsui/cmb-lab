@@ -2,14 +2,23 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { courseAccess, bulkOperations } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
-import { assignTag, removeTag } from "@/lib/tags";
+import { courseAccess, bulkOperations, users } from "@/db/schema";
+import { eq, and, isNull } from "drizzle-orm";
+import { hasMinimumRole, getRealUser } from "@/lib/auth";
+import { setStaffTagOverride } from "@/lib/staff-tag-overrides";
 import { assignRole, removeRole } from "@/lib/user-roles";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { syncTagToGhl } from "@/lib/ghl/tag-sync";
 
 const bulkSchema = z.object({
-  operation: z.enum(["assign_course", "remove_course", "add_tag", "remove_tag", "assign_role", "remove_role"]),
+  operation: z.enum([
+    "assign_course",
+    "remove_course",
+    "add_tag",
+    "remove_tag",
+    "assign_role",
+    "remove_role",
+  ]),
   studentIds: z.array(z.string().uuid()).min(1).max(500),
   targetId: z.string().uuid(),
   expiresAt: z.string().datetime().optional(),
@@ -31,7 +40,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const currentUser = await getCurrentUser();
+  const currentUser = await getRealUser();
   if (!currentUser) {
     return NextResponse.json({ error: "User not found" }, { status: 401 });
   }
@@ -41,7 +50,10 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 }
+    );
   }
 
   const parsed = bulkSchema.safeParse(body);
@@ -55,11 +67,36 @@ export async function POST(request: NextRequest) {
   const { operation, studentIds, targetId, expiresAt } = parsed.data;
 
   try {
-    const results: { studentId: string; success: boolean; error?: string }[] = [];
+    const results: { studentId: string; success: boolean; error?: string }[] =
+      [];
 
     // Process each student independently (sequential to avoid overwhelming DB)
     for (const studentId of studentIds) {
       try {
+        const student = await db.query.users.findFirst({
+          where: and(
+            eq(users.id, studentId),
+            eq(users.role, "student"),
+            isNull(users.deletedAt),
+          ),
+          columns: { assignedCoachId: true },
+        });
+        if (
+          !student ||
+          !canStaffAccessStudent({
+            actorUserId: currentUser.id,
+            actorRole: currentUser.role,
+            assignedCoachId: student.assignedCoachId,
+          })
+        ) {
+          results.push({
+            studentId,
+            success: false,
+            error: "Student not found or outside your assigned roster",
+          });
+          continue;
+        }
+
         switch (operation) {
           case "assign_course": {
             // Check if access already exists
@@ -71,7 +108,11 @@ export async function POST(request: NextRequest) {
             });
 
             if (existing) {
-              results.push({ studentId, success: true, error: "Already enrolled" });
+              results.push({
+                studentId,
+                success: true,
+                error: "Already enrolled",
+              });
             } else {
               await db.insert(courseAccess).values({
                 userId: studentId,
@@ -95,7 +136,11 @@ export async function POST(request: NextRequest) {
               .returning({ id: courseAccess.id });
 
             if (deleted.length === 0) {
-              results.push({ studentId, success: false, error: "Not enrolled" });
+              results.push({
+                studentId,
+                success: false,
+                error: "Not enrolled",
+              });
             } else {
               results.push({ studentId, success: true });
             }
@@ -103,13 +148,27 @@ export async function POST(request: NextRequest) {
           }
 
           case "add_tag": {
-            await assignTag(studentId, targetId, currentUser.id);
+            const result = await setStaffTagOverride({
+              userId: studentId,
+              tagId: targetId,
+              isAssigned: true,
+              setBy: currentUser.id,
+            });
+            syncTagToGhl(studentId, result.tag.name, "add").catch(console.error);
             results.push({ studentId, success: true });
             break;
           }
 
           case "remove_tag": {
-            await removeTag(studentId, targetId);
+            const result = await setStaffTagOverride({
+              userId: studentId,
+              tagId: targetId,
+              isAssigned: false,
+              setBy: currentUser.id,
+            });
+            syncTagToGhl(studentId, result.tag.name, "remove").catch(
+              console.error,
+            );
             results.push({ studentId, success: true });
             break;
           }
@@ -142,7 +201,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Log the operation to bulk_operations table
-    const succeededIds = results.filter((r) => r.success).map((r) => r.studentId);
+    const succeededIds = results
+      .filter((r) => r.success)
+      .map((r) => r.studentId);
 
     const [op] = await db
       .insert(bulkOperations)

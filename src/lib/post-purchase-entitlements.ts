@@ -9,6 +9,11 @@ export const POST_PURCHASE_CONTROLLED_TAGS = [
 export type PostPurchaseControlledTag =
   (typeof POST_PURCHASE_CONTROLLED_TAGS)[number];
 
+export type PostPurchaseTagOverride = {
+  tagName: string;
+  isAssigned: boolean;
+};
+
 export type PostPurchaseEntitlementInput = {
   productLine?: string | string[] | null;
   addOnPurchased?: string | string[] | null;
@@ -50,9 +55,7 @@ function normalizeValues(value: string | string[] | null | undefined) {
     .filter(Boolean);
 }
 
-function uniqueRawValues(
-  values: Array<string | string[] | null | undefined>,
-) {
+function uniqueRawValues(values: Array<string | string[] | null | undefined>) {
   const result = new Map<string, string>();
   for (const value of values) {
     const items = Array.isArray(value) ? value : value ? [value] : [];
@@ -70,7 +73,7 @@ function uniqueRawValues(
  * another row grants.
  */
 export function aggregatePostPurchaseStudents(
-  rows: PostPurchaseSourceRow[],
+  rows: PostPurchaseSourceRow[]
 ): AggregatedPostPurchaseStudent[] {
   const byEmail = new Map<string, PostPurchaseSourceRow[]>();
   for (const row of rows) {
@@ -90,17 +93,17 @@ export function aggregatePostPurchaseStudents(
       entries.find((entry) => entry.lastName?.trim())?.lastName?.trim() ?? null,
     productLine: uniqueRawValues(entries.map((entry) => entry.productLine)),
     addOnPurchased: uniqueRawValues(
-      entries.map((entry) => entry.addOnPurchased),
+      entries.map((entry) => entry.addOnPurchased)
     ),
     oneOnOneEligibilityActive: entries.some(
-      (entry) => entry.oneOnOneEligibilityActive === true,
+      (entry) => entry.oneOnOneEligibilityActive === true
     ),
     sourceRows: entries.length,
   }));
 }
 
 export function derivePostPurchaseTags(
-  input: PostPurchaseEntitlementInput,
+  input: PostPurchaseEntitlementInput
 ): PostPurchaseControlledTag[] {
   const products = normalizeValues(input.productLine);
   const addOns = normalizeValues(input.addOnPurchased);
@@ -135,18 +138,37 @@ export function planPostPurchaseTagReconciliation(params: {
   expectedTags: Iterable<PostPurchaseControlledTag>;
 }) {
   const current = new Set(
-    [...params.currentTags].map((tag) => tag.trim().toLowerCase()),
+    [...params.currentTags].map((tag) => tag.trim().toLowerCase())
   );
   const expected = new Set(params.expectedTags);
 
   return {
     add: POST_PURCHASE_CONTROLLED_TAGS.filter(
-      (tag) => expected.has(tag) && !current.has(tag),
+      (tag) => expected.has(tag) && !current.has(tag)
     ),
     remove: POST_PURCHASE_CONTROLLED_TAGS.filter(
-      (tag) => !expected.has(tag) && current.has(tag),
+      (tag) => !expected.has(tag) && current.has(tag)
     ),
   };
+}
+
+/** Apply durable staff choices after deriving the automated GHL defaults. */
+export function applyPostPurchaseTagOverrides(params: {
+  expectedTags: Iterable<PostPurchaseControlledTag>;
+  overrides: Iterable<PostPurchaseTagOverride>;
+}): PostPurchaseControlledTag[] {
+  const expected = new Set<PostPurchaseControlledTag>(params.expectedTags);
+  const managed = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
+
+  for (const override of params.overrides) {
+    const normalized = override.tagName.trim().toLowerCase();
+    if (!managed.has(normalized)) continue;
+    const tag = normalized as PostPurchaseControlledTag;
+    if (override.isAssigned) expected.add(tag);
+    else expected.delete(tag);
+  }
+
+  return POST_PURCHASE_CONTROLLED_TAGS.filter((tag) => expected.has(tag));
 }
 
 export function shouldReconcilePostPurchaseStudent(params: {

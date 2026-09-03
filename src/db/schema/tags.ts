@@ -18,21 +18,23 @@ export const tagTypeEnum = pgEnum("tag_type", ["coach", "system"]);
 // --- Tables ---
 
 // Tags: first-class tagging entities with color and type
-export const tags = pgTable("tags", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: text("name").notNull(),
-  color: text("color").notNull(), // hex color, e.g. "#ef4444"
-  type: tagTypeEnum("type").notNull().default("coach"),
-  description: text("description"),
-  createdBy: uuid("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-}, (table) => [
-  index("tags_created_by_idx").on(table.createdBy),
-]);
+export const tags = pgTable(
+  "tags",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    color: text("color").notNull(), // hex color, e.g. "#ef4444"
+    type: tagTypeEnum("type").notNull().default("coach"),
+    description: text("description"),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [index("tags_created_by_idx").on(table.createdBy)]
+);
 
 // Student Tags: join table linking users to tags
 export const studentTags = pgTable(
@@ -55,21 +57,56 @@ export const studentTags = pgTable(
   ]
 );
 
+// Durable staff decisions for a student's tag state. Automated provisioning
+// may still recommend tags from GHL, but an admin/coach decision always wins
+// until another staff member changes it.
+export const studentTagOverrides = pgTable(
+  "student_tag_overrides",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    isAssigned: boolean("is_assigned").notNull(),
+    setBy: uuid("set_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("student_tag_overrides_user_tag_unique").on(
+      table.userId,
+      table.tagId
+    ),
+    index("student_tag_overrides_user_idx").on(table.userId),
+    index("student_tag_overrides_tag_idx").on(table.tagId),
+  ]
+);
+
 // Auto-Tag Rules: condition-based automatic tag assignment
-export const autoTagRules = pgTable("auto_tag_rules", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  tagId: uuid("tag_id")
-    .notNull()
-    .references(() => tags.id, { onDelete: "cascade" }),
-  conditionType: text("condition_type").notNull(), // "inactive_days", "no_progress_days", "course_completed"
-  conditionValue: text("condition_value").notNull(), // e.g. "7" for 7 days
-  isActive: boolean("is_active").notNull().default(true),
-  createdBy: uuid("created_by").references(() => users.id),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table) => [
-  index("auto_tag_rules_tag_id_idx").on(table.tagId),
-  index("auto_tag_rules_created_by_idx").on(table.createdBy),
-]);
+export const autoTagRules = pgTable(
+  "auto_tag_rules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    conditionType: text("condition_type").notNull(), // "inactive_days", "no_progress_days", "course_completed"
+    conditionValue: text("condition_value").notNull(), // e.g. "7" for 7 days
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("auto_tag_rules_tag_id_idx").on(table.tagId),
+    index("auto_tag_rules_created_by_idx").on(table.createdBy),
+  ]
+);
 
 // Tag Feature Grants: tag → feature access mapping (replaces hardcoded EXCLUSIVE_TAG_MAP)
 export const grantTypeEnum = pgEnum("grant_type", ["additive", "deny"]);
@@ -86,7 +123,10 @@ export const tagFeatureGrants = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("tag_feature_grants_tag_feature_unique").on(table.tagId, table.featureKey),
+    uniqueIndex("tag_feature_grants_tag_feature_unique").on(
+      table.tagId,
+      table.featureKey
+    ),
     index("tag_feature_grants_tag_id_idx").on(table.tagId),
     index("tag_feature_grants_feature_key_idx").on(table.featureKey),
   ]
@@ -105,9 +145,16 @@ export const tagContentGrants = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("tag_content_grants_unique").on(table.tagId, table.contentType, table.contentId),
+    uniqueIndex("tag_content_grants_unique").on(
+      table.tagId,
+      table.contentType,
+      table.contentId
+    ),
     index("tag_content_grants_tag_id_idx").on(table.tagId),
-    index("tag_content_grants_content_idx").on(table.contentType, table.contentId),
+    index("tag_content_grants_content_idx").on(
+      table.contentType,
+      table.contentId
+    ),
   ]
 );
 
@@ -115,6 +162,7 @@ export const tagContentGrants = pgTable(
 
 export const tagsRelations = relations(tags, ({ many }) => ({
   studentTags: many(studentTags),
+  studentTagOverrides: many(studentTagOverrides),
   autoTagRules: many(autoTagRules),
   featureGrants: many(tagFeatureGrants),
   contentGrants: many(tagContentGrants),
@@ -137,6 +185,26 @@ export const studentTagsRelations = relations(studentTags, ({ one }) => ({
   }),
 }));
 
+export const studentTagOverridesRelations = relations(
+  studentTagOverrides,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [studentTagOverrides.userId],
+      references: [users.id],
+      relationName: "studentTagOverrideUser",
+    }),
+    tag: one(tags, {
+      fields: [studentTagOverrides.tagId],
+      references: [tags.id],
+    }),
+    setByUser: one(users, {
+      fields: [studentTagOverrides.setBy],
+      references: [users.id],
+      relationName: "studentTagOverrideSetter",
+    }),
+  })
+);
+
 export const autoTagRulesRelations = relations(autoTagRules, ({ one }) => ({
   tag: one(tags, {
     fields: [autoTagRules.tagId],
@@ -148,13 +216,19 @@ export const autoTagRulesRelations = relations(autoTagRules, ({ one }) => ({
   }),
 }));
 
-export const tagFeatureGrantsRelations = relations(tagFeatureGrants, ({ one }) => ({
-  tag: one(tags, { fields: [tagFeatureGrants.tagId], references: [tags.id] }),
-}));
+export const tagFeatureGrantsRelations = relations(
+  tagFeatureGrants,
+  ({ one }) => ({
+    tag: one(tags, { fields: [tagFeatureGrants.tagId], references: [tags.id] }),
+  })
+);
 
-export const tagContentGrantsRelations = relations(tagContentGrants, ({ one }) => ({
-  tag: one(tags, { fields: [tagContentGrants.tagId], references: [tags.id] }),
-}));
+export const tagContentGrantsRelations = relations(
+  tagContentGrants,
+  ({ one }) => ({
+    tag: one(tags, { fields: [tagContentGrants.tagId], references: [tags.id] }),
+  })
+);
 
 // --- Type Inference ---
 
@@ -163,6 +237,9 @@ export type NewTag = typeof tags.$inferInsert;
 
 export type StudentTag = typeof studentTags.$inferSelect;
 export type NewStudentTag = typeof studentTags.$inferInsert;
+
+export type StudentTagOverride = typeof studentTagOverrides.$inferSelect;
+export type NewStudentTagOverride = typeof studentTagOverrides.$inferInsert;
 
 export type AutoTagRule = typeof autoTagRules.$inferSelect;
 export type NewAutoTagRule = typeof autoTagRules.$inferInsert;

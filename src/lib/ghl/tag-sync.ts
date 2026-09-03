@@ -9,23 +9,28 @@ import { db } from "@/db";
 import { activeStudents, ghlContacts, tags, users } from "@/db/schema";
 import { and, eq, ilike, isNotNull, sql } from "drizzle-orm";
 import { getGhlClientForLocation } from "@/lib/ghl/client";
-import {
-  findOrLinkContact,
-  getGhlContactLinks,
-} from "@/lib/ghl/contacts";
+import { findOrLinkContact, getGhlContactLinks } from "@/lib/ghl/contacts";
 import { markOutboundChange, isEchoWebhook } from "@/lib/ghl/echo-detection";
 import { logSyncEvent } from "@/lib/ghl/sync-logger";
 import { assignTag, removeTag } from "@/lib/tags";
 import { clerkClient } from "@clerk/nextjs/server";
 import {
+  applyPostPurchaseTagOverrides,
   derivePostPurchaseTags,
+  POST_PURCHASE_CONTROLLED_TAGS,
   shouldApplyInboundPostPurchaseTagChange,
   type PostPurchaseControlledTag,
 } from "@/lib/post-purchase-entitlements";
 import { syncAssignedCoachFromGhl } from "@/lib/ghl/coach-assignment";
+import {
+  getStaffTagOverrides,
+  type StaffTagOverride,
+} from "@/lib/staff-tag-overrides";
+import { shouldApplyTagChangeAgainstStaffOverride } from "@/lib/tag-override-policy";
 
 async function getConfiguredPostPurchaseTagsForUser(
   userId: string,
+  staffOverrides: StaffTagOverride[],
 ): Promise<Set<PostPurchaseControlledTag> | null> {
   const user = await db.query.users.findFirst({
     columns: { email: true, assignedCoachId: true },
@@ -54,15 +59,23 @@ async function getConfiguredPostPurchaseTagsForUser(
       ),
     );
   const configured = rows.filter((row) => row.productLine?.trim());
-  if (configured.length === 0) return null;
+  const controlledTagNames = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
+  const managedOverrides = staffOverrides.filter((override) =>
+    controlledTagNames.has(override.tagName.trim().toLowerCase()),
+  );
+  if (configured.length === 0 && managedOverrides.length === 0) return null;
 
+  const sourceExpectedTags = configured.flatMap((row) =>
+    derivePostPurchaseTags({
+      ...row,
+      oneOnOneCoachAssigned: Boolean(user.assignedCoachId),
+    }),
+  );
   return new Set(
-    configured.flatMap((row) =>
-      derivePostPurchaseTags({
-        ...row,
-        oneOnOneCoachAssigned: Boolean(user.assignedCoachId),
-      }),
-    ),
+    applyPostPurchaseTagOverrides({
+      expectedTags: sourceExpectedTags,
+      overrides: managedOverrides,
+    }),
   );
 }
 
@@ -76,7 +89,7 @@ async function getConfiguredPostPurchaseTagsForUser(
 export async function syncTagToGhl(
   userId: string,
   tagName: string,
-  action: "add" | "remove"
+  action: "add" | "remove",
 ): Promise<void> {
   const links = await getGhlContactLinks(userId);
   if (links.length === 0) return; // User not linked to any GHL location
@@ -110,7 +123,7 @@ export async function syncTagToGhl(
     } catch (error) {
       console.error(
         `[GHL Tag Sync] Failed to sync tag "${tagName}" ${action} to location ${link.ghlLocationId}:`,
-        error instanceof Error ? error.message : error
+        error instanceof Error ? error.message : error,
       );
     }
   }
@@ -121,7 +134,7 @@ export async function syncTagToGhl(
  */
 export async function syncTagRemovalFromGhl(
   userId: string,
-  tagName: string
+  tagName: string,
 ): Promise<void> {
   return syncTagToGhl(userId, tagName, "remove");
 }
@@ -136,7 +149,7 @@ export async function syncTagRemovalFromGhl(
 export async function processInboundTagUpdate(
   ghlContactId: string,
   currentGhlTags: string[],
-  ghlLocationId?: string
+  ghlLocationId?: string,
 ): Promise<void> {
   // Find the LMS user linked to this GHL contact
   let contactRows = await db
@@ -168,7 +181,11 @@ export async function processInboundTagUpdate(
     // No CMB Lab account exists for this contact — auto-invite them so they can sign up.
     // The email was already fetched during reverse lookup; retrieve it again to send the invite.
     if (ghlLocationId) {
-      await sendGhlContactInvitation(ghlContactId, ghlLocationId, currentGhlTags);
+      await sendGhlContactInvitation(
+        ghlContactId,
+        ghlLocationId,
+        currentGhlTags,
+      );
     } else {
       await logSyncEvent({
         eventType: "tag.inbound_skipped",
@@ -192,14 +209,42 @@ export async function processInboundTagUpdate(
   // Diff: find additions and removals
   const addedTags = currentGhlTags.filter((t) => !previousTags.includes(t));
   const removedTags = previousTags.filter((t) => !currentGhlTags.includes(t));
-  const configuredPostPurchaseTags =
-    await getConfiguredPostPurchaseTagsForUser(userId);
+  const staffOverrides = await getStaffTagOverrides(userId);
+  const staffOverrideByName = new Map(
+    staffOverrides.map((override) => [
+      override.tagName.trim().toLowerCase(),
+      override.isAssigned,
+    ]),
+  );
+  const configuredPostPurchaseTags = await getConfiguredPostPurchaseTagsForUser(
+    userId,
+    staffOverrides,
+  );
 
   // Process additions — only for tags that exist in CMB Lab
   for (const tagName of addedTags) {
     // Check echo detection
     const isEcho = await isEchoWebhook(ghlContactId, "tag", tagName);
     if (isEcho) {
+      continue;
+    }
+
+    if (
+      !shouldApplyTagChangeAgainstStaffOverride({
+        overrideIsAssigned: staffOverrideByName.get(
+          tagName.trim().toLowerCase(),
+        ),
+        action: "add",
+      })
+    ) {
+      await logSyncEvent({
+        eventType: "tag.add_skipped",
+        direction: "inbound",
+        entityType: "tag",
+        entityId: tagName,
+        ghlContactId,
+        payload: { reason: "staff_override_off" },
+      });
       continue;
     }
 
@@ -251,6 +296,25 @@ export async function processInboundTagUpdate(
   for (const tagName of removedTags) {
     const isEcho = await isEchoWebhook(ghlContactId, "tag", tagName);
     if (isEcho) {
+      continue;
+    }
+
+    if (
+      !shouldApplyTagChangeAgainstStaffOverride({
+        overrideIsAssigned: staffOverrideByName.get(
+          tagName.trim().toLowerCase(),
+        ),
+        action: "remove",
+      })
+    ) {
+      await logSyncEvent({
+        eventType: "tag.remove_skipped",
+        direction: "inbound",
+        entityType: "tag",
+        entityId: tagName,
+        ghlContactId,
+        payload: { reason: "staff_override_on" },
+      });
       continue;
     }
 
@@ -325,7 +389,7 @@ export async function processInboundTagUpdate(
  */
 export async function linkAndSyncTagsFromGhl(
   userId: string,
-  email: string
+  email: string,
 ): Promise<{
   linkedLocations: number;
   tagsApplied: number;
@@ -359,6 +423,13 @@ export async function linkAndSyncTagsFromGhl(
   }
 
   stats.linkedLocations = links.length;
+  const staffOverrides = await getStaffTagOverrides(userId);
+  const staffOverrideByName = new Map(
+    staffOverrides.map((override) => [
+      override.tagName.trim().toLowerCase(),
+      override.isAssigned,
+    ]),
+  );
 
   // For each linked GHL contact, fetch current tags and apply matching ones
   for (const link of links) {
@@ -385,6 +456,30 @@ export async function linkAndSyncTagsFromGhl(
         const tag = await findTagByName(tagName);
         if (!tag) {
           stats.tagsIgnored++;
+          continue;
+        }
+
+        if (
+          !shouldApplyTagChangeAgainstStaffOverride({
+            overrideIsAssigned: staffOverrideByName.get(
+              tag.name.trim().toLowerCase(),
+            ),
+            action: "add",
+          })
+        ) {
+          stats.tagsIgnored++;
+          await logSyncEvent({
+            eventType: "tag.add_skipped",
+            direction: "inbound",
+            entityType: "tag",
+            entityId: tagName,
+            ghlContactId: link.ghlContactId,
+            payload: {
+              reason: "staff_override_off",
+              lmsTagId: tag.id,
+              locationId: link.ghlLocationId,
+            },
+          });
           continue;
         }
 
@@ -426,7 +521,7 @@ export async function linkAndSyncTagsFromGhl(
     } catch (error) {
       console.error(
         `[GHL Link Sync] Failed to fetch/apply tags for contact ${link.ghlContactId} in location ${link.ghlLocationId}:`,
-        error instanceof Error ? error.message : error
+        error instanceof Error ? error.message : error,
       );
     }
   }
@@ -448,7 +543,7 @@ export async function linkAndSyncTagsFromGhl(
 // --- Internal helpers ---
 
 async function findTagByName(
-  name: string
+  name: string,
 ): Promise<{ id: string; name: string; type: "coach" | "system" } | null> {
   const rows = await db
     .select({ id: tags.id, name: tags.name, type: tags.type })
@@ -469,7 +564,7 @@ async function findTagByName(
  */
 async function reverseLookupAndLink(
   ghlContactId: string,
-  ghlLocationId: string
+  ghlLocationId: string,
 ): Promise<{ linked: boolean; email?: string }> {
   try {
     const client = await getGhlClientForLocation(ghlLocationId);
@@ -495,7 +590,11 @@ async function reverseLookupAndLink(
         direction: "inbound",
         entityType: "contact",
         entityId: ghlContactId,
-        payload: { email, locationId: ghlLocationId, reason: "no_lms_user_with_email" },
+        payload: {
+          email,
+          locationId: ghlLocationId,
+          reason: "no_lms_user_with_email",
+        },
       });
       return { linked: false, email };
     }
@@ -532,7 +631,7 @@ async function reverseLookupAndLink(
   } catch (error) {
     console.error(
       `[GHL Reverse Lookup] Failed for contact ${ghlContactId} in location ${ghlLocationId}:`,
-      error instanceof Error ? error.message : error
+      error instanceof Error ? error.message : error,
     );
     return { linked: false };
   }
@@ -547,7 +646,7 @@ async function reverseLookupAndLink(
 async function sendGhlContactInvitation(
   ghlContactId: string,
   ghlLocationId: string,
-  ghlTags: string[]
+  ghlTags: string[],
 ): Promise<void> {
   try {
     const client = await getGhlClientForLocation(ghlLocationId);
@@ -568,8 +667,8 @@ async function sendGhlContactInvitation(
       .select({ name: tags.name })
       .from(tags)
       .where(ilike(tags.name, "%")); // fetch all, filter below
-    const cmbTagNames = new Set(cmbTagRows.map(r => r.name.toLowerCase()));
-    const matchedTags = ghlTags.filter(t => cmbTagNames.has(t.toLowerCase()));
+    const cmbTagNames = new Set(cmbTagRows.map((r) => r.name.toLowerCase()));
+    const matchedTags = ghlTags.filter((t) => cmbTagNames.has(t.toLowerCase()));
 
     const clerk = await clerkClient();
     await clerk.invitations.createInvitation({
@@ -594,7 +693,7 @@ async function sendGhlContactInvitation(
   } catch (error) {
     console.error(
       `[GHL Invite] Failed to invite contact ${ghlContactId}:`,
-      error instanceof Error ? error.message : error
+      error instanceof Error ? error.message : error,
     );
   }
 }

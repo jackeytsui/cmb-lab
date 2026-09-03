@@ -27,6 +27,7 @@ import {
   type PostPurchaseControlledTag,
   type PostPurchaseEntitlementInput,
 } from "@/lib/post-purchase-entitlements";
+import { resolvePostPurchaseTagsWithStaffOverrides } from "@/lib/staff-tag-overrides";
 
 export type PostPurchaseProvisioningInput = PostPurchaseEntitlementInput & {
   email: string;
@@ -97,20 +98,19 @@ async function ensureCmbUser(params: {
     });
   } else {
     const existingInviteTags = Array.isArray(
-      clerkUser.publicMetadata?.cmbInviteTags,
+      clerkUser.publicMetadata?.cmbInviteTags
     )
       ? clerkUser.publicMetadata.cmbInviteTags.filter(
-          (value): value is string => typeof value === "string",
+          (value): value is string => typeof value === "string"
         )
       : [];
     const controlledTags = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
     const preservedInviteTags = existingInviteTags.filter(
-      (tag) => !controlledTags.has(tag.toLowerCase()),
+      (tag) => !controlledTags.has(tag.toLowerCase())
     );
-    const mergedInviteTags = [...new Set([
-      ...preservedInviteTags,
-      ...params.expectedTags,
-    ])];
+    const mergedInviteTags = [
+      ...new Set([...preservedInviteTags, ...params.expectedTags]),
+    ];
     await clerk.users.updateUserMetadata(clerkUser.id, {
       publicMetadata: {
         ...(clerkUser.publicMetadata ?? {}),
@@ -213,20 +213,20 @@ async function ensureCmbUser(params: {
 
 async function updateControlledInviteTags(
   clerkUserId: string,
-  expectedTags: PostPurchaseControlledTag[],
+  expectedTags: PostPurchaseControlledTag[]
 ) {
   const clerk = await clerkClient();
   const clerkUser = await clerk.users.getUser(clerkUserId);
   const existingInviteTags = Array.isArray(
-    clerkUser.publicMetadata?.cmbInviteTags,
+    clerkUser.publicMetadata?.cmbInviteTags
   )
     ? clerkUser.publicMetadata.cmbInviteTags.filter(
-        (value): value is string => typeof value === "string",
+        (value): value is string => typeof value === "string"
       )
     : [];
   const controlledTags = new Set<string>(POST_PURCHASE_CONTROLLED_TAGS);
   const preservedInviteTags = existingInviteTags.filter(
-    (tag) => !controlledTags.has(tag.toLowerCase()),
+    (tag) => !controlledTags.has(tag.toLowerCase())
   );
   await clerk.users.updateUserMetadata(clerkUserId, {
     publicMetadata: {
@@ -240,7 +240,7 @@ async function getControlledTagRows() {
   const rows = await db.select().from(tags);
   const byName = new Map(rows.map((tag) => [tag.name.toLowerCase(), tag]));
   const missing = POST_PURCHASE_CONTROLLED_TAGS.filter(
-    (name) => !byName.has(name),
+    (name) => !byName.has(name)
   );
   if (missing.length > 0) {
     throw new Error(`Missing controlled CMB tags: ${missing.join(", ")}`);
@@ -325,11 +325,9 @@ async function syncControlledTagsToContact(params: {
     }>(`/contacts/${contactId}`);
   }
   const currentTags = new Set(
-    (response.data.contact?.tags ?? []).map((tag) => tag.toLowerCase()),
+    (response.data.contact?.tags ?? []).map((tag) => tag.toLowerCase())
   );
-  const tagsToAdd = params.expectedTags.filter(
-    (tag) => !currentTags.has(tag),
-  );
+  const tagsToAdd = params.expectedTags.filter((tag) => !currentTags.has(tag));
   if (tagsToAdd.length > 0) {
     await client.post(`/contacts/${contactId}/tags`, {
       tags: tagsToAdd,
@@ -337,7 +335,7 @@ async function syncControlledTagsToContact(params: {
   }
   const expected = new Set(params.expectedTags);
   const tagsToRemove = POST_PURCHASE_CONTROLLED_TAGS.filter(
-    (tagName) => !expected.has(tagName) && currentTags.has(tagName),
+    (tagName) => !expected.has(tagName) && currentTags.has(tagName)
   );
   if (tagsToRemove.length > 0) {
     await client.delete(`/contacts/${contactId}/tags`, {
@@ -353,10 +351,7 @@ async function getCourseGhlLocation() {
     .select({ locationId: ghlLocations.ghlLocationId })
     .from(ghlLocations)
     .where(
-      and(
-        eq(ghlLocations.isActive, true),
-        ilike(ghlLocations.name, "%course%"),
-      ),
+      and(eq(ghlLocations.isActive, true), ilike(ghlLocations.name, "%course%"))
     )
     .limit(1);
   if (!courseLocation) {
@@ -434,7 +429,7 @@ async function ensureGhlContactLink(params: {
     const targetLocationLink = await db.query.ghlContacts.findFirst({
       where: and(
         eq(ghlContacts.userId, params.userId),
-        eq(ghlContacts.ghlLocationId, params.ghlLocationId),
+        eq(ghlContacts.ghlLocationId, params.ghlLocationId)
       ),
     });
     if (targetLocationLink && targetLocationLink.id !== byContact.id) {
@@ -462,7 +457,7 @@ async function ensureGhlContactLink(params: {
         .where(eq(ghlContacts.id, byContact.id));
     }
     console.warn(
-      "[Post Purchase] Repaired a legacy course-contact ownership mismatch",
+      "[Post Purchase] Repaired a legacy course-contact ownership mismatch"
     );
     return;
   }
@@ -470,7 +465,7 @@ async function ensureGhlContactLink(params: {
   const byUserLocation = await db.query.ghlContacts.findFirst({
     where: and(
       eq(ghlContacts.userId, params.userId),
-      eq(ghlContacts.ghlLocationId, params.ghlLocationId),
+      eq(ghlContacts.ghlLocationId, params.ghlLocationId)
     ),
   });
   if (byUserLocation) {
@@ -495,11 +490,11 @@ async function ensureGhlContactLink(params: {
 }
 
 export async function provisionPostPurchaseEntitlements(
-  input: PostPurchaseProvisioningInput,
+  input: PostPurchaseProvisioningInput
 ): Promise<ProvisioningResult> {
   const email = normalizeEmail(input.email);
-  const expectedTags = derivePostPurchaseTags(input);
-  if (expectedTags.length === 0) {
+  const sourceExpectedTags = derivePostPurchaseTags(input);
+  if (sourceExpectedTags.length === 0) {
     throw new Error("Post-purchase submission has no recognized package");
   }
 
@@ -507,8 +502,13 @@ export async function provisionPostPurchaseEntitlements(
     email,
     firstName: input.firstName,
     lastName: input.lastName,
-    expectedTags,
+    expectedTags: sourceExpectedTags,
   });
+  const expectedTags = await resolvePostPurchaseTagsWithStaffOverrides(
+    ensured.dbUserId,
+    sourceExpectedTags
+  );
+  await updateControlledInviteTags(ensured.clerkUserId, expectedTags);
   const plan = await applyCmbTags({
     userId: ensured.dbUserId,
     expectedTags,
@@ -557,7 +557,7 @@ export async function provisionPostPurchaseEntitlements(
     } catch (error) {
       console.error(
         "[Post Purchase] Coach assignment reconciliation failed:",
-        error instanceof Error ? error.message : error,
+        error instanceof Error ? error.message : error
       );
       coachBackedOneOnOne = false;
     }
@@ -569,8 +569,9 @@ export async function provisionPostPurchaseEntitlements(
     remove: [],
   };
   if (!coachBackedOneOnOne) {
-    finalExpectedTags = expectedTags.filter(
-      (tag) => tag !== "1on1_student",
+    finalExpectedTags = await resolvePostPurchaseTagsWithStaffOverrides(
+      ensured.dbUserId,
+      sourceExpectedTags.filter((tag) => tag !== "1on1_student")
     );
     correctionPlan = await applyCmbTags({
       userId: ensured.dbUserId,
@@ -594,10 +595,7 @@ export async function provisionPostPurchaseEntitlements(
       lastName: input.lastName,
       expectedTags: finalExpectedTags,
     });
-    await updateControlledInviteTags(
-      ensured.clerkUserId,
-      finalExpectedTags,
-    );
+    await updateControlledInviteTags(ensured.clerkUserId, finalExpectedTags);
   }
 
   return {
@@ -640,11 +638,11 @@ export async function reconcilePostPurchaseEntitlements(params?: {
     .where(
       and(
         ilike(activeStudents.courseEligibility, "YES"),
-        isNotNull(activeStudents.productLine),
-      ),
+        isNotNull(activeStudents.productLine)
+      )
     );
   const validSourceRows = sourceRows.filter(
-    (student) => student.email?.trim() && student.productLine?.trim(),
+    (student) => student.email?.trim() && student.productLine?.trim()
   );
   const aggregatedStudents = aggregatePostPurchaseStudents(validSourceRows);
   const students = limit
@@ -668,11 +666,11 @@ export async function reconcilePostPurchaseEntitlements(params?: {
     .where(
       and(
         eq(ghlContacts.ghlLocationId, courseLocation.locationId),
-        eq(ghlContacts.syncStatus, "active"),
-      ),
+        eq(ghlContacts.syncStatus, "active")
+      )
     );
   const courseLinkedUserIds = new Set(
-    courseContactRows.map((row) => row.userId),
+    courseContactRows.map((row) => row.userId)
   );
   const usersByEmail = new Map<
     string,
@@ -714,21 +712,29 @@ export async function reconcilePostPurchaseEntitlements(params?: {
     stats.checked += 1;
     const email = normalizeEmail(student.email);
     const existing = usersByEmail.get(email);
-    const expectedTags = derivePostPurchaseTags({
+    const sourceExpectedTags = derivePostPurchaseTags({
       ...student,
       oneOnOneCoachAssigned: Boolean(existing?.assignedCoachId),
     });
-    if (expectedTags.length === 0) {
+    const expectedTags = existing
+      ? await resolvePostPurchaseTagsWithStaffOverrides(
+          existing.userId,
+          sourceExpectedTags
+        )
+      : sourceExpectedTags;
+    if (sourceExpectedTags.length === 0) {
       stats.skippedInvalid += 1;
       continue;
     }
-    if (!shouldReconcilePostPurchaseStudent({
-      userExists: Boolean(existing),
-      currentTags: existing?.tags ?? [],
-      expectedTags,
-      hasCourseContact: existing?.hasCourseContact ?? false,
-      resyncGhl,
-    })) {
+    if (
+      !shouldReconcilePostPurchaseStudent({
+        userExists: Boolean(existing),
+        currentTags: existing?.tags ?? [],
+        expectedTags,
+        hasCourseContact: existing?.hasCourseContact ?? false,
+        resyncGhl,
+      })
+    ) {
       stats.alreadyCorrect += 1;
       continue;
     }
@@ -753,7 +759,7 @@ export async function reconcilePostPurchaseEntitlements(params?: {
       stats.failed += 1;
       console.error(
         "[Post Purchase] Reconciliation failed for one student:",
-        error instanceof Error ? error.message : error,
+        error instanceof Error ? error.message : error
       );
     }
   }

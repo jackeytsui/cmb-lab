@@ -18,6 +18,7 @@ interface TagManagerProps {
   currentTags: Tag[];
   allTags: Tag[];
   onTagsChange: () => void;
+  canManageDefinitions?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export function TagManager({
   currentTags,
   allTags,
   onTagsChange,
+  canManageDefinitions = false,
 }: TagManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -49,18 +51,23 @@ export function TagManager({
       setToggling(tagId);
       setOperationError(null);
       try {
+        let response: Response;
         if (isAssigned) {
-          await fetch(`/api/students/${studentId}/tags`, {
+          response = await fetch(`/api/students/${studentId}/tags`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tagId }),
           });
         } else {
-          await fetch(`/api/students/${studentId}/tags`, {
+          response = await fetch(`/api/students/${studentId}/tags`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tagId }),
           });
+        }
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error || "Failed to update tag");
         }
         onTagsChange();
       } catch (error) {
@@ -113,11 +120,16 @@ export function TagManager({
 
   const handleDeleteTag = useCallback(
     async (tagId: string, tagName: string) => {
-      if (!confirm(`Delete tag "${tagName}"? This removes it from all students.`)) return;
+      if (
+        !confirm(`Delete tag "${tagName}"? This removes it from all students.`)
+      )
+        return;
       setDeleting(tagId);
       setOperationError(null);
       try {
-        const res = await fetch(`/api/admin/tags/${tagId}`, { method: "DELETE" });
+        const res = await fetch(`/api/admin/tags/${tagId}`, {
+          method: "DELETE",
+        });
         if (!res.ok) throw new Error("Failed to delete tag");
         onTagsChange();
       } catch (error) {
@@ -173,10 +185,7 @@ export function TagManager({
 
           {/* Operation error */}
           {operationError && (
-            <ErrorAlert
-              message={operationError}
-              className="mb-2"
-            />
+            <ErrorAlert message={operationError} className="mb-2" />
           )}
 
           {/* Tag list with checkboxes */}
@@ -219,27 +228,33 @@ export function TagManager({
                         type={tag.type}
                       />
                     </button>
-                    <button
-                      onClick={() => setEditingColor(isEditingThisColor ? null : tag.id)}
-                      className="opacity-0 group-hover/tag:opacity-100 p-1 rounded hover:bg-zinc-700 transition-all"
-                      aria-label={`Edit color for ${tag.name}`}
-                    >
-                      <Palette className="w-3 h-3 text-zinc-400" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteTag(tag.id, tag.name)}
-                      disabled={isDeleting}
-                      className="opacity-0 group-hover/tag:opacity-100 p-1 rounded hover:bg-red-900/50 transition-all"
-                      aria-label={`Delete tag ${tag.name}`}
-                    >
-                      {isDeleting ? (
-                        <Loader2 className="w-3 h-3 text-red-400 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-3 h-3 text-red-400" />
-                      )}
-                    </button>
+                    {canManageDefinitions && (
+                      <>
+                        <button
+                          onClick={() =>
+                            setEditingColor(isEditingThisColor ? null : tag.id)
+                          }
+                          className="opacity-0 group-hover/tag:opacity-100 p-1 rounded hover:bg-zinc-700 transition-all"
+                          aria-label={`Edit color for ${tag.name}`}
+                        >
+                          <Palette className="w-3 h-3 text-zinc-400" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTag(tag.id, tag.name)}
+                          disabled={isDeleting}
+                          className="opacity-0 group-hover/tag:opacity-100 p-1 rounded hover:bg-red-900/50 transition-all"
+                          aria-label={`Delete tag ${tag.name}`}
+                        >
+                          {isDeleting ? (
+                            <Loader2 className="w-3 h-3 text-red-400 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3 h-3 text-red-400" />
+                          )}
+                        </button>
+                      </>
+                    )}
                   </div>
-                  {isEditingThisColor && (
+                  {canManageDefinitions && isEditingThisColor && (
                     <div className="flex flex-wrap gap-1.5 px-2 pb-1">
                       {TAG_COLORS.map((color) => (
                         <button
@@ -262,7 +277,7 @@ export function TagManager({
           </div>
 
           {/* Create tag section */}
-          {showCreate ? (
+          {canManageDefinitions && showCreate ? (
             <div className="border-t border-zinc-700 pt-3 space-y-2">
               <input
                 type="text"
@@ -310,14 +325,14 @@ export function TagManager({
                 </button>
               </div>
             </div>
-          ) : (
+          ) : canManageDefinitions ? (
             <button
               onClick={() => setShowCreate(true)}
               className="w-full text-xs text-cyan-400 hover:text-cyan-300 text-left py-1 transition-colors"
             >
               + Create new tag
             </button>
-          )}
+          ) : null}
 
           <Popover.Arrow className="fill-zinc-700" />
         </Popover.Content>

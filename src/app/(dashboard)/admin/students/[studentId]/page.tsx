@@ -185,7 +185,9 @@ async function getActivityTimeline(
     if (row.completedAt) {
       events.push({
         type: "practice_completed",
-        title: `Completed Quiz: ${row.practiceSetTitle} (Score: ${row.score ?? 0}%)`,
+        title: `Completed Quiz: ${row.practiceSetTitle} (Score: ${
+          row.score ?? 0
+        }%)`,
         timestamp: row.completedAt.toISOString(),
         score: row.score ?? 0,
       });
@@ -225,13 +227,15 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
 
   // Dynamic imports for main logic
   const { db } = await import("@/db");
-  const { users, lessonProgress } = await import(
-    "@/db/schema"
-  );
+  const { users, lessonProgress } = await import("@/db/schema");
   const { eq, sql, max } = await import("drizzle-orm");
 
   // Level 1: Fetch student (critical - show error page if fails)
-  let student: Awaited<ReturnType<typeof db.query.users.findFirst>> & { assignedCoachId?: string | null } | undefined;
+  let student:
+    | (Awaited<ReturnType<typeof db.query.users.findFirst>> & {
+        assignedCoachId?: string | null;
+      })
+    | undefined;
   let coaches: Array<{ id: string; name: string | null; email: string }> = [];
   try {
     student = await db.query.users.findFirst({
@@ -318,34 +322,38 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
 
   try {
     // Fetch summary stats and activity timeline in parallel
-    const [
-      courseLibraryProgress,
-      lastActiveResult,
-      timeline,
-    ] = await Promise.all([
-      loadStudentCourseLibraryProgress({
-        id: student.id,
-        role: student.role,
-      }),
-      (async () => {
-        const { featureEngagementEvents } = await import("@/db/schema");
-        const [lessonLast] = await db
-          .select({ lastActive: max(lessonProgress.lastAccessedAt) })
-          .from(lessonProgress)
-          .where(eq(lessonProgress.userId, studentId));
-        const [engagementLast] = await db
-          .select({ lastActive: max(featureEngagementEvents.createdAt) })
-          .from(featureEngagementEvents)
-          .where(eq(featureEngagementEvents.userId, studentId));
-        const dates = [lessonLast?.lastActive, engagementLast?.lastActive].filter(Boolean) as Date[];
-        if (dates.length === 0) return [{ lastActive: null }];
-        return [{ lastActive: new Date(Math.max(...dates.map((d) => d.getTime()))) }];
-      })(),
-      getActivityTimeline(studentId),
-    ]);
+    const [courseLibraryProgress, lastActiveResult, timeline] =
+      await Promise.all([
+        loadStudentCourseLibraryProgress({
+          id: student.id,
+          role: student.role,
+        }),
+        (async () => {
+          const { featureEngagementEvents } = await import("@/db/schema");
+          const [lessonLast] = await db
+            .select({ lastActive: max(lessonProgress.lastAccessedAt) })
+            .from(lessonProgress)
+            .where(eq(lessonProgress.userId, studentId));
+          const [engagementLast] = await db
+            .select({ lastActive: max(featureEngagementEvents.createdAt) })
+            .from(featureEngagementEvents)
+            .where(eq(featureEngagementEvents.userId, studentId));
+          const dates = [
+            lessonLast?.lastActive,
+            engagementLast?.lastActive,
+          ].filter(Boolean) as Date[];
+          if (dates.length === 0) return [{ lastActive: null }];
+          return [
+            {
+              lastActive: new Date(Math.max(...dates.map((d) => d.getTime()))),
+            },
+          ];
+        })(),
+        getActivityTimeline(studentId),
+      ]);
 
     const courseLibrarySummary = summarizeCourseLibraryAccessProgress(
-      courseLibraryProgress,
+      courseLibraryProgress
     );
 
     stats = {
@@ -477,8 +485,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
       for (const course of courseMap.values()) {
         if (course.progress.lessonsTotal > 0) {
           course.progress.percentComplete = Math.round(
-            (course.progress.lessonsCompleted /
-              course.progress.lessonsTotal) *
+            (course.progress.lessonsCompleted / course.progress.lessonsTotal) *
               100
           );
         }
@@ -536,14 +543,14 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
     <div className="container mx-auto px-4 py-8">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-zinc-400 mb-6">
-        <Link href={staffHomeHref} className="hover:text-white transition-colors">
+        <Link
+          href={staffHomeHref}
+          className="hover:text-white transition-colors"
+        >
           {isAdmin ? "Admin" : "Coach"}
         </Link>
         <ChevronRight className="w-4 h-4" />
-        <Link
-          href={usersHref}
-          className="hover:text-white transition-colors"
-        >
+        <Link href={usersHref} className="hover:text-white transition-colors">
           Users
         </Link>
         <ChevronRight className="w-4 h-4" />
@@ -580,8 +587,8 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
                       portalAccessStatus === "active"
                         ? "text-emerald-400"
                         : portalAccessStatus === "paused"
-                          ? "text-amber-400"
-                          : "text-red-400"
+                        ? "text-amber-400"
+                        : "text-red-400"
                     }
                   >
                     {portalAccessStatus.charAt(0).toUpperCase() +
@@ -657,7 +664,8 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         <section className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Additional Roles</h2>
           <p className="mb-3 text-sm text-zinc-400">
-            Base role is single-select (Student, Coach, Admin). Add extra access roles here as separate tags.
+            Base role is single-select (Student, Coach, Admin). Add extra access
+            roles here as separate tags.
           </p>
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
             <StudentRoleAssignment studentId={studentId} />
@@ -667,38 +675,41 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
 
       {/* Assigned Coach — only for students */}
       {isAdmin && student.role === "student" && (
-      <section className="mb-8">
-        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-          <UserCheck className="w-5 h-5 text-cyan-400" />
-          Assigned Coach
-        </h2>
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
-          <p className="text-sm text-zinc-400 mb-3">
-            Assign a coach to this student for 1:1 coaching sessions.
-          </p>
-          <AssignCoachDropdown
-            studentId={studentId}
-            currentCoachId={student.assignedCoachId ?? null}
-            currentCoachName={
-              student.assignedCoachId
-                ? coaches.find((c) => c.id === student.assignedCoachId)?.name ??
-                  coaches.find((c) => c.id === student.assignedCoachId)?.email ??
-                  null
-                : null
-            }
-            coaches={coaches}
-          />
-        </div>
-      </section>
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <UserCheck className="w-5 h-5 text-cyan-400" />
+            Assigned Coach
+          </h2>
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+            <p className="text-sm text-zinc-400 mb-3">
+              Assign a coach to this student for 1:1 coaching sessions.
+            </p>
+            <AssignCoachDropdown
+              studentId={studentId}
+              currentCoachId={student.assignedCoachId ?? null}
+              currentCoachName={
+                student.assignedCoachId
+                  ? coaches.find((c) => c.id === student.assignedCoachId)
+                      ?.name ??
+                    coaches.find((c) => c.id === student.assignedCoachId)
+                      ?.email ??
+                    null
+                  : null
+              }
+              coaches={coaches}
+            />
+          </div>
+        </section>
       )}
 
       {/* Tags section */}
-      {isAdmin ? (
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Tags</h2>
-          <StudentTagsSection studentId={studentId} />
-        </section>
-      ) : null}
+      <section className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Tags</h2>
+        <StudentTagsSection
+          studentId={studentId}
+          canManageTagDefinitions={isAdmin}
+        />
+      </section>
 
       {isAdmin ? (
         <section className="mb-8">
@@ -735,7 +746,10 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
       {student.role === "student" && canManuallyUnlockCourseLibrary ? (
         <section id="course-library-progress" className="mb-8 scroll-mt-6">
           <div className="mb-4 flex items-center gap-2">
-            <BookOpenCheck className="size-5 text-cyan-400" aria-hidden="true" />
+            <BookOpenCheck
+              className="size-5 text-cyan-400"
+              aria-hidden="true"
+            />
             <h2 className="text-xl font-semibold">Course Library Progress</h2>
           </div>
           <StudentCourseLibraryUnlock
@@ -828,9 +842,12 @@ function ActivityTimeline({ events }: { events: ActivityEvent[] }) {
           {events.map((event, index) => {
             const config = EVENT_CONFIG[event.type];
             const Icon = config.icon;
-            const relativeTime = formatDistanceToNow(new Date(event.timestamp), {
-              addSuffix: true,
-            });
+            const relativeTime = formatDistanceToNow(
+              new Date(event.timestamp),
+              {
+                addSuffix: true,
+              }
+            );
 
             return (
               <div
@@ -850,7 +867,10 @@ function ActivityTimeline({ events }: { events: ActivityEvent[] }) {
                   <time
                     className="text-xs text-zinc-500 whitespace-nowrap shrink-0"
                     dateTime={event.timestamp}
-                    title={format(new Date(event.timestamp), "MMM d, yyyy h:mm a")}
+                    title={format(
+                      new Date(event.timestamp),
+                      "MMM d, yyyy h:mm a"
+                    )}
                   >
                     {relativeTime}
                   </time>

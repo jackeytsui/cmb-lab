@@ -10,6 +10,7 @@ import { eq, and, inArray, gte, sql } from "drizzle-orm";
 import { dispatchWebhook } from "@/lib/ghl/webhooks";
 import { assignTag } from "@/lib/tags";
 import { syncTagToGhl } from "@/lib/ghl/tag-sync";
+import { shouldApplyAutomatedTagChange } from "@/lib/staff-tag-overrides";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -159,6 +160,13 @@ async function evaluateAutoTagRules(
       stats.evaluated++;
 
       try {
+        const allowed = await shouldApplyAutomatedTagChange({
+          userId: student.userId,
+          tagId: rule.tagId,
+          action: "add",
+        });
+        if (!allowed) continue;
+
         const result = await assignTag(student.userId, rule.tagId, undefined, {
           source: "system",
         });

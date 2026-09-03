@@ -9,6 +9,7 @@ import {
   ghlFieldMappings,
   ghlLocations,
   studentTags,
+  studentTagOverrides,
   syncEvents,
   tags,
   users,
@@ -323,6 +324,7 @@ export async function syncGhlCourseProgress({
     existingLinks,
     tagRows,
     assignedTagRows,
+    tagOverrideRows,
     courseData,
     linkedRoster,
   ] = await Promise.all([
@@ -350,6 +352,13 @@ export async function syncGhlCourseProgress({
     db
       .select({ userId: studentTags.userId, tagId: studentTags.tagId })
       .from(studentTags),
+    db
+      .select({
+        userId: studentTagOverrides.userId,
+        tagId: studentTagOverrides.tagId,
+        isAssigned: studentTagOverrides.isAssigned,
+      })
+      .from(studentTagOverrides),
     loadCourseStructures(),
     db
       .select({
@@ -424,6 +433,11 @@ export async function syncGhlCourseProgress({
   );
   const assignedTagKeys = new Set(
     assignedTagRows.map((row) => `${row.userId}:${row.tagId}`),
+  );
+  const staffForcedOffTagKeys = new Set(
+    tagOverrideRows
+      .filter((row) => !row.isAssigned)
+      .map((row) => `${row.userId}:${row.tagId}`),
   );
 
   const linkPlans: LinkPlan[] = [];
@@ -506,7 +520,7 @@ export async function syncGhlCourseProgress({
         const tag = tagByName.get(rawTagName.trim().toLowerCase());
         if (!tag) continue;
         const key = `${user.id}:${tag.id}`;
-        if (!assignedTagKeys.has(key)) {
+        if (!assignedTagKeys.has(key) && !staffForcedOffTagKeys.has(key)) {
           tagsToAdd.set(key, { userId: user.id, tagId: tag.id });
         }
       }

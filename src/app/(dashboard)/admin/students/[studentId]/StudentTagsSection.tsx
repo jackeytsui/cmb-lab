@@ -14,13 +14,17 @@ interface Tag {
 
 interface StudentTagsSectionProps {
   studentId: string;
+  canManageTagDefinitions?: boolean;
 }
 
 /**
  * StudentTagsSection - Shows all tags assigned to a student with a TagManager for editing.
  * Used on the admin student detail page.
  */
-export function StudentTagsSection({ studentId }: StudentTagsSectionProps) {
+export function StudentTagsSection({
+  studentId,
+  canManageTagDefinitions = false,
+}: StudentTagsSectionProps) {
   const [currentTags, setCurrentTags] = useState<Tag[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,11 +80,12 @@ export function StudentTagsSection({ studentId }: StudentTagsSectionProps) {
           color={tag.color}
           type={tag.type}
           onRemove={async () => {
-            await fetch(`/api/students/${studentId}/tags`, {
+            const response = await fetch(`/api/students/${studentId}/tags`, {
               method: "DELETE",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ tagId: tag.id }),
             });
+            if (!response.ok) return;
             handleTagsChange();
           }}
         />
@@ -90,6 +95,7 @@ export function StudentTagsSection({ studentId }: StudentTagsSectionProps) {
         currentTags={currentTags}
         allTags={allTags}
         onTagsChange={handleTagsChange}
+        canManageDefinitions={canManageTagDefinitions}
       />
     </div>
   );

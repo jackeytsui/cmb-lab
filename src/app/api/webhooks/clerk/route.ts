@@ -10,6 +10,7 @@ import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import { assignRole } from "@/lib/user-roles";
 import { assignTag } from "@/lib/tags";
 import { composeStudentName } from "@/lib/student-name";
+import { shouldApplyAutomatedTagChange } from "@/lib/staff-tag-overrides";
 import {
   DEFAULT_PLATFORM_ROLE,
   normalizePlatformRole,
@@ -118,6 +119,12 @@ async function applyInvitationMetadataToUser(
   const inviteTags = parseInviteTags(inviteTagsRaw);
   for (const tagName of inviteTags) {
     const tagId = await ensureTagIdByName(tagName, null);
+    const allowed = await shouldApplyAutomatedTagChange({
+      userId,
+      tagId,
+      action: "add",
+    });
+    if (!allowed) continue;
     await assignTag(userId, tagId, undefined, { source: "webhook" });
   }
 }

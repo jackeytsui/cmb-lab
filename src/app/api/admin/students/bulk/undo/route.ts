@@ -2,10 +2,12 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { courseAccess, bulkOperations } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
-import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
-import { assignTag, removeTag } from "@/lib/tags";
+import { courseAccess, bulkOperations, users } from "@/db/schema";
+import { eq, and, isNull } from "drizzle-orm";
+import { hasMinimumRole, getRealUser } from "@/lib/auth";
+import { setStaffTagOverride } from "@/lib/staff-tag-overrides";
+import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { syncTagToGhl } from "@/lib/ghl/tag-sync";
 
 const undoSchema = z.object({
   operationId: z.string().uuid(),
@@ -27,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const currentUser = await getCurrentUser();
+  const currentUser = await getRealUser();
   if (!currentUser) {
     return NextResponse.json({ error: "User not found" }, { status: 401 });
   }
@@ -37,7 +39,10 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 }
+    );
   }
 
   const parsed = undoSchema.safeParse(body);
@@ -90,6 +95,25 @@ export async function POST(request: NextRequest) {
 
     for (const studentId of succeededIds) {
       try {
+        const student = await db.query.users.findFirst({
+          where: and(
+            eq(users.id, studentId),
+            eq(users.role, "student"),
+            isNull(users.deletedAt),
+          ),
+          columns: { assignedCoachId: true },
+        });
+        if (
+          !student ||
+          !canStaffAccessStudent({
+            actorUserId: currentUser.id,
+            actorRole: currentUser.role,
+            assignedCoachId: student.assignedCoachId,
+          })
+        ) {
+          continue;
+        }
+
         switch (op.operationType) {
           case "assign_course": {
             // Reverse: remove course access
@@ -121,14 +145,28 @@ export async function POST(request: NextRequest) {
 
           case "add_tag": {
             // Reverse: remove tag
-            await removeTag(studentId, targetId);
+            const result = await setStaffTagOverride({
+              userId: studentId,
+              tagId: targetId,
+              isAssigned: false,
+              setBy: currentUser.id,
+            });
+            syncTagToGhl(studentId, result.tag.name, "remove").catch(
+              console.error,
+            );
             studentsAffected++;
             break;
           }
 
           case "remove_tag": {
             // Reverse: re-assign tag
-            await assignTag(studentId, targetId, currentUser.id);
+            const result = await setStaffTagOverride({
+              userId: studentId,
+              tagId: targetId,
+              isAssigned: true,
+              setBy: currentUser.id,
+            });
+            syncTagToGhl(studentId, result.tag.name, "add").catch(console.error);
             studentsAffected++;
             break;
           }

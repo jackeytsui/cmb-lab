@@ -6,18 +6,23 @@ import { z } from "zod";
 
 const createTagSchema = z.object({
   name: z.string().min(1, "Tag name is required"),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a valid hex color"),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a valid hex color"),
   type: z.enum(["coach", "system"]).optional(),
-  description: z.string().max(500, "Description must be 500 characters or less").optional(),
+  description: z
+    .string()
+    .max(500, "Description must be 500 characters or less")
+    .optional(),
 });
 
 /**
  * GET /api/admin/tags
  * List all tags. Accepts optional ?type=coach|system query param.
- * Requires administrator role.
+ * Reading tag definitions is available to coaches and administrators.
  */
 export async function GET(request: NextRequest) {
-  const hasAccess = await hasMinimumRole("admin");
+  const hasAccess = await hasMinimumRole("coach");
   if (!hasAccess) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
