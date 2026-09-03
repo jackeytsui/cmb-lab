@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { ExerciseForm } from "@/components/admin/exercises/ExerciseForm";
 import { AudioCourseWalkthroughAdmin } from "@/components/admin/AudioCourseWalkthroughAdmin";
 import type { PracticeExercise } from "@/db/schema";
+import { useAdminStudentSearch } from "@/hooks/useAdminStudentSearch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1318,6 +1319,23 @@ function VisibilitySection({
   const [studentSearch, setStudentSearch] = useState("");
   const [bulkInput, setBulkInput] = useState("");
   const [showBulk, setShowBulk] = useState(false);
+  const [selectedStudentOptions, setSelectedStudentOptions] = useState<
+    StudentOption[]
+  >([]);
+  const {
+    results: studentSearchResults,
+    isLoading: searchingStudents,
+    error: studentSearchError,
+  } = useAdminStudentSearch(studentSearch, 10);
+  const knownStudents = useMemo(() => {
+    const merged = new Map(
+      [...allStudents, ...selectedStudentOptions].map((student) => [
+        student.id,
+        student,
+      ]),
+    );
+    return [...merged.values()];
+  }, [allStudents, selectedStudentOptions]);
 
   const hasChanges =
     JSON.stringify([...selectedTagIds].sort()) !==
@@ -1336,14 +1354,7 @@ function VisibilitySection({
 
   // Student search (single)
   const filteredStudents = studentSearch.trim()
-    ? allStudents
-        .filter(
-          (s) =>
-            !selectedUserIds.includes(s.id) &&
-            (s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-              s.email.toLowerCase().includes(studentSearch.toLowerCase())),
-        )
-        .slice(0, 10)
+    ? studentSearchResults.filter((s) => !selectedUserIds.includes(s.id))
     : [];
 
   // Bulk add: parse comma/newline separated emails, match to students
@@ -1506,7 +1517,7 @@ function VisibilitySection({
         {selectedUserIds.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
             {selectedUserIds.map((uid) => {
-              const student = allStudents.find((s) => s.id === uid);
+              const student = knownStudents.find((s) => s.id === uid);
               return (
                 <span
                   key={uid}
@@ -1550,8 +1561,29 @@ function VisibilitySection({
           /* Single search mode */
           <div className="relative">
             <input
+              aria-label="Search students for visibility"
+              name="studentSearch"
               value={studentSearch}
               onChange={(e) => setStudentSearch(e.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                const exactEmail = filteredStudents.find(
+                  (student) =>
+                    student.email.toLowerCase() ===
+                    studentSearch.trim().toLowerCase(),
+                );
+                const student =
+                  exactEmail ??
+                  (filteredStudents.length === 1 ? filteredStudents[0] : null);
+                if (!student) return;
+                event.preventDefault();
+                setSelectedStudentOptions((current) => [
+                  ...current.filter((option) => option.id !== student.id),
+                  student,
+                ]);
+                setSelectedUserIds((current) => [...current, student.id]);
+                setStudentSearch("");
+              }}
               placeholder="Search students by name or email…"
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             />
@@ -1562,6 +1594,10 @@ function VisibilitySection({
                     key={s.id}
                     type="button"
                     onClick={() => {
+                      setSelectedStudentOptions((current) => [
+                        ...current.filter((option) => option.id !== s.id),
+                        s,
+                      ]);
                       setSelectedUserIds((prev) => [...prev, s.id]);
                       setStudentSearch("");
                     }}
@@ -1569,9 +1605,28 @@ function VisibilitySection({
                   >
                     <span className="font-medium text-foreground">{s.name}</span>
                     <span className="text-xs text-muted-foreground">{s.email}</span>
+                    <span className="ml-auto text-xs font-medium text-primary">Add</span>
                   </button>
                 ))}
               </div>
+            )}
+            {studentSearch.trim() && searchingStudents && (
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Searching all students…
+              </div>
+            )}
+            {studentSearch.trim() &&
+              !searchingStudents &&
+              !studentSearchError &&
+              filteredStudents.length === 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No matching CMB Lab student account.
+                </p>
+              )}
+            {studentSearchError && (
+              <p role="alert" className="mt-1 text-xs text-red-500">
+                {studentSearchError}
+              </p>
             )}
           </div>
         )}
