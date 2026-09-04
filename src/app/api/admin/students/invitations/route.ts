@@ -1,3 +1,4 @@
+import { setPortalAccess } from "@/lib/portal-access";
 import { NextRequest, NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { z } from "zod";
@@ -395,16 +396,10 @@ export async function POST(req: NextRequest) {
           });
           continue;
         }
-        await clerk.users.updateUserMetadata(user.id, {
-          publicMetadata: {
-            ...(user.publicMetadata ?? {}),
-            cmbPortalAccessRevoked: true,
-            cmbPortalAccessStatus: "paused",
-            cmbPortalAccessRevokedAt: new Date().toISOString(),
-            cmbPortalAccessRevokedReason: "admin_manual_pause",
-          },
+        await setPortalAccess(clerk, user.id, {
+          status: "paused",
+          reason: "admin_manual_pause",
         });
-        await clerk.users.lockUser(user.id);
         results.push({
           email: target.email,
           success: true,
@@ -448,20 +443,7 @@ export async function POST(req: NextRequest) {
 
       const statusFromMetadata =
         (metadata.cmbPortalAccessStatus as "active" | "paused" | "expired") || "active";
-      if (statusFromMetadata === "active") {
-        // If previously locked/revoked, re-enable on active upload actions.
-        try {
-          await clerk.users.unlockUser(user.id);
-        } catch {
-          // No-op if user is not locked.
-        }
-      } else {
-        try {
-          await clerk.users.lockUser(user.id);
-        } catch {
-          // No-op if already locked.
-        }
-      }
+      await setPortalAccess(clerk, user.id, { status: statusFromMetadata, reason: "admin_upload" });
 
       if (action === "upload_only") {
         results.push({

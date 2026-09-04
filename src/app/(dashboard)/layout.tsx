@@ -40,12 +40,9 @@ import {
   filterFeaturesForRole,
 } from "@/lib/platform-roles";
 import { hasOneOnOneCoachingHistory } from "@/lib/coaching-history-access";
+import { portalAccessStatus, setPortalAccess } from "@/lib/portal-access";
 
 export const dynamic = "force-dynamic";
-
-function isPast(date: Date) {
-  return date.getTime() < new Date().getTime();
-}
 
 function getClerkEmail(clerkUser: Awaited<ReturnType<typeof currentUser>>) {
   return (
@@ -77,40 +74,21 @@ export default async function DashboardLayout({
   const clerkUser = await currentUser();
   const email = getClerkEmail(clerkUser);
   const metadata = (clerkUser?.publicMetadata ?? {}) as Record<string, unknown>;
-  const rawStatus =
-    metadata.cmbPortalAccessStatus === "active" ||
-    metadata.cmbPortalAccessStatus === "paused" ||
-    metadata.cmbPortalAccessStatus === "expired"
-      ? metadata.cmbPortalAccessStatus
-      : metadata.cmbPortalAccessRevoked === true
-        ? "paused"
-        : "active";
-  const courseEndDateRaw =
-    typeof metadata.cmbCourseEndDate === "string" ? metadata.cmbCourseEndDate : null;
-  const courseEndAt = courseEndDateRaw ? new Date(courseEndDateRaw) : null;
-  const isCourseEnded =
-    courseEndAt instanceof Date &&
-    !Number.isNaN(courseEndAt.getTime()) &&
-    isPast(courseEndAt);
-  const isAccessActive = rawStatus === "active" && !isCourseEnded;
+  const accessStatus = portalAccessStatus(metadata);
+  const isAccessActive = accessStatus === "active";
 
   if (!isAccessActive) {
-    // Auto-lock expired students once the end date passes.
-    if (isCourseEnded && rawStatus !== "expired" && userId) {
+    // Revoke sessions, not a temporary lock. This checks the real signed-in user,
+    // before View As, so viewing an expired student never blocks their coach/admin.
+    if (!clerkUser?.banned || metadata.cmbPortalAccessStatus !== accessStatus) {
       try {
-        const clerk = await clerkClient();
-        await clerk.users.updateUserMetadata(userId, {
-          publicMetadata: {
-            ...metadata,
-            cmbPortalAccessRevoked: true,
-            cmbPortalAccessStatus: "expired",
-            cmbPortalAccessRevokedAt: new Date().toISOString(),
-            cmbPortalAccessRevokedReason: "course_end_date_expired",
-          },
+        await setPortalAccess(await clerkClient(), userId, {
+          status: accessStatus,
+          enforceExisting: true,
+          reason: "portal_access_restricted",
         });
-        await clerk.users.lockUser(userId);
       } catch (err) {
-        console.error("Failed to auto-lock expired user:", err);
+        console.error("Failed to block expired/paused sign-in:", err);
       }
     }
     redirect("/sign-in?access=expired");

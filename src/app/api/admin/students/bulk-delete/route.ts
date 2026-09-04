@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { inArray, and, isNull } from "drizzle-orm";
+import { inArray, and, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { hasMinimumRole, getCurrentUser } from "@/lib/auth";
@@ -61,14 +61,21 @@ export async function POST(request: NextRequest) {
 
   // Fetch clerk IDs so we can lock the accounts too (prevents login)
   const targetRows = await db
-    .select({ id: users.id, clerkId: users.clerkId })
+    .select({ id: users.id, clerkId: users.clerkId, role: users.role })
     .from(users)
     .where(and(inArray(users.id, targetIds), isNull(users.deletedAt)));
+
+  if (targetRows.some((row) => row.role === "student")) {
+    return NextResponse.json(
+      { error: "Student records cannot be deleted. Set portal access to Expired instead. No accounts were removed." },
+      { status: 409 },
+    );
+  }
 
   const deleted = await db
     .update(users)
     .set({ deletedAt: new Date() })
-    .where(and(inArray(users.id, targetIds), isNull(users.deletedAt)))
+    .where(and(inArray(users.id, targetIds), isNull(users.deletedAt), ne(users.role, "student")))
     .returning({ id: users.id });
 
   // Lock Clerk accounts so deleted users can't log in. This is fire-and-forget

@@ -3,7 +3,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import { users, courseAccess, lessonProgress } from "@/db/schema";
-import { eq, sql, max } from "drizzle-orm";
+import { eq, sql, max, and, ne } from "drizzle-orm";
 import { z } from "zod";
 import { PLATFORM_ROLES } from "@/lib/platform-roles";
 import { composeStudentName } from "@/lib/student-name";
@@ -219,7 +219,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 /**
  * DELETE /api/admin/students/[studentId]
- * Soft-delete a user (sets deletedAt). Requires admin role.
+ * Soft-delete staff only. Student records must be retained; expire access instead.
  */
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const { userId } = await auth();
@@ -240,10 +240,20 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
+  if (student.role === "student") {
+    return NextResponse.json(
+      { error: "Student records cannot be deleted. Set portal access to Expired instead." },
+      { status: 409 },
+    );
+  }
+  if (student.clerkId === userId) {
+    return NextResponse.json({ error: "You cannot remove your own account" }, { status: 409 });
+  }
+
   await db
     .update(users)
     .set({ deletedAt: new Date() })
-    .where(eq(users.id, studentId));
+    .where(and(eq(users.id, studentId), ne(users.role, "student")));
 
   // Lock in Clerk so they can't log in
   try {

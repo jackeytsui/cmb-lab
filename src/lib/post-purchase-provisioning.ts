@@ -1,4 +1,5 @@
 import "server-only";
+import { portalAccessStatus, setPortalAccess } from "@/lib/portal-access";
 
 import { clerkClient } from "@clerk/nextjs/server";
 import { and, eq, ilike, isNotNull, isNull, sql } from "drizzle-orm";
@@ -71,8 +72,8 @@ async function ensureCmbUser(params: {
   let clerkUser = lookup.data[0] ?? null;
   const created = !clerkUser;
   const priorMetadata = clerkUser?.publicMetadata ?? {};
-  const portalAlreadyExpired =
-    priorMetadata.cmbPortalAccessStatus === "expired";
+  // Background provisioning must not undo a manual pause or an expired term.
+  const existingPortalStatus = portalAccessStatus(priorMetadata);
   const retryPostPurchaseInvitation =
     priorMetadata.invitedBy === "ghl_post_purchase" &&
     typeof priorMetadata.cmbPostPurchaseInviteSentAt !== "string";
@@ -80,8 +81,8 @@ async function ensureCmbUser(params: {
     role: DEFAULT_PLATFORM_ROLE,
     cmbInviteRole: DEFAULT_PLATFORM_ROLE,
     cmbInviteTags: params.expectedTags,
-    cmbPortalAccessStatus: portalAlreadyExpired ? "expired" : "active",
-    cmbPortalAccessRevoked: portalAlreadyExpired,
+    cmbPortalAccessStatus: existingPortalStatus,
+    cmbPortalAccessRevoked: existingPortalStatus !== "active",
   };
   const invitationMetadata = {
     ...provisioningMetadata,
@@ -114,10 +115,7 @@ async function ensureCmbUser(params: {
         cmbInviteTags: mergedInviteTags,
       },
     });
-    if (!portalAlreadyExpired) {
-      await clerk.users.unbanUser(clerkUser.id).catch(() => {});
-      await clerk.users.unlockUser(clerkUser.id).catch(() => {});
-    }
+    await setPortalAccess(clerk, clerkUser.id, { status: existingPortalStatus, reason: "post_purchase_reconciliation" });
   }
 
   const fullName = composeStudentName(params.firstName, params.lastName);

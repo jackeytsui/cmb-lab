@@ -3,12 +3,12 @@
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Loader2,
   Tag as TagIcon,
   UserPlus,
-  Trash2,
   Check,
   X,
   Search,
@@ -57,7 +57,6 @@ type BulkAction =
   | "add_tags"
   | "remove_tags"
   | "portal_access"
-  | "delete"
   | null;
 
 export function UsersManageTable({
@@ -230,48 +229,13 @@ export function UsersManageTable({
         setResultMessage(data.error || "Failed to update portal access");
         return;
       }
-      setResultMessage(
-        `✓ Set ${data.updatedCount} user(s) to ${selectedPortalStatus}` +
-          (data.failedCount > 0 ? ` (${data.failedCount} failed)` : ""),
-      );
-      closeAction();
-      clearSelection();
-      refreshPage();
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const submitDelete = async () => {
-    if (
-      !confirm(
-        `Remove ${selectedIds.size} user(s) from the lab? This will revoke their access.`,
-      )
-    ) {
-      return;
-    }
-    setSubmitting(true);
-    setResultMessage(null);
-    try {
-      const res = await fetch("/api/admin/students/bulk-delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIds: Array.from(selectedIds) }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setResultMessage(data.error || "Failed to delete users");
+      const message = `Updated ${data.updatedCount} user(s). Past end dates remain expired.`;
+      if (data.failedCount > 0) {
+        setResultMessage(`${message} ${data.failedCount} failed — please retry or review their security status.`);
+        toast.error(`${data.failedCount} access update(s) could not be completed`);
         return;
       }
-      const msg = [
-        `✓ Deleted ${data.deletedCount} user(s)`,
-        data.selfExcluded > 0
-          ? `(self-delete of ${data.selfExcluded} skipped)`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" ");
-      setResultMessage(msg);
+      toast.success(message);
       closeAction();
       clearSelection();
       refreshPage();
@@ -345,11 +309,14 @@ export function UsersManageTable({
               </button>
               <button
                 type="button"
-                onClick={() => openAction("delete")}
+                onClick={() => {
+                  setSelectedPortalStatus("expired");
+                  openAction("portal_access");
+                }}
                 className="inline-flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                Remove from lab
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Expire access
               </button>
             </div>
           </div>
@@ -525,9 +492,10 @@ export function UsersManageTable({
                 </option>
               </select>
               <p className="text-[11px] text-muted-foreground">
-                Paused/Expired locks their Clerk account so they can&apos;t log in.
-                All their progress, tags, and notes stay intact. Set back to
-                active to restore access.
+                Paused/Expired blocks sign-in and ends existing sessions.
+                Progress, tags, notes, and coaching history stay intact and
+                remain available to admins and assigned coaches. To restore
+                access, set Active and extend any past course end date.
               </p>
               <div className="flex justify-end gap-2">
                 <button
@@ -546,35 +514,6 @@ export function UsersManageTable({
                 >
                   {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
                   Apply
-                </button>
-              </div>
-            </div>
-          )}
-
-          {activeAction === "delete" && (
-            <div className="rounded border border-red-500/30 bg-red-500/5 p-3 space-y-2">
-              <p className="text-xs text-foreground">
-                Remove <strong>{selectedIds.size}</strong> user(s) from the
-                lab? This soft-deletes them and revokes access. Your own
-                account will be excluded if selected.
-              </p>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeAction}
-                  disabled={submitting}
-                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={submitDelete}
-                  disabled={submitting}
-                  className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                >
-                  {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
-                  Confirm delete
                 </button>
               </div>
             </div>

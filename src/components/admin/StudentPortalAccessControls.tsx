@@ -74,6 +74,7 @@ export function StudentPortalAccessControls({
       </div>
       <p className="text-xs text-zinc-500">
         Only <span className="text-zinc-300">Active</span> users can log in. Paused and Expired users keep their data but cannot access the portal.
+        {" "}Admins and assigned coaches can still open their records.
       </p>
       <button
         type="button"

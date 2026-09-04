@@ -5,6 +5,7 @@ import { hasMinimumRole } from "@/lib/auth";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { inArray } from "drizzle-orm";
+import { setPortalAccess, type PortalAccessStatus } from "@/lib/portal-access";
 
 const bulkSchema = z.object({
   userIds: z.array(z.string().uuid()).min(1).max(500),
@@ -16,8 +17,7 @@ const bulkSchema = z.object({
  * Bulk update portal access status for multiple users.
  * Mirrors the single-user PATCH at /api/admin/students/[studentId]/portal-access.
  *
- * Active → unlocks Clerk, user can log in.
- * Paused/Expired → locks Clerk, user cannot log in; all their data is preserved.
+ * Paused/Expired → blocks sign-in until reactivated; records remain visible to staff.
  */
 export async function POST(request: NextRequest) {
   const { userId } = await auth();
@@ -50,42 +50,18 @@ export async function POST(request: NextRequest) {
     .where(inArray(users.id, userIds));
 
   const clerk = await clerkClient();
-  const results: Array<{ userId: string; success: boolean; error?: string }> = [];
+  const results: Array<{ userId: string; success: boolean; status?: PortalAccessStatus; error?: string }> = [];
+  for (const id of new Set(userIds)) {
+    if (!userRows.some((row) => row.id === id)) results.push({ userId: id, success: false, error: "User not found" });
+  }
 
   for (const row of userRows) {
     try {
-      const clerkUser = await clerk.users.getUser(row.clerkId);
-      await clerk.users.updateUserMetadata(row.clerkId, {
-        publicMetadata: {
-          ...(clerkUser.publicMetadata ?? {}),
-          cmbPortalAccessStatus: status,
-          cmbPortalAccessRevoked: status !== "active",
-          cmbPortalAccessRevokedAt:
-            status === "active" ? null : new Date().toISOString(),
-          cmbPortalAccessRevokedReason:
-            status === "active"
-              ? null
-              : status === "expired"
-                ? "admin_bulk_expire"
-                : "admin_bulk_pause",
-        },
-      });
-
-      if (status === "active") {
-        try {
-          await clerk.users.unlockUser(row.clerkId);
-        } catch {
-          // already unlocked
-        }
-      } else {
-        try {
-          await clerk.users.lockUser(row.clerkId);
-        } catch {
-          // already locked
-        }
+      if (row.clerkId === userId) {
+        throw new Error("Change your own access separately to prevent accidental lockout");
       }
-
-      results.push({ userId: row.id, success: true });
+      const updated = await setPortalAccess(clerk, row.clerkId, { status, reason: `admin_bulk_${status}` });
+      results.push({ userId: row.id, success: true, status: updated.status });
     } catch (err) {
       results.push({
         userId: row.id,

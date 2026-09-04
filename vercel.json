@@ -5,6 +5,10 @@
   "devCommand": "npm run dev",
   "crons": [
     {
+      "path": "/api/cron/student-access-expiry",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/ghl-webhooks",
       "schedule": "0 7 * * *"
     },

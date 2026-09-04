@@ -217,6 +217,17 @@ export async function POST(req: NextRequest) {
       if (primaryEmail) {
         const normalizedEmail = primaryEmail.trim().toLowerCase();
 
+        // Portal status/ban changes emit user.updated too. They must not trigger
+        // unrelated CRM writes or sales/onboarding automations.
+        const existingIdentity = await db.query.users.findFirst({
+          where: eq(users.clerkId, id),
+          columns: { email: true, name: true },
+        });
+        const emailChanged = !existingIdentity || existingIdentity.email.toLowerCase() !== normalizedEmail;
+        if (!emailChanged && existingIdentity.name === composeStudentName(first_name, last_name)) {
+          return new Response("OK", { status: 200 });
+        }
+
         let [updated] = await db
           .update(users)
           .set({
@@ -255,7 +266,7 @@ export async function POST(req: NextRequest) {
           .from(users)
           .where(eq(users.clerkId, id))
           .limit(1);
-        if (user.length > 0) {
+        if (user.length > 0 && emailChanged) {
           const existingLinks = await getGhlContactLinks(user[0].id);
           if (existingLinks.length > 0) {
             // Already linked — just sync email change across all linked locations
