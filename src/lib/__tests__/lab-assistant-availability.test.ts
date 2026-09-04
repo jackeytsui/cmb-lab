@@ -10,7 +10,7 @@ describe("CMB Lab Assistant availability and layout", () => {
   it("renders for every active signed-in dashboard user without a feature gate", () => {
     const layout = source("src/app/(dashboard)/layout.tsx");
 
-    expect(layout).toContain("<LabAssistantWidget />");
+    expect(layout).toContain("<LabAssistantWidget role={assistantRole} />");
     expect(layout).not.toContain("showLabAssistant &&");
   });
 

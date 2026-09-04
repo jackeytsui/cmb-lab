@@ -2,9 +2,8 @@
 // CMB Lab Assistant chat endpoint. Gorgias-style pipeline:
 //   identify (session) → intent scan → guidance → resolve or escalate.
 //
-// Data gatekeeping: the model never calls GHL. getStudentContext() injects
-// the allowlisted fields for the signed-in student only; the model's single
-// tool (escalateToTeam) writes a task through the same middleware.
+// Data gatekeeping: student mode never calls GHL directly. Internal recording
+// mode is available only to server-verified admins, coaches, and consultants.
 
 import {
   convertToModelMessages,
@@ -68,6 +67,8 @@ import {
   filterKnowledgeForCoachingAccess,
   restrictedCoachingReply,
 } from "@/lib/lab-assistant/entitlement-policy";
+import { canUseInternalRecordingFinder } from "@/lib/lab-assistant/internal-recording-policy";
+import { internalRecordingAssistantResponse } from "@/lib/lab-assistant/internal-assistant";
 
 export const maxDuration = 30;
 
@@ -326,6 +327,13 @@ export async function POST(request: Request) {
       isPromptInjectionProbe(messageText(latestUserMessage))
     ) {
       return cannedResponse(SAFE_SCOPE_REPLY);
+    }
+
+    // The signed-in internal team gets a purpose-built recording finder.
+    // Admin dry runs deliberately stay in the student pipeline so the
+    // existing QA console continues to test the student experience.
+    if (!dryRun && canUseInternalRecordingFinder(verifiedRole)) {
+      return internalRecordingAssistantResponse(messages, user);
     }
 
     const studentContextPromise = getStudentContext(user);

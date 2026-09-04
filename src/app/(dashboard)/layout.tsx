@@ -118,6 +118,9 @@ export default async function DashboardLayout({
   if (!role) {
     role = dbUser?.role ?? DEFAULT_PLATFORM_ROLE;
   }
+  // The assistant authorizes against the real signed-in role even while an
+  // administrator is using View As for the surrounding dashboard.
+  const assistantRole = role;
 
   // "View As" impersonation: admin can view the app as another user
   const cookieStore = await cookies();
@@ -315,7 +318,7 @@ export default async function DashboardLayout({
         </div>
         </SidebarInset>
         {/* Support is a baseline service for every active signed-in user. */}
-        <LabAssistantWidget />
+        <LabAssistantWidget role={assistantRole} />
       </SidebarProvider>
     </>
   );

@@ -10,6 +10,9 @@ import {
 import { AlertTriangle, Bug, CheckCircle2, Lightbulb, MessageSquarePlus, Send, Square, Star, X } from 'lucide-react';
 import { useLabAssistant } from '@/hooks/useLabAssistant';
 import type { LabAssistantCaseOutcome } from '@/lib/lab-assistant/message';
+import { canUseInternalRecordingFinder } from '@/lib/lab-assistant/internal-recording-policy';
+import { sanitizeRecordingUrl } from '@/lib/recording-embed';
+import type { Roles } from '@/types/globals';
 
 const SUPPORT_EMAIL = 'contact@thecmblueprint.com';
 
@@ -29,6 +32,14 @@ const FAQ_CHIPS = [
 const WELCOME_MESSAGE =
   "Hi! I can help with your program dates, coaching, referrals, and finding your way around CMB Lab. Choose a common question or write your own.";
 
+const INTERNAL_RECORDING_CHIPS = [
+  "Find a student's 1:1 recording",
+  'Find an ICGC recording by date',
+];
+
+const INTERNAL_WELCOME_MESSAGE =
+  "Hi! I can find saved 1:1 and ICGC recording links. Tell me the student's name or email and session date, or give me an ICGC lesson date.";
+
 type FeedbackMode = 'bug' | 'feature_request' | 'general';
 
 const FEEDBACK_ACTIONS = [
@@ -45,6 +56,7 @@ const FEEDBACK_PROMPTS: Record<FeedbackMode, string> = {
 
 interface LabAssistantPanelProps {
   onClose: () => void;
+  role: Roles;
 }
 
 type ResolutionStatus =
@@ -64,7 +76,7 @@ interface ResolutionState {
   responseWindow?: string;
 }
 
-export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
+export function LabAssistantPanel({ onClose, role }: LabAssistantPanelProps) {
   const { messages, sendMessage, status, error, clearError, stop } =
     useLabAssistant();
   const [input, setInput] = useState('');
@@ -106,6 +118,8 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
   }, [input]);
 
   const isStreaming = status === 'streaming';
+  const internalRecordingMode = canUseInternalRecordingFinder(role);
+  const starterChips = internalRecordingMode ? INTERNAL_RECORDING_CHIPS : FAQ_CHIPS;
   // 'error' stays sendable so the student can retry after a failed request.
   const canSend = status === 'ready' || status === 'error';
 
@@ -259,7 +273,9 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
               </span>
             </div>
             <p className="mt-0.5 truncate text-xs text-white/70">
-              Answers, guidance, and a direct line to our team
+              {internalRecordingMode
+                ? 'Internal 1:1 and ICGC recording finder'
+                : 'Answers, guidance, and a direct line to our team'}
             </p>
           </div>
           <button
@@ -275,11 +291,17 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
       </div>
 
       <div className="shrink-0 border-b border-amber-500/25 bg-amber-50 px-4 py-2 text-xs leading-5 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-        AI can make mistakes. For urgent or personal help,{' '}
-        <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold underline underline-offset-2">
-          email our team
-        </a>
-        .
+        {internalRecordingMode ? (
+          'Verify the student and session date before sharing a recording.'
+        ) : (
+          <>
+            AI can make mistakes. For urgent or personal help,{' '}
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold underline underline-offset-2">
+              email our team
+            </a>
+            .
+          </>
+        )}
       </div>
 
       {/* Messages */}
@@ -290,15 +312,15 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
         {messages.length === 0 && (
           <div className="space-y-5">
             <div className="max-w-[92%] rounded-2xl rounded-bl-md bg-muted px-3.5 py-3 text-sm leading-6 text-foreground">
-              {WELCOME_MESSAGE}
+              {internalRecordingMode ? INTERNAL_WELCOME_MESSAGE : WELCOME_MESSAGE}
             </div>
 
             <section aria-labelledby="popular-questions-heading">
               <p id="popular-questions-heading" className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Popular questions
+                {internalRecordingMode ? 'Recording shortcuts' : 'Popular questions'}
               </p>
               <div className="flex flex-wrap gap-2">
-                {FAQ_CHIPS.map((chip) => (
+                {starterChips.map((chip) => (
                   <button
                     key={chip}
                     type="button"
@@ -371,7 +393,7 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
               <div key={message.id} className="space-y-2">
                 <div className="flex justify-start">
                   <div className="max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5 text-sm leading-6 text-foreground">
-                    {text}
+                    <LinkifiedMessageText text={text} />
                   </div>
                 </div>
                 {caseOutcome?.type === 'data-caseOutcome' && (
@@ -473,7 +495,7 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
               onKeyDown={handleInputKeyDown}
               rows={1}
               maxLength={4000}
-              placeholder="Ask anything about CMB Lab…"
+              placeholder={internalRecordingMode ? 'Find a coaching recording…' : 'Ask anything about CMB Lab…'}
               className="max-h-28 min-h-12 flex-1 resize-none overflow-y-auto rounded-xl border border-input bg-background px-3.5 py-3 text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#3a49b8]/50"
             />
             {isStreaming ? (
@@ -501,6 +523,35 @@ export function LabAssistantPanel({ onClose }: LabAssistantPanelProps) {
       )}
     </div>
   );
+}
+
+function LinkifiedMessageText({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, index) => {
+    if (!part.startsWith('http://') && !part.startsWith('https://')) {
+      return part;
+    }
+
+    const trailingMatch = part.match(/[),.;!?]+$/);
+    const trailing = trailingMatch?.[0] ?? '';
+    const candidate = trailing ? part.slice(0, -trailing.length) : part;
+    const href = sanitizeRecordingUrl(candidate);
+    if (!href) return part;
+
+    return (
+      <span key={`${href}-${index}`}>
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="font-medium text-[#3a49b8] underline underline-offset-2 hover:text-[#2e3a97] dark:text-indigo-300 dark:hover:text-indigo-200"
+        >
+          {candidate}
+        </a>
+        {trailing}
+      </span>
+    );
+  });
 }
 
 function CaseOutcomeCard({

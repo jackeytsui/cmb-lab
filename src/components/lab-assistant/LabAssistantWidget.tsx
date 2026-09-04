@@ -5,8 +5,9 @@ import { useUser } from '@clerk/nextjs';
 import { MessageCircle, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LabAssistantPanel } from './LabAssistantPanel';
+import type { Roles } from '@/types/globals';
 
-export function LabAssistantWidget() {
+export function LabAssistantWidget({ role }: { role: Roles }) {
   const { isSignedIn } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const launcherRef = useRef<HTMLButtonElement>(null);
@@ -43,7 +44,7 @@ export function LabAssistantWidget() {
             transition={{ duration: 0.18 }}
             className="pointer-events-auto fixed bottom-2 right-2 flex h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-2xl sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[420px]"
           >
-            <LabAssistantPanel onClose={close} />
+            <LabAssistantPanel onClose={close} role={role} />
           </motion.div>
         )}
       </AnimatePresence>
