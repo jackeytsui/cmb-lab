@@ -2,7 +2,7 @@ import type { ClerkClient } from "@clerk/backend";
 
 export type PortalAccessStatus = "active" | "paused" | "expired";
 type Metadata = Record<string, unknown>;
-type Clerk = Pick<ClerkClient, "users">;
+type Clerk = Pick<ClerkClient, "users" | "sessions">;
 
 /** Date-only entitlements last through the stated day, not just midnight. */
 export function courseEndTime(value: unknown): number | null {
@@ -35,7 +35,8 @@ export function normalizeCourseEndDate(value: string | null): string | null {
 
 /**
  * Retain all learning records. A Clerk ban revokes sessions and prevents sign-in
- * until explicitly reversed; lockUser is only a temporary brute-force lock.
+ * until explicitly reversed. Plans without bans use a lock renewed by the expiry
+ * job plus explicit session revocation; app authorization also checks expiry.
  * Only release bans owned by this policy, never independent security bans.
  * Callers must authorize the operation. This helper never sends email or writes GHL.
  */
@@ -79,7 +80,7 @@ export async function setPortalAccess(
         cmbPortalAccessRevokedAt: null,
         cmbPortalAccessRevokedReason: null,
       },
-      privateMetadata: { cmbPortalLoginBlockManaged: null },
+      privateMetadata: { cmbPortalLoginBlockManaged: null, cmbPortalLoginLockManaged: null },
     });
   } else {
     // Fail closed in the app even if the auth provider is temporarily unavailable.
@@ -96,7 +97,32 @@ export async function setPortalAccess(
         : {}),
     });
     // Do not swallow failures: staff must not be told sign-in was blocked if it wasn't.
-    if (!user.banned) await clerk.users.banUser(clerkId);
+    if (!user.banned) {
+      let useLock = user.privateMetadata.cmbPortalLoginLockManaged === true;
+      if (!useLock) {
+        try {
+          await clerk.users.banUser(clerkId);
+        } catch (error) {
+          const failure = error as { status?: number; errors?: Array<{ code?: string }> };
+          if (failure.status !== 402 || !failure.errors?.some((e) => e.code === "unsupported_subscription_plan_features")) throw error;
+          useLock = true;
+        }
+      }
+      if (useLock) {
+        // Never claim ownership of a security ban when the plan rejected ours.
+        await clerk.users.updateUserMetadata(clerkId, {
+          privateMetadata: { cmbPortalLoginBlockManaged: null, cmbPortalLoginLockManaged: true },
+        });
+        // Renew on every enforcement pass: locks can expire; portal expiry does not.
+        await clerk.users.lockUser(clerkId);
+        for (;;) {
+          const active = await clerk.sessions.getSessionList({ userId: clerkId, status: "active", limit: 100 });
+          if (!active.data.length) break;
+          for (const session of active.data) await clerk.sessions.revokeSession(session.id);
+          if (active.data.length < 100) break;
+        }
+      }
+    }
   }
   return { status, courseEndDate: typeof courseEndDate === "string" ? courseEndDate.slice(0, 10) : null };
 }

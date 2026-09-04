@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSignIn, useSignUp, useAuth } from "@clerk/nextjs";
+import { useSignIn, useSignUp, useAuth, useClerk } from "@clerk/nextjs";
 
 type Step = "email" | "otp" | "password" | "setup-password";
 
@@ -25,6 +25,7 @@ export function OtpFirstSignIn() {
   const searchParams = useSearchParams();
   const { isLoaded, signIn, setActive } = useSignIn();
   const { isSignedIn } = useAuth();
+  const { signOut } = useClerk();
 
   const { isLoaded: signUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
 
@@ -45,10 +46,10 @@ export function OtpFirstSignIn() {
 
   // Auto-redirect if already signed in
   useEffect(() => {
-    if (isSignedIn) {
+    if (isSignedIn && !accessExpired) {
       window.location.href = "/home";
     }
-  }, [isSignedIn]);
+  }, [isSignedIn, accessExpired]);
 
   // Accept Clerk invitation ticket automatically on page load
   useEffect(() => {
@@ -261,6 +262,22 @@ export function OtpFirstSignIn() {
 
   // ---- Render ----
 
+  if (accessExpired) {
+    return (
+      <div className="space-y-3 rounded-lg border border-amber-700/50 bg-amber-900/30 p-4">
+        <p className="text-sm font-medium text-amber-200">Your access has ended</p>
+        <p className="text-xs text-amber-300/80">
+          Your CMB Lab access is currently inactive. Your learning records are safe.
+          Please contact your coach or the Canto to Mando Blueprint team for help.
+        </p>
+        {isSignedIn ? (
+          <button type="button" onClick={() => void signOut({ redirectUrl: "/sign-in" })}
+            className="text-sm text-white underline">Sign out</button>
+        ) : <a href="/sign-in" className="text-sm text-white underline">Return to sign-in</a>}
+      </div>
+    );
+  }
+
   // Show spinner while the invite ticket is being consumed (only if no error yet)
   if (inviteTicket && (inviteAccepting || !signUpLoaded) && !error) {
     return (
@@ -283,16 +300,6 @@ export function OtpFirstSignIn() {
           >
             Go to Dashboard
           </a>
-        </div>
-      )}
-
-      {/* Access expired banner */}
-      {accessExpired && !isSignedIn && (
-        <div className="rounded-lg border border-amber-700/50 bg-amber-900/30 p-4">
-          <p className="text-sm font-medium text-amber-200">Your access has expired</p>
-          <p className="mt-1 text-xs text-amber-300/80">
-            Your course access period has ended. Please contact your coach or the Canto to Mando Blueprint team if you believe this is an error.
-          </p>
         </div>
       )}
 

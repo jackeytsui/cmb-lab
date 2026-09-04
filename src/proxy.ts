@@ -83,7 +83,7 @@ export const proxy = clerkMiddleware(async (auth, req) => {
   const { sessionClaims, userId } = await auth();
 
   // If already signed in and visiting sign-in page, redirect to student home.
-  if (userId && createRouteMatcher(["/sign-in(.*)"])(req)) {
+  if (userId && createRouteMatcher(["/sign-in(.*)"])(req) && req.nextUrl.searchParams.get("access") !== "expired") {
     return NextResponse.redirect(new URL("/home", req.url));
   }
 

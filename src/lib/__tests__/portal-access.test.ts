@@ -15,10 +15,15 @@ function fixture(publicMetadata: Record<string, unknown> = {}, extras: Record<st
       return user;
     }),
     banUser: vi.fn(async () => { user.banned = true; return user; }),
+    lockUser: vi.fn(async () => { user.locked = true; return user; }),
     unbanUser: vi.fn(async () => { user.banned = false; return user; }),
     unlockUser: vi.fn(async () => { user.locked = false; return user; }),
   };
-  return { user, api, clerk: { users: api } as unknown as Pick<ClerkClient, "users"> };
+  const sessions = {
+    getSessionList: vi.fn(async () => ({ data: [] as Array<{ id: string }> })),
+    revokeSession: vi.fn(async (_id: string) => ({})),
+  };
+  return { user, api, sessions, clerk: { users: api, sessions } as unknown as Pick<ClerkClient, "users" | "sessions"> };
 }
 
 describe("retained student access policy", () => {
@@ -76,6 +81,24 @@ describe("retained student access policy", () => {
     api.banUser.mockRejectedValueOnce(new Error("provider unavailable"));
     await expect(setPortalAccess(clerk, user.id, { status: "expired", reason: "admin" }, now)).rejects.toThrow("provider unavailable");
     expect(user.publicMetadata.cmbPortalAccessStatus).toBe("expired");
+  });
+  it("uses renewable locks and revokes sessions when bans require an upgrade", async () => {
+    const { clerk, api, sessions, user } = fixture();
+    api.banUser.mockRejectedValueOnce({ status: 402, errors: [{ code: "unsupported_subscription_plan_features" }] });
+    sessions.getSessionList.mockResolvedValueOnce({ data: [{ id: "old-session" }] });
+    await setPortalAccess(clerk, user.id, { status: "expired", reason: "admin" }, now);
+    expect(user.locked).toBe(true);
+    expect(sessions.revokeSession).toHaveBeenCalledWith("old-session");
+    expect(user.privateMetadata).toMatchObject({ cmbPortalLoginBlockManaged: null, cmbPortalLoginLockManaged: true });
+    api.banUser.mockClear();
+    await setPortalAccess(clerk, user.id, { status: "expired", reason: "cron", enforceExisting: true }, now);
+    expect(api.banUser).not.toHaveBeenCalled();
+    expect(api.lockUser).toHaveBeenCalledTimes(2);
+  });
+  it("reports fallback lock failures, too", async () => {
+    const { clerk, api, user } = fixture({}, { privateMetadata: { cmbPortalLoginLockManaged: true } });
+    api.lockUser.mockRejectedValueOnce(new Error("lock failed"));
+    await expect(setPortalAccess(clerk, user.id, { status: "expired", reason: "admin" }, now)).rejects.toThrow("lock failed");
   });
   it("scheduled enforcement respects a concurrent extension and never unbans", async () => {
     const { clerk, api, user } = fixture({ cmbPortalAccessStatus: "active", cmbCourseEndDate: "2027-01-01" }, { banned: true });

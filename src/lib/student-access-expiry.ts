@@ -3,7 +3,7 @@ import { portalAccessStatus, setPortalAccess } from "@/lib/portal-access";
 
 /** Enforce existing access decisions, never reactivate or delete accounts. */
 export async function reconcileStudentAccessExpiry(
-  clerk: Pick<ClerkClient, "users">,
+  clerk: Pick<ClerkClient, "users" | "sessions">,
   students: Array<{ id: string; clerkId: string }>,
   { dryRun = false, now = new Date() } = {},
 ) {

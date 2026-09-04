@@ -1,4 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { cache } from "react";
+import { portalAccessStatus } from "@/lib/portal-access";
 import { cookies } from "next/headers";
 import type { Roles } from "@/types/globals";
 import { db } from "@/db";
@@ -57,6 +59,11 @@ export async function hasAcceleratorManagementAccess(): Promise<boolean> {
   return canManageAcceleratorContent(await resolveRole());
 }
 
+const hasActiveStudentPortal = cache(async () => {
+  const user = await currentUser();
+  return Boolean(user && portalAccessStatus(user.publicMetadata) === "active");
+});
+
 /**
  * Get the real authenticated user from the database.
  * Always returns the actual Clerk user, ignoring View As impersonation.
@@ -66,9 +73,12 @@ export async function getRealUser() {
   const { userId } = await auth();
   if (!userId) return null;
 
-  return db.query.users.findFirst({
+  const user = await db.query.users.findFirst({
     where: and(eq(users.clerkId, userId), isNull(users.deletedAt)),
-  }) ?? null;
+  });
+  // Real student expiry never suppresses the record for a coach/admin actor.
+  if (user?.role === "student" && !(await hasActiveStudentPortal())) return null;
+  return user ?? null;
 }
 
 /**
