@@ -6,6 +6,7 @@ import { ChatWidget } from "@/components/chat/ChatWidget";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { Toaster } from "sonner";
+import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme";
 
 // ClerkProvider requires publishableKey at render time, so all pages
 // wrapped by this root layout must be dynamically rendered
@@ -48,11 +49,15 @@ export default function RootLayout({
           --font-cantonese-visual: var(--font-cv-src). See 30-RESEARCH.md for the localFont() pattern. */}
       <html
         lang="en"
+        suppressHydrationWarning
         style={{
           "--font-hp-src": "sans-serif",
           "--font-cv-src": "'VF Cantonese', 'VF-Canto', sans-serif",
         } as React.CSSProperties}
       >
+        <head>
+          <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        </head>
         <body
           className={`${inter.variable} font-sans antialiased bg-white text-zinc-900 dark:bg-gray-950 dark:text-gray-100`}
         >

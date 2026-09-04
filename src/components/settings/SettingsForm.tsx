@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useLayoutEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
+import { THEME_STORAGE_KEY } from "@/lib/theme";
 
 // --- Types ---
 
@@ -28,8 +29,8 @@ export function SettingsForm({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("theme");
+  useLayoutEffect(() => {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
     const nextTheme = stored === "dark" ? "dark" : "light";
     setTheme(nextTheme);
     if (nextTheme === "dark") {
@@ -71,7 +72,7 @@ export function SettingsForm({
   const toggleTheme = (checked: boolean) => {
     const nextTheme = checked ? "dark" : "light";
     setTheme(nextTheme);
-    localStorage.setItem("theme", nextTheme);
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
     if (nextTheme === "dark") {
       document.documentElement.classList.add("dark");
     } else {

@@ -29,6 +29,7 @@ import {
   type CalendarMonth,
 } from "@/lib/group-coaching-calendar";
 import { getCoachingSessionPresentation } from "@/lib/group-coaching-session";
+import { COACHING_TIME_ZONES } from "@/lib/coaching-time-zones";
 
 type CoachingEvent = {
   id: string;
@@ -49,19 +50,6 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function normalizeTimeZone(timeZone: string) {
   return timeZone === "Asia/Shanghai" ? "Asia/Hong_Kong" : timeZone;
 }
-
-const TIME_ZONES = [
-  { value: "America/Toronto", label: "Toronto / New York", detail: "Eastern Time" },
-  { value: "America/Vancouver", label: "Vancouver", detail: "Pacific Time" },
-  { value: "America/Edmonton", label: "Calgary", detail: "Mountain Time" },
-  { value: "America/Winnipeg", label: "Winnipeg", detail: "Central Time" },
-  { value: "Europe/London", label: "London", detail: "UK time" },
-  { value: "Europe/Paris", label: "Central Europe", detail: "Paris / Berlin" },
-  { value: "Asia/Hong_Kong", label: "Hong Kong / China", detail: "UTC+8" },
-  { value: "Asia/Singapore", label: "Singapore", detail: "UTC+8" },
-  { value: "Asia/Tokyo", label: "Tokyo", detail: "UTC+9" },
-  { value: "Australia/Sydney", label: "Sydney", detail: "Australia Eastern" },
-] as const;
 
 function getEventDetails(description: string) {
   const signupUrl = description.match(/https:\/\/forms\.gle\/[^\s]+/)?.[0] ?? null;
@@ -415,7 +403,7 @@ export function GroupCoachingScheduleClient() {
             </div>
             <button type="button" onClick={() => setTimeZoneConfirmed(false)} className="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-foreground">
               <Globe2 className="h-3.5 w-3.5" />
-              {TIME_ZONES.find((zone) => zone.value === timeZone)?.label ?? timeZone}
+              {COACHING_TIME_ZONES.find((zone) => zone.value === timeZone)?.label ?? timeZone}
               <span className="text-primary">Change</span>
             </button>
           </div>
@@ -436,7 +424,7 @@ export function GroupCoachingScheduleClient() {
             <label className="mt-6 block text-sm font-medium text-foreground" htmlFor="coaching-timezone">Your location</label>
             <div className="relative mt-2">
               <select id="coaching-timezone" value={timeZone} onChange={(event) => setTimeZone(event.target.value)} className="w-full appearance-none rounded-xl border border-border bg-background px-4 py-3 pr-11 text-sm font-medium text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15">
-                {TIME_ZONES.map((zone) => (
+                {COACHING_TIME_ZONES.map((zone) => (
                   <option key={zone.value} value={zone.value}>{zone.label} — {zone.detail}</option>
                 ))}
               </select>
