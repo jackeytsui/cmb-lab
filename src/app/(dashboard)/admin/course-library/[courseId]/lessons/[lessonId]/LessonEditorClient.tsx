@@ -38,6 +38,7 @@ import {
   countHanCharacters,
 } from "@/lib/generate-model-pinyin";
 import { fetchProperTranslations } from "@/lib/mandarin-generation";
+import { saveUploadedLessonVideo } from "@/lib/save-uploaded-lesson-video";
 
 type LessonType =
   | "video"
@@ -965,7 +966,11 @@ function VideoLessonForm({
         ...content,
         videoUrl: result.url,
       };
-      await saveLessonContent(lessonId, nextContent);
+      const saved = await saveUploadedLessonVideo(lessonId, nextContent);
+      if (!saved.ok) {
+        setUploadError(saved.error);
+        return;
+      }
       onUpdate(nextContent);
     } catch (err) {
       if (!(err instanceof Error && /abort/i.test(err.message))) {
