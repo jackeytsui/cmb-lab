@@ -32,13 +32,17 @@ export async function reconcileStudentAccessExpiry(
             result.unchanged++;
             continue;
           }
-          await setPortalAccess(clerk, user.id, {
+          const applied = await setPortalAccess(clerk, user.id, {
             status: freshStatus,
             enforceExisting: true,
             reason: typeof fresh.publicMetadata.cmbPortalAccessRevokedReason === "string"
               ? fresh.publicMetadata.cmbPortalAccessRevokedReason
               : "scheduled_access_enforcement",
           }, now);
+          if (applied.status === "active") {
+            result.unchanged++;
+            continue;
+          }
         }
         result.restricted++;
       } catch (error) {

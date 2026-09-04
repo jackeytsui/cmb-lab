@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { composeStudentName } from "@/lib/student-name";
+import { setPortalAccess } from "@/lib/portal-access";
 import {
   DEFAULT_PLATFORM_ROLE,
   normalizePlatformRole,
@@ -79,9 +80,11 @@ export async function POST(req: NextRequest) {
         role,
       },
     });
-    // Unlock in case they were previously locked/banned
-    await clerk.users.unbanUser(clerkUser.id).catch(() => {});
-    await clerk.users.unlockUser(clerkUser.id).catch(() => {});
+    // An explicit checkout can restore a valid term, but must not bypass an
+    // expired end date or an independent security ban.
+    const access = await setPortalAccess(clerk, clerkUser.id, {
+      status: "active", reason: "fanbasis_checkout",
+    });
 
     // Upsert DB record
     if (existingByClerk) {
@@ -118,7 +121,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, action: "access_granted", email: normalizedEmail });
+    return NextResponse.json({ success: true, action: access.status === "active" ? "access_granted" : "access_expired", status: access.status, email: normalizedEmail });
   }
 
   // No Clerk account yet — send a Clerk invitation (magic-link email)
