@@ -80,7 +80,10 @@ export function TextAssignmentViewer({
 
   const allReady = useMemo(
     () =>
-      prompts.every((p) => values[p.id] !== null) &&
+      prompts.every((p) => {
+        const value = values[p.id];
+        return !!value?.chineseText.trim() && !!value.english.trim();
+      }) &&
       !Object.values(generating).some(Boolean),
     [prompts, values, generating],
   );

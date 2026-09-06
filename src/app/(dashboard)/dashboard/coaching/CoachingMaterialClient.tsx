@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { ReaderTextArea } from "@/components/reader/ReaderTextArea";
+import { TranslationFallbackNotice } from "@/components/reader/TranslationFallbackNotice";
 import { WordSpan } from "@/components/reader/WordSpan";
 import { segmentText, type WordSegment } from "@/lib/segmenter";
 import { detectSentences } from "@/lib/sentences";
@@ -226,6 +227,8 @@ export function useProcessedText({
     Map<number, string>
   >(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translationFailed, setTranslationFailed] = useState(false);
+  const [translationAttempt, setTranslationAttempt] = useState(0);
   // This records only a completed request. Recording an in-flight request here
   // makes an effect cleanup (for example, React Strict Mode) cancel the request
   // and then causes the replacement effect to deduplicate itself forever.
@@ -347,16 +350,23 @@ export function useProcessedText({
         setTranslationCache(new Map());
         translatedKeyRef.current = "";
         setIsTranslating(false);
+        setTranslationFailed(false);
         return;
       }
 
       const translationKey = `${language}:${sentenceKey}`;
       if (translationKey === translatedKeyRef.current) return;
+      setBatchTranslations(new Map());
+      setTranslationFailed(false);
       setIsTranslating(true);
 
       fetchProperTranslations(sentenceTexts, language)
         .then((translations) => {
-          if (cancelled || !translations) return;
+          if (cancelled) return;
+          if (!translations) {
+            setTranslationFailed(true);
+            return;
+          }
           const map = new Map<number, string>();
           translations.forEach((t, idx) => {
             if (t) map.set(idx, t);
@@ -371,12 +381,10 @@ export function useProcessedText({
             });
             return next;
           });
+          translatedKeyRef.current = translationKey;
         })
         .finally(() => {
-          if (!cancelled) {
-            translatedKeyRef.current = translationKey;
-            setIsTranslating(false);
-          }
+          if (!cancelled) setIsTranslating(false);
         });
     });
 
@@ -385,7 +393,13 @@ export function useProcessedText({
     };
   // Depend on sentenceKey, not the sentences array. Segmentation can replace
   // the array with an equivalent one while a translation is in flight.
-  }, [language, sentenceKey]);
+  }, [language, sentenceKey, translationAttempt]);
+
+  const retryTranslation = useCallback(() => {
+    translatedKeyRef.current = "";
+    setTranslationFailed(false);
+    setTranslationAttempt((attempt) => attempt + 1);
+  }, []);
 
   const handleSpeakSentence = useCallback(
     async (text: string, rate: "slow" | "medium" | "fast") => {
@@ -409,6 +423,8 @@ export function useProcessedText({
     segments,
     batchTranslations,
     isTranslating,
+    translationFailed,
+    retryTranslation,
     translationCache,
     setTranslationCache,
     handleSpeakSentence,
@@ -520,6 +536,7 @@ function NoteCard({
   const [savedExplanation, setSavedExplanation] = useState(note.explanation ?? "");
   const [isEditingExplanation, setIsEditingExplanation] = useState(!note.explanation);
   const explanationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasEditingRef = useRef(false);
 
   // Preload the Traditional→Simplified converter so smartRomanise() (which
   // routes through toSimplifiedSync) gets correct pinyin for Traditional
@@ -571,10 +588,12 @@ function NoteCard({
   }, [defaultTranslation, note.translationOverride, note.id, processed.isTranslating]);
 
   useEffect(() => {
-    if (!isEditing) return;
-    setDraftText(baseText);
-    setDraftRomanization(note.romanizationOverride ?? defaultRomanization);
-    setDraftTranslation(note.translationOverride ?? defaultTranslation);
+    if (isEditing && !wasEditingRef.current) {
+      setDraftText(baseText);
+      setDraftRomanization(note.romanizationOverride ?? defaultRomanization);
+      setDraftTranslation(note.translationOverride ?? defaultTranslation);
+    }
+    wasEditingRef.current = isEditing;
   }, [isEditing, baseText, note.romanizationOverride, note.translationOverride, defaultRomanization, defaultTranslation]);
 
   const handleSave = useCallback(() => {
@@ -1083,6 +1102,15 @@ function NoteCard({
               toneColorsEnabled={toneColorsEnabled}
             />
           )}
+          {!isEditing && !note.translationOverride ? (
+            <TranslationFallbackNotice
+              hasTranslation={Boolean(defaultTranslation)}
+              isTranslating={processed.isTranslating}
+              translationFailed={processed.translationFailed}
+              onAddManualTranslation={canEdit ? () => setIsEditing(true) : undefined}
+              onRetryTranslation={processed.retryTranslation}
+            />
+          ) : null}
           {/* Explanation / notes section */}
           {(showExplanation || (savedExplanation && !canEdit)) && (
             <div className="mt-2 border-t border-border/50 pt-2">

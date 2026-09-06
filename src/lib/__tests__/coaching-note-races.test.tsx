@@ -248,4 +248,65 @@ describe("coaching note refresh races", () => {
       root = null;
     });
   });
+
+  it("does not cache a failed translation attempt and retries on demand", async () => {
+    translationMocks.fetchProperTranslations
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(["although"]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url !== "/api/segment") {
+          throw new Error(`Unexpected request: ${url}`);
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            segments: [[{ text: "雖然", isWordLike: true }]],
+          }),
+        } as Response);
+      }),
+    );
+
+    const container = document.createElement("div");
+    let root: Root | null = createRoot(container);
+    function Harness() {
+      const result = useProcessedText({
+        committedText: "雖然",
+        scriptMode: "traditional",
+        language: "zh-CN",
+      });
+      return (
+        <>
+          <output data-failed={String(result.translationFailed)}>
+            {result.batchTranslations.get(0) ?? ""}
+          </output>
+          <button type="button" onClick={result.retryTranslation}>
+            Retry
+          </button>
+        </>
+      );
+    }
+
+    await act(async () => {
+      root?.render(<Harness />);
+    });
+    await waitFor(() =>
+      expect(container.querySelector("output")?.dataset.failed).toBe("true"),
+    );
+
+    await act(async () => {
+      container.querySelector("button")?.click();
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector("output")?.textContent).toBe("although"),
+    );
+    expect(translationMocks.fetchProperTranslations).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      root?.unmount();
+      root = null;
+    });
+  });
 });

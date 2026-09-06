@@ -77,4 +77,52 @@ describe("shared Chinese text translation race", () => {
     await waitFor(() => expect(result.current.isTranslating).toBe(false));
     expect(result.current.batchTranslations.get(0)).toBe("star anise");
   });
+
+  it("reports a failed translation and retries only when requested", async () => {
+    let translationRequests = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url === "/api/segment") {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              segments: [[{ text: "雖然", isWordLike: true }]],
+            }),
+          } as Response);
+        }
+        if (url === "/api/reader/translate-batch") {
+          translationRequests += 1;
+          return Promise.resolve(
+            translationRequests === 1
+              ? ({ ok: false, status: 503 } as Response)
+              : ({
+                  ok: true,
+                  json: async () => ({ translations: ["although"] }),
+                } as Response),
+          );
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useProcessedChineseText({
+        committedText: "雖然",
+        scriptMode: "traditional",
+        language: "zh-CN",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.translationFailed).toBe(true));
+    expect(translationRequests).toBe(1);
+
+    act(() => result.current.retryTranslation());
+
+    await waitFor(() =>
+      expect(result.current.batchTranslations.get(0)).toBe("although"),
+    );
+    expect(result.current.translationFailed).toBe(false);
+    expect(translationRequests).toBe(2);
+  });
 });

@@ -26,7 +26,7 @@ export async function fetchProperTranslations(
   // Translation goes through OpenAI, which fails transiently (rate limits,
   // timeouts). Retry a few times with backoff so a blip doesn't surface as a
   // hard "could not generate" to the user.
-  const ATTEMPTS = 3;
+  const ATTEMPTS = 2;
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     try {
       const res = await fetch("/api/reader/translate-batch", {
@@ -44,7 +44,12 @@ export async function fetchProperTranslations(
           return translations;
         }
       } else {
+        const data = await res.json().catch(() => null);
         console.error("Batch translate failed:", res.status);
+        // Billing/configuration failures cannot recover on retry. The route
+        // marks them explicitly so the browser can fall back immediately
+        // instead of multiplying the AI SDK's own retry delay.
+        if (data?.retryable === false) return null;
       }
     } catch (err) {
       console.error("Batch translate error:", err);
@@ -81,8 +86,9 @@ export async function generateMandarinAnnotation(
  *   - cantonese: jyutping via smartRomanise + English via zh-HK translate-batch
  *
  * The `pinyin` field carries jyutping for Cantonese (it maps to the same
- * generated_pinyin storage column). Throws if translation fails so callers can
- * surface a retry — an incomplete generation must not silently pass as complete.
+ * generated_pinyin storage column). Student callers may opt out of requiring
+ * English so they can preserve the locally generated romanisation and offer a
+ * manual translation fallback when the AI service is unavailable.
  */
 export async function generateAnnotation(
   text: string,
@@ -91,9 +97,9 @@ export async function generateAnnotation(
     /**
      * When true (default) a missing English translation throws, so student
      * flows force a retry rather than silently submitting an incomplete
-     * annotation. Reviewer/admin flows pass false: pinyin is always returned
-     * (derived locally) and English falls back to "" so they can proceed and
-     * fill it in manually.
+     * annotation. Assignment and reviewer flows may pass false: romanisation is
+     * always returned (derived locally) and English falls back to "" so it can
+     * be filled in manually.
      */
     requireEnglish?: boolean;
   },

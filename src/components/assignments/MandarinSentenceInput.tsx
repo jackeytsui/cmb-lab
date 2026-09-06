@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Pencil, Play, Sparkles, Square } from "lucide-react";
+import {
+  AlertTriangle,
+  Loader2,
+  Pencil,
+  Play,
+  Sparkles,
+  Square,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   fetchProperTranslations,
@@ -56,8 +63,8 @@ interface MandarinSentenceInputProps {
   /**
    * Reviewer/admin mode: never block on a failed English translation (commit
    * with whatever was generated and let the reviewer fill it in), and expose
-   * editable pinyin + English fields so a wrong auto-generation can be
-   * overwritten by hand. Students do not get this — they must retry.
+   * editable romanisation and English fields. Students receive the narrower
+   * manual-English fallback when automatic translation is unavailable.
    */
   annotationEditable?: boolean;
 }
@@ -83,6 +90,7 @@ export function MandarinSentenceInput({
   const [draft, setDraft] = useState(value?.chineseText ?? "");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [translationFallback, setTranslationFallback] = useState(false);
   const { speak, stop, isPlaying, isLoading: ttsLoading } = useTTS();
 
   const setGeneratingState = (next: boolean) => {
@@ -114,7 +122,12 @@ export function MandarinSentenceInput({
           english: translations?.join(" ").trim() || "",
         });
       } else {
-        const annotation = await generateAnnotation(text, lang);
+        // Romanisation is generated locally and should never be thrown away
+        // merely because the independent AI translation service is down.
+        const annotation = await generateAnnotation(text, lang, {
+          requireEnglish: false,
+        });
+        setTranslationFallback(!annotation.english.trim());
         onValueChange({
           chineseText: text,
           pinyin: annotation.pinyin,
@@ -139,6 +152,8 @@ export function MandarinSentenceInput({
   const handleEdit = () => {
     if (disabled || readOnly) return;
     setDraft(value?.chineseText ?? "");
+    setTranslationFallback(false);
+    setError(null);
     // Clearing the committed value re-opens the input and blocks submission
     // until the edited sentence has been regenerated.
     onValueChange(null);
@@ -271,6 +286,38 @@ export function MandarinSentenceInput({
                 className="mt-0.5 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 disabled:opacity-60"
               />
             </label>
+          </div>
+        ) : translationFallback ? (
+          <div className="space-y-2 border-t border-amber-500/20 pt-2">
+            <p className="flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              Automatic English translation is temporarily unavailable. Add
+              your English translation below to continue.
+            </p>
+            <label className="block">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                English translation (required)
+              </span>
+              <input
+                type="text"
+                value={value.english}
+                onChange={(e) =>
+                  onValueChange({ ...value, english: e.target.value })
+                }
+                disabled={disabled}
+                placeholder="Type the English meaning"
+                className="mt-0.5 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 disabled:opacity-60"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={disabled || generating}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+            >
+              {generating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Retry automatic translation
+            </button>
           </div>
         ) : (
           value.english && (

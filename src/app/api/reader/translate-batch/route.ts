@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { generateText } from "ai";
+import { generateText, Output } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
 import {
   properBatchTranslationSystem,
   wordGlossTranslationSystem,
@@ -10,6 +11,45 @@ import {
 
 const MAX_SENTENCES = 50;
 const MAX_WORDS = 200;
+const TRANSLATION_TIMEOUT_MS = 15_000;
+const OPENAI_QUOTA_CIRCUIT_MS = 5 * 60 * 1_000;
+
+export const maxDuration = 30;
+
+let openAiQuotaCircuitUntil = 0;
+
+class TranslationUnavailableError extends Error {
+  constructor(public readonly retryable: boolean) {
+    super("Translation provider failed");
+    this.name = "TranslationUnavailableError";
+  }
+}
+
+function isQuotaExhaustion(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /insufficient_quota|credit_balance_exhausted|no credits remaining/i.test(
+    `${error.message} ${"responseBody" in error ? String(error.responseBody) : ""}`,
+  );
+}
+
+async function translateWithOpenAi(
+  operation: () => Promise<string[]>,
+): Promise<string[]> {
+  if (Date.now() < openAiQuotaCircuitUntil) {
+    throw new TranslationUnavailableError(false);
+  }
+
+  try {
+    return await operation();
+  } catch (error) {
+    const quotaExhausted = isQuotaExhaustion(error);
+    if (quotaExhausted) {
+      openAiQuotaCircuitUntil = Date.now() + OPENAI_QUOTA_CIRCUIT_MS;
+    }
+    console.error("OpenAI translation failed:", error);
+    throw new TranslationUnavailableError(!quotaExhausted);
+  }
+}
 
 /** Strip citation markers and problematic characters from text */
 function cleanText(text: string): string {
@@ -17,26 +57,6 @@ function cleanText(text: string): string {
     .replace(/\[(?:註\s*)?\d+(?:[:\-]\d+)?\]/g, "") // [14], [註 6]
     .replace(/[\uFFFD\u200B\u200C\u200D\uFEFF]/g, "") // replacement char, zero-width spaces
     .trim();
-}
-
-/** Extract outermost JSON array from a string, handling nested brackets properly */
-function extractJsonArray(raw: string): unknown[] | null {
-  const start = raw.indexOf("[");
-  if (start === -1) return null;
-
-  let depth = 0;
-  for (let i = start; i < raw.length; i++) {
-    if (raw[i] === "[") depth++;
-    else if (raw[i] === "]") depth--;
-    if (depth === 0) {
-      try {
-        return JSON.parse(raw.slice(start, i + 1));
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
 }
 
 /** Extract outermost JSON object from a string */
@@ -100,29 +120,32 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ glosses: {}, mode: "words" });
       }
 
-      const prompt = cleaned.join("\n");
-      const { text: rawResponse } = await generateText({
-        model: openai("gpt-4o-mini"),
-        system: wordGlossTranslationSystem(translationLanguage),
-        prompt,
-        maxOutputTokens: 4096,
+      const translations = await translateWithOpenAi(async () => {
+        const prompt = cleaned.join("\n");
+        const { text: rawResponse } = await generateText({
+          model: openai("gpt-4o-mini"),
+          system: wordGlossTranslationSystem(translationLanguage),
+          prompt,
+          maxOutputTokens: 4096,
+          maxRetries: 0,
+          timeout: { totalMs: TRANSLATION_TIMEOUT_MS },
+        });
+        const parsed = extractJsonObject(rawResponse);
+        if (!parsed) throw new Error("Failed to parse OpenAI word glosses");
+        const translations = cleaned.map((word) =>
+          String(parsed[word] ?? "").trim(),
+        );
+        if (translations.some((translation) => !translation)) {
+          throw new Error("OpenAI returned incomplete word glosses");
+        }
+        return translations;
       });
 
-      const parsed = extractJsonObject(rawResponse);
-      if (!parsed) {
-        console.error("Failed to parse word glosses JSON:", rawResponse.slice(0, 500));
-        return NextResponse.json(
-          { error: "Failed to parse word glosses" },
-          { status: 500 },
-        );
-      }
-
-      // Ensure all values are strings
       const glosses: Record<string, string> = {};
-      for (const [k, v] of Object.entries(parsed)) {
-        glosses[k] = String(v);
+      for (let index = 0; index < cleaned.length; index++) {
+        glosses[cleaned[index]] = translations[index];
       }
-      return NextResponse.json({ glosses, mode: "words" });
+      return NextResponse.json({ glosses, mode: "words", provider: "openai" });
     }
 
     // "proper" mode: natural sentence translation
@@ -147,61 +170,58 @@ export async function POST(request: NextRequest) {
     if (cleanedWithIndex.length === 0) {
       return NextResponse.json({ translations: [], mode: "proper" });
     }
-    const taggedTexts = cleanedWithIndex
-      .map((item) => `<s>${item.text}</s>`)
-      .join("\n");
+    const cleanTexts = cleanedWithIndex.map((item) => item.text);
+    const translations = await translateWithOpenAi(async () => {
+      const taggedTexts = cleanedWithIndex
+        .map((item) => `<s>${item.text}</s>`)
+        .join("\n");
+      const { output } = await generateText({
+        model: openai("gpt-4o-mini"),
+        system: properBatchTranslationSystem(translationLanguage),
+        prompt: taggedTexts,
+        output: Output.array({ element: z.string().min(1) }),
+        maxOutputTokens: 4096,
+        maxRetries: 0,
+        timeout: { totalMs: TRANSLATION_TIMEOUT_MS },
+      });
 
-    const { text: rawResponse } = await generateText({
-      model: openai("gpt-4o-mini"),
-      system: properBatchTranslationSystem(translationLanguage),
-      prompt: taggedTexts,
-      maxOutputTokens: 4096,
-    });
-
-    const parsed = extractJsonArray(rawResponse);
-    let translatedCleaned: string[];
-    if (parsed) {
-      translatedCleaned = parsed.map((t: unknown) =>
-        typeof t === "string" ? t : String(t),
-      );
-    } else if (cleanedWithIndex.length === 1) {
-      // Fallback: for single-sentence inputs (especially short phrases like
-      // 关于/你好), GPT-4o-mini sometimes returns a bare string instead of a
-      // JSON array. Treat the whole response as the translation.
-      const fallback = rawResponse
-        .trim()
-        .replace(/^```(?:json)?\s*|```$/g, "")
-        .replace(/^["'`\[]+|["'`\]]+$/g, "")
-        .trim();
-      if (!fallback) {
-        console.error("Empty translation response:", rawResponse.slice(0, 500));
-        return NextResponse.json(
-          { error: "Failed to parse translation response" },
-          { status: 500 },
-        );
+      const translations = output.map((translation) => translation.trim());
+      if (
+        translations.length !== cleanTexts.length ||
+        translations.some((translation) => !translation)
+      ) {
+        throw new Error("OpenAI returned an incomplete translation response");
       }
-      translatedCleaned = [fallback];
-    } else {
-      console.error("Failed to parse translation JSON:", rawResponse.slice(0, 500));
-      return NextResponse.json(
-        { error: "Failed to parse translation response" },
-        { status: 500 },
-      );
-    }
+      return translations;
+    });
 
     // Preserve original sentence indices so client mapping remains stable.
     const alignedTranslations: string[] = Array.from({ length: texts.length }, () => "");
     for (let i = 0; i < cleanedWithIndex.length; i++) {
       const targetIndex = cleanedWithIndex[i]?.index;
       if (typeof targetIndex !== "number") continue;
-      alignedTranslations[targetIndex] = translatedCleaned[i] ?? "";
+      alignedTranslations[targetIndex] = translations[i] ?? "";
     }
 
-    return NextResponse.json({ translations: alignedTranslations, mode: "proper" });
+    return NextResponse.json({
+      translations: alignedTranslations,
+      mode: "proper",
+      provider: "openai",
+    });
   } catch (error) {
     console.error("Batch translation error:", error);
+    if (error instanceof TranslationUnavailableError) {
+      return NextResponse.json(
+        {
+          error: "Translation service temporarily unavailable",
+          code: "translation_unavailable",
+          retryable: error.retryable,
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
-      { error: "Translation failed" },
+      { error: "Translation failed", retryable: true },
       { status: 500 },
     );
   }

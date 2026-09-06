@@ -105,6 +105,8 @@ export function useProcessedChineseText({
     Map<number, string>
   >(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translationFailed, setTranslationFailed] = useState(false);
+  const [translationAttempt, setTranslationAttempt] = useState(0);
   // This records only a completed request. Recording an in-flight request here
   // makes an effect cleanup cancel the request and then causes the replacement
   // effect to deduplicate itself forever.
@@ -223,16 +225,23 @@ export function useProcessedChineseText({
         setTranslationCache(new Map());
         translatedKeyRef.current = "";
         setIsTranslating(false);
+        setTranslationFailed(false);
         return;
       }
 
       const translationKey = `${language}:${sentenceKey}`;
       if (translationKey === translatedKeyRef.current) return;
+      setBatchTranslations(new Map());
+      setTranslationFailed(false);
       setIsTranslating(true);
 
       fetchProperTranslations(sentenceTexts, language)
         .then((translations) => {
-          if (cancelled || !translations) return;
+          if (cancelled) return;
+          if (!translations) {
+            setTranslationFailed(true);
+            return;
+          }
           const map = new Map<number, string>();
           translations.forEach((t, idx) => {
             if (t) map.set(idx, t);
@@ -259,7 +268,13 @@ export function useProcessedChineseText({
     };
   // Depend on sentenceKey, not the sentences array. Segmentation can replace
   // the array with an equivalent one while a translation is in flight.
-  }, [language, sentenceKey]);
+  }, [language, sentenceKey, translationAttempt]);
+
+  const retryTranslation = useCallback(() => {
+    translatedKeyRef.current = "";
+    setTranslationFailed(false);
+    setTranslationAttempt((attempt) => attempt + 1);
+  }, []);
 
   const handleSpeakSentence = useCallback(
     async (text: string, rate: "slow" | "medium" | "fast") => {
@@ -283,6 +298,8 @@ export function useProcessedChineseText({
     segments,
     batchTranslations,
     isTranslating,
+    translationFailed,
+    retryTranslation,
     translationCache,
     setTranslationCache,
     handleSpeakSentence,

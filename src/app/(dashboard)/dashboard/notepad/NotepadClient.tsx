@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReaderTextArea } from "@/components/reader/ReaderTextArea";
+import { TranslationFallbackNotice } from "@/components/reader/TranslationFallbackNotice";
 import { useProcessedChineseText, type ScriptMode } from "@/hooks/useProcessedChineseText";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import { exportCoachingNotes } from "@/lib/coaching-export";
@@ -432,6 +433,16 @@ function NoteRow({
         ) : (
           <div className="text-sm text-muted-foreground">Loading...</div>
         )}
+
+        {!isEditing && !note.translationOverride ? (
+          <TranslationFallbackNotice
+            hasTranslation={processed.batchTranslations.size > 0}
+            isTranslating={processed.isTranslating}
+            translationFailed={processed.translationFailed}
+            onAddManualTranslation={startEditing}
+            onRetryTranslation={processed.retryTranslation}
+          />
+        ) : null}
 
         {/* Explanation / notes section */}
         {(showExplanation || note.explanation) && !isEditing && (

@@ -39,4 +39,19 @@ describe("Cantonese-to-English routing", () => {
       language: "zh-HK",
     });
   });
+
+  it("does not retry an explicitly non-retryable provider outage", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({
+        code: "translation_unavailable",
+        retryable: false,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchProperTranslations(["你好"], "zh-CN")).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
