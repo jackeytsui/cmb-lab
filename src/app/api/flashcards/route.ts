@@ -14,6 +14,7 @@ import {
   buildFlashcardContentKey,
   normalizeFlashcardLanguage,
 } from "@/lib/flashcards";
+import { normalizeNoteFlashcardScripts } from "@/lib/flashcard-note-scripts";
 
 /**
  * GET /api/flashcards
@@ -50,24 +51,26 @@ export async function GET() {
     .where(eq(coachingNoteStars.userId, dbUser.id))
     .orderBy(desc(coachingNoteStars.createdAt));
 
-  const coachingCards = starredRows.map((row) => {
-    const text = row.textOverride || row.text;
-    // Mandarin pane = simplified input, Cantonese pane = traditional input
-    const isMandarin = row.pane === "mandarin";
-    return {
-      id: `coaching-${row.noteId}`,
-      source: "coaching" as const,
-      chinese: text, // traditional (or original text)
-      simplified: isMandarin ? text : undefined, // mandarin notes are already simplified
-      romanization: row.romanization || "",
-      pinyin: isMandarin ? (row.romanization || "") : "",
-      jyutping: !isMandarin ? (row.romanization || "") : "",
-      english: row.translation || "",
-      pane: row.pane,
-      createdAt: row.starredAt?.toISOString() ?? new Date().toISOString(),
-      noteId: row.noteId,
-    };
-  });
+  const coachingCards = await Promise.all(
+    starredRows.map(async (row) => {
+      const text = row.textOverride || row.text;
+      const isMandarin = row.pane === "mandarin";
+      const scripts = await normalizeNoteFlashcardScripts(text, row.pane);
+      return {
+        id: `coaching-${row.noteId}`,
+        source: "coaching" as const,
+        chinese: scripts.chinese,
+        simplified: scripts.simplified,
+        romanization: row.romanization || "",
+        pinyin: isMandarin ? row.romanization || "" : "",
+        jyutping: !isMandarin ? row.romanization || "" : "",
+        english: row.translation || "",
+        pane: row.pane,
+        createdAt: row.starredAt?.toISOString() ?? new Date().toISOString(),
+        noteId: row.noteId,
+      };
+    }),
+  );
 
   // 2. Saved vocabulary (from Reader and Listening Lab)
   const vocabRows = await db
@@ -138,25 +141,28 @@ export async function GET() {
     .where(eq(notepadNotes.userId, dbUser.id))
     .orderBy(desc(notepadNotes.createdAt));
 
-  const notepadCards = notepadRows
-    .filter((row) => row.starred === 1)
-    .map((row) => {
-      const text = row.textOverride || row.text;
-      const isMandarin = row.pane === "mandarin";
-      return {
-        id: `notepad-${row.id}`,
-        source: "notepad" as const,
-        chinese: text,
-        simplified: isMandarin ? text : undefined,
-        romanization: row.romanizationOverride || "",
-        pinyin: isMandarin ? (row.romanizationOverride || "") : "",
-        jyutping: !isMandarin ? (row.romanizationOverride || "") : "",
-        english: row.translationOverride || "",
-        pane: row.pane,
-        createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
-        noteId: row.id,
-      };
-    });
+  const notepadCards = await Promise.all(
+    notepadRows
+      .filter((row) => row.starred === 1)
+      .map(async (row) => {
+        const text = row.textOverride || row.text;
+        const isMandarin = row.pane === "mandarin";
+        const scripts = await normalizeNoteFlashcardScripts(text, row.pane);
+        return {
+          id: `notepad-${row.id}`,
+          source: "notepad" as const,
+          chinese: scripts.chinese,
+          simplified: scripts.simplified,
+          romanization: row.romanizationOverride || "",
+          pinyin: isMandarin ? row.romanizationOverride || "" : "",
+          jyutping: !isMandarin ? row.romanizationOverride || "" : "",
+          english: row.translationOverride || "",
+          pane: row.pane,
+          createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+          noteId: row.id,
+        };
+      }),
+  );
 
   const allCards = [...savedCards, ...coachingCards, ...notepadCards, ...vocabCards];
   const deduped = new Map<string, (typeof allCards)[number]>();

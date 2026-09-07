@@ -81,7 +81,7 @@ function SpeakButton({
   );
 }
 
-function FlashCard({
+export function FlashCard({
   card,
   displayChinese,
   isFlipped,
@@ -135,19 +135,19 @@ function FlashCard({
       <button
         type="button"
         onClick={onFlip}
-        className="w-full cursor-pointer text-left"
+        className="w-full cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         style={{ perspective: "800px" }}
-        >
-          <div
-            className={cn(
-              "relative min-h-[240px] w-full rounded-xl border border-border bg-card shadow-sm transition-transform duration-500",
-              isFlipped && "[transform:rotateY(180deg)]",
+      >
+        <div
+          className={cn(
+            "relative grid min-h-[240px] w-full rounded-xl border border-border bg-card shadow-sm transition-transform duration-500",
+            isFlipped && "[transform:rotateY(180deg)]",
           )}
           style={{ transformStyle: "preserve-3d" }}
         >
           {/* Front — per-character romanization on top, large Chinese */}
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl p-5"
+            className="col-start-1 row-start-1 flex min-h-[240px] flex-col items-center justify-center gap-2 rounded-xl p-5"
             style={{ backfaceVisibility: "hidden" }}
           >
             {jyutpingSyllables ? (
@@ -201,7 +201,7 @@ function FlashCard({
 
           {/* Back — English + per-char romanization + play */}
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl p-5 [transform:rotateY(180deg)]"
+            className="col-start-1 row-start-1 flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-xl p-5 pb-16 [transform:rotateY(180deg)]"
             style={{ backfaceVisibility: "hidden" }}
           >
             {card.english && (
@@ -255,12 +255,21 @@ function FlashCard({
             <span className="rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground">
               {sourceBadge}
             </span>
-            <div className="mt-1" onClick={(e) => e.stopPropagation()}>
-              <SpeakButton text={displayChinese} lang={lang} speak={speak} isLoading={ttsLoading} isPlaying={ttsPlaying} />
-            </div>
           </div>
         </div>
       </button>
+
+      {isFlipped && (
+        <div className="absolute bottom-5 left-1/2 z-10 -translate-x-1/2">
+          <SpeakButton
+            text={displayChinese}
+            lang={lang}
+            speak={speak}
+            isLoading={ttsLoading}
+            isPlaying={ttsPlaying}
+          />
+        </div>
+      )}
 
       {/* Remove button */}
       <button
@@ -516,8 +525,6 @@ export function FlashcardsClient() {
   // Study mode — single card at a time
   if (studyMode && studyCard) {
     const studyDisplayChinese = getDisplayText(studyCard);
-    const studyLang: "zh-CN" | "zh-HK" =
-      studyCard.pane === "cantonese" ? "zh-HK" : "zh-CN";
     const studyRoman =
       studyCard.pane === "cantonese"
         ? studyCard.jyutping || studyCard.romanization
@@ -548,14 +555,14 @@ export function FlashcardsClient() {
         >
           <div
             className={cn(
-              "relative min-h-[280px] w-full rounded-xl border border-border bg-card shadow-lg transition-transform duration-500",
+              "relative grid min-h-[280px] w-full rounded-xl border border-border bg-card shadow-lg transition-transform duration-500",
               studyFlipped && "[transform:rotateY(180deg)]",
             )}
             style={{ transformStyle: "preserve-3d" }}
           >
             {/* Front — pinyin + Chinese */}
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl p-6"
+              className="col-start-1 row-start-1 flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-xl p-6"
               style={{ backfaceVisibility: "hidden" }}
             >
               {studyRoman && (
@@ -575,7 +582,7 @@ export function FlashcardsClient() {
 
             {/* Back — English + Chinese small + play */}
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl p-6 [transform:rotateY(180deg)]"
+              className="col-start-1 row-start-1 flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-xl p-6 [transform:rotateY(180deg)]"
               style={{ backfaceVisibility: "hidden" }}
             >
               {studyCard.english && (

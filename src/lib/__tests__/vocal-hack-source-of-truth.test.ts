@@ -44,6 +44,13 @@ const toneSandhiMigration = readFileSync(
   ),
   "utf8",
 );
+const reportedPhraseMigration = readFileSync(
+  path.join(
+    process.cwd(),
+    "src/db/migrations/0117_repair_reported_vocal_hack_phrases.sql",
+  ),
+  "utf8",
+);
 
 describe("Vocal Hack video source-of-truth guidance", () => {
   it("shows the guidance before every Vocal Hack sentence list", () => {
@@ -135,6 +142,23 @@ describe("Vocal Hack video source-of-truth guidance", () => {
       ),
     ).toHaveLength(4);
     expect(toneSandhiMigration).toContain(
+      'UPDATE "videoask_vocal_hack_sentences" AS staged',
+    );
+  });
+
+  it("guards and stages the three student-reported missing phrases", () => {
+    for (const [sentenceId, chinese, pinyin] of [
+      ["5f938cca-ed07-43a7-a598-a1827d5e5bda", "已经", "yǐ jīng"],
+      ["dc2d6912-38c5-45fe-ac9b-ac07c9160fd1", "我想起", "wǒ xiǎng qǐ"],
+      ["3971c449-da9d-42ae-a165-c54890d00355", "下雨", "xià yǔ"],
+    ]) {
+      expect(reportedPhraseMigration).toContain(sentenceId);
+      expect(reportedPhraseMigration).toContain(chinese);
+      expect(reportedPhraseMigration).toContain(pinyin);
+    }
+    expect(reportedPhraseMigration).toContain("GET DIAGNOSTICS changed_count");
+    expect(reportedPhraseMigration).toContain("RAISE EXCEPTION");
+    expect(reportedPhraseMigration).toContain(
       'UPDATE "videoask_vocal_hack_sentences" AS staged',
     );
   });
