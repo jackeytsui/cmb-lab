@@ -20,6 +20,11 @@ import { ProductWalkthrough, type WalkthroughStep } from "@/components/onboardin
 import { useUser } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
+import {
+  readReaderAnnotationCache,
+  updateReaderAnnotationCache,
+} from "@/lib/reader-annotation-cache";
+import { smartRomanise } from "@/lib/romanise";
 
 // Fetch jieba segments from API, falling back to client-side Intl.Segmenter
 async function fetchJiebaSegments(
@@ -428,6 +433,17 @@ export function ReaderClient({
   const [displayText, setDisplayText] = useState("");
   const [isConverting, setIsConverting] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [romanizationReady, setRomanizationReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    ensureSimplifiedConverter().then(() => {
+      if (!cancelled) setRomanizationReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Jieba segments (flat array for rendering)
   const [jiebaSegments, setJiebaSegments] = useState<WordSegment[] | null>(
@@ -593,9 +609,34 @@ export function ReaderClient({
         next.set(text, translation);
         return next;
       });
+      if (rawText) {
+        const cached = readReaderAnnotationCache(rawText, ttsLanguage);
+        updateReaderAnnotationCache(rawText, ttsLanguage, {
+          sentenceTranslations: {
+            ...(cached?.sentenceTranslations ?? {}),
+            [text]: translation,
+          },
+        });
+      }
     },
-    [],
+    [rawText, ttsLanguage],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const saved = rawText
+        ? readReaderAnnotationCache(rawText, ttsLanguage)
+        : null;
+      setTranslationCache(
+        new Map(Object.entries(saved?.sentenceTranslations ?? {})),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rawText, ttsLanguage]);
 
   // Script conversion. Cantonese keeps one canonical Traditional source and
   // derives the optional Simplified display from it. Jyutping always reads
@@ -705,6 +746,29 @@ export function ReaderClient({
 
   const segments = jiebaSegments ?? fallbackSegments;
 
+  const persistedRomanization = useMemo(
+    () => {
+      const sourceText = romanizationSourceText || displayText;
+      if (!romanizationReady || !sourceText.trim()) return "";
+      return (
+        readReaderAnnotationCache(sourceText, ttsLanguage)?.romanization ??
+        smartRomanise(
+          sourceText,
+          ttsLanguage === "zh-HK" ? "cantonese" : "mandarin",
+        )
+      );
+    },
+    [displayText, romanizationReady, romanizationSourceText, ttsLanguage],
+  );
+
+  useEffect(() => {
+    const sourceText = romanizationSourceText || displayText;
+    if (!sourceText || !persistedRomanization) return;
+    updateReaderAnnotationCache(sourceText, ttsLanguage, {
+      romanization: persistedRomanization,
+    });
+  }, [displayText, persistedRomanization, romanizationSourceText, ttsLanguage]);
+
   // Sentence ranges derived from final segments
   const sentences = useMemo(() => detectSentences(segments), [segments]);
   const firstSentenceText = sentences[0]?.text ?? null;
@@ -752,43 +816,86 @@ export function ReaderClient({
   // prevents new ones, leaving translations stuck on "Translating..." forever.
   useEffect(() => {
     if (!showEnglish || !sentenceKey) return;
+    let cancelled = false;
 
     // Build a dedup key: mode + sentence texts + segments (for word glosses)
-    const key = `${translationMode}:${sentenceKey}:${segmentsKey}`;
+    const key = `${ttsLanguage}:${translationMode}:${sentenceKey}:${segmentsKey}`;
     if (key === translatedKeyRef.current) return;
+
+    const sentenceTexts = JSON.parse(sentenceKey) as string[];
+    const cacheSourceText = rawText || displayText;
+    const cached = cacheSourceText
+      ? readReaderAnnotationCache(cacheSourceText, ttsLanguage)
+      : null;
+    const cachedProper = cached?.properTranslations;
+    const hasCompleteProperCache =
+      cachedProper?.length === sentenceTexts.length &&
+      cachedProper.every((translation) => translation.trim().length > 0);
+    const CJK = /[\u4e00-\u9fff\u3400-\u4dbf]/;
+    const uniqueWords = [
+      ...new Set(
+        segments
+          .filter((segment) => segment.isWordLike && CJK.test(segment.text))
+          .map((segment) => segment.text),
+      ),
+    ];
+    const cachedGlosses = cached?.wordGlosses ?? {};
+    const hasCompleteGlossCache =
+      translationMode !== "direct" ||
+      uniqueWords.every((word) => cachedGlosses[word]?.trim());
+
+    if (hasCompleteProperCache && hasCompleteGlossCache && cachedProper) {
+      translatedKeyRef.current = key;
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setBatchTranslations(
+          new Map(cachedProper.map((translation, index) => [index, translation])),
+        );
+        setWordGlossMap(
+          translationMode === "direct"
+            ? new Map(Object.entries(cachedGlosses))
+            : new Map(),
+        );
+        setIsTranslating(false);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     translatedKeyRef.current = key;
-
-    let cancelled = false;
     setIsTranslating(true);
-
-    // Clear previous translations
     setBatchTranslations(new Map());
     setWordGlossMap(new Map());
 
-    const sentenceTexts = JSON.parse(sentenceKey) as string[];
-
     (async () => {
       try {
-        const translatedMap = new Map<number, string>();
+        const translatedMap = new Map<number, string>(
+          hasCompleteProperCache && cachedProper
+            ? cachedProper.map((translation, index) => [index, translation])
+            : [],
+        );
         // 1. Fetch proper translations in chunks of 10
-        const sentenceChunks: string[][] = [];
-        for (let i = 0; i < sentenceTexts.length; i += 10) {
-          sentenceChunks.push(sentenceTexts.slice(i, i + 10));
-        }
-
-        let baseIdx = 0;
-        for (const chunk of sentenceChunks) {
-          if (cancelled) return;
-          const translations = await fetchProperTranslations(chunk, ttsLanguage);
-          if (!cancelled && translations && translations.length > 0) {
-            translations.forEach((t, i) => {
-              const mappedIndex = baseIdx + i;
-              if (typeof t === "string" && t.trim().length > 0) {
-                translatedMap.set(mappedIndex, t);
-              }
-            });
+        if (!hasCompleteProperCache) {
+          const sentenceChunks: string[][] = [];
+          for (let i = 0; i < sentenceTexts.length; i += 10) {
+            sentenceChunks.push(sentenceTexts.slice(i, i + 10));
           }
-          baseIdx += chunk.length;
+
+          let baseIdx = 0;
+          for (const chunk of sentenceChunks) {
+            if (cancelled) return;
+            const translations = await fetchProperTranslations(chunk, ttsLanguage);
+            if (!cancelled && translations && translations.length > 0) {
+              translations.forEach((translation, index) => {
+                const mappedIndex = baseIdx + index;
+                if (typeof translation === "string" && translation.trim()) {
+                  translatedMap.set(mappedIndex, translation);
+                }
+              });
+            }
+            baseIdx += chunk.length;
+          }
         }
 
         // Strict fallback pass: fill every missing sentence translation.
@@ -816,36 +923,38 @@ export function ReaderClient({
 
         // 2. If direct mode, fetch word glosses for unique Chinese words
         if (translationMode === "direct" && !cancelled) {
-          const CJK = /[\u4e00-\u9fff\u3400-\u4dbf]/;
-          const uniqueWords = [
-            ...new Set(
-              segments
-                .filter((s) => s.isWordLike && CJK.test(s.text))
-                .map((s) => s.text),
-            ),
-          ];
+          const collectedGlosses: Record<string, string> = { ...cachedGlosses };
+          const missingWords = uniqueWords.filter(
+            (word) => !collectedGlosses[word]?.trim(),
+          );
 
-          if (uniqueWords.length > 0) {
+          if (missingWords.length > 0) {
             // Chunk words into batches of 100
             const wordChunks: string[][] = [];
-            for (let i = 0; i < uniqueWords.length; i += 100) {
-              wordChunks.push(uniqueWords.slice(i, i + 100));
+            for (let i = 0; i < missingWords.length; i += 100) {
+              wordChunks.push(missingWords.slice(i, i + 100));
             }
 
             for (const wordChunk of wordChunks) {
               if (cancelled) return;
               const glosses = await fetchWordGlosses(wordChunk, ttsLanguage);
-              if (!cancelled && glosses) {
-                setWordGlossMap((prev) => {
-                  const next = new Map(prev);
-                  for (const [word, def] of Object.entries(glosses)) {
-                    next.set(word, def);
-                  }
-                  return next;
-                });
-              }
+              if (!cancelled && glosses) Object.assign(collectedGlosses, glosses);
             }
           }
+          if (!cancelled) setWordGlossMap(new Map(Object.entries(collectedGlosses)));
+          if (cacheSourceText && !cancelled) {
+            updateReaderAnnotationCache(cacheSourceText, ttsLanguage, {
+              wordGlosses: collectedGlosses,
+            });
+          }
+        }
+
+        if (cacheSourceText && !cancelled) {
+          updateReaderAnnotationCache(cacheSourceText, ttsLanguage, {
+            properTranslations: sentenceTexts.map(
+              (_, index) => translatedMap.get(index) ?? "",
+            ),
+          });
         }
       } catch (err) {
         console.error("Batch translation loop error:", err);
@@ -860,7 +969,7 @@ export function ReaderClient({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showEnglish, translationMode, sentenceKey, segmentsKey]);
+  }, [showEnglish, translationMode, sentenceKey, segmentsKey, ttsLanguage, rawText, displayText]);
 
   // Full-text TTS: play all sentences or selection
   const handlePlayAll = useCallback(async () => {
@@ -995,6 +1104,7 @@ export function ReaderClient({
           playingSentenceIndex={playingSentenceIndex}
           containerRef={readerContainerRef}
           toneColorsEnabled={toneColorsEnabled}
+          romanizationOverride={persistedRomanization}
           romanizationSourceText={
             isCantoneseReader ? romanizationSourceText : undefined
           }

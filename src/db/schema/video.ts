@@ -43,6 +43,11 @@ export const videoSessions = pgTable(
     captionSource: captionSourceEnum("caption_source"), // set when captions loaded
     captionLang: varchar("caption_lang", { length: 10 }), // e.g. "zh-Hans"
     captionCount: integer("caption_count").notNull().default(0),
+    // Cached annotations align 1:1 with the persisted caption rows (sequence order).
+    // Replacing captions clears/rebuilds these arrays so stale output is never reused.
+    captionPinyin: text("caption_pinyin").array(),
+    captionJyutping: text("caption_jyutping").array(),
+    captionEnglish: text("caption_english").array(),
     lastPositionMs: integer("last_position_ms").notNull().default(0),
     videoDurationMs: integer("video_duration_ms"), // null until first play event
     totalWatchedMs: integer("total_watched_ms").notNull().default(0),

@@ -32,6 +32,8 @@ type CaptionLine = {
   startMs: number;
   endMs: number;
   sequence: number;
+  pinyin?: string;
+  jyutping?: string;
 };
 
 type CaptionExtractionPayload = {
@@ -40,6 +42,7 @@ type CaptionExtractionPayload = {
   limit?: number;
   captions?: CaptionLine[] | null;
   englishCaptions?: CaptionLine[] | null;
+  englishTranslations?: string[] | null;
   session?: {
     id?: string;
     lastPositionMs?: number;
@@ -397,6 +400,7 @@ export function ListeningClient() {
           }
           setCaptions(nextCaptions);
           setEnglishCaptions(data.englishCaptions ?? null);
+          setEnglishTranslations(data.englishTranslations ?? null);
           setSessionId(data.session?.id ?? null);
           setCaptionStatus(
             data.captions && data.captions.length > 0 ? "success" : "no_captions"
@@ -678,7 +682,7 @@ export function ListeningClient() {
     if (
       englishTranslations &&
       englishTranslations.length === captions.length &&
-      englishTranslations.some((t) => t.length > 0)
+      englishTranslations.every((translation) => translation.trim().length > 0)
     ) return;
 
     let cancelled = false;
@@ -690,7 +694,7 @@ export function ListeningClient() {
     fetch("/api/video/translate-captions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ texts: textsToTranslate }),
+      body: JSON.stringify({ texts: textsToTranslate, sessionId }),
     })
       .then((res) => {
         if (!res.ok) throw new Error("translation_failed");
@@ -714,7 +718,7 @@ export function ListeningClient() {
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showEnglishSubs, captions, englishCaptions]);
+  }, [showEnglishSubs, captions, englishCaptions, sessionId]);
 
   // When we have AI translations but no YouTube English track, build overlay-compatible captions
   // by pairing each translation with the corresponding Chinese caption's timestamps.
@@ -905,6 +909,7 @@ export function ListeningClient() {
           return;
         }
         setCaptions(data.captions);
+        setEnglishTranslations(data.englishTranslations ?? null);
         setCaptionStatus("success");
         if (data.session?.id) setSessionId(data.session.id);
       } else {
@@ -1002,6 +1007,7 @@ export function ListeningClient() {
         }
         setCaptions(nextCaptions);
         setEnglishCaptions(data.englishCaptions ?? null);
+        setEnglishTranslations(data.englishTranslations ?? null);
         setSessionId(data.session?.id ?? null);
         setCaptionStatus(
           data.captions && data.captions.length > 0 ? "success" : "no_captions"
@@ -1035,6 +1041,8 @@ export function ListeningClient() {
         return;
       }
       setCaptions(uploadedCaptions);
+      setEnglishCaptions(null);
+      setEnglishTranslations(null);
       setCaptionStatus("success");
     },
     [isMandarinOrCantonese, trackAction]

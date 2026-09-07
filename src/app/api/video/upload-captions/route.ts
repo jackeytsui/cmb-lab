@@ -4,6 +4,10 @@ import { db } from "@/db";
 import { users, videoSessions, videoCaptions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { parseCaptionFile } from "@/lib/captions";
+import {
+  attachCaptionAnnotations,
+  generateCaptionAnnotations,
+} from "@/lib/caption-annotations";
 
 /** Maximum upload size: 2 MB */
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
@@ -113,12 +117,20 @@ export async function POST(request: NextRequest) {
     const captionSource = fileName.endsWith(".srt")
       ? ("upload_srt" as const)
       : ("upload_vtt" as const);
+    const annotations = await generateCaptionAnnotations(
+      parsedCaptions.map((caption) => caption.text),
+    );
 
     // 9. Mark the transcript incomplete before replacing rows. If insertion
     // fails, later loads will re-extract instead of trusting stale metadata.
     await db
       .update(videoSessions)
-      .set({ captionCount: 0 })
+      .set({
+        captionCount: 0,
+        captionPinyin: null,
+        captionJyutping: null,
+        captionEnglish: null,
+      })
       .where(eq(videoSessions.id, videoSessionId));
     await db
       .delete(videoCaptions)
@@ -142,13 +154,21 @@ export async function POST(request: NextRequest) {
         captionSource,
         captionCount: parsedCaptions.length,
         captionLang: null, // uploaded files don't have a lang code
+        captionPinyin: annotations.map((annotation) => annotation.pinyin),
+        captionJyutping: annotations.map((annotation) => annotation.jyutping),
+        captionEnglish: null,
       })
       .where(eq(videoSessions.id, videoSessionId))
       .returning();
 
     return NextResponse.json({
       session: updatedSession,
-      captions: parsedCaptions,
+      captions: attachCaptionAnnotations(
+        parsedCaptions,
+        updatedSession?.captionPinyin,
+        updatedSession?.captionJyutping,
+      ),
+      englishTranslations: null,
     });
   } catch (error) {
     console.error("Caption upload error:", error);

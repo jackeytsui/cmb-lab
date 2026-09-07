@@ -10,6 +10,8 @@ interface Caption {
   startMs: number;
   endMs: number;
   sequence: number;
+  pinyin?: string;
+  jyutping?: string;
 }
 
 interface TranscriptPanelProps {
@@ -227,6 +229,13 @@ export function TranscriptPanel({
                   (isTtsLoading || isTtsPlaying) && ttsLineIndex !== index
                 }
                 englishText={englishTexts?.[index]}
+                romanization={
+                  annotationMode === "jyutping"
+                    ? caption.jyutping
+                    : annotationMode === "pinyin"
+                      ? caption.pinyin
+                      : undefined
+                }
                 lineTourId={index === 0 ? firstLineTourId : undefined}
                 ttsButtonTourId={index === 0 ? firstLineTtsTourId : undefined}
               />

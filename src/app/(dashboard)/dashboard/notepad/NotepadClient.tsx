@@ -186,6 +186,7 @@ function NoteRow({
   onSaveExplanation,
   onCopyOver,
   onPersistTranslation,
+  onPersistRomanization,
 }: {
   note: NotepadNote;
   index: number;
@@ -203,12 +204,14 @@ function NoteRow({
   onSaveExplanation: (explanation: string | null) => void;
   onCopyOver: () => Promise<void>;
   onPersistTranslation: (t: string) => void;
+  onPersistRomanization: (romanization: string) => void;
 }) {
   const baseText = note.textOverride ?? note.text;
   const processed = useProcessedChineseText({
     committedText: baseText,
     scriptMode,
     language,
+    savedTranslation: note.translationOverride,
   });
 
   const [isEditing, setIsEditing] = useState(false);
@@ -228,34 +231,93 @@ function NoteRow({
   );
   const [isCopyingOver, setIsCopyingOver] = useState(false);
 
-  // Preload Simplified converter so pinyin pre-fill works for Traditional input
+  // Preload Simplified converter so persisted pinyin is generated from the
+  // canonical Simplified form even when the saved note is Traditional.
+  const [converterReady, setConverterReady] = useState(false);
   useEffect(() => {
-    ensureSimplifiedConverter();
+    let cancelled = false;
+    ensureSimplifiedConverter().then(() => {
+      if (!cancelled) setConverterReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  const defaultRomanization = useMemo(() => {
+    if (!converterReady || !baseText.trim()) return "";
+    return smartRomanise(
+      baseText,
+      language === "zh-HK" ? "cantonese" : "mandarin",
+    );
+  }, [baseText, converterReady, language]);
+
+  const generatedTranslation = useMemo(
+    () =>
+      processed.sentences
+        .map((_, idx) => processed.batchTranslations.get(idx) ?? "")
+        .filter((translation) => translation.trim().length > 0)
+        .join(" "),
+    [processed.batchTranslations, processed.sentences],
+  );
+
   // Auto-persist translation once GPT batch fetch completes, so it shows on reload
-  const translationPersistedRef = useRef(false);
+  const translationPersistedForRef = useRef("");
   useEffect(() => {
-    const t = processed.batchTranslations.get(0);
-    if (!t || note.translationOverride || processed.isTranslating || translationPersistedRef.current) return;
-    translationPersistedRef.current = true;
-    onPersistTranslation(t);
-  }, [processed.batchTranslations, processed.isTranslating, note.translationOverride, onPersistTranslation]);
+    if (
+      !generatedTranslation ||
+      note.translationOverride ||
+      processed.isTranslating ||
+      translationPersistedForRef.current === baseText
+    ) return;
+    translationPersistedForRef.current = baseText;
+    onPersistTranslation(generatedTranslation);
+  }, [baseText, generatedTranslation, processed.isTranslating, note.translationOverride, onPersistTranslation]);
+
+  const romanizationPersistedForRef = useRef("");
+  useEffect(() => {
+    if (
+      !defaultRomanization ||
+      note.romanizationOverride ||
+      romanizationPersistedForRef.current === baseText
+    ) return;
+    romanizationPersistedForRef.current = baseText;
+    onPersistRomanization(defaultRomanization);
+  }, [baseText, defaultRomanization, note.romanizationOverride, onPersistRomanization]);
 
   const startEditing = () => {
     const lang = language === "zh-HK" ? "cantonese" : "mandarin";
     setDraftText(baseText);
-    setDraftRomanization(note.romanizationOverride ?? smartRomanise(baseText, lang));
-    setDraftTranslation(note.translationOverride ?? "");
+    setDraftRomanization(
+      note.romanizationOverride ?? defaultRomanization ?? smartRomanise(baseText, lang),
+    );
+    setDraftTranslation(note.translationOverride ?? generatedTranslation);
     setIsEditing(true);
   };
 
   const handleSave = () => {
     const t = draftText.trim();
+    const nextText = t || baseText;
+    const sourceChanged = nextText !== baseText;
+    const originalRomanization = note.romanizationOverride ?? defaultRomanization;
+    const originalTranslation = note.translationOverride ?? generatedTranslation;
+    const enteredRomanization = draftRomanization.trim();
+    const enteredTranslation = draftTranslation.trim();
     onSaveEdit({
       textOverride: t && t !== note.text ? t : null,
-      romanizationOverride: draftRomanization.trim() || null,
-      translationOverride: draftTranslation.trim() || null,
+      romanizationOverride: sourceChanged
+        ? enteredRomanization && enteredRomanization !== originalRomanization
+          ? enteredRomanization
+          : smartRomanise(
+              nextText,
+              language === "zh-HK" ? "cantonese" : "mandarin",
+            ) || null
+        : enteredRomanization || null,
+      translationOverride: sourceChanged
+        ? enteredTranslation && enteredTranslation !== originalTranslation
+          ? enteredTranslation
+          : null
+        : enteredTranslation || null,
     });
     setIsEditing(false);
   };
@@ -416,11 +478,7 @@ function NoteRow({
             isSpeaking={processed.isPlaying || processed.ttsLoading}
             speakingText={processed.speakingText}
             ttsError={processed.ttsError}
-            translationCache={
-              note.translationOverride
-                ? new Map([[baseText, note.translationOverride]])
-                : processed.translationCache
-            }
+            translationCache={processed.translationCache}
             onTranslationFetched={(text, translation) => {
               processed.setTranslationCache((prev) => {
                 const next = new Map(prev);
@@ -428,14 +486,10 @@ function NoteRow({
                 return next;
               });
             }}
-            batchTranslations={
-              note.translationOverride
-                ? new Map([[0, note.translationOverride]])
-                : processed.batchTranslations
-            }
+            batchTranslations={processed.batchTranslations}
             isTranslating={processed.isTranslating}
             toneColorsEnabled={toneColorsEnabled}
-            romanizationOverride={note.romanizationOverride}
+            romanizationOverride={note.romanizationOverride ?? defaultRomanization}
           />
         ) : (
           <div className="text-sm text-muted-foreground">Loading...</div>
@@ -756,6 +810,9 @@ function NotepadPane({
                 onCopyOver={() => onCopyOverNote(note.id)}
                 onPersistTranslation={(t) =>
                   void onUpdateNote(note.id, { translationOverride: t })
+                }
+                onPersistRomanization={(romanization) =>
+                  void onUpdateNote(note.id, { romanizationOverride: romanization })
                 }
               />
             ))}

@@ -6,6 +6,10 @@ import type { VideoSession } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import ytdl from "@distube/ytdl-core";
 import { getYoutubeYtdlAgent } from "@/lib/youtube-access";
+import {
+  attachCaptionAnnotations,
+  generateCaptionAnnotations,
+} from "@/lib/caption-annotations";
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
@@ -184,6 +188,9 @@ export async function POST(request: NextRequest) {
         sequence: i,
       })
     );
+    const annotations = await generateCaptionAnnotations(
+      captions.map((caption: { text: string }) => caption.text),
+    );
 
     // Save to database
     let session: VideoSession | undefined;
@@ -202,7 +209,12 @@ export async function POST(request: NextRequest) {
         // like a valid cached transcript on the next request.
         await db
           .update(videoSessions)
-          .set({ captionCount: 0 })
+          .set({
+            captionCount: 0,
+            captionPinyin: null,
+            captionJyutping: null,
+            captionEnglish: null,
+          })
           .where(eq(videoSessions.id, existing.id));
         await db
           .delete(videoCaptions)
@@ -263,6 +275,9 @@ export async function POST(request: NextRequest) {
           captionSource: "whisper_auto",
           captionLang: "zh",
           captionCount: captions.length,
+          captionPinyin: annotations.map((annotation) => annotation.pinyin),
+          captionJyutping: annotations.map((annotation) => annotation.jyutping),
+          captionEnglish: null,
         })
         .where(eq(videoSessions.id, session.id))
         .returning();
@@ -271,7 +286,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       session,
-      captions,
+      captions: attachCaptionAnnotations(
+        captions,
+        session?.captionPinyin,
+        session?.captionJyutping,
+      ),
+      englishTranslations: null,
       source: "whisper",
     });
   } catch (error) {

@@ -15,6 +15,10 @@ import {
 } from "@/lib/captions";
 import { getTranscriptLimitSettings, getPeriodStart } from "@/lib/usage-limits";
 import { extractVideoId } from "@/lib/youtube";
+import {
+  attachCaptionAnnotations,
+  generateCaptionAnnotations,
+} from "@/lib/caption-annotations";
 
 export const maxDuration = 60;
 
@@ -24,9 +28,17 @@ async function replaceStoredCaptions(
   videoSessionId: string,
   captions: NormalizedCaption[]
 ) {
+  const annotations = await generateCaptionAnnotations(
+    captions.map((caption) => caption.text),
+  );
   await db
     .update(videoSessions)
-    .set({ captionCount: 0 })
+    .set({
+      captionCount: 0,
+      captionPinyin: null,
+      captionJyutping: null,
+      captionEnglish: null,
+    })
     .where(eq(videoSessions.id, videoSessionId));
   await db
     .delete(videoCaptions)
@@ -51,7 +63,12 @@ async function replaceStoredCaptions(
 
   const [completedSession] = await db
     .update(videoSessions)
-    .set({ captionCount: captions.length })
+    .set({
+      captionCount: captions.length,
+      captionPinyin: annotations.map((annotation) => annotation.pinyin),
+      captionJyutping: annotations.map((annotation) => annotation.jyutping),
+      captionEnglish: null,
+    })
     .where(eq(videoSessions.id, videoSessionId))
     .returning();
   if (!completedSession) {
@@ -140,11 +157,35 @@ export async function POST(request: NextRequest) {
             existingSession.id,
             optimizedCaptions
           );
+        } else if (
+          existingSession.captionPinyin?.length !== optimizedCaptions.length ||
+          existingSession.captionJyutping?.length !== optimizedCaptions.length
+        ) {
+          const annotations = await generateCaptionAnnotations(
+            optimizedCaptions.map((caption) => caption.text),
+          );
+          const [annotatedSession] = await db
+            .update(videoSessions)
+            .set({
+              captionPinyin: annotations.map((annotation) => annotation.pinyin),
+              captionJyutping: annotations.map((annotation) => annotation.jyutping),
+            })
+            .where(eq(videoSessions.id, existingSession.id))
+            .returning();
+          if (annotatedSession) cachedSession = annotatedSession;
         }
 
         return NextResponse.json({
           session: cachedSession,
-          captions: optimizedCaptions,
+          captions: attachCaptionAnnotations(
+            optimizedCaptions,
+            cachedSession.captionPinyin,
+            cachedSession.captionJyutping,
+          ),
+          englishTranslations:
+            cachedSession.captionEnglish?.length === optimizedCaptions.length
+              ? cachedSession.captionEnglish
+              : null,
           englishCaptions: null,
           cached: true,
         });
@@ -270,9 +311,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       session: completedSession,
-      captions: result.captions,
-      // English is translated on demand in the client. Keeping it out of the
-      // critical load path avoids a second provider request and rate limits.
+      captions: attachCaptionAnnotations(
+        result.captions,
+        completedSession.captionPinyin,
+        completedSession.captionJyutping,
+      ),
+      englishTranslations: null,
+      // English remains on-demand, but the first successful result is persisted.
       englishCaptions: null,
       cached: false,
     });

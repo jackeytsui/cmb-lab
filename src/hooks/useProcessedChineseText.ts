@@ -90,10 +90,12 @@ export function useProcessedChineseText({
   committedText,
   scriptMode,
   language,
+  savedTranslation,
 }: {
   committedText: string;
   scriptMode: ScriptMode;
   language: "zh-CN" | "zh-HK";
+  savedTranslation?: string | null;
 }) {
   const [displayText, setDisplayText] = useState("");
   const [isConverting, setIsConverting] = useState(false);
@@ -229,6 +231,18 @@ export function useProcessedChineseText({
         return;
       }
 
+      const persistedTranslation = savedTranslation?.trim();
+      if (persistedTranslation) {
+        setBatchTranslations(new Map([[0, persistedTranslation]]));
+        setTranslationCache(
+          new Map([[committedText || sentenceTexts[0], persistedTranslation]]),
+        );
+        translatedKeyRef.current = `saved:${language}:${sentenceKey}:${persistedTranslation}`;
+        setIsTranslating(false);
+        setTranslationFailed(false);
+        return;
+      }
+
       const translationKey = `${language}:${sentenceKey}`;
       if (translationKey === translatedKeyRef.current) return;
       setBatchTranslations(new Map());
@@ -268,7 +282,7 @@ export function useProcessedChineseText({
     };
   // Depend on sentenceKey, not the sentences array. Segmentation can replace
   // the array with an equivalent one while a translation is in flight.
-  }, [language, sentenceKey, translationAttempt]);
+  }, [committedText, language, savedTranslation, sentenceKey, translationAttempt]);
 
   const retryTranslation = useCallback(() => {
     translatedKeyRef.current = "";

@@ -3,6 +3,8 @@ import { and, eq, desc, max } from "drizzle-orm";
 import { db } from "@/db";
 import { notepadNotes } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import { ensureSimplifiedConverter } from "@/lib/chinese-convert";
+import { smartRomanise } from "@/lib/romanise";
 
 type Pane = "mandarin" | "cantonese";
 
@@ -76,6 +78,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    await ensureSimplifiedConverter();
+    const romanization = smartRomanise(text, body.pane);
     const [{ maxOrder }] = await db
       .select({ maxOrder: max(notepadNotes.order) })
       .from(notepadNotes)
@@ -95,6 +99,7 @@ export async function POST(req: NextRequest) {
         pane: body.pane,
         text,
         order: nextOrder,
+        romanizationOverride: romanization || null,
       })
       .returning();
 

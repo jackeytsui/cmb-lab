@@ -212,10 +212,14 @@ export function useProcessedText({
   committedText,
   scriptMode,
   language,
+  savedTranslation,
+  translate = true,
 }: {
   committedText: string;
   scriptMode: ScriptMode;
   language: "zh-CN" | "zh-HK";
+  savedTranslation?: string | null;
+  translate?: boolean;
 }) {
   const [displayText, setDisplayText] = useState("");
   const [isConverting, setIsConverting] = useState(false);
@@ -354,6 +358,26 @@ export function useProcessedText({
         return;
       }
 
+      if (!translate) {
+        setBatchTranslations(new Map());
+        setTranslationCache(new Map());
+        setIsTranslating(false);
+        setTranslationFailed(false);
+        return;
+      }
+
+      const persistedTranslation = savedTranslation?.trim();
+      if (persistedTranslation) {
+        setBatchTranslations(new Map([[0, persistedTranslation]]));
+        setTranslationCache(
+          new Map([[committedText || sentenceTexts[0], persistedTranslation]]),
+        );
+        translatedKeyRef.current = `saved:${language}:${sentenceKey}:${persistedTranslation}`;
+        setIsTranslating(false);
+        setTranslationFailed(false);
+        return;
+      }
+
       const translationKey = `${language}:${sentenceKey}`;
       if (translationKey === translatedKeyRef.current) return;
       setBatchTranslations(new Map());
@@ -393,7 +417,7 @@ export function useProcessedText({
     };
   // Depend on sentenceKey, not the sentences array. Segmentation can replace
   // the array with an equivalent one while a translation is in flight.
-  }, [language, sentenceKey, translationAttempt]);
+  }, [committedText, language, savedTranslation, sentenceKey, translate, translationAttempt]);
 
   const retryTranslation = useCallback(() => {
     translatedKeyRef.current = "";
@@ -467,9 +491,9 @@ function NoteCard({
   fontSize: number;
   onToggleStar: () => void;
   onSave: (updates: {
-    textOverride?: string;
-    romanizationOverride?: string;
-    translationOverride?: string;
+    textOverride?: string | null;
+    romanizationOverride?: string | null;
+    translationOverride?: string | null;
   }) => void;
   onDelete: () => void;
   onCopyOver?: () => void;
@@ -520,6 +544,7 @@ function NoteCard({
     committedText: baseText,
     scriptMode,
     language: noteLanguage,
+    savedTranslation: note.translationOverride,
   });
   const { toneColorsEnabled } = useReaderPreferences();
   const [isEditing, setIsEditing] = useState(false);
@@ -571,21 +596,38 @@ function NoteCard({
   }, [processed.sentences, processed.batchTranslations]);
 
   // Auto-persist generated translation so it's cached for future page loads
-  const translationPersistedRef = useRef(false);
+  const translationPersistedForRef = useRef("");
   useEffect(() => {
     if (
+      !canEdit ||
       !defaultTranslation ||
       note.translationOverride ||
       processed.isTranslating ||
-      translationPersistedRef.current
+      translationPersistedForRef.current === baseText
     ) return;
-    translationPersistedRef.current = true;
+    translationPersistedForRef.current = baseText;
     fetch(`/api/coaching/notes/${note.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ translationOverride: defaultTranslation }),
     }).catch(() => {});
-  }, [defaultTranslation, note.translationOverride, note.id, processed.isTranslating]);
+  }, [baseText, canEdit, defaultTranslation, note.translationOverride, note.id, processed.isTranslating]);
+
+  const romanizationPersistedForRef = useRef("");
+  useEffect(() => {
+    if (
+      !canEdit ||
+      !defaultRomanization ||
+      note.romanizationOverride ||
+      romanizationPersistedForRef.current === baseText
+    ) return;
+    romanizationPersistedForRef.current = baseText;
+    fetch(`/api/coaching/notes/${note.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ romanizationOverride: defaultRomanization }),
+    }).catch(() => {});
+  }, [baseText, canEdit, defaultRomanization, note.id, note.romanizationOverride]);
 
   useEffect(() => {
     if (isEditing && !wasEditingRef.current) {
@@ -600,13 +642,27 @@ function NoteCard({
     const nextText = draftText.trim();
     const nextRoman = draftRomanization.trim();
     const nextTrans = draftTranslation.trim();
+    const sourceChanged = nextText.length > 0 && nextText !== baseText;
+    const originalRomanization = note.romanizationOverride ?? defaultRomanization;
+    const originalTranslation = note.translationOverride ?? defaultTranslation;
     onSave({
       textOverride: nextText.length > 0 ? nextText : undefined,
-      romanizationOverride: nextRoman.length > 0 ? nextRoman : undefined,
-      translationOverride: nextTrans.length > 0 ? nextTrans : undefined,
+      romanizationOverride: sourceChanged
+        ? nextRoman && nextRoman !== originalRomanization
+          ? nextRoman
+          : smartRomanise(
+              nextText,
+              noteLanguage === "zh-HK" ? "cantonese" : "mandarin",
+            ) || null
+        : nextRoman || null,
+      translationOverride: sourceChanged
+        ? nextTrans && nextTrans !== originalTranslation
+          ? nextTrans
+          : null
+        : nextTrans || null,
     });
     setIsEditing(false);
-  }, [draftText, draftRomanization, draftTranslation, onSave]);
+  }, [baseText, defaultRomanization, defaultTranslation, draftText, draftRomanization, draftTranslation, note.romanizationOverride, note.translationOverride, noteLanguage, onSave]);
 
   const handleRomanizationChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const el = e.target;
@@ -1100,6 +1156,7 @@ function NoteCard({
               batchTranslations={processed.batchTranslations}
               isTranslating={processed.isTranslating}
               toneColorsEnabled={toneColorsEnabled}
+              romanizationOverride={note.romanizationOverride ?? defaultRomanization}
             />
           )}
           {!isEditing && !note.translationOverride ? (
@@ -2001,6 +2058,7 @@ function CoachingPanel({
     committedText: activeSession?.mandarin.committedText ?? "",
     scriptMode: activeSession?.mandarin.scriptMode ?? "simplified",
     language: "zh-CN",
+    translate: false,
   });
   const [mandarinDraft, setMandarinDraft] = useState("");
   const [draggingMando, setDraggingMando] = useState<number | null>(null);
@@ -2013,6 +2071,7 @@ function CoachingPanel({
     committedText: activeSession?.cantonese.committedText ?? "",
     scriptMode: activeSession?.cantonese.scriptMode ?? "simplified",
     language: "zh-HK",
+    translate: false,
   });
   const [cantoneseDraft, setCantoneseDraft] = useState("");
   const [draggingCanto, setDraggingCanto] = useState<number | null>(null);

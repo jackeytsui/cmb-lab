@@ -7,6 +7,8 @@ import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { isStaffRole } from "@/lib/platform-roles";
 import { getCoachingStudentAccess } from "@/lib/coaching-student-access";
+import { ensureSimplifiedConverter } from "@/lib/chinese-convert";
+import { smartRomanise } from "@/lib/romanise";
 
 // Allow up to 60s for translation (Vercel serverless default is 10s)
 export const maxDuration = 60;
@@ -193,14 +195,30 @@ export async function GET(request: Request) {
 
   // If translation requested, fill in missing translationOverride via OpenAI
   if (includeTranslations) {
+    await ensureSimplifiedConverter();
+    const updatesToPersist = new Map<
+      string,
+      { romanizationOverride?: string; translationOverride?: string }
+    >();
+
     // Collect notes needing translation, grouped by language
     const mandarinItems: Array<{ noteIndex: number; text: string }> = [];
     const cantoneseItems: Array<{ noteIndex: number; text: string }> = [];
 
     for (let i = 0; i < allNotes.length; i++) {
       const note = allNotes[i];
+      const text = (note.textOverride || note.text || "").trim();
+      if (!note.romanizationOverride && text) {
+        const romanization = smartRomanise(
+          text,
+          note.pane === "mandarin" ? "mandarin" : "cantonese",
+        );
+        if (romanization) {
+          allNotes[i] = { ...note, romanizationOverride: romanization };
+          updatesToPersist.set(note.id, { romanizationOverride: romanization });
+        }
+      }
       if (!note.translationOverride) {
-        const text = (note.textOverride || note.text || "").trim();
         if (text) {
           if (note.pane === "mandarin") {
             mandarinItems.push({ noteIndex: i, text });
@@ -226,19 +244,43 @@ export async function GET(request: Request) {
     // Apply translations back to note objects
     for (let i = 0; i < mandarinItems.length; i++) {
       if (mandarinTranslations[i]) {
+        const note = allNotes[mandarinItems[i].noteIndex];
         allNotes[mandarinItems[i].noteIndex] = {
-          ...allNotes[mandarinItems[i].noteIndex],
+          ...note,
           translationOverride: mandarinTranslations[i],
         };
+        updatesToPersist.set(note.id, {
+          ...updatesToPersist.get(note.id),
+          translationOverride: mandarinTranslations[i],
+        });
       }
     }
     for (let i = 0; i < cantoneseItems.length; i++) {
       if (cantoneseTranslations[i]) {
+        const note = allNotes[cantoneseItems[i].noteIndex];
         allNotes[cantoneseItems[i].noteIndex] = {
-          ...allNotes[cantoneseItems[i].noteIndex],
+          ...note,
           translationOverride: cantoneseTranslations[i],
         };
+        updatesToPersist.set(note.id, {
+          ...updatesToPersist.get(note.id),
+          translationOverride: cantoneseTranslations[i],
+        });
       }
+    }
+
+    // Persist in bounded batches so later exports and page visits reuse the
+    // generated output without creating an unbounded database fan-out.
+    const pendingUpdates = [...updatesToPersist.entries()];
+    for (let offset = 0; offset < pendingUpdates.length; offset += 25) {
+      await Promise.all(
+        pendingUpdates.slice(offset, offset + 25).map(([noteId, values]) =>
+          db
+            .update(coachingNotes)
+            .set(values)
+            .where(eq(coachingNotes.id, noteId)),
+        ),
+      );
     }
   }
 

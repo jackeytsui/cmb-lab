@@ -5,6 +5,7 @@ import { Volume2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WordSpan, type AnnotationMode } from "@/components/reader/WordSpan";
 import { segmentText } from "@/lib/segmenter";
+import { annotateFromModelAnswer } from "@/lib/mandarin-annotate";
 
 interface TranscriptLineProps {
   ref?: React.Ref<HTMLDivElement>;
@@ -32,6 +33,8 @@ interface TranscriptLineProps {
   isTtsDisabled?: boolean;
   /** English translation to display below the Chinese text */
   englishText?: string;
+  /** Persisted full-line pinyin or jyutping, aligned to the Chinese text. */
+  romanization?: string;
   /** Optional onboarding target id for this line row */
   lineTourId?: string;
   /** Optional onboarding target id for this line's TTS button */
@@ -62,6 +65,7 @@ export function TranscriptLine({
   isTtsPlaying = false,
   isTtsDisabled = false,
   englishText,
+  romanization,
   lineTourId,
   ttsButtonTourId,
 }: TranscriptLineProps) {
@@ -69,6 +73,23 @@ export function TranscriptLine({
     () => preSegments ?? segmentText(text),
     [preSegments, text]
   );
+  const romanizationBySegment = useMemo(() => {
+    if (!romanization?.trim()) return new Map<number, readonly (string | null)[]>();
+    const aligned = annotateFromModelAnswer(text, romanization).map(
+      (annotation) => annotation.pinyin || null,
+    );
+    const result = new Map<number, readonly (string | null)[]>();
+    let characterOffset = 0;
+    segments.forEach((segment, index) => {
+      const characterCount = [...segment.text].length;
+      result.set(
+        index,
+        aligned.slice(characterOffset, characterOffset + characterCount),
+      );
+      characterOffset += characterCount;
+    });
+    return result;
+  }, [romanization, segments, text]);
 
   return (
     <div
@@ -131,6 +152,7 @@ export function TranscriptLine({
                 index={i}
                 isWordLike={seg.isWordLike}
                 annotationMode={annotationMode}
+                romanization={romanizationBySegment.get(i)}
               />
             </span>
           ))}

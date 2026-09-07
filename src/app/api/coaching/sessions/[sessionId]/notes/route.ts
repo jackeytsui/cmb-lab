@@ -5,6 +5,8 @@ import { eq, desc, and } from "drizzle-orm";
 import { getRealUser } from "@/lib/auth";
 import { z } from "zod";
 import { isStaffRole } from "@/lib/platform-roles";
+import { ensureSimplifiedConverter } from "@/lib/chinese-convert";
+import { smartRomanise } from "@/lib/romanise";
 
 const createNoteSchema = z.object({
   text: z.string().trim().min(1).max(20_000),
@@ -51,6 +53,8 @@ export async function POST(
     .limit(1);
 
   const nextOrder = latest.length > 0 ? latest[0].order + 1 : 1;
+  await ensureSimplifiedConverter();
+  const romanization = smartRomanise(text, pane);
 
   const [note] = await db
     .insert(coachingNotes)
@@ -59,6 +63,7 @@ export async function POST(
       pane,
       order: nextOrder,
       text,
+      romanizationOverride: romanization || null,
     })
     .returning();
 

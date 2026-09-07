@@ -29,6 +29,37 @@ afterEach(() => {
 });
 
 describe("shared Chinese text translation race", () => {
+  it("reuses a persisted translation without calling the translation API", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/segment") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            segments: [[{ text: "雖然", isWordLike: true }]],
+          }),
+        } as Response);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() =>
+      useProcessedChineseText({
+        committedText: "雖然",
+        scriptMode: "traditional",
+        language: "zh-CN",
+        savedTranslation: "although",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(result.current.batchTranslations.get(0)).toBe("although"),
+    );
+    expect(
+      fetchMock.mock.calls.some(([url]) => url === "/api/reader/translate-batch"),
+    ).toBe(false);
+  });
+
   it("finishes translation after equivalent segmentation arrives", async () => {
     const segmentation = deferred<Response>();
     const translation = deferred<Response>();
