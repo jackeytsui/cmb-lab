@@ -34,13 +34,13 @@ export function getPerStudentGrantedCourseIds(
 
 /** Resolve tag access versus precise student enrollment for one course. */
 export function resolveCourseLibraryCourseAccess(params: {
-  isCustomized: boolean;
+  isPrivateCourse: boolean;
   isCoreProgressCourse: boolean;
   progressGated: boolean;
   hasPerStudentGrant: boolean;
   baseAllowed: boolean;
 }): boolean {
-  if (params.isCustomized) return params.hasPerStudentGrant;
+  if (params.isPrivateCourse) return params.hasPerStudentGrant;
   if (params.progressGated && params.isCoreProgressCourse) {
     return params.hasPerStudentGrant;
   }

@@ -9,6 +9,7 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { hasCourseContentAccess } from "@/lib/auth";
 import { COURSE_LIBRARY_COURSE_CONTENT_TYPE } from "@/lib/tag-feature-access";
+import { isPrivateCourseLibraryCourseTitle } from "@/lib/course-library-course-visibility";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -18,11 +19,9 @@ const updateSchema = z.object({
   isPublished: z.boolean().optional(),
   status: z.enum(["draft", "preview", "published"]).optional(),
   sortOrder: z.number().int().optional(),
-  // Tag-based visibility (same model as audio series): empty array = no
-  // restriction, visible to all students with the course_library feature.
+  // Tag-based visibility is available only for the preset catalogue.
   allowedTagIds: z.array(z.string().uuid()).optional(),
-  // Per-student manual grants. Primarily for customized ("Customized ...")
-  // courses, which are hidden from all students unless granted here or via tag.
+  // All non-preset courses are private and require one of these direct grants.
   allowedUserIds: z.array(z.string().uuid()).optional(),
 });
 
@@ -171,9 +170,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Course not found" }, { status: 404 });
   }
 
-  // Sync tag_content_grants so the Tag Management page stays in sync
-  // (same pattern as the audio-course admin route).
-  if (allowedTagIds !== undefined) {
+  // Private courses never accept tag grants. Their only learner entitlement is
+  // an explicit student assignment stored in allowedUserIds.
+  const isPrivateCourse = isPrivateCourseLibraryCourseTitle(updated.title);
+  const shouldSyncTagGrants =
+    allowedTagIds !== undefined ||
+    (data.title !== undefined && isPrivateCourse);
+  if (shouldSyncTagGrants) {
+    const effectiveAllowedTagIds = isPrivateCourse
+      ? []
+      : (allowedTagIds ?? []);
     await db
       .delete(tagContentGrants)
       .where(
@@ -182,9 +188,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           eq(tagContentGrants.contentId, courseId),
         ),
       );
-    if (allowedTagIds.length > 0) {
+    if (effectiveAllowedTagIds.length > 0) {
       await db.insert(tagContentGrants).values(
-        allowedTagIds.map((tagId) => ({
+        effectiveAllowedTagIds.map((tagId) => ({
           tagId,
           contentType: COURSE_LIBRARY_COURSE_CONTENT_TYPE,
           contentId: courseId,

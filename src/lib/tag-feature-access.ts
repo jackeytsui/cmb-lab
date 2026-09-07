@@ -16,6 +16,7 @@ import {
   resolveCourseLibraryCourseAccess,
 } from "@/lib/course-library-access-grants";
 import { BLUEPRINT_COURSE_TITLES } from "@/lib/ghl/course-progress-plan";
+import { isPrivateCourseLibraryCourseTitle } from "@/lib/course-library-course-visibility";
 
 type FeatureOverrideState = {
   allow: Set<FeatureKey>;
@@ -241,9 +242,10 @@ export async function canViewCourseLibrary(
  * - A course with no grant rows is unrestricted → visible to everyone.
  * - A course with grant rows is visible only to students holding one of the
  *   granting tags.
- * - Customized courses ("Customized ..." titles) are ALWAYS restricted, even
- *   with no grants configured — default deny. Access comes from a tag grant
- *   or a per-student manual/system grant.
+ * - Every non-preset course is private even with no grants configured. Only a
+ *   direct per-student manual/system grant can expose one to a student.
+ * - The three Blueprint levels and Confident Cantonese are preset catalogue
+ *   courses, so their existing tag/progress rules continue to apply.
  * - Staff (admin/coach) always see everything.
  */
 export async function getCourseLibraryCourseAccessPolicy(
@@ -279,9 +281,11 @@ export async function getCourseLibraryCourseAccessPolicy(
       : Promise.resolve([]),
   ]);
 
-  const customIds = new Set(
+  const privateCourseIds = new Set(
     courses
-      .filter((course) => /customized/i.test(course.title))
+      .filter((course) =>
+        isPrivateCourseLibraryCourseTitle(course.title),
+      )
       .map((course) => course.id)
   );
   const perStudentGrantedIds = user
@@ -326,7 +330,7 @@ export async function getCourseLibraryCourseAccessPolicy(
       // not unlock Intermediate or Advanced ahead of the student's current
       // level. Manual/system per-student grants are the precise access list.
       return resolveCourseLibraryCourseAccess({
-        isCustomized: customIds.has(courseId),
+        isPrivateCourse: privateCourseIds.has(courseId),
         isCoreProgressCourse: coreCourseIds.has(courseId),
         progressGated,
         hasPerStudentGrant: perStudentGrantedIds.has(courseId),

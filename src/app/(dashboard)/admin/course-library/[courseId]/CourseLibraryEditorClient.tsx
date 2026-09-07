@@ -28,6 +28,7 @@ import {
   MapPinned,
   NotebookPen,
   MessagesSquare,
+  LockKeyhole,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { courseCoverImagePath } from "@/lib/course-cover-image";
@@ -39,6 +40,7 @@ import {
   isVideoAskVocalHackDestination,
   videoAskMigrationHref,
 } from "@/lib/videoask/vocal-hack-routing";
+import { isPrivateCourseLibraryCourseTitle } from "@/lib/course-library-course-visibility";
 
 type LessonType =
   | "video"
@@ -418,9 +420,9 @@ export function CourseLibraryEditorClient({
   );
   const [savingAccess, setSavingAccess] = useState(false);
 
-  // Per-student manual grants (primary path for customized courses, which
-  // are hidden from all students by default).
-  const isCustomized = /customized/i.test(course.title);
+  // Newly created and custom Course Library courses are private by default.
+  // Only the explicit preset catalogue uses tag-based access.
+  const isPrivateCourse = isPrivateCourseLibraryCourseTitle(course.title);
   const [allowedUserIds, setAllowedUserIds] = useState<string[]>(
     initialAllowedUserIds,
   );
@@ -1143,7 +1145,9 @@ export function CourseLibraryEditorClient({
               id="course-visibility-hint"
               className="max-w-[240px] text-left text-[10px] text-muted-foreground sm:max-w-[180px] sm:text-right"
             >
-              {STATUS_HINT[course.status]}
+              {course.status === "published" && isPrivateCourse
+                ? "Published only to the students assigned below."
+                : STATUS_HINT[course.status]}
             </span>
           </div>
         </div>
@@ -1235,7 +1239,21 @@ export function CourseLibraryEditorClient({
             <p className="mt-1.5 text-xs text-red-500">{coverError}</p>
           )}
         </div>
-        {allTags.length > 0 && (
+        {isPrivateCourse && (
+          <div className="flex max-w-2xl items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
+            <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div>
+              <p className="text-xs font-semibold text-foreground">
+                Private custom course
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Publishing this course will not make it visible to everyone.
+                Only students added by email below can see and open it.
+              </p>
+            </div>
+          </div>
+        )}
+        {!isPrivateCourse && allTags.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-1">
               <label className="block text-xs font-medium text-muted-foreground">
@@ -1246,11 +1264,9 @@ export function CourseLibraryEditorClient({
               )}
             </div>
             <p className="text-[10px] text-muted-foreground mb-2">
-              {isCustomized
-                ? "Customized course — hidden from all students by default; a tag selected here also grants access."
-                : allowedTagIds.length === 0
-                  ? "No tags selected — visible to all students with Course Library access."
-                  : "Only students with one of the selected tags can see this course."}
+              {allowedTagIds.length === 0
+                ? "No tags selected — visible to all students with Course Library access."
+                : "Only students with one of the selected tags can see this preset course."}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {allTags.map((tag) => {
@@ -1283,15 +1299,17 @@ export function CourseLibraryEditorClient({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <label className="block text-xs font-medium text-muted-foreground">
-              Manual access exceptions
+              {isPrivateCourse
+                ? "Students with access (by email)"
+                : "Manual access exceptions"}
             </label>
             {savingStudents && (
               <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
             )}
           </div>
           <p className="text-[10px] text-muted-foreground mb-2">
-            {isCustomized
-              ? "Customized course — hidden from ALL students by default. Only the students added here (or granted via a tag above) can see it."
+            {isPrivateCourse
+              ? "This course is hidden from all other students. Add each intended student here using their CMB Lab account email."
               : allowedUserIds.length === 0
                 ? "No manual exceptions. Search below only when a student needs access outside the assigned tags."
                 : "These deliberate exceptions can see this course regardless of tags."}
@@ -1379,7 +1397,9 @@ export function CourseLibraryEditorClient({
             htmlFor="course-student-search"
             className="mb-1 block text-[10px] font-medium text-muted-foreground"
           >
-            Add a student exception
+            {isPrivateCourse
+              ? "Assign a student by email"
+              : "Add a student exception"}
           </label>
           <input
             id="course-student-search"

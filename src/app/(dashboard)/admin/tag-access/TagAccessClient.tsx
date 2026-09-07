@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { TagBadge } from "@/components/tags/TagBadge";
 import { isCustomizedTitle } from "@/lib/customized-content";
+import { isPrivateCourseLibraryCourseTitle } from "@/lib/course-library-course-visibility";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -640,12 +641,13 @@ export function TagAccessClient() {
             })
           );
         setAudioSeries(series);
-        // Same rule for the Course Library: customized courses are managed
-        // per-student in the course editor, not via tags.
+        // Private Course Library courses are assigned per-student by email in
+        // the course editor. Only the explicit preset catalogue is tag-managed.
         setLibraryCourses(
           (libraryData.courses ?? [])
             .filter(
-              (c: { title: string }) => !isCustomizedTitle(c.title)
+              (c: { title: string }) =>
+                !isPrivateCourseLibraryCourseTitle(c.title)
             )
             .map(
               (c: { id: string; title: string; status: LibraryCourse["status"] }) => ({

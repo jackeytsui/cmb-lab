@@ -61,7 +61,7 @@ describe("Course Library per-student grants", () => {
   it("does not let a broad student tag bypass core GHL progress access", () => {
     expect(
       resolveCourseLibraryCourseAccess({
-        isCustomized: false,
+        isPrivateCourse: false,
         isCoreProgressCourse: true,
         progressGated: true,
         hasPerStudentGrant: false,
@@ -71,11 +71,33 @@ describe("Course Library per-student grants", () => {
 
     expect(
       resolveCourseLibraryCourseAccess({
-        isCustomized: false,
+        isPrivateCourse: false,
         isCoreProgressCourse: true,
         progressGated: true,
         hasPerStudentGrant: true,
         baseAllowed: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("requires direct student assignment for private courses", () => {
+    expect(
+      resolveCourseLibraryCourseAccess({
+        isPrivateCourse: true,
+        isCoreProgressCourse: false,
+        progressGated: false,
+        hasPerStudentGrant: false,
+        baseAllowed: true,
+      }),
+    ).toBe(false);
+
+    expect(
+      resolveCourseLibraryCourseAccess({
+        isPrivateCourse: true,
+        isCoreProgressCourse: false,
+        progressGated: false,
+        hasPerStudentGrant: true,
+        baseAllowed: false,
       }),
     ).toBe(true);
   });
