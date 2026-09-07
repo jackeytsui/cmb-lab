@@ -25,17 +25,17 @@ export function AnnouncementBanner({
   const isCoaching = tone !== "default";
   const isExternalLink = announcement.linkUrl?.startsWith("https://") ?? false;
   const bannerClass = isLive
-    ? "border-red-950/30 bg-gradient-to-r from-red-700 via-rose-700 to-orange-600 shadow-[0_6px_22px_rgba(185,28,28,0.3)]"
+    ? "border-blue-950/30 bg-gradient-to-r from-blue-700 via-indigo-700 to-cyan-600 shadow-[0_6px_22px_rgba(29,78,216,0.28)]"
     : tone === "coaching-upcoming"
       ? "border-amber-950/25 bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 shadow-[0_6px_22px_rgba(217,119,6,0.26)]"
       : "border-indigo-900/20 bg-gradient-to-r from-indigo-700 via-violet-700 to-fuchsia-700 shadow-[0_6px_22px_rgba(49,46,129,0.24)]";
   const iconClass = isLive
-    ? "text-red-700"
+    ? "text-blue-700"
     : tone === "coaching-upcoming"
       ? "text-amber-700"
       : "text-indigo-700";
   const actionClass = isLive
-    ? "text-red-700 hover:bg-red-50 focus-visible:ring-offset-red-700"
+    ? "text-blue-700 hover:bg-blue-50 focus-visible:ring-offset-blue-700"
     : tone === "coaching-upcoming"
       ? "text-amber-800 hover:bg-amber-50 focus-visible:ring-offset-amber-700"
       : "text-indigo-700 hover:bg-indigo-50 focus-visible:ring-offset-indigo-700";

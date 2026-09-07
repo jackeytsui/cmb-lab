@@ -45,6 +45,16 @@ describe("CMB Lab announcements", () => {
     expect(banner).not.toContain("localStorage");
   });
 
+  it("uses an informational blue palette for the live coaching banner", () => {
+    const banner = source(
+      "src/components/announcements/AnnouncementBanner.tsx",
+    );
+
+    expect(banner).toContain("from-blue-700 via-indigo-700 to-cyan-600");
+    expect(banner).toContain("text-blue-700 hover:bg-blue-50");
+    expect(banner).not.toContain("from-red-700 via-rose-700 to-orange-600");
+  });
+
   it("adds push and click handlers to the production service worker", () => {
     const serviceWorker = source("public/sw.js");
 
