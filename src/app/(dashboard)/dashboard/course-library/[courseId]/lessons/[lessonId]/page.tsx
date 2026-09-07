@@ -58,6 +58,8 @@ import { extractEmbedUrl } from "@/lib/embed";
 import { legacyVideoAskUrl } from "@/lib/legacy-vocal-hack";
 import { hasDefaultCourseCompletion } from "@/lib/staff-course-progress";
 import { StaffCourseProgressNotice } from "@/components/course/StaffCourseProgressNotice";
+import { CourseLessonNavigator } from "@/components/course-library/CourseLessonNavigator";
+import { displayedCompletedLessonIds } from "@/lib/staff-course-progress";
 
 interface Attachment {
   url: string;
@@ -160,6 +162,11 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
   const orderedLessons = await db
     .select({
       lessonId: courseLibraryLessons.id,
+      lessonTitle: courseLibraryLessons.title,
+      moduleId: courseLibraryModules.id,
+      moduleTitle: courseLibraryModules.title,
+      moduleShortTitle: courseLibraryModules.shortTitle,
+      weekLabel: courseLibraryModules.weekLabel,
     })
     .from(courseLibraryLessons)
     .innerJoin(
@@ -188,14 +195,31 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
     ? `/course-library/${courseId}/lessons/${nextLessonId}`
     : null;
 
-  const progress = currentUser
-    ? await db.query.courseLibraryLessonProgress.findFirst({
-        where: and(
-          eq(courseLibraryLessonProgress.userId, currentUser.id),
-          eq(courseLibraryLessonProgress.lessonId, lessonId),
-        ),
-      })
-    : null;
+  const progressRows =
+    !staffProgress && orderedLessons.length > 0
+      ? await db
+          .select({
+            lessonId: courseLibraryLessonProgress.lessonId,
+            completedAt: courseLibraryLessonProgress.completedAt,
+            quizAnswers: courseLibraryLessonProgress.quizAnswers,
+          })
+          .from(courseLibraryLessonProgress)
+          .where(
+            and(
+              eq(courseLibraryLessonProgress.userId, currentUser.id),
+              inArray(
+                courseLibraryLessonProgress.lessonId,
+                orderedLessons.map((lesson) => lesson.lessonId),
+              ),
+            ),
+          )
+      : [];
+  const completedLessonIds = displayedCompletedLessonIds(
+    currentUser.role,
+    orderedLessons.map((lesson) => ({ id: lesson.lessonId })),
+    progressRows,
+  );
+  const progress = progressRows.find((item) => item.lessonId === lessonId) ?? null;
 
   const content = (row.content ?? {}) as Record<string, unknown>;
   const lessonType = row.lessonType as string;
@@ -427,7 +451,7 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
 
   return (
     <CourseLibraryGate key={`${currentUser?.id}:${lessonId}`}>
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto max-w-7xl px-4 py-8">
         <a
           href={`/course-library/${courseId}/modules/${row.moduleId}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
@@ -444,6 +468,9 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
         </h1>
 
         {staffProgress && <StaffCourseProgressNotice />}
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <main className="min-w-0 space-y-4">
 
         {row.lessonType === "video" && (
           <div className="space-y-4">
@@ -875,6 +902,18 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
           };
           return <QuizLessonViewer lessonId={lessonId} quiz={safeQuiz} />;
         })()}
+          </main>
+          <aside className="order-first lg:order-last">
+            <div className="lg:sticky lg:top-20">
+              <CourseLessonNavigator
+                courseId={courseId}
+                currentLessonId={lessonId}
+                lessons={orderedLessons}
+                completedLessonIds={completedLessonIds}
+              />
+            </div>
+          </aside>
+        </div>
       </div>
     </CourseLibraryGate>
   );
