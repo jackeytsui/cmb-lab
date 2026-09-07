@@ -60,7 +60,18 @@ describe.each([["main", mainVideo], ["vocal", vocalVideo]] as const)("%s protect
   });
   it("redirects only after all access checks pass", async () => {
     expect((await handler(request(), context)).status).toBe(307);
-    expect(mocks.redirect).toHaveBeenCalledWith(blob, expect.stringMatching(/^course-library\//));
+    if (_name === "main") {
+      expect(mocks.redirect).toHaveBeenCalledWith(
+        blob,
+        "course-library/stream",
+        { useCache: false },
+      );
+    } else {
+      expect(mocks.redirect).toHaveBeenCalledWith(
+        blob,
+        "course-library/vocal-hack-video",
+      );
+    }
   });
 });
 

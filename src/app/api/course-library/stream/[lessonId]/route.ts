@@ -84,5 +84,14 @@ export async function GET(
     );
   }
 
-  return privateMediaPlaybackRedirect(videoUrl, "course-library/stream");
+  // Private Blob's CDN can occasionally return a malformed Content-Range on
+  // a cache-miss seek (for example, reporting the requested window size as the
+  // total object size). Chromium discards that response and leaves the video
+  // at HAVE_METADATA while it waits forever for playable bytes. Reading the
+  // signed object from Blob origin keeps the browser's Range requests intact;
+  // the browser still talks directly to Blob, so no long-lived serverless
+  // proxy is reintroduced.
+  return privateMediaPlaybackRedirect(videoUrl, "course-library/stream", {
+    useCache: false,
+  });
 }
