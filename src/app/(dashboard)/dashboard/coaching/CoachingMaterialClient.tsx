@@ -1299,6 +1299,12 @@ function CoachingPanel({
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
+  const [noteSaveError, setNoteSaveError] = useState<string | null>(null);
+  const [savingNotePane, setSavingNotePane] = useState<
+    "mandarin" | "cantonese" | null
+  >(null);
+  const [mandarinDraft, setMandarinDraft] = useState("");
+  const [cantoneseDraft, setCantoneseDraft] = useState("");
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [notesAscending, setNotesAscending] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -1951,26 +1957,55 @@ function CoachingPanel({
 
   const handleCommitText = useCallback(
     async (sessionId: string, pane: "mandarin" | "cantonese", text: string) => {
-      if (!canWrite) return;
-      if (!text.trim()) return;
-      updateSession(sessionId, (session) => ({
-        ...session,
-        [pane]: {
-          ...session[pane],
-          committedText: text,
-          draftText: "",
-        },
-      }));
-      const res = await fetch(`/api/coaching/sessions/${sessionId}/notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, pane }),
-      });
-      if (!res.ok) return;
-      trackAction("add_note", { pane });
-      await fetchSessions();
+      if (!canWrite || !text.trim() || savingNotePane) return;
+      const submittedText = text;
+      setNoteSaveError(null);
+      setSavingNotePane(pane);
+      try {
+        const res = await fetch(`/api/coaching/sessions/${sessionId}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: submittedText, pane }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          setNoteSaveError(
+            data?.error || "The note was not saved. Your text is still here—please try again.",
+          );
+          return;
+        }
+
+        updateSession(sessionId, (session) => ({
+          ...session,
+          [pane]: {
+            ...session[pane],
+            committedText: submittedText,
+            draftText:
+              session[pane].draftText === submittedText
+                ? ""
+                : session[pane].draftText,
+          },
+        }));
+        if (pane === "mandarin") {
+          setMandarinDraft((current) =>
+            current === submittedText ? "" : current,
+          );
+        } else {
+          setCantoneseDraft((current) =>
+            current === submittedText ? "" : current,
+          );
+        }
+        trackAction("add_note", { pane });
+        await fetchSessions();
+      } catch {
+        setNoteSaveError(
+          "The note was not saved. Your text is still here—please check your connection and try again.",
+        );
+      } finally {
+        setSavingNotePane(null);
+      }
     },
-    [canWrite, fetchSessions, trackAction, updateSession],
+    [canWrite, fetchSessions, savingNotePane, trackAction, updateSession],
   );
 
   const handleReorderNotes = useCallback(
@@ -2060,7 +2095,6 @@ function CoachingPanel({
     language: "zh-CN",
     translate: false,
   });
-  const [mandarinDraft, setMandarinDraft] = useState("");
   const [draggingMando, setDraggingMando] = useState<number | null>(null);
   // Dragging is armed only while the pointer is on a note's grip handle.
   // With `draggable` always on, browsers start a card drag instead of a text
@@ -2073,7 +2107,6 @@ function CoachingPanel({
     language: "zh-HK",
     translate: false,
   });
-  const [cantoneseDraft, setCantoneseDraft] = useState("");
   const [draggingCanto, setDraggingCanto] = useState<number | null>(null);
 
   useEffect(() => {
@@ -2917,6 +2950,7 @@ function CoachingPanel({
               value={mandarinDraft}
               onChange={(e) => {
                 const next = e.target.value;
+                setNoteSaveError(null);
                 setMandarinDraft(next);
                 if (activeSession) {
                   updateSession(activeSession.id, (session) => ({
@@ -2937,8 +2971,7 @@ function CoachingPanel({
                 ) {
                   e.preventDefault();
                   if (activeSession) {
-                    handleCommitText(activeSession.id, "mandarin", mandarinDraft);
-                    setMandarinDraft("");
+                    void handleCommitText(activeSession.id, "mandarin", mandarinDraft);
                   }
                 }
               }}
@@ -2952,17 +2985,21 @@ function CoachingPanel({
                   type="button"
                   onClick={() => {
                     if (activeSession) {
-                      handleCommitText(activeSession.id, "mandarin", mandarinDraft);
-                      setMandarinDraft("");
+                      void handleCommitText(activeSession.id, "mandarin", mandarinDraft);
                     }
                   }}
-                  disabled={!activeSession}
+                  disabled={!activeSession || savingNotePane !== null}
                   className="absolute bottom-2 right-2 inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1 text-[11px] font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Enter
+                  {savingNotePane === "mandarin" ? "Saving…" : "Enter"}
                 </button>
               )}
             </div>
+            {noteSaveError && (
+              <p role="alert" className="text-xs text-destructive">
+                {noteSaveError}
+              </p>
+            )}
           </div>
 
           {(mandarinPane.isConverting || mandarinPane.isSegmenting) && (
@@ -3238,6 +3275,7 @@ function CoachingPanel({
               value={cantoneseDraft}
               onChange={(e) => {
                 const next = e.target.value;
+                setNoteSaveError(null);
                 setCantoneseDraft(next);
                 if (activeSession) {
                   updateSession(activeSession.id, (session) => ({
@@ -3258,8 +3296,7 @@ function CoachingPanel({
                 ) {
                   e.preventDefault();
                   if (activeSession) {
-                    handleCommitText(activeSession.id, "cantonese", cantoneseDraft);
-                    setCantoneseDraft("");
+                    void handleCommitText(activeSession.id, "cantonese", cantoneseDraft);
                   }
                 }
               }}
@@ -3273,17 +3310,21 @@ function CoachingPanel({
                   type="button"
                   onClick={() => {
                     if (activeSession) {
-                      handleCommitText(activeSession.id, "cantonese", cantoneseDraft);
-                      setCantoneseDraft("");
+                      void handleCommitText(activeSession.id, "cantonese", cantoneseDraft);
                     }
                   }}
-                  disabled={!activeSession}
+                  disabled={!activeSession || savingNotePane !== null}
                   className="absolute bottom-2 right-2 inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1 text-[11px] font-medium text-foreground hover:border-primary/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Enter
+                  {savingNotePane === "cantonese" ? "Saving…" : "Enter"}
                 </button>
               )}
             </div>
+            {noteSaveError && (
+              <p role="alert" className="text-xs text-destructive">
+                {noteSaveError}
+              </p>
+            )}
           </div>
 
           {(cantonesePane.isConverting || cantonesePane.isSegmenting) && (

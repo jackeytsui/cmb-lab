@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getRealUser } from "@/lib/auth";
 import { z } from "zod";
 import { isStaffRole } from "@/lib/platform-roles";
+import { canStaffManageCoachingSession } from "@/lib/coaching-session-access";
 
 const updateNoteSchema = z
   .object({
@@ -18,10 +19,14 @@ const updateNoteSchema = z
 
 async function canManageNote(
   noteId: string,
-  user: { id: string; role: string },
+  user: Parameters<typeof canStaffManageCoachingSession>[0],
 ): Promise<boolean> {
   const [note] = await db
-    .select({ createdBy: coachingSessions.createdBy })
+    .select({
+      type: coachingSessions.type,
+      createdBy: coachingSessions.createdBy,
+      studentEmail: coachingSessions.studentEmail,
+    })
     .from(coachingNotes)
     .innerJoin(
       coachingSessions,
@@ -29,9 +34,7 @@ async function canManageNote(
     )
     .where(eq(coachingNotes.id, noteId))
     .limit(1);
-  return Boolean(
-    note && (user.role === "admin" || note.createdBy === user.id),
-  );
+  return note ? canStaffManageCoachingSession(user, note) : false;
 }
 
 export async function PATCH(

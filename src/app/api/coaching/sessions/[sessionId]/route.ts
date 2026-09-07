@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getRealUser } from "@/lib/auth";
 import { sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { isStaffRole } from "@/lib/platform-roles";
+import { canStaffManageCoachingSession } from "@/lib/coaching-session-access";
 
 const optionalHttpUrlSchema = z
   .union([z.string().trim().max(2_000), z.null()])
@@ -62,17 +63,22 @@ export async function PATCH(
     return NextResponse.json({ error: "No updates provided" }, { status: 400 });
   }
 
+  const session = await db.query.coachingSessions.findFirst({
+    where: eq(coachingSessions.id, sessionId),
+    columns: {
+      type: true,
+      createdBy: true,
+      studentEmail: true,
+    },
+  });
+  if (!session || !(await canStaffManageCoachingSession(dbUser, session))) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
   const [updated] = await db
     .update(coachingSessions)
     .set(updates)
-    .where(
-      dbUser.role === "admin"
-        ? eq(coachingSessions.id, sessionId)
-        : and(
-            eq(coachingSessions.id, sessionId),
-            eq(coachingSessions.createdBy, dbUser.id),
-          ),
-    )
+    .where(eq(coachingSessions.id, sessionId))
     .returning();
 
   if (!updated) {

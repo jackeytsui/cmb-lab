@@ -7,6 +7,7 @@ import { z } from "zod";
 import { isStaffRole } from "@/lib/platform-roles";
 import { ensureSimplifiedConverter } from "@/lib/chinese-convert";
 import { smartRomanise } from "@/lib/romanise";
+import { canStaffManageCoachingSession } from "@/lib/coaching-session-access";
 
 const createNoteSchema = z.object({
   text: z.string().trim().min(1).max(20_000),
@@ -36,12 +37,14 @@ export async function POST(
 
   const session = await db.query.coachingSessions.findFirst({
     where: eq(coachingSessions.id, sessionId),
-    columns: { id: true, createdBy: true },
+    columns: {
+      id: true,
+      type: true,
+      createdBy: true,
+      studentEmail: true,
+    },
   });
-  if (
-    !session ||
-    (dbUser.role !== "admin" && session.createdBy !== dbUser.id)
-  ) {
+  if (!session || !(await canStaffManageCoachingSession(dbUser, session))) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
