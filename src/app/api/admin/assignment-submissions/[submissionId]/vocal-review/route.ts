@@ -10,6 +10,7 @@ import {
 import { getAssignmentReviewer } from "@/lib/assignment-review";
 import { sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { createNotification } from "@/lib/notifications";
+import { shouldNotifyAssignmentReview } from "@/lib/assignment-review-notification";
 
 interface RouteParams {
   params: Promise<{ submissionId: string }>;
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const now = new Date();
-  const wasReviewed = submission.status === "reviewed";
+  const shouldNotifyStudent = shouldNotifyAssignmentReview(submission.status);
 
   for (const review of parsed.data.sentences) {
     // Keep only entries with actual Chinese text.
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     .returning();
 
   // In-app notification — only on the first review, not on review edits.
-  if (!wasReviewed) {
+  if (shouldNotifyStudent) {
     const lesson = await db.query.courseLibraryLessons.findFirst({
       where: eq(courseLibraryLessons.id, submission.lessonId),
       columns: { title: true },

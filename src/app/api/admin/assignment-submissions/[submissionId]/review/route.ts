@@ -22,6 +22,7 @@ import {
 } from "@/lib/assignment-corrections";
 import { sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { createNotification } from "@/lib/notifications";
+import { shouldNotifyAssignmentReview } from "@/lib/assignment-review-notification";
 
 interface RouteParams {
   params: Promise<{ submissionId: string }>;
@@ -186,7 +187,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const finalScore = scoreOverridden ? overrideScore : autoScore;
 
   const now = new Date();
-  const wasReviewed = submission.status === "reviewed";
+  const shouldNotifyStudent = shouldNotifyAssignmentReview(submission.status);
 
   // Persist verdicts + corrections (replace-all keeps re-reviews consistent).
   const sentenceIds = sentences.map((s) => s.id);
@@ -242,7 +243,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   // In-app notification (existing notification system) — only on the first
   // review, not on review edits.
-  if (!wasReviewed) {
+  if (shouldNotifyStudent) {
     const lesson = await db.query.courseLibraryLessons.findFirst({
       where: eq(courseLibraryLessons.id, submission.lessonId),
       columns: { title: true },
