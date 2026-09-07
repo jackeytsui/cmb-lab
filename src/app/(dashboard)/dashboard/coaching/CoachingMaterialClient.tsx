@@ -28,6 +28,7 @@ import {
   getToneColorStyle,
   getToneDataAttr,
 } from "@/lib/tone-colors";
+import { readerTypographySizes } from "@/lib/reader-typography";
 import type { Roles } from "@/types/globals";
 import { isStaffRole } from "@/lib/platform-roles";
 import {
@@ -754,8 +755,8 @@ function NoteCard({
     setShowExplanation(false);
   }, [onSaveExplanation]);
 
-  const annotationSize = Math.round(fontSize * 1.2);
-  const englishSize = Math.round(fontSize * 1.1);
+  const { romanizationSize: annotationSize, englishSize } =
+    readerTypographySizes(fontSize);
 
   return (
     <div
@@ -979,7 +980,7 @@ function NoteCard({
                         return (
                           <span key={i} data-word={seg.text} data-index={i}
                             className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20 inline-flex flex-col items-center">
-                            <span className="inline-flex items-end">
+                            <span className="inline-flex items-end gap-x-[0.15em]">
                               {segChars.map((char, ci) => {
                                 const syllable = overrideMap!.get(startOffset + ci);
                                 if (syllable) {
@@ -2919,7 +2920,7 @@ function CoachingPanel({
 
           {/* Font size control — Mandarin panel */}
           <div className="flex items-center gap-2 mt-3">
-            <span className="text-xs text-muted-foreground">Font size</span>
+            <span className="text-xs text-muted-foreground">Chinese size</span>
             <button
               type="button"
               onClick={() => setNoteFontSize((s) => Math.max(12, s - 2))}

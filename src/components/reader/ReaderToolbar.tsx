@@ -297,7 +297,7 @@ export function ReaderToolbar({
         </>
       )}
 
-      {/* Font size */}
+      {/* Chinese size; annotations and English remain proportionally smaller. */}
       <div className="inline-flex items-center gap-1">
         <Button
           variant="ghost"
@@ -308,12 +308,13 @@ export function ReaderToolbar({
             )
           }
           disabled={fontSize <= FONT_SIZE_MIN}
+          aria-label="Decrease Chinese character size"
           className="text-muted-foreground hover:text-foreground hover:bg-muted"
         >
           <Minus className="size-3" />
         </Button>
-        <span className="min-w-[3ch] text-center text-xs tabular-nums text-muted-foreground">
-          {fontSize}px
+        <span className="min-w-[7ch] text-center text-xs tabular-nums text-muted-foreground">
+          Chinese {fontSize}px
         </span>
         <Button
           variant="ghost"
@@ -324,6 +325,7 @@ export function ReaderToolbar({
             )
           }
           disabled={fontSize >= FONT_SIZE_MAX}
+          aria-label="Increase Chinese character size"
           className="text-muted-foreground hover:text-foreground hover:bg-muted"
         >
           <Plus className="size-3" />

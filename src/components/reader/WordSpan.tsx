@@ -10,6 +10,7 @@ import {
   extractToneFromJyutping,
   getToneColorClass,
 } from "@/lib/tone-colors";
+import { readerTypographySizes } from "@/lib/reader-typography";
 
 // Keep AnnotationMode export for Listening tab backward compatibility
 export type AnnotationMode = "pinyin" | "jyutping" | "plain";
@@ -132,9 +133,8 @@ export const WordSpan = React.memo(function WordSpan({
     : (showJyutpingProp ?? false);
   const showEnglish = isLegacy ? false : ((showEnglishProp ?? false) && !!englishGloss);
 
-  // Annotation sizing: pinyin/jyutping are 1.2x the base character size
-  const annotationSize = Math.round(fontSize * 1.2);
-  const englishSize = Math.round(fontSize * 1.1);
+  const { romanizationSize: annotationSize, englishSize } =
+    readerTypographySizes(fontSize);
 
   // All hooks called unconditionally
   const legacyContent = useMemo(() => {
@@ -212,7 +212,7 @@ export const WordSpan = React.memo(function WordSpan({
         className={`${WORD_CLASS} inline-flex flex-col items-center`}
       >
         {/* Per-character columns with annotations stacked above */}
-        <span className="inline-flex items-end">
+        <span className="inline-flex items-end gap-x-[0.15em]">
           {chars.map((char, i) => (
             <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.1em" }}>
               {showPinyin && (

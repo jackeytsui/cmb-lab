@@ -9,6 +9,7 @@ import { SentenceControls } from "./SentenceControls";
 import { cn } from "@/lib/utils";
 import { annotateFromModelAnswer } from "@/lib/mandarin-annotate";
 import { smartRomanise } from "@/lib/romanise";
+import { readerTypographySizes } from "@/lib/reader-typography";
 
 /** Standard glosses for grammatical particles — used as fallback for common words */
 const PARTICLE_GLOSSES: Record<string, string> = {
@@ -296,7 +297,7 @@ export function ReaderTextArea({
 
             {/* Proper mode: natural translation below sentence */}
             {showEnglish && translationMode === "proper" && properTranslation && (
-              <div className="text-muted-foreground italic ml-1 mt-0.5 opacity-0 animate-[fadeIn_200ms_ease-out_forwards]" style={{ fontSize: `${Math.round(fontSize * 1.1)}px` }}>
+              <div className="text-muted-foreground italic ml-1 mt-0.5 opacity-0 animate-[fadeIn_200ms_ease-out_forwards]" style={{ fontSize: `${readerTypographySizes(fontSize).englishSize}px` }}>
                 {properTranslation}
               </div>
             )}

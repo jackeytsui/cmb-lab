@@ -37,7 +37,7 @@ export function ModelAnnotatedSentence({
   return (
     <div className={cn("space-y-1.5", className)}>
       <span
-        className="inline-flex flex-wrap items-end gap-y-1.5"
+        className="inline-flex flex-wrap items-end gap-x-1 gap-y-1.5"
         style={{ lineHeight: 1.15 }}
       >
         {annotations.map((ann) => (

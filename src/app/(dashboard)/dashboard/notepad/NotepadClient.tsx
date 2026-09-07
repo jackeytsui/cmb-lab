@@ -705,7 +705,7 @@ function NotepadPane({
 
           {/* Font size */}
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span>Font size</span>
+            <span>Chinese size</span>
             <button
               type="button"
               onClick={() => setFontSize(Math.max(MIN_FONT, fontSize - 2))}
