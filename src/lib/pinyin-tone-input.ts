@@ -76,3 +76,26 @@ export function adjustedPinyinToneCursor(
 ): number {
   return Math.max(0, cursor - Math.max(0, raw.length - converted.length));
 }
+
+/**
+ * Apply live tone-number conversion to a controlled Mandarin pinyin input.
+ * Passing `enabled: false` preserves numbered Cantonese Jyutping unchanged.
+ */
+export function handlePinyinToneInputChange(
+  input: HTMLInputElement,
+  onValueChange: (value: string) => void,
+  enabled = true,
+): void {
+  const raw = input.value;
+  const converted = enabled ? applyPinyinToneNumbers(raw) : raw;
+  onValueChange(converted);
+
+  if (converted.length === raw.length) return;
+
+  const cursor = adjustedPinyinToneCursor(
+    raw,
+    converted,
+    input.selectionStart ?? raw.length,
+  );
+  requestAnimationFrame(() => input.setSelectionRange(cursor, cursor));
+}

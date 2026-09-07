@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { playWithGain, type PlayWithGainHandle } from "@/lib/play-with-gain";
+import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -816,10 +817,14 @@ export default function AdminScriptsClient() {
                       <Input
                         value={line.mandarinRomanisation}
                         onChange={(e) =>
-                          updateLine(
-                            idx,
-                            "mandarinRomanisation",
-                            e.target.value
+                          handlePinyinToneInputChange(
+                            e.currentTarget,
+                            (mandarinRomanisation) =>
+                              updateLine(
+                                idx,
+                                "mandarinRomanisation",
+                                mandarinRomanisation,
+                              ),
                           )
                         }
                         placeholder="Pinyin"

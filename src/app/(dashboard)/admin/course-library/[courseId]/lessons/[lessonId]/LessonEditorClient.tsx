@@ -38,6 +38,7 @@ import {
   countHanCharacters,
 } from "@/lib/generate-model-pinyin";
 import { fetchProperTranslations } from "@/lib/mandarin-generation";
+import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
 import { saveUploadedLessonVideo } from "@/lib/save-uploaded-lesson-video";
 
 type LessonType =
@@ -2251,7 +2252,11 @@ function ListeningPracticeLessonForm({
                     type="text"
                     value={sentence.pinyin}
                     onChange={(e) =>
-                      updateSentence(sentence.id, { pinyin: e.target.value })
+                      handlePinyinToneInputChange(
+                        e.currentTarget,
+                        (pinyin) => updateSentence(sentence.id, { pinyin }),
+                        lang === "mandarin",
+                      )
                     }
                     placeholder={
                       lang === "cantonese" ? "nei5 hou2" : "nǐ chī fàn le ma"
@@ -2973,7 +2978,11 @@ function VocalHackLessonForm({
                     type="text"
                     value={sentence.pinyin}
                     onChange={(e) =>
-                      updateSentence(sentence.id, { pinyin: e.target.value })
+                      handlePinyinToneInputChange(
+                        e.currentTarget,
+                        (pinyin) => updateSentence(sentence.id, { pinyin }),
+                        lang === "mandarin",
+                      )
                     }
                     placeholder={lang === "cantonese" ? "nei5 hou2" : "zhè shì lì jù"}
                     disabled={transcribingIds.has(sentence.id)}

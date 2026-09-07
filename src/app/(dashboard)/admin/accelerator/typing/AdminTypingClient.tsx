@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Pencil, Trash2, Plus, Upload } from "lucide-react";
+import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -389,7 +390,12 @@ export default function AdminTypingClient() {
               <Input
                 value={form.romanisation}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, romanisation: e.target.value }))
+                  handlePinyinToneInputChange(
+                    e.currentTarget,
+                    (romanisation) =>
+                      setForm((current) => ({ ...current, romanisation })),
+                    form.language === "mandarin",
+                  )
                 }
                 placeholder="e.g. ni3 hao3"
               />

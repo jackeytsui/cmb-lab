@@ -5,6 +5,7 @@ import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Pencil, Plus, Trash2, Upload, Check, X, FileSpreadsheet, XCircle } from "lucide-react";
+import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
 
 type Clip = {
   id: string;
@@ -140,7 +141,14 @@ function EditableClipRow({
     return (
       <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/5 px-3 py-2">
         <Input value={chinese} onChange={(e) => setChinese(e.target.value)} className="w-16 text-center text-sm" placeholder="中文" />
-        <Input value={pinyinVal} onChange={(e) => setPinyinVal(e.target.value)} className="w-24 text-sm" placeholder="pinyin" />
+        <Input
+          value={pinyinVal}
+          onChange={(e) =>
+            handlePinyinToneInputChange(e.currentTarget, setPinyinVal)
+          }
+          className="w-24 text-sm"
+          placeholder="pinyin"
+        />
         <Input value={title} onChange={(e) => setTitle(e.target.value)} className="flex-1 text-sm" placeholder="English" />
         <Input value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="w-14 text-sm text-center" type="number" placeholder="#" />
         <Button size="sm" variant="ghost" onClick={handleSave} disabled={saving}>
@@ -626,7 +634,15 @@ export function ToneMasteryAdminClient() {
           <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Input placeholder="Chinese (e.g. 高中)" value={form.chinese} onChange={(e) => setForm({ ...form, chinese: e.target.value })} />
-              <Input placeholder="Pinyin (e.g. gāo zhōng)" value={form.pinyin} onChange={(e) => setForm({ ...form, pinyin: e.target.value })} />
+              <Input
+                placeholder="Pinyin (e.g. gāo zhōng)"
+                value={form.pinyin}
+                onChange={(e) =>
+                  handlePinyinToneInputChange(e.currentTarget, (pinyin) =>
+                    setForm((current) => ({ ...current, pinyin })),
+                  )
+                }
+              />
               <Input placeholder="English (e.g. High school)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
               <Input placeholder="Sort #" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} type="number" />
             </div>

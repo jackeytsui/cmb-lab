@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
 
 type PlacementDetail = {
   placement: {
@@ -658,7 +659,11 @@ export function VocalHackPlacementReviewClient({
                     value={sentence.pinyin ?? ""}
                     disabled={isPublished}
                     onChange={(event) =>
-                      updateSentence(sentence.id, "pinyin", event.target.value)
+                      handlePinyinToneInputChange(
+                        event.currentTarget,
+                        (pinyin) => updateSentence(sentence.id, "pinyin", pinyin),
+                        placement.language === "mandarin",
+                      )
                     }
                   />
                 </label>

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { extractEmbedUrl, looksLikeIframeSnippet } from "@/lib/embed";
+import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
 import { Plus, Trash2, Link as LinkIcon, FileText, Upload, X } from "lucide-react";
 import type { Lesson } from "@/db/schema/courses";
 import type { LessonAttachment } from "@/db/schema/courses";
@@ -404,9 +405,15 @@ export function LessonForm({
                       placeholder="Expected pinyin e.g. ni chi fan le ma"
                       value={s.expectedPinyin}
                       onChange={(e) => {
-                        const next = [...listeningConfig.sentences];
-                        next[i] = { ...next[i], expectedPinyin: e.target.value };
-                        setListeningConfig((prev) => ({ ...prev, sentences: next }));
+                        handlePinyinToneInputChange(
+                          e.currentTarget,
+                          (expectedPinyin) =>
+                            setListeningConfig((prev) => {
+                              const sentences = [...prev.sentences];
+                              sentences[i] = { ...sentences[i], expectedPinyin };
+                              return { ...prev, sentences };
+                            }),
+                        );
                       }}
                       className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-500"
                     />
@@ -479,9 +486,15 @@ export function LessonForm({
                       placeholder="Pinyin e.g. nǐ hǎo"
                       value={s.pinyin}
                       onChange={(e) => {
-                        const next = [...vocalConfig.sentences];
-                        next[i] = { ...next[i], pinyin: e.target.value };
-                        setVocalConfig({ sentences: next });
+                        handlePinyinToneInputChange(
+                          e.currentTarget,
+                          (pinyin) =>
+                            setVocalConfig((prev) => {
+                              const sentences = [...prev.sentences];
+                              sentences[i] = { ...sentences[i], pinyin };
+                              return { sentences };
+                            }),
+                        );
                       }}
                       className="border-zinc-600 bg-zinc-700 text-white placeholder:text-zinc-500"
                     />

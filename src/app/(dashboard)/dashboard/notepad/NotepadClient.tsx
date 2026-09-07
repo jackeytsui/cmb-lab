@@ -8,6 +8,7 @@ import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import { exportCoachingNotes } from "@/lib/coaching-export";
 import { ensureSimplifiedConverter } from "@/lib/chinese-convert";
 import { smartRomanise } from "@/lib/romanise";
+import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
 import { FlashcardStarButton } from "@/components/flashcards/FlashcardStarButton";
 import { notifyFlashcardsChanged } from "@/lib/flashcards";
 import {
@@ -356,7 +357,13 @@ function NoteRow({
             />
             <input
               value={draftRomanization}
-              onChange={(e) => setDraftRomanization(e.target.value)}
+              onChange={(e) =>
+                handlePinyinToneInputChange(
+                  e.currentTarget,
+                  setDraftRomanization,
+                  language === "zh-CN",
+                )
+              }
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
