@@ -80,6 +80,7 @@ export function VocalHackViewer({
   >(() => new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null);
 
   const locked = submission ? LOCKED_STATUSES.has(submission.status) : false;
   const recordedCount = useMemo(
@@ -237,11 +238,13 @@ export function VocalHackViewer({
       )}
 
       <div className="space-y-5">
-        {sentences.map((sentence, idx) => (
-          <div
-            key={sentence.id}
-            className="rounded-lg border border-border bg-card p-4 space-y-3"
-          >
+        {sentences.map((sentence, idx) => {
+          const videoExpanded = expandedVideoId === sentence.id;
+          return (
+            <div
+              key={sentence.id}
+              className="rounded-lg border border-border bg-card p-4 space-y-3"
+            >
             <div className="flex items-center gap-2">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                 {idx + 1}
@@ -254,12 +257,26 @@ export function VocalHackViewer({
               )}
             </div>
 
-            {/* Video left, sentence + recorder right (stacks on mobile). */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            {/* Expanded video remains inline so the response recorder stays visible. */}
+            <div
+              className={cn(
+                "flex flex-col gap-4",
+                !videoExpanded && "sm:flex-row sm:items-start",
+              )}
+            >
               {sentence.hasVideo && (
-                <div className="flex justify-center sm:block sm:shrink-0">
+                <div
+                  className={cn(
+                    "flex justify-center",
+                    !videoExpanded && "sm:block sm:shrink-0",
+                  )}
+                >
                   <SentenceVideo
                     src={`${videoBaseUrl}&sentence=${encodeURIComponent(sentence.id)}#t=0.1`}
+                    expanded={videoExpanded}
+                    onExpandedChange={(expanded) =>
+                      setExpandedVideoId(expanded ? sentence.id : null)
+                    }
                   />
                 </div>
               )}
@@ -347,8 +364,9 @@ export function VocalHackViewer({
                 )}
               </div>
             </div>
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
 
       {error && (

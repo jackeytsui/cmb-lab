@@ -118,6 +118,12 @@ describe("Vocal Hack video transcription", () => {
       expect(transcriptionBody.get("language")).toBe("zh");
       expect(transcriptionBody.get("prompt")).toContain(script);
       expect(mocks.generateObject.mock.calls[0][0].system).toContain(wording);
+      expect(mocks.generateObject.mock.calls[0][0].system).toContain(
+        "never summarize, shorten, paraphrase, or omit",
+      );
+      expect(mocks.generateObject.mock.calls[0][0].system).toContain(
+        "exact full-sentence duplicate",
+      );
       expect(mocks.convertScript).toHaveBeenCalledWith(
         modelChinese,
         "original",

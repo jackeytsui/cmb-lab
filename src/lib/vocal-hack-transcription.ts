@@ -11,7 +11,9 @@ export type VocalHackLanguage = "mandarin" | "cantonese";
 const cleanedTranscriptSchema = z.object({
   chinese: z
     .string()
-    .describe("The single Chinese sentence spoken by the coach, without repetition"),
+    .describe(
+      "One complete, verbatim Chinese teaching sentence, with only exact full-sentence repetitions removed",
+    ),
   english: z.string().describe("A concise natural English translation"),
 });
 
@@ -109,8 +111,11 @@ export async function transcribeVocalHackVideo(input: {
     system:
       `You clean transcripts for a Chinese pronunciation course. ` +
       `The clip demonstrates exactly one ${languageLabel} sentence, sometimes ` +
-      `repeated twice. Keep one faithful copy of the taught sentence, remove ` +
-      `fillers and duplicate repetitions, and translate it concisely. ` +
+      `repeated twice. Return one complete, faithful copy of the entire taught ` +
+      `sentence. Preserve every meaningful word and clause in its original order; ` +
+      `never summarize, shorten, paraphrase, or omit part of the sentence. Remove ` +
+      `only speech outside the taught sentence and exact full-sentence duplicate ` +
+      `demonstrations, then translate the complete sentence concisely. ` +
       scriptInstruction,
     prompt: `Course item: ${input.context}\nRaw transcript: ${rawTranscript}`,
   });
