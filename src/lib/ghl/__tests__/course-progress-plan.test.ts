@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCourseProgressPlan,
   diffCourseProgressAccess,
+  mergeCourseProgressAccess,
   parseGhlCourseProgress,
   type CourseStructure,
   type GhlProgressFieldIds,
@@ -157,7 +158,7 @@ describe("GHL Blueprint progress planning", () => {
     expect(plan.lessonCompletions).toEqual([]);
   });
 
-  it("adds missing level access and removes stale later-course access", () => {
+  it("adds missing access without removing a course CMB Lab already granted", () => {
     const changes = diffCourseProgressAccess({
       currentByCourse: new Map([
         ["foundations", new Set(["student-1"])],
@@ -175,8 +176,15 @@ describe("GHL Blueprint progress planning", () => {
     expect(changes.toAdd).toEqual([
       { courseId: "foundations", userId: "student-2" },
     ]);
-    expect(changes.toRemove).toEqual([
-      { courseId: "advanced", userId: "student-1" },
-    ]);
+    expect(changes.toRemove).toEqual([]);
+  });
+
+  it("keeps the union when CMB Lab is ahead of GHL", () => {
+    expect(
+      [...mergeCourseProgressAccess(
+        new Set(["cmb-ahead", "shared"]),
+        new Set(["ghl-ahead", "shared"]),
+      )],
+    ).toEqual(["cmb-ahead", "shared", "ghl-ahead"]);
   });
 });

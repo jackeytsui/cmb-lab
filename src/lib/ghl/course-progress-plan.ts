@@ -70,8 +70,8 @@ export interface CourseAccessChange {
 
 /**
  * Compare the system-managed access roster with the latest successful GHL
- * audit. Only audited users are eligible for removal, so a transient fetch
- * failure can never lock out an unchecked student.
+ * audit. GHL is an additive migration source: it may unlock a course, but it
+ * must never remove access already earned or used in CMB Lab.
  */
 export function diffCourseProgressAccess(params: {
   currentByCourse: ReadonlyMap<string, ReadonlySet<string>>;
@@ -79,7 +79,6 @@ export function diffCourseProgressAccess(params: {
   scopedUserIds: ReadonlySet<string>;
 }): { toAdd: CourseAccessChange[]; toRemove: CourseAccessChange[] } {
   const toAdd: CourseAccessChange[] = [];
-  const toRemove: CourseAccessChange[] = [];
   const courseIds = new Set([
     ...params.currentByCourse.keys(),
     ...params.expectedByCourse.keys(),
@@ -91,13 +90,19 @@ export function diffCourseProgressAccess(params: {
     for (const userId of params.scopedUserIds) {
       if (expected.has(userId) && !current.has(userId)) {
         toAdd.push({ courseId, userId });
-      } else if (!expected.has(userId) && current.has(userId)) {
-        toRemove.push({ courseId, userId });
       }
     }
   }
 
-  return { toAdd, toRemove };
+  return { toAdd, toRemove: [] };
+}
+
+/** Keep the union of CMB Lab and GHL access; neither source may downgrade it. */
+export function mergeCourseProgressAccess(
+  current: ReadonlySet<string>,
+  imported: ReadonlySet<string>,
+): Set<string> {
+  return new Set([...current, ...imported]);
 }
 
 const BLUEPRINT_LEVELS: BlueprintLevel[] = [

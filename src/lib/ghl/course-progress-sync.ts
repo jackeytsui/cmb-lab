@@ -20,6 +20,7 @@ import {
   GHL_PROGRESS_CONCEPTS,
   buildCourseProgressPlan,
   diffCourseProgressAccess,
+  mergeCourseProgressAccess,
   parseGhlCourseProgress,
   type BlueprintLevel,
   type CourseStructure,
@@ -158,13 +159,19 @@ async function fetchCmbLabContacts(location: {
     (contactId) => !contactsById.has(contactId),
   );
   for (const batch of chunks(missingLinkedIds, 10)) {
-    const responses = await Promise.all(
+    const responses = await Promise.allSettled(
       batch.map((contactId) =>
         client.get<{ contact: GhlSearchContact }>(`/contacts/${contactId}`),
       ),
     );
-    for (const response of responses) {
-      const contact = normalizeContact(response.data.contact);
+    for (const [index, response] of responses.entries()) {
+      if (response.status === "rejected") {
+        console.warn(
+          `[GHL course progress] Skipped unavailable linked contact ${batch[index]}`,
+        );
+        continue;
+      }
+      const contact = normalizeContact(response.value.data.contact);
       contactsById.set(contact.id, contact);
     }
   }
@@ -411,6 +418,35 @@ export async function syncGhlCourseProgress({
   const rosterUserIds = new Set(linkedRoster.map((link) => link.userId));
   const checkedRosterUserIds = new Set<string>();
 
+  // A progress row proves the student has already opened or completed content
+  // in CMB Lab. Preserve that course access even when GHL is missing or behind.
+  const localProgressAccessRows = courseData.courses.length
+    ? await db
+        .selectDistinct({
+          userId: courseLibraryLessonProgress.userId,
+          courseId: courseLibraryModules.courseId,
+        })
+        .from(courseLibraryLessonProgress)
+        .innerJoin(
+          courseLibraryLessons,
+          eq(courseLibraryLessons.id, courseLibraryLessonProgress.lessonId),
+        )
+        .innerJoin(
+          courseLibraryModules,
+          eq(courseLibraryModules.id, courseLibraryLessons.moduleId),
+        )
+        .where(
+          and(
+            inArray(
+              courseLibraryModules.courseId,
+              courseData.courses.map((course) => course.id),
+            ),
+            isNull(courseLibraryLessons.deletedAt),
+            isNull(courseLibraryModules.deletedAt),
+          ),
+        )
+    : [];
+
   const usersByEmail = new Map<string, typeof activeUsers>();
   for (const user of activeUsers) {
     const email = normalizeEmail(user.email);
@@ -456,6 +492,12 @@ export async function syncGhlCourseProgress({
     rosterStudents: rosterUserIds.size,
   };
   const syncedAt = new Date();
+
+  for (const row of localProgressAccessRows) {
+    if (!rosterUserIds.has(row.userId)) continue;
+    expectedAccessByCourse.get(row.courseId)?.add(row.userId);
+    scopedUserIds.add(row.userId);
+  }
 
   for (const { location, contacts } of contactsByLocation) {
     for (const contact of contacts) {
@@ -648,10 +690,8 @@ export async function syncGhlCourseProgress({
     const current =
       courseData.systemAccessUserIdsByCourse.get(course.id) ?? new Set<string>();
     const expected = expectedAccessByCourse.get(course.id) ?? new Set<string>();
-    const next = new Set(
-      [...current].filter((userId) => !scopedUserIds.has(userId)),
-    );
-    for (const userId of expected) next.add(userId);
+    const next = mergeCourseProgressAccess(current, expected);
+    if (next.size === current.size) continue;
 
     await db
       .update(courseLibraryCourses)
