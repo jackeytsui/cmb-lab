@@ -2,7 +2,7 @@ import { studentAssignedToCoach } from "@/lib/coach-student-sql";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { clerkClient } from "@clerk/nextjs/server";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { AddUserQuickDialog } from "@/components/admin/AddUserQuickDialog";
 import { getActiveStudentsPageData } from "@/lib/active-student-queries";
 import { ActiveStudentDataTable } from "@/components/admin/ActiveStudentDataTable";
@@ -12,11 +12,26 @@ import { cn } from "@/lib/utils";
 import { StudentInvitePanel } from "@/components/admin/StudentInvitePanel";
 import { db } from "@/db";
 import { users, studentTags, tags } from "@/db/schema";
-import { and, count, desc, eq, gte, lte, ilike, isNull, or, inArray, asc, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  lte,
+  ilike,
+  isNull,
+  or,
+  inArray,
+  asc,
+  sql,
+} from "drizzle-orm";
 import { UsersManageTable } from "@/components/admin/UsersManageTable";
 import { UsersFilterBar } from "@/components/admin/UsersFilterBar";
 import {
   PLATFORM_ROLE_DEFINITIONS,
+  canProvideStudentSupport,
+  hasMinimumPlatformRole,
   normalizePlatformRole,
   type PlatformRole,
 } from "@/lib/platform-roles";
@@ -38,11 +53,13 @@ export default async function AdminStudentsPage({
 }: {
   searchParams: Promise<Record<string, string | string[]>>;
 }) {
-  // Verify user has coach+ role
-  const hasAccess = await hasMinimumRole("coach");
-  if (!hasAccess) {
+  // Verify the real account is staff; View As never grants management access.
+  const actor = await getRealUser();
+  if (!actor || !hasMinimumPlatformRole(actor.role, "coach")) {
     redirect("/home");
   }
+  const isAdmin = actor.role === "admin";
+  const canAddStudents = canProvideStudentSupport(actor.role);
 
   // Parse search params
   const params = await searchParams;
@@ -51,7 +68,8 @@ export default async function AdminStudentsPage({
   const normalizedRoleFilter = normalizePlatformRole(usersRoleFilter);
   const page = Number(params.page) || 1;
   const pageSize = Number(params.pageSize) || 25;
-  const sortBy = (params.sortBy as string) || (tab === "ghl" ? "created" : "createdAt");
+  const sortBy =
+    (params.sortBy as string) || (tab === "ghl" ? "created" : "createdAt");
   const sortOrder = ((params.sortOrder as string) || "desc") as "asc" | "desc";
   const search = (params.search as string) || "";
 
@@ -71,25 +89,23 @@ export default async function AdminStudentsPage({
     : [];
   const filterPortalAccess = (params.portalAccess as string) || ""; // "active" | "paused" | "expired"
 
-
   // Fetch enriched student data server-side with error handling
-  let ghlResult: Awaited<ReturnType<typeof getActiveStudentsPageData>> | null = null;
-  let usersResult:
-    | {
-        items: Array<{
-          id: string;
-          name: string | null;
-          email: string;
-          role: PlatformRole;
-          createdAt: Date;
-          portalAccessStatus: "active" | "paused" | "expired";
-          assignedCoachId?: string | null;
-          assignedCoachName?: string | null;
-          tagIds: string[];
-        }>;
-        total: number;
-      }
-    | null = null;
+  let ghlResult: Awaited<ReturnType<typeof getActiveStudentsPageData>> | null =
+    null;
+  let usersResult: {
+    items: Array<{
+      id: string;
+      name: string | null;
+      email: string;
+      role: PlatformRole;
+      createdAt: Date;
+      portalAccessStatus: "active" | "paused" | "expired";
+      assignedCoachId?: string | null;
+      assignedCoachName?: string | null;
+      tagIds: string[];
+    }>;
+    total: number;
+  } | null = null;
   let coaches: Array<{ id: string; name: string | null; email: string }> = [];
   let allTags: Array<{ id: string; name: string; color: string }> = [];
   let dataError: string | null = null;
@@ -113,19 +129,21 @@ export default async function AdminStudentsPage({
         : undefined;
 
       // Coach filter
-      const coachClause = filterCoachId === "unassigned"
-        ? and(isNull(users.assignedCoachId), sql`cardinality(${users.additionalCoachIds}) = 0`)
-        : filterCoachId
-          ? studentAssignedToCoach(filterCoachId)
-          : undefined;
+      const coachClause =
+        filterCoachId === "unassigned"
+          ? and(
+              isNull(users.assignedCoachId),
+              sql`cardinality(${users.additionalCoachIds}) = 0`,
+            )
+          : filterCoachId
+            ? studentAssignedToCoach(filterCoachId)
+            : undefined;
 
       // Created date range filter
       const createdFromDate = filterCreatedFrom
         ? new Date(filterCreatedFrom)
         : null;
-      const createdToDate = filterCreatedTo
-        ? new Date(filterCreatedTo)
-        : null;
+      const createdToDate = filterCreatedTo ? new Date(filterCreatedTo) : null;
       const createdClause = and(
         createdFromDate && !isNaN(createdFromDate.getTime())
           ? gte(users.createdAt, createdFromDate)
@@ -179,8 +197,11 @@ export default async function AdminStudentsPage({
         createdClause,
         taggedUserIds ? inArray(users.id, taggedUserIds) : undefined,
         search
-          ? or(ilike(users.email, `%${search}%`), ilike(users.name, `%${search}%`))
-          : undefined
+          ? or(
+              ilike(users.email, `%${search}%`),
+              ilike(users.name, `%${search}%`),
+            )
+          : undefined,
       );
       const offset = (page - 1) * pageSize;
       const [items, totalRows, coachRows, allTagRows] = await Promise.all([
@@ -202,7 +223,12 @@ export default async function AdminStudentsPage({
           .offset(offset),
         db.select({ total: count() }).from(users).where(whereClause),
         db
-          .select({ id: users.id, name: users.name, email: users.email, role: users.role })
+          .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            role: users.role,
+          })
           .from(users)
           .where(
             and(
@@ -224,15 +250,16 @@ export default async function AdminStudentsPage({
 
       // Fetch tag assignments for the current page of users (one query)
       const pageUserIds = items.map((u) => u.id);
-      const tagAssignments = pageUserIds.length > 0
-        ? await db
-            .select({
-              userId: studentTags.userId,
-              tagId: studentTags.tagId,
-            })
-            .from(studentTags)
-            .where(inArray(studentTags.userId, pageUserIds))
-        : [];
+      const tagAssignments =
+        pageUserIds.length > 0
+          ? await db
+              .select({
+                userId: studentTags.userId,
+                tagId: studentTags.tagId,
+              })
+              .from(studentTags)
+              .where(inArray(studentTags.userId, pageUserIds))
+          : [];
       const tagsByUser = new Map<string, string[]>();
       for (const row of tagAssignments) {
         const list = tagsByUser.get(row.userId) ?? [];
@@ -246,7 +273,10 @@ export default async function AdminStudentsPage({
           let portalAccessStatus: "active" | "paused" | "expired" = "active";
           try {
             const clerkUser = await clerk.users.getUser(item.clerkId);
-            const metadata = (clerkUser.publicMetadata ?? {}) as Record<string, unknown>;
+            const metadata = (clerkUser.publicMetadata ?? {}) as Record<
+              string,
+              unknown
+            >;
             const rawStatus =
               metadata.cmbPortalAccessStatus === "active" ||
               metadata.cmbPortalAccessStatus === "paused" ||
@@ -258,7 +288,10 @@ export default async function AdminStudentsPage({
             portalAccessStatus = rawStatus;
             if (typeof metadata.cmbCourseEndDate === "string") {
               const date = new Date(metadata.cmbCourseEndDate);
-              if (!Number.isNaN(date.getTime()) && date.getTime() < Date.now()) {
+              if (
+                !Number.isNaN(date.getTime()) &&
+                date.getTime() < Date.now()
+              ) {
                 portalAccessStatus = "expired";
               }
             }
@@ -273,22 +306,28 @@ export default async function AdminStudentsPage({
             createdAt: item.createdAt,
             portalAccessStatus,
             assignedCoachId: item.assignedCoachId ?? null,
-            assignedCoachName: [
-              ...(item.assignedCoachId ? [item.assignedCoachId] : []),
-              ...item.additionalCoachIds.filter((id) => id !== item.assignedCoachId),
-            ].map((id) => coachMap.get(id) ?? "Unavailable coach").join(", ") || null,
+            assignedCoachName:
+              [
+                ...(item.assignedCoachId ? [item.assignedCoachId] : []),
+                ...item.additionalCoachIds.filter(
+                  (id) => id !== item.assignedCoachId,
+                ),
+              ]
+                .map((id) => coachMap.get(id) ?? "Unavailable coach")
+                .join(", ") || null,
             tagIds: tagsByUser.get(item.id) ?? [],
           };
-        })
+        }),
       );
 
       // In-memory filter by portal access (since this comes from Clerk metadata,
       // not the DB). Applied post-fetch.
-      const portalFiltered = filterPortalAccess === "active" ||
+      const portalFiltered =
+        filterPortalAccess === "active" ||
         filterPortalAccess === "paused" ||
         filterPortalAccess === "expired"
-        ? enriched.filter((u) => u.portalAccessStatus === filterPortalAccess)
-        : enriched;
+          ? enriched.filter((u) => u.portalAccessStatus === filterPortalAccess)
+          : enriched;
 
       usersResult = {
         items: portalFiltered,
@@ -320,7 +359,9 @@ export default async function AdminStudentsPage({
             </div>
             <h1 className="text-3xl font-bold">Users</h1>
           </div>
-          <AddUserQuickDialog />
+          {canAddStudents ? (
+            <AddUserQuickDialog studentOnly={!isAdmin} />
+          ) : null}
         </div>
         <p className="text-muted-foreground">
           Manage users, roles, access, and invitation workflows.
@@ -334,7 +375,7 @@ export default async function AdminStudentsPage({
             "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
             tab === "ghl"
               ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
           )}
         >
           <Globe className="w-4 h-4" />
@@ -346,23 +387,26 @@ export default async function AdminStudentsPage({
             "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
             tab === "users"
               ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
           )}
         >
           <Users className="w-4 h-4" />
           Users
         </Link>
       </div>
-      
+
       {/* GHL Info Banner */}
       {tab === "ghl" && (
         <div className="mb-6 flex flex-col justify-between gap-4 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center">
           <div className="flex items-start gap-3">
             <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-500 dark:text-amber-300" />
             <div>
-              <h3 className="text-sm font-medium text-foreground">Read-only View</h3>
+              <h3 className="text-sm font-medium text-foreground">
+                Read-only View
+              </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                This is a synced snapshot from GoHighLevel and is not real-time live data. Any changes must be made directly in the CRM.
+                This is a synced snapshot from GoHighLevel and is not real-time
+                live data. Any changes must be made directly in the CRM.
               </p>
             </div>
           </div>
@@ -398,7 +442,7 @@ export default async function AdminStudentsPage({
                   "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
                   usersRoleFilter === roleTab.key
                     ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-background text-muted-foreground hover:text-foreground"
+                    : "border-border bg-background text-muted-foreground hover:text-foreground",
                 )}
               >
                 {roleTab.label}
@@ -465,7 +509,7 @@ export default async function AdminStudentsPage({
         </section>
       ) : null}
 
-      <StudentInvitePanel defaultCollapsed />
+      {isAdmin ? <StudentInvitePanel defaultCollapsed /> : null}
     </div>
   );
 }

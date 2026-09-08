@@ -70,10 +70,7 @@ export const PLATFORM_ROLE_DEFINITIONS: readonly PlatformRoleDefinition[] = [
 ] as const;
 
 const ROLE_DEFINITION_MAP = new Map(
-  PLATFORM_ROLE_DEFINITIONS.map((definition) => [
-    definition.role,
-    definition,
-  ]),
+  PLATFORM_ROLE_DEFINITIONS.map((definition) => [definition.role, definition]),
 );
 
 export const PLATFORM_ROLE_OPTIONS = PLATFORM_ROLE_DEFINITIONS.map(
@@ -102,8 +99,8 @@ export function hasMinimumPlatformRole(
   const minimumDefinition = ROLE_DEFINITION_MAP.get(minimumRole);
   return Boolean(
     definition &&
-      minimumDefinition &&
-      definition.accessLevel >= minimumDefinition.accessLevel,
+    minimumDefinition &&
+    definition.accessLevel >= minimumDefinition.accessLevel,
   );
 }
 
@@ -117,7 +114,9 @@ export function hasHigherPlatformAccess(
 ): boolean {
   const candidate = getPlatformRoleDefinition(candidateRole);
   const current = getPlatformRoleDefinition(currentRole);
-  return Boolean(candidate && current && candidate.accessLevel > current.accessLevel);
+  return Boolean(
+    candidate && current && candidate.accessLevel > current.accessLevel,
+  );
 }
 
 /** Preserve an existing role unless the candidate strictly raises access. */
@@ -143,7 +142,10 @@ const COACH_DISABLED_FEATURES = new Set<string>([
 ]);
 
 /** Role exclusions cannot be re-enabled by package grants or tag overrides. */
-export function isFeatureDisabledForRole(role: unknown, feature: string): boolean {
+export function isFeatureDisabledForRole(
+  role: unknown,
+  feature: string,
+): boolean {
   return role === "coach" && COACH_DISABLED_FEATURES.has(feature);
 }
 
@@ -162,4 +164,13 @@ export function canManageAcceleratorContent(role: unknown): boolean {
 /** Content authoring is explicit: peer staff roles do not inherit Coach access. */
 export function canManageCourseContent(role: unknown): boolean {
   return role === "admin" || role === "coach";
+}
+
+/**
+ * Student troubleshooting is intentionally narrower than general staff access.
+ * Consultants may manage learning access alongside coaches, while Operations
+ * and Temp accounts do not inherit these write permissions from access level 1.
+ */
+export function canProvideStudentSupport(role: unknown): boolean {
+  return role === "admin" || role === "coach" || role === "consultant";
 }

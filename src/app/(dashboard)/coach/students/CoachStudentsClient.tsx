@@ -16,6 +16,7 @@ import {
   BookOpenCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AddUserQuickDialog } from "@/components/admin/AddUserQuickDialog";
 
 interface StudentRow {
   id: string;
@@ -40,6 +41,7 @@ interface Coach {
 
 interface Props {
   isAdmin: boolean;
+  canAddStudents: boolean;
   coaches: Coach[];
 }
 
@@ -93,7 +95,11 @@ function SortButton({
   );
 }
 
-export function CoachStudentsClient({ isAdmin, coaches }: Props) {
+export function CoachStudentsClient({
+  isAdmin,
+  canAddStudents,
+  coaches,
+}: Props) {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -229,18 +235,21 @@ export function CoachStudentsClient({ isAdmin, coaches }: Props) {
   return (
     <div>
       {/* Header */}
-      <header className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Users className="h-5 w-5 text-primary" />
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="mb-2 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Students</h1>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Students</h1>
+          <p className="text-muted-foreground text-sm">
+            {isAdmin
+              ? "View all students, manage coach assignments, unlock roadmap chapters, and track coaching ratings."
+              : "View your assigned students, manage learning access, and review coaching ratings."}
+          </p>
         </div>
-        <p className="text-muted-foreground text-sm">
-          {isAdmin
-            ? "View all students, manage coach assignments, unlock roadmap chapters, and track coaching ratings."
-            : "View your assigned students, unlock roadmap chapters, and review coaching ratings."}
-        </p>
+        {canAddStudents ? <AddUserQuickDialog studentOnly={!isAdmin} /> : null}
       </header>
 
       {/* Controls bar */}
@@ -257,7 +266,10 @@ export function CoachStudentsClient({ isAdmin, coaches }: Props) {
           />
           {search && (
             <button
-              onClick={() => { setSearch(""); fetchStudents("", coachFilter); }}
+              onClick={() => {
+                setSearch("");
+                fetchStudents("", coachFilter);
+              }}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X className="size-3.5" />
@@ -317,7 +329,9 @@ export function CoachStudentsClient({ isAdmin, coaches }: Props) {
               onClick={toggleSelectAll}
               className="text-xs text-primary hover:underline"
             >
-              {selectedIds.size === students.length ? "Deselect all" : "Select all"}
+              {selectedIds.size === students.length
+                ? "Deselect all"
+                : "Select all"}
             </button>
             <select
               value={bulkCoachId}
@@ -477,7 +491,12 @@ function StudentTable({
                       <span className="text-muted-foreground">—</span>
                     )}
                     {student.additionalCoachNames?.map((name, index) => (
-                      <div key={`${name}-${index}`} className="text-xs text-muted-foreground">{name} (shared)</div>
+                      <div
+                        key={`${name}-${index}`}
+                        className="text-xs text-muted-foreground"
+                      >
+                        {name} (shared)
+                      </div>
                     ))}
                   </td>
                 )}

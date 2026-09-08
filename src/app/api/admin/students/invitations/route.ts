@@ -1,14 +1,15 @@
 import { setPortalAccess } from "@/lib/portal-access";
 import { NextRequest, NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import { z } from "zod";
-import { hasMinimumRole } from "@/lib/auth";
+import { getRealUser } from "@/lib/auth";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { composeStudentName } from "@/lib/student-name";
 import {
   PLATFORM_ROLES,
+  canProvideStudentSupport,
   normalizePlatformRole,
   type PlatformRole,
 } from "@/lib/platform-roles";
@@ -87,7 +88,7 @@ function normalizeDate(value?: string) {
 function normalizeTargets(
   records: TargetRecord[] | undefined,
   emails: string[] | undefined,
-  batchRole: PlatformRole | undefined
+  batchRole: PlatformRole | undefined,
 ) {
   const byEmail = new Map<string, TargetRecord>();
 
@@ -111,19 +112,27 @@ function normalizeTargets(
   return Array.from(byEmail.values());
 }
 
-function buildInvitationMetadata(target: TargetRecord) {
+function buildInvitationMetadata(
+  target: TargetRecord,
+  actorRole: PlatformRole,
+) {
   const now = new Date();
   const courseEndAt =
-    target.courseEndDate && !Number.isNaN(new Date(target.courseEndDate).getTime())
+    target.courseEndDate &&
+    !Number.isNaN(new Date(target.courseEndDate).getTime())
       ? new Date(target.courseEndDate)
       : null;
   const normalizedRole = normalizeRole(target.role);
-  const autoStatus = courseEndAt && courseEndAt.getTime() < now.getTime() ? "expired" : "active";
+  const autoStatus =
+    courseEndAt && courseEndAt.getTime() < now.getTime() ? "expired" : "active";
   const initialStatus = target.portalAccessStatus ?? autoStatus;
 
   return {
     role: normalizedRole,
-    invitedBy: "admin_access_management",
+    invitedBy:
+      actorRole === "admin"
+        ? "admin_access_management"
+        : "staff_student_support",
     cmbInviteFirstName: target.firstName ?? null,
     cmbInviteLastName: target.lastName ?? null,
     cmbInviteRole: normalizedRole,
@@ -134,7 +143,11 @@ function buildInvitationMetadata(target: TargetRecord) {
   };
 }
 
-function replaceTemplateVars(template: string, target: TargetRecord, portalLink: string) {
+function replaceTemplateVars(
+  template: string,
+  target: TargetRecord,
+  portalLink: string,
+) {
   const firstName = (target.firstName || "").trim();
   const lastName = (target.lastName || "").trim();
   const studentName = `${firstName} ${lastName}`.trim() || target.email;
@@ -226,11 +239,13 @@ async function sendCustomInvitationEmail(params: {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
     throw new Error(
-      "No email sender configured. Set GHL_INVITATION_WEBHOOK_URL (recommended) or RESEND_API_KEY."
+      "No email sender configured. Set GHL_INVITATION_WEBHOOK_URL (recommended) or RESEND_API_KEY.",
     );
   }
 
-  const from = process.env.INVITATION_EMAIL_FROM?.trim() || "CMB Lab <cmb-lab@thecmblueprint.com>";
+  const from =
+    process.env.INVITATION_EMAIL_FROM?.trim() ||
+    "CMB Lab <cmb-lab@thecmblueprint.com>";
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -258,9 +273,17 @@ function buildCustomEmailForTarget(params: {
   appUrl: string;
   portalLink: string;
 }) {
-  const subject = replaceTemplateVars(params.config.subject, params.target, params.portalLink);
+  const subject = replaceTemplateVars(
+    params.config.subject,
+    params.target,
+    params.portalLink,
+  );
   const bodyTextTemplate = params.config.body || "";
-  const bodyText = replaceTemplateVars(bodyTextTemplate, params.target, params.portalLink);
+  const bodyText = replaceTemplateVars(
+    bodyTextTemplate,
+    params.target,
+    params.portalLink,
+  );
   const htmlTemplate = params.config.html;
   const htmlRaw = htmlTemplate
     ? replaceTemplateVars(htmlTemplate, params.target, params.portalLink)
@@ -322,25 +345,28 @@ async function upsertDbUserFromInvite(params: {
     return existingByEmail.id;
   }
 
-  const [inserted] = await db.insert(users).values({
-    clerkId: params.clerkId,
-    email: normalizedEmail,
-    name: safeName,
-    role: normalizedRole,
-  }).returning({ id: users.id });
+  const [inserted] = await db
+    .insert(users)
+    .values({
+      clerkId: params.clerkId,
+      email: normalizedEmail,
+      name: safeName,
+      role: normalizedRole,
+    })
+    .returning({ id: users.id });
   return inserted?.id;
 }
 
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
+  const actor = await getRealUser();
+  if (!actor) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const isAdmin = await hasMinimumRole("admin");
-  if (!isAdmin) {
+  if (!canProvideStudentSupport(actor.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const isAdmin = actor.role === "admin";
 
   let body: unknown;
   try {
@@ -353,21 +379,68 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Validation failed", details: parsed.error.flatten() },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   const { action, expiresInDays = 14, batchRole } = parsed.data;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || new URL(req.url).origin;
-  const redirectUrl = parsed.data.redirectUrl || `${appUrl.replace(/\/$/, "")}/sign-in`;
+
+  if (!isAdmin) {
+    const requestsNonStudentRole =
+      (batchRole !== undefined && batchRole !== "student") ||
+      (parsed.data.records ?? []).some((record) => {
+        const requestedRole = record.role?.trim().toLowerCase();
+        return Boolean(requestedRole && requestedRole !== "student");
+      });
+    const requestsAdministrativeFields = (parsed.data.records ?? []).some(
+      (record) =>
+        Boolean(record.tags?.length) ||
+        Boolean(record.courseEndDate) ||
+        (record.portalAccessStatus !== undefined &&
+          record.portalAccessStatus !== "active"),
+    );
+    const requestsAdministrativeAction =
+      action === "resend_invite" || action === "remove_access";
+
+    if (
+      requestsNonStudentRole ||
+      requestsAdministrativeFields ||
+      requestsAdministrativeAction ||
+      parsed.data.redirectUrl !== undefined ||
+      parsed.data.invitationEmail !== undefined
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Consultants and coaches may add new student accounts only. Role, tag, expiry, access-removal, redirect, and custom-email controls require an administrator.",
+        },
+        { status: 403 },
+      );
+    }
+  }
+
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() || new URL(req.url).origin;
+  const redirectUrl =
+    parsed.data.redirectUrl || `${appUrl.replace(/\/$/, "")}/sign-in`;
   const invitationEmailConfig = parsed.data.invitationEmail;
-  const targets = normalizeTargets(parsed.data.records, parsed.data.emails, batchRole);
+  const targets = normalizeTargets(
+    parsed.data.records,
+    parsed.data.emails,
+    batchRole,
+  );
   const clerk = await clerkClient();
 
-  if ((action === "upload_only" || action === "upload_and_invite") && !parsed.data.records?.length) {
+  if (
+    (action === "upload_only" || action === "upload_and_invite") &&
+    !parsed.data.records?.length
+  ) {
     return NextResponse.json(
-      { error: "Upload actions require CSV records with first name, last name, and email." },
-      { status: 400 }
+      {
+        error:
+          "Upload actions require CSV records with first name, last name, and email.",
+      },
+      { status: 400 },
     );
   }
 
@@ -375,7 +448,10 @@ export async function POST(req: NextRequest) {
 
   for (const target of targets) {
     try {
-      if ((action === "upload_only" || action === "upload_and_invite") && (!target.firstName || !target.lastName)) {
+      if (
+        (action === "upload_only" || action === "upload_and_invite") &&
+        (!target.firstName || !target.lastName)
+      ) {
         results.push({
           email: target.email,
           success: false,
@@ -384,8 +460,21 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const lookup = await clerk.users.getUserList({ emailAddress: [target.email], limit: 1 });
+      const lookup = await clerk.users.getUserList({
+        emailAddress: [target.email],
+        limit: 1,
+      });
       let user = lookup.data[0] ?? null;
+
+      if (!isAdmin && user) {
+        results.push({
+          email: target.email,
+          success: false,
+          error:
+            "This account already exists. Open the existing student record to manage courses and tags.",
+        });
+        continue;
+      }
 
       if (action === "remove_access") {
         if (!user) {
@@ -409,7 +498,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const metadata = buildInvitationMetadata(target);
+      const metadata = buildInvitationMetadata(target, actor.role);
 
       if (!user) {
         user = await clerk.users.createUser({
@@ -442,8 +531,12 @@ export async function POST(req: NextRequest) {
       });
 
       const statusFromMetadata =
-        (metadata.cmbPortalAccessStatus as "active" | "paused" | "expired") || "active";
-      await setPortalAccess(clerk, user.id, { status: statusFromMetadata, reason: "admin_upload" });
+        (metadata.cmbPortalAccessStatus as "active" | "paused" | "expired") ||
+        "active";
+      await setPortalAccess(clerk, user.id, {
+        status: statusFromMetadata,
+        reason: isAdmin ? "admin_upload" : "staff_student_support_upload",
+      });
 
       if (action === "upload_only") {
         results.push({
@@ -496,7 +589,8 @@ export async function POST(req: NextRequest) {
             : "Uploaded and invitation email sent",
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Operation failed";
+      const message =
+        error instanceof Error ? error.message : "Operation failed";
       results.push({
         email: target.email,
         success: false,

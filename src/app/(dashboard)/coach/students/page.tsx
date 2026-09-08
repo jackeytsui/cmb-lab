@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { and, isNull, or, eq } from "drizzle-orm";
 import { CoachStudentsClient } from "./CoachStudentsClient";
+import { canProvideStudentSupport } from "@/lib/platform-roles";
 
 /**
  * Coach Students page — enhanced management tool.
@@ -53,6 +54,7 @@ export default async function CoachStudentsPage() {
     <div className="container mx-auto px-4 py-8">
       <CoachStudentsClient
         isAdmin={isAdmin}
+        canAddStudents={canProvideStudentSupport(currentDbUser.role)}
         coaches={coaches}
       />
     </div>

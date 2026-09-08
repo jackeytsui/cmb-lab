@@ -55,9 +55,9 @@ type CourseSummary = {
 type ProgressResponse = {
   courses?: CourseSummary[];
   result?: {
-    action?: "set_next_lesson";
+    action?: "grant_course" | "set_next_lesson";
     courseTitle: string;
-    targetModuleTitle: string;
+    targetModuleTitle?: string;
     targetLessonTitle?: string;
     lessonsCompleted?: number;
     lessonsReopened?: number;
@@ -79,7 +79,7 @@ function selectionForCourse(course: CourseSummary | undefined) {
   if (!course) return { moduleId: "", lessonId: "" };
 
   const currentModule = course.modules.find((module) =>
-    module.lessons.some((lesson) => lesson.id === course.currentLessonId)
+    module.lessons.some((lesson) => lesson.id === course.currentLessonId),
   );
   const fallbackModule =
     currentModule ??
@@ -87,7 +87,7 @@ function selectionForCourse(course: CourseSummary | undefined) {
     null;
   const fallbackLesson =
     fallbackModule?.lessons.find(
-      (lesson) => lesson.id === course.currentLessonId
+      (lesson) => lesson.id === course.currentLessonId,
     ) ?? fallbackModule?.lessons[0];
 
   return {
@@ -105,6 +105,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [grantConfirmOpen, setGrantConfirmOpen] = useState(false);
 
   const loadProgress = useCallback(
     async (signal?: AbortSignal) => {
@@ -113,12 +114,12 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
       try {
         const response = await fetch(
           `/api/admin/students/${studentId}/course-library-unlock`,
-          { signal }
+          { signal },
         );
         const data = (await response.json()) as ProgressResponse;
         if (!response.ok) {
           throw new Error(
-            data.error || "Failed to load Course Library progress"
+            data.error || "Failed to load Course Library progress",
           );
         }
 
@@ -139,13 +140,13 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         setError(
           loadError instanceof Error
             ? loadError.message
-            : "Failed to load Course Library progress"
+            : "Failed to load Course Library progress",
         );
       } finally {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [studentId]
+    [studentId],
   );
 
   useEffect(() => {
@@ -165,7 +166,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
   const orderedLessons =
     selectedCourse?.modules.flatMap((module) => module.lessons) ?? [];
   const selectedLessonIndex = orderedLessons.findIndex(
-    (lesson) => lesson.id === selectedLessonId
+    (lesson) => lesson.id === selectedLessonId,
   );
   const lessonsToComplete =
     selectedLessonIndex >= 0
@@ -193,7 +194,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
 
   const handleModuleChange = (moduleId: string) => {
     const chapter = selectedCourse?.modules.find(
-      (item) => item.id === moduleId
+      (item) => item.id === moduleId,
     );
     const lesson =
       chapter?.lessons.find((item) => !item.isComplete) ?? chapter?.lessons[0];
@@ -216,12 +217,12 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
             courseId: selectedCourse.id,
             targetLessonId: selectedLesson.id,
           }),
-        }
+        },
       );
       const data = (await response.json()) as ProgressResponse;
       if (!response.ok) {
         throw new Error(
-          data.error || "Failed to update Course Library progress"
+          data.error || "Failed to update Course Library progress",
         );
       }
 
@@ -235,13 +236,48 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
           selectedLesson.title
         } is now ${studentName}'s next lesson. ${completed} prerequisite lesson${
           completed === 1 ? "" : "s"
-        } completed; ${reopened} lesson${reopened === 1 ? "" : "s"} reopened.`
+        } completed; ${reopened} lesson${reopened === 1 ? "" : "s"} reopened.`,
       );
     } catch (updateError) {
       toast.error(
         updateError instanceof Error
           ? updateError.message
-          : "Failed to update Course Library progress"
+          : "Failed to update Course Library progress",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGrantCourse = async () => {
+    if (!selectedCourse || !needsCourseAccess || saving) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch(
+        `/api/admin/students/${studentId}/course-library-unlock`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "grant_course",
+            courseId: selectedCourse.id,
+          }),
+        },
+      );
+      const data = (await response.json()) as ProgressResponse;
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to grant course access");
+      }
+
+      if (data.courses) setCourses(data.courses);
+      setGrantConfirmOpen(false);
+      toast.success(`${selectedCourse.title} assigned to ${studentName}.`);
+    } catch (updateError) {
+      toast.error(
+        updateError instanceof Error
+          ? updateError.message
+          : "Failed to grant course access",
       );
     } finally {
       setSaving(false);
@@ -311,7 +347,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         </div>
         <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
           <ShieldCheck className="size-3.5" aria-hidden="true" />
-          Admin &amp; coach only
+          Admin, coach &amp; consultant
         </span>
       </div>
 
@@ -349,10 +385,10 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
                 {chapter.lessonCount === 0
                   ? " — no lessons"
                   : chapter.isComplete
-                  ? " — complete"
-                  : chapter.isCurrent
-                  ? " — current"
-                  : ""}
+                    ? " — complete"
+                    : chapter.isCurrent
+                      ? " — current"
+                      : ""}
               </option>
             ))}
           </select>
@@ -372,8 +408,8 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
                 {lesson.id === selectedCourse?.currentLessonId
                   ? " — next"
                   : lesson.isComplete
-                  ? " — complete"
-                  : ""}
+                    ? " — complete"
+                    : ""}
               </option>
             ))}
           </select>
@@ -415,7 +451,18 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         </div>
       ) : null}
 
-      <div className="mt-5 flex justify-end">
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
+        {needsCourseAccess ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setGrantConfirmOpen(true)}
+            disabled={saving}
+          >
+            <KeyRound aria-hidden="true" />
+            Assign course only
+          </Button>
+        ) : null}
         <Button
           type="button"
           onClick={() => setConfirmOpen(true)}
@@ -425,10 +472,38 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
           {needsCourseAccess
             ? "Grant course & set next lesson"
             : hasChanges
-            ? "Set as next lesson"
-            : "Already the next lesson"}
+              ? "Set as next lesson"
+              : "Already the next lesson"}
         </Button>
       </div>
+
+      <AlertDialog open={grantConfirmOpen} onOpenChange={setGrantConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Assign {selectedCourse?.title ?? "this course"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="leading-6">
+              This gives {studentName} access to the selected course without
+              changing completed lessons, quiz answers, submissions, recordings,
+              notes, or viewing history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={saving}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleGrantCourse();
+              }}
+            >
+              {saving ? <Loader2 className="animate-spin" /> : <KeyRound />}
+              {saving ? "Assigning…" : "Assign course"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
@@ -466,8 +541,8 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
               {saving
                 ? "Updating…"
                 : needsCourseAccess
-                ? "Grant access & confirm"
-                : "Confirm next lesson"}
+                  ? "Grant access & confirm"
+                  : "Confirm next lesson"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

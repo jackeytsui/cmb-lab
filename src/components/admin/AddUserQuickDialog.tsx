@@ -15,15 +15,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  PLATFORM_ROLE_OPTIONS,
-  type PlatformRole,
-} from "@/lib/platform-roles";
+import { PLATFORM_ROLE_OPTIONS, type PlatformRole } from "@/lib/platform-roles";
 
 type AccessStatus = "active" | "paused" | "expired";
 type CoachOption = { id: string; name: string | null; email: string };
 
-export function AddUserQuickDialog() {
+export function AddUserQuickDialog({
+  studentOnly = false,
+}: {
+  studentOnly?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -40,12 +41,12 @@ export function AddUserQuickDialog() {
 
   // Fetch coaches when dialog opens
   useEffect(() => {
-    if (!open) return;
+    if (!open || studentOnly) return;
     fetch("/api/admin/coaches")
       .then((res) => res.json())
       .then((data) => setCoaches(data.coaches ?? []))
       .catch(() => {});
-  }, [open]);
+  }, [open, studentOnly]);
 
   const handleAdd = async (action: "upload_only" | "upload_and_invite") => {
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
@@ -65,17 +66,22 @@ export function AddUserQuickDialog() {
               firstName: form.firstName.trim(),
               lastName: form.lastName.trim(),
               email: form.email.trim().toLowerCase(),
-              role: form.role,
-              courseEndDate: form.courseEndDate || undefined,
-              portalAccessStatus: form.accessStatus,
+              role: studentOnly ? "student" : form.role,
+              ...(!studentOnly
+                ? {
+                    courseEndDate: form.courseEndDate || undefined,
+                    portalAccessStatus: form.accessStatus,
+                  }
+                : {}),
             },
           ],
           // When inviting, pass email config so the API sends via GHL webhook
           // instead of Clerk's default email
-          ...(action === "upload_and_invite"
+          ...(action === "upload_and_invite" && !studentOnly
             ? {
                 invitationEmail: {
-                  subject: "Welcome to Canto to Mando Lab \u2014 Your Access Is Ready",
+                  subject:
+                    "Welcome to Canto to Mando Lab \u2014 Your Access Is Ready",
                   body: `Hi {{first_name}},\n\nWelcome to Canto to Mando Lab, a new learning experience the CMB team has been creating internally to give you a smoother, smarter Chinese learning experience.\n\nThis is a beta test version, and we are inviting you to try it out for fun.\n\nHere is the link to access:\n{{portal_link}}\n\nSimply use your email address to log in. You can continue with Google or receive a one-time password (OTP) by email.\n\nOn first login, you will see an onboarding walkthrough automatically.\n\nHope you enjoy it, and we would really appreciate your comments and feedback.\n\nOur team is also working on more new features on top of this, so thank you in advance.\n\nBest,\nJackey\nHead of Operations`,
                 },
               }
@@ -101,7 +107,7 @@ export function AddUserQuickDialog() {
 
       // If coach was selected, assign after user creation (use DB user ID, not Clerk ID)
       const studentDbId = firstResult?.dbUserId ?? firstResult?.userId;
-      if (form.assignedCoachId && studentDbId) {
+      if (!studentOnly && form.assignedCoachId && studentDbId) {
         try {
           await fetch(`/api/admin/students/${studentDbId}/coach`, {
             method: "PATCH",
@@ -141,14 +147,18 @@ export function AddUserQuickDialog() {
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          Add Contact
+          {studentOnly ? "Add Student" : "Add Contact"}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Contact</DialogTitle>
+          <DialogTitle>
+            {studentOnly ? "Add Student" : "Add Contact"}
+          </DialogTitle>
           <DialogDescription>
-            Add a new user to the system. You can optionally send an invitation email.
+            {studentOnly
+              ? "Create a new student account. You can optionally send the standard invitation email."
+              : "Add a new user to the system. You can optionally send an invitation email."}
           </DialogDescription>
         </DialogHeader>
 
@@ -159,7 +169,9 @@ export function AddUserQuickDialog() {
               <Input
                 id="quick-first-name"
                 value={form.firstName}
-                onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, firstName: e.target.value }))
+                }
                 required
               />
             </div>
@@ -168,7 +180,9 @@ export function AddUserQuickDialog() {
               <Input
                 id="quick-last-name"
                 value={form.lastName}
-                onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, lastName: e.target.value }))
+                }
                 required
               />
             </div>
@@ -180,83 +194,126 @@ export function AddUserQuickDialog() {
               id="quick-email"
               type="email"
               value={form.email}
-              onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, email: e.target.value }))
+              }
               required
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="quick-role">Role *</Label>
-              <select
-                id="quick-role"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.role}
-                onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value as PlatformRole }))}
-              >
-                {PLATFORM_ROLE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+          {!studentOnly ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="quick-role">Role *</Label>
+                <select
+                  id="quick-role"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={form.role}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      role: e.target.value as PlatformRole,
+                    }))
+                  }
+                >
+                  {PLATFORM_ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quick-status">Access Status</Label>
+                <select
+                  id="quick-status"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={form.accessStatus}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      accessStatus: e.target.value as AccessStatus,
+                    }))
+                  }
+                >
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="expired">Expired</option>
+                </select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="quick-status">Access Status</Label>
-              <select
-                id="quick-status"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.accessStatus}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, accessStatus: e.target.value as AccessStatus }))
-                }
-              >
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="expired">Expired</option>
-              </select>
-            </div>
-          </div>
+          ) : null}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="quick-course-end-date">Course End Date (Optional)</Label>
-              <Input
-                id="quick-course-end-date"
-                type="date"
-                value={form.courseEndDate}
-                onChange={(e) => setForm((prev) => ({ ...prev, courseEndDate: e.target.value }))}
-                onInput={(e) =>
-                  setForm((prev) => ({ ...prev, courseEndDate: e.currentTarget.value }))
-                }
-              />
+          {!studentOnly ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="quick-course-end-date">
+                  Course End Date (Optional)
+                </Label>
+                <Input
+                  id="quick-course-end-date"
+                  type="date"
+                  value={form.courseEndDate}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      courseEndDate: e.target.value,
+                    }))
+                  }
+                  onInput={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      courseEndDate: e.currentTarget.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quick-coach">Assigned Coach (Optional)</Label>
+                <select
+                  id="quick-coach"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={form.assignedCoachId}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      assignedCoachId: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="">No coach assigned</option>
+                  {coaches.map((coach) => (
+                    <option key={coach.id} value={coach.id}>
+                      {coach.name || coach.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="quick-coach">Assigned Coach (Optional)</Label>
-              <select
-                id="quick-coach"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.assignedCoachId}
-                onChange={(e) => setForm((prev) => ({ ...prev, assignedCoachId: e.target.value }))}
-              >
-                <option value="">No coach assigned</option>
-                {coaches.map((coach) => (
-                  <option key={coach.id} value={coach.id}>
-                    {coach.name || coach.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          ) : null}
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={submitting}
+            >
               Cancel
             </Button>
-            <Button type="button" variant="outline" onClick={() => handleAdd("upload_only")} disabled={submitting}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleAdd("upload_only")}
+              disabled={submitting}
+            >
               {submitting ? "Adding..." : "Just Add"}
             </Button>
-            <Button type="button" onClick={() => handleAdd("upload_and_invite")} disabled={submitting}>
+            <Button
+              type="button"
+              onClick={() => handleAdd("upload_and_invite")}
+              disabled={submitting}
+            >
               {submitting ? "Adding..." : "Add + Send Invite"}
             </Button>
           </div>

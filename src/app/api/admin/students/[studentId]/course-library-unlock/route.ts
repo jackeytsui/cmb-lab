@@ -13,6 +13,7 @@ import {
   loadStudentCourseLibraryProgress,
   type StudentCourseLibraryProgressCourse,
 } from "@/lib/course-library-student-progress";
+import { canProvideStudentSupport } from "@/lib/platform-roles";
 
 const paramsSchema = z.object({ studentId: z.string().uuid() });
 const unlockSchema = z.object({
@@ -24,7 +25,15 @@ const setNextLessonSchema = z.object({
   courseId: z.string().uuid(),
   targetLessonId: z.string().uuid(),
 });
-const progressMutationSchema = z.union([setNextLessonSchema, unlockSchema]);
+const grantCourseSchema = z.object({
+  action: z.literal("grant_course"),
+  courseId: z.string().uuid(),
+});
+const progressMutationSchema = z.union([
+  grantCourseSchema,
+  setNextLessonSchema,
+  unlockSchema,
+]);
 
 type RouteContext = {
   params: Promise<{ studentId: string }>;
@@ -32,24 +41,20 @@ type RouteContext = {
 
 type UnlockCourse = StudentCourseLibraryProgressCourse;
 
-function canManageProgress(role: string) {
-  return role === "admin" || role === "coach";
-}
-
 function publicCourse(course: UnlockCourse) {
   const completedLessons = course.modules.reduce(
     (total, module) => total + module.completedLessonIds.length,
-    0
+    0,
   );
   const totalLessons = course.modules.reduce(
     (total, module) => total + module.lessonIds.length,
-    0
+    0,
   );
   const currentModuleId =
     course.modules.find(
       (module) =>
         module.lessonIds.length > 0 &&
-        module.completedLessonIds.length < module.lessonIds.length
+        module.completedLessonIds.length < module.lessonIds.length,
     )?.id ?? null;
   const currentLessonId =
     course.modules
@@ -87,7 +92,8 @@ async function getStudent(studentId: string) {
       name: true,
       email: true,
       role: true,
-      assignedCoachId: true, additionalCoachIds: true,
+      assignedCoachId: true,
+      additionalCoachIds: true,
     },
   });
 }
@@ -109,9 +115,9 @@ async function authorizeManager() {
   }
   const actor =
     realActor.role === "admin"
-      ? (await getCurrentUser()) ?? realActor
+      ? ((await getCurrentUser()) ?? realActor)
       : realActor;
-  if (!canManageProgress(actor.role)) {
+  if (!canProvideStudentSupport(actor.role)) {
     return {
       error: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
       actor: null,
@@ -154,7 +160,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     console.error("Failed to load Course Library unlock data:", error);
     return NextResponse.json(
       { error: "Failed to load Course Library progress" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -169,12 +175,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const parsedBody = progressMutationSchema.safeParse(
-    await request.json().catch(() => null)
+    await request.json().catch(() => null),
   );
   if (!parsedBody.success) {
     return NextResponse.json(
       { error: "Select a valid course and progress target" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -198,12 +204,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (!course) {
       return NextResponse.json(
         { error: "Published course not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     const completedLessonIds = course.modules.flatMap(
-      (module) => module.completedLessonIds
+      (module) => module.completedLessonIds,
     );
     const actor = authorization.actor;
     const realActor = authorization.realActor;
@@ -253,6 +259,36 @@ export async function POST(request: NextRequest, context: RouteContext) {
             `,
           ];
 
+    if (
+      "action" in parsedBody.data &&
+      parsedBody.data.action === "grant_course"
+    ) {
+      if (!courseAccessGranted) {
+        return NextResponse.json({
+          success: true,
+          result: {
+            action: "grant_course",
+            courseTitle: course.title,
+            courseAccessGranted: false,
+          },
+          courses: courses.map(publicCourse),
+        });
+      }
+
+      const grantedAt = new Date();
+      await sql.transaction(accessGrantQueries(grantedAt));
+      const refreshedCourses = await loadUnlockCourses(student);
+      return NextResponse.json({
+        success: true,
+        result: {
+          action: "grant_course",
+          courseTitle: course.title,
+          courseAccessGranted: true,
+        },
+        courses: refreshedCourses.map(publicCourse),
+      });
+    }
+
     if ("targetLessonId" in parsedBody.data) {
       const targetLessonId = parsedBody.data.targetLessonId;
       const targetLesson = course.modules
@@ -261,13 +297,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
             ...lesson,
             moduleId: module.id,
             moduleTitle: module.title,
-          }))
+          })),
         )
         .find((lesson) => lesson.id === targetLessonId);
       if (!targetLesson) {
         return NextResponse.json(
           { error: "Lesson does not belong to the selected course" },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -317,7 +353,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             FROM jsonb_to_recordset(${JSON.stringify(
               plan.missingPrerequisiteLessonIds.map((lessonId) => ({
                 lesson_id: lessonId,
-              }))
+              })),
             )}::jsonb) AS rows(lesson_id uuid)
           )
           INSERT INTO course_library_lesson_progress
@@ -339,7 +375,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             FROM jsonb_to_recordset(${JSON.stringify(
               plan.completedLessonIdsToReopen.map((lessonId) => ({
                 lesson_id: lessonId,
-              }))
+              })),
             )}::jsonb) AS rows(lesson_id uuid)
           )
           UPDATE course_library_lesson_progress AS progress
@@ -382,18 +418,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const targetModuleId = parsedBody.data.targetModuleId;
     const targetModule = course.modules.find(
-      (module) => module.id === targetModuleId
+      (module) => module.id === targetModuleId,
     );
     if (!targetModule) {
       return NextResponse.json(
         { error: "Chapter does not belong to the selected course" },
-        { status: 400 }
+        { status: 400 },
       );
     }
     if (targetModule.lessonIds.length === 0) {
       return NextResponse.json(
         { error: "The selected chapter has no lessons to unlock" },
-        { status: 400 }
+        { status: 400 },
       );
     }
     if (
@@ -401,7 +437,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     ) {
       return NextResponse.json(
         { error: "The selected chapter is already complete" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -439,7 +475,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         WITH progress_rows AS (
           SELECT lesson_id
           FROM jsonb_to_recordset(${JSON.stringify(
-            plan.missingLessonIds.map((lessonId) => ({ lesson_id: lessonId }))
+            plan.missingLessonIds.map((lessonId) => ({ lesson_id: lessonId })),
           )}::jsonb) AS rows(lesson_id uuid)
         )
         INSERT INTO course_library_lesson_progress
@@ -487,7 +523,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     console.error("Failed to update Course Library progress:", error);
     return NextResponse.json(
       { error: "Failed to update Course Library progress" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

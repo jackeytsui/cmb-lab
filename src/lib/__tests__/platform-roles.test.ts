@@ -4,6 +4,7 @@ import {
   DEFAULT_PLATFORM_ROLE,
   PLATFORM_ROLE_DEFINITIONS,
   PLATFORM_ROLES,
+  canProvideStudentSupport,
   hasFullFeatureAccess,
   filterFeaturesForRole,
   isFeatureDisabledForRole,
@@ -45,6 +46,15 @@ describe("platform roles", () => {
     expect(hasMinimumPlatformRole("student", "coach")).toBe(false);
   });
 
+  it("grants student troubleshooting only to admins, coaches, and consultants", () => {
+    for (const role of ["admin", "coach", "consultant"] as const) {
+      expect(canProvideStudentSupport(role)).toBe(true);
+    }
+    for (const role of ["student", "operations", "temp"] as const) {
+      expect(canProvideStudentSupport(role)).toBe(false);
+    }
+  });
+
   it("provides default package access for Coach and Admin only, subject to exclusions", () => {
     expect(hasFullFeatureAccess("coach")).toBe(true);
     expect(hasFullFeatureAccess("admin")).toBe(true);
@@ -54,12 +64,21 @@ describe("platform roles", () => {
   });
 
   it("excludes exactly the Accelerator and Extra Pack features for coaches", () => {
-    const disabled = FEATURE_KEYS.filter((key) => isFeatureDisabledForRole("coach", key));
+    const disabled = FEATURE_KEYS.filter((key) =>
+      isFeatureDisabledForRole("coach", key),
+    );
     expect(disabled).toEqual([
-      "mandarin_accelerator", "audio_accelerator_edition", "tone_mastery", "listening_training",
+      "mandarin_accelerator",
+      "audio_accelerator_edition",
+      "tone_mastery",
+      "listening_training",
     ]);
-    expect(filterFeaturesForRole("coach", FEATURE_KEYS)).toContain("course_library");
-    expect(filterFeaturesForRole("coach", FEATURE_KEYS)).toContain("audio_courses");
+    expect(filterFeaturesForRole("coach", FEATURE_KEYS)).toContain(
+      "course_library",
+    );
+    expect(filterFeaturesForRole("coach", FEATURE_KEYS)).toContain(
+      "audio_courses",
+    );
     for (const role of PLATFORM_ROLES.filter((role) => role !== "coach")) {
       expect(filterFeaturesForRole(role, FEATURE_KEYS)).toEqual(FEATURE_KEYS);
     }
@@ -79,7 +98,9 @@ describe("platform roles", () => {
   it("never lets stale invitation metadata downgrade an existing staff role", () => {
     expect(resolveNonDowngradingPlatformRole("coach", "student")).toBe("coach");
     expect(resolveNonDowngradingPlatformRole("admin", "coach")).toBe("admin");
-    expect(resolveNonDowngradingPlatformRole("coach", "operations")).toBe("coach");
+    expect(resolveNonDowngradingPlatformRole("coach", "operations")).toBe(
+      "coach",
+    );
     expect(resolveNonDowngradingPlatformRole("student", "coach")).toBe("coach");
   });
 });

@@ -3,7 +3,10 @@ import Link from "next/link";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getCurrentUser, getRealUser } from "@/lib/auth";
 import { canStaffAccessStudent } from "@/lib/coach-student-scope";
-import { hasMinimumPlatformRole } from "@/lib/platform-roles";
+import {
+  canProvideStudentSupport,
+  hasMinimumPlatformRole,
+} from "@/lib/platform-roles";
 import { StudentProgressView } from "@/components/admin/StudentProgressView";
 import { StudentCourseLibraryUnlock } from "@/components/admin/StudentCourseLibraryUnlock";
 import { GhlProfileSection } from "@/components/ghl/GhlProfileSection";
@@ -63,7 +66,7 @@ interface ActivityEvent {
  * submissions, conversations, and practice attempts.
  */
 async function getActivityTimeline(
-  studentId: string
+  studentId: string,
 ): Promise<ActivityEvent[]> {
   const { db } = await import("@/db");
   const {
@@ -127,7 +130,7 @@ async function getActivityTimeline(
         .from(practiceAttempts)
         .innerJoin(
           practiceSets,
-          eq(practiceSets.id, practiceAttempts.practiceSetId)
+          eq(practiceSets.id, practiceAttempts.practiceSetId),
         )
         .where(eq(practiceAttempts.userId, studentId))
         .orderBy(desc(practiceAttempts.completedAt))
@@ -196,7 +199,7 @@ async function getActivityTimeline(
 
   // Sort by timestamp descending, limit to 50
   events.sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   );
 
   return events.slice(0, 50);
@@ -214,14 +217,13 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
   }
   const actor =
     realActor.role === "admin"
-      ? (await getCurrentUser()) ?? realActor
+      ? ((await getCurrentUser()) ?? realActor)
       : realActor;
   if (!hasMinimumPlatformRole(actor.role, "coach")) {
     redirect("/home");
   }
   const isAdmin = actor.role === "admin";
-  const canManuallyUnlockCourseLibrary =
-    actor.role === "admin" || actor.role === "coach";
+  const canManuallyUnlockCourseLibrary = canProvideStudentSupport(actor.role);
 
   const { studentId } = await params;
 
@@ -243,11 +245,20 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
     });
     if (isAdmin) {
       // Only administrators can reassign a student's coach.
-      const { and: andFn, isNull: isNullFn, or: orFn } = await import("drizzle-orm");
+      const {
+        and: andFn,
+        isNull: isNullFn,
+        or: orFn,
+      } = await import("drizzle-orm");
       coaches = await db
         .select({ id: users.id, name: users.name, email: users.email })
         .from(users)
-        .where(andFn(isNullFn(users.deletedAt), orFn(eq(users.role, "coach"), eq(users.role, "admin"))))
+        .where(
+          andFn(
+            isNullFn(users.deletedAt),
+            orFn(eq(users.role, "coach"), eq(users.role, "admin")),
+          ),
+        )
         .orderBy(users.name);
     }
   } catch {
@@ -354,7 +365,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
       ]);
 
     const courseLibrarySummary = summarizeCourseLibraryAccessProgress(
-      courseLibraryProgress
+      courseLibraryProgress,
     );
 
     stats = {
@@ -400,7 +411,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         .orderBy(
           asc(coursesTable.title),
           asc(modules.sortOrder),
-          asc(lessons.sortOrder)
+          asc(lessons.sortOrder),
         );
 
       const progressData = await db
@@ -423,7 +434,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
             interactionsTotal: p.interactionsTotal,
             completedAt: p.completedAt?.toISOString() || null,
           },
-        ])
+        ]),
       );
 
       const interactionCounts = await db
@@ -435,7 +446,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         .groupBy(interactions.lessonId);
 
       const interactionCountMap = new Map(
-        interactionCounts.map((i) => [i.lessonId, Number(i.count)])
+        interactionCounts.map((i) => [i.lessonId, Number(i.count)]),
       );
 
       const courseMap = new Map<string, (typeof courses)[0]>();
@@ -487,7 +498,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
         if (course.progress.lessonsTotal > 0) {
           course.progress.percentComplete = Math.round(
             (course.progress.lessonsCompleted / course.progress.lessonsTotal) *
-              100
+              100,
           );
         }
       }
@@ -588,8 +599,8 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
                       portalAccessStatus === "active"
                         ? "text-emerald-400"
                         : portalAccessStatus === "paused"
-                        ? "text-amber-400"
-                        : "text-red-400"
+                          ? "text-amber-400"
+                          : "text-red-400"
                     }
                   >
                     {portalAccessStatus.charAt(0).toUpperCase() +
@@ -683,7 +694,8 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
           </h2>
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
             <p className="text-sm text-zinc-400 mb-3">
-              Keep a primary coach and add other coaches when a student is shared.
+              Keep a primary coach and add other coaches when a student is
+              shared.
             </p>
             <AssignCoachDropdown
               key={`${student.id}:${student.assignedCoachId}:${student.additionalCoachIds.join(",")}`}
@@ -692,11 +704,11 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
               currentCoachId={student.assignedCoachId ?? null}
               currentCoachName={
                 student.assignedCoachId
-                  ? coaches.find((c) => c.id === student.assignedCoachId)
+                  ? (coaches.find((c) => c.id === student.assignedCoachId)
                       ?.name ??
                     coaches.find((c) => c.id === student.assignedCoachId)
                       ?.email ??
-                    null
+                    null)
                   : null
               }
               coaches={coaches}
@@ -849,7 +861,7 @@ function ActivityTimeline({ events }: { events: ActivityEvent[] }) {
               new Date(event.timestamp),
               {
                 addSuffix: true,
-              }
+              },
             );
 
             return (
@@ -872,7 +884,7 @@ function ActivityTimeline({ events }: { events: ActivityEvent[] }) {
                     dateTime={event.timestamp}
                     title={format(
                       new Date(event.timestamp),
-                      "MMM d, yyyy h:mm a"
+                      "MMM d, yyyy h:mm a",
                     )}
                   >
                     {relativeTime}
