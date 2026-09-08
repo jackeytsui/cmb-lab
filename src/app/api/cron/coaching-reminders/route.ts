@@ -117,7 +117,7 @@ export async function GET(request: Request) {
   const candidateOccurrences = expandCoachingOccurrences(candidateEvents, {
     startsAt: windowStart,
     endsAt: windowEnd,
-  });
+  }).filter((event) => !event.isCancelled);
   const grantedEventIds = new Set(audienceGrants.map((grant) => grant.contentId));
   const restrictedEventIds = new Set(
     restrictedEvents.map((grant) => grant.contentId),

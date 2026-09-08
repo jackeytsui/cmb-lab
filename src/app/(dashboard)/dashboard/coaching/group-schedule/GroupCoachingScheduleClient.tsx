@@ -56,7 +56,12 @@ function getEventDetails(description: string) {
   const repeatLabel = description.match(/Repeats every ([^(\n.]+)/)?.[1]?.trim() ?? null;
   const summary = description
     .split("\n")
-    .filter((line) => !line.startsWith("Sign up here:") && !line.startsWith("Repeats every"))
+    .filter(
+      (line) =>
+        !line.startsWith("Sign up here:") &&
+        !line.startsWith("Repeats every") &&
+        !line.startsWith("Cancelled on "),
+    )
     .join("\n")
     .trim();
   return { signupUrl, repeatLabel, summary };

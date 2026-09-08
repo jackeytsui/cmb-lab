@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  cancelledCoachingDateKeys,
   expandCoachingOccurrences,
+  isCoachingOccurrenceDate,
   isWeeklyCoachingEvent,
+  setCoachingOccurrenceCancelled,
 } from "@/lib/group-coaching-recurrence";
 
 const weeklyEvent = {
@@ -47,6 +50,40 @@ describe("group coaching recurrence", () => {
       "2026-11-06T23:00:00.000Z",
       "2026-11-13T23:00:00.000Z",
     ]);
+  });
+
+  it("cancels only the selected Toronto occurrence", () => {
+    const description = setCoachingOccurrenceCancelled(
+      weeklyEvent.description,
+      "2026-09-04",
+      true,
+    );
+    const occurrences = expandCoachingOccurrences(
+      [{ ...weeklyEvent, description, isCancelled: false }],
+      {
+        startsAt: new Date("2026-08-28T00:00:00.000Z"),
+        endsAt: new Date("2026-09-12T00:00:00.000Z"),
+      },
+    );
+
+    expect(occurrences.map((event) => event.isCancelled)).toEqual([
+      false,
+      true,
+      false,
+    ]);
+    expect(cancelledCoachingDateKeys(description)).toEqual(["2026-09-04"]);
+    expect(
+      cancelledCoachingDateKeys(
+        setCoachingOccurrenceCancelled(description, "2026-09-04", false),
+      ),
+    ).toEqual([]);
+  });
+
+  it("accepts only dates that belong to the weekly series", () => {
+    expect(isCoachingOccurrenceDate(weeklyEvent, "2026-09-18")).toBe(true);
+    expect(isCoachingOccurrenceDate(weeklyEvent, "2026-09-17")).toBe(false);
+    expect(isCoachingOccurrenceDate(weeklyEvent, "2026-08-14")).toBe(false);
+    expect(isCoachingOccurrenceDate(weeklyEvent, "2026-02-31")).toBe(false);
   });
 
   it("does not repeat ordinary one-off sessions", () => {
