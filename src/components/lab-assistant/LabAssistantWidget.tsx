@@ -18,6 +18,18 @@ export function LabAssistantWidget({ role }: { role: Roles }) {
   }, []);
 
   useEffect(() => {
+    const openFromStatusNotification = () => {
+      if (window.location.hash === '#support-feedback') {
+        setIsOpen(true);
+      }
+    };
+
+    openFromStatusNotification();
+    window.addEventListener('hashchange', openFromStatusNotification);
+    return () => window.removeEventListener('hashchange', openFromStatusNotification);
+  }, []);
+
+  useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape' && isOpen) close();
     }

@@ -19,6 +19,7 @@ export function BetaFeedbackQueue() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -35,10 +36,27 @@ export function BetaFeedbackQueue() {
   const countMap = useMemo(() => new Map(counts.map((row) => [row.status, row.count])), [counts]);
 
   async function update(id: string, values: { status?: Status; adminNote?: string | null }) {
-    setSaving(id); setError(null);
+    setSaving(id); setError(null); setNotice(null);
     try {
       const response = await fetch("/api/admin/beta-feedback", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...values }) });
-      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || "Update failed");
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Update failed");
+      if (data?.statusChanged) {
+        const email = data?.studentUpdate?.email;
+        setNotice({
+          tone: email === "failed" || email === "not_configured" ? "warning" : "success",
+          text:
+            email === "sent"
+              ? `Student updated in CMB Lab and notified by email: ${data.publicStatusLabel}.`
+              : email === "muted"
+                ? `Student request history updated: ${data.publicStatusLabel}. Their feedback notifications are muted.`
+              : email === "failed"
+                ? `Student updated in CMB Lab: ${data.publicStatusLabel}. Email delivery failed and was logged.`
+                : `Student updated in CMB Lab: ${data.publicStatusLabel}. Email delivery is not configured.`,
+        });
+      } else if (values.adminNote !== undefined) {
+        setNotice({ tone: "success", text: "Internal note saved. It is not shown to the student." });
+      }
       await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Update failed"); }
     finally { setSaving(null); }
@@ -47,13 +65,14 @@ export function BetaFeedbackQueue() {
   return (
     <section className="mt-5 border-t border-border pt-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h3 className="text-sm font-semibold text-foreground">Feedback history</h3><p className="mt-0.5 text-xs text-muted-foreground">Every submission is also routed to an assigned GHL support task; this view is the searchable product record.</p></div>
+        <div><h3 className="text-sm font-semibold text-foreground">Feedback history</h3><p className="mt-0.5 text-xs text-muted-foreground">Every submission is also routed to an assigned GHL support task. Changing a stage automatically updates the student’s request history, sends an in-app notification and, when enabled, a browser alert and email.</p></div>
         <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"><RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh</button>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         <button onClick={() => setFilter("all")} className={`rounded-full border px-2.5 py-1 text-xs ${filter === "all" ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>All</button>
         {STATUSES.map((status) => <button key={status} onClick={() => setFilter(status)} className={`rounded-full border px-2.5 py-1 text-xs ${filter === status ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>{LABELS[status]} {countMap.get(status) ?? 0}</button>)}
       </div>
+      {notice && <p role="status" className={`mt-3 rounded-md p-2 text-xs ${notice.tone === "success" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/10 text-amber-800 dark:text-amber-300"}`}>{notice.text}</p>}
       {error && <p className="mt-3 rounded-md bg-red-500/10 p-2 text-xs text-red-500">{error}</p>}
       {loading && items.length === 0 ? <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading feedback…</div> : items.length === 0 ? <p className="mt-4 rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No feedback in this view.</p> : (
         <div className="mt-4 grid gap-3 xl:grid-cols-2">{items.map((item) => {
@@ -61,6 +80,7 @@ export function BetaFeedbackQueue() {
           return <article key={item.id} className="rounded-lg border border-border bg-background/50 p-3">
             <div className="flex items-start gap-2"><Icon className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold capitalize">{item.category.replace("_", " ")}</span><span className="text-[11px] text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</span></div><p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{item.message}</p><p className="mt-2 truncate text-xs text-muted-foreground">{item.userName || "Student"} · {item.userEmail}{item.pagePath ? ` · ${item.pagePath}` : ""}</p></div></div>
             <div className="mt-3 grid gap-2 sm:grid-cols-[9rem_1fr_auto]"><select value={item.status} disabled={saving === item.id} onChange={(e) => void update(item.id, { status: e.target.value as Status })} className="rounded-md border border-border bg-background px-2 py-1.5 text-xs">{STATUSES.map((status) => <option key={status} value={status}>{LABELS[status]}</option>)}</select><input defaultValue={item.adminNote || ""} placeholder="Internal note…" className="rounded-md border border-border bg-background px-2 py-1.5 text-xs" id={`note-${item.id}`} /><button disabled={saving === item.id} onClick={() => void update(item.id, { adminNote: (document.getElementById(`note-${item.id}`) as HTMLInputElement)?.value || null })} className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">Save note</button></div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">Stage changes are public and notify the submitter. Notes remain internal.</p>
           </article>;
         })}</div>
       )}

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { db } from "@/db";
+import { betaFeedback } from "@/db/schema";
 import { getRealUser } from "@/lib/auth";
 import { storeBetaFeedback } from "@/lib/beta-feedback";
 import { getStudentContext } from "@/lib/lab-assistant/student-context";
@@ -25,6 +28,31 @@ const CATEGORY_LABELS = {
   feature_request: "Feature request",
   general: "Product feedback",
 } as const;
+
+export async function GET() {
+  const user = await getRealUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const items = await db
+    .select({
+      id: betaFeedback.id,
+      category: betaFeedback.category,
+      message: betaFeedback.message,
+      status: betaFeedback.status,
+      createdAt: betaFeedback.createdAt,
+      updatedAt: betaFeedback.updatedAt,
+    })
+    .from(betaFeedback)
+    .where(eq(betaFeedback.userId, user.id))
+    .orderBy(desc(betaFeedback.createdAt))
+    .limit(10);
+
+  // adminNote and reviewer information are deliberately private. Students see
+  // only their own request, public stage, and timestamps.
+  return NextResponse.json({ items });
+}
 
 export async function POST(request: NextRequest) {
   const user = await getRealUser();
@@ -84,6 +112,8 @@ export async function POST(request: NextRequest) {
     {
       id: record.id,
       reference: record.id.slice(0, 8),
+      status: "new",
+      createdAt: record.createdAt,
       taskCreated,
       responseWindow: HANDOFF_RESPONSE_WINDOW,
       ...(!taskCreated

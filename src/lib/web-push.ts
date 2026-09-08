@@ -23,6 +23,13 @@ type CoachingReminderPushPayload = {
   linkUrl: string;
 };
 
+type FeedbackStatusPushPayload = {
+  id: string;
+  title: string;
+  body: string;
+  linkUrl: string;
+};
+
 export function getWebPushPublicKey() {
   const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
   const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
@@ -52,7 +59,11 @@ function getPushStatusCode(error: unknown) {
 
 async function sendPush(
   announcement: AnnouncementPushPayload,
-  options?: { userIds?: string[]; tagPrefix?: string },
+  options?: {
+    userIds?: string[];
+    tagPrefix?: string;
+    category?: "feedback" | "system";
+  },
 ) {
   if (!configureWebPush()) return { sent: 0, removed: 0 };
   if (options?.userIds && options.userIds.length === 0) {
@@ -72,7 +83,7 @@ async function sendPush(
       notificationPreferences,
       and(
         eq(notificationPreferences.userId, users.id),
-        eq(notificationPreferences.category, "system"),
+        eq(notificationPreferences.category, options?.category ?? "system"),
       ),
     )
     .where(
@@ -145,4 +156,16 @@ export async function sendCoachingReminderPush(
   userIds: string[],
 ) {
   return sendPush(reminder, { userIds, tagPrefix: "icgc-reminder" });
+}
+
+/** Send a browser alert for one feedback transition to an opted-in submitter. */
+export async function sendBetaFeedbackStatusPush(
+  notification: FeedbackStatusPushPayload,
+  userId: string,
+) {
+  return sendPush(notification, {
+    userIds: [userId],
+    tagPrefix: "beta-feedback-status",
+    category: "feedback",
+  });
 }

@@ -1,14 +1,19 @@
 'use client';
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { AlertTriangle, Bug, CheckCircle2, Lightbulb, MessageSquarePlus, Send, Square, Star, X } from 'lucide-react';
+import { AlertTriangle, Bug, CheckCircle2, Clock3, Lightbulb, MessageSquarePlus, RefreshCw, Send, Square, Star, X } from 'lucide-react';
 import { useLabAssistant } from '@/hooks/useLabAssistant';
+import {
+  getBetaFeedbackStatusCopy,
+  PUBLIC_BETA_FEEDBACK_STATUS_LABELS,
+} from '@/lib/beta-feedback-status';
 import type { LabAssistantCaseOutcome } from '@/lib/lab-assistant/message';
 import { canUseInternalRecordingFinder } from '@/lib/lab-assistant/internal-recording-policy';
 import { sanitizeRecordingUrl } from '@/lib/recording-embed';
@@ -41,6 +46,16 @@ const INTERNAL_WELCOME_MESSAGE =
   "Hi! I can find saved 1:1 and ICGC recording links. Tell me the student's name or email and session date, or give me an ICGC lesson date.";
 
 type FeedbackMode = 'bug' | 'feature_request' | 'general';
+type FeedbackStatus = 'new' | 'reviewing' | 'planned' | 'resolved' | 'closed';
+
+interface FeedbackHistoryItem {
+  id: string;
+  category: FeedbackMode;
+  message: string;
+  status: FeedbackStatus;
+  createdAt: string;
+  updatedAt: string;
+}
 
 const FEEDBACK_ACTIONS = [
   { mode: 'bug' as const, label: 'Report a bug', icon: Bug },
@@ -52,6 +67,20 @@ const FEEDBACK_PROMPTS: Record<FeedbackMode, string> = {
   bug: 'What happened, and what did you expect instead?',
   feature_request: 'What would you like CMB Lab to do, and how would it help?',
   general: 'What would you like us to know about your experience?',
+};
+
+const FEEDBACK_CATEGORY_LABELS: Record<FeedbackMode, string> = {
+  bug: 'Bug report',
+  feature_request: 'Feature request',
+  general: 'Product feedback',
+};
+
+const FEEDBACK_STATUS_STYLES: Record<FeedbackStatus, string> = {
+  new: 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200',
+  reviewing: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200',
+  planned: 'border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200',
+  resolved: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200',
+  closed: 'border-zinc-300 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200',
 };
 
 interface LabAssistantPanelProps {
@@ -79,16 +108,41 @@ interface ResolutionState {
 export function LabAssistantPanel({ onClose, role }: LabAssistantPanelProps) {
   const { messages, sendMessage, status, error, clearError, stop } =
     useLabAssistant();
+  const internalRecordingMode = canUseInternalRecordingFinder(role);
   const [input, setInput] = useState('');
   const [feedbackMode, setFeedbackMode] = useState<FeedbackMode | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackState, setFeedbackState] = useState<'idle' | 'sending' | 'sent' | 'handoff-error' | 'error'>('idle');
   const [feedbackReference, setFeedbackReference] = useState('');
   const [feedbackResponseWindow, setFeedbackResponseWindow] = useState('48 hours');
+  const [feedbackHistory, setFeedbackHistory] = useState<FeedbackHistoryItem[]>([]);
+  const [feedbackHistoryLoading, setFeedbackHistoryLoading] = useState(false);
   const [resolutionStates, setResolutionStates] = useState<Record<string, ResolutionState>>({});
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  const loadFeedbackHistory = useCallback(async () => {
+    if (internalRecordingMode) return;
+    setFeedbackHistoryLoading(true);
+    try {
+      const response = await fetch('/api/beta-feedback', { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json().catch(() => null);
+      setFeedbackHistory(Array.isArray(data?.items) ? data.items : []);
+    } catch {
+      // The assistant remains usable if the non-critical history request fails.
+    } finally {
+      setFeedbackHistoryLoading(false);
+    }
+  }, [internalRecordingMode]);
+
+  useEffect(() => {
+    if (internalRecordingMode) return;
+    void loadFeedbackHistory();
+    const interval = window.setInterval(() => void loadFeedbackHistory(), 60_000);
+    return () => window.clearInterval(interval);
+  }, [internalRecordingMode, loadFeedbackHistory]);
 
   useEffect(() => {
     const container = messagesRef.current;
@@ -118,7 +172,6 @@ export function LabAssistantPanel({ onClose, role }: LabAssistantPanelProps) {
   }, [input]);
 
   const isStreaming = status === 'streaming';
-  const internalRecordingMode = canUseInternalRecordingFinder(role);
   const starterChips = internalRecordingMode ? INTERNAL_RECORDING_CHIPS : FAQ_CHIPS;
   // 'error' stays sendable so the student can retry after a failed request.
   const canSend = status === 'ready' || status === 'error';
@@ -229,6 +282,7 @@ export function LabAssistantPanel({ onClose, role }: LabAssistantPanelProps) {
       setFeedbackResponseWindow(data.responseWindow || '48 hours');
       setFeedbackState(data.taskCreated === false ? 'handoff-error' : 'sent');
       setFeedbackText('');
+      void loadFeedbackHistory();
     } catch {
       setFeedbackState('error');
     }
@@ -334,6 +388,63 @@ export function LabAssistantPanel({ onClose, role }: LabAssistantPanelProps) {
               </div>
             </section>
 
+            {!internalRecordingMode && (feedbackHistoryLoading || feedbackHistory.length > 0) && (
+              <section aria-labelledby="feedback-history-heading" className="rounded-xl border border-[#3a49b8]/20 bg-[#3a49b8]/5 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p id="feedback-history-heading" className="text-sm font-semibold text-foreground">
+                      Your requests
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                      We’ll update this stage and notify you whenever our team moves a request.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadFeedbackHistory()}
+                    disabled={feedbackHistoryLoading}
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
+                    aria-label="Refresh your requests"
+                  >
+                    <RefreshCw className={`size-3.5 ${feedbackHistoryLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+                {feedbackHistoryLoading && feedbackHistory.length === 0 ? (
+                  <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Clock3 className="size-3.5" /> Loading your requests…
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {feedbackHistory.slice(0, 3).map((item) => {
+                      const reference = item.id.slice(0, 8);
+                      const copy = getBetaFeedbackStatusCopy({
+                        category: item.category,
+                        status: item.status,
+                        reference,
+                      });
+                      return (
+                        <article key={item.id} className="rounded-lg border border-border bg-background p-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground">
+                              {FEEDBACK_CATEGORY_LABELS[item.category]} · {reference}
+                            </p>
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${FEEDBACK_STATUS_STYLES[item.status]}`}>
+                              {PUBLIC_BETA_FEEDBACK_STATUS_LABELS[item.status]}
+                            </span>
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-foreground">{item.message}</p>
+                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{copy.message}</p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            Updated {new Date(item.updatedAt).toLocaleString()}
+                          </p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
             <section aria-labelledby="feedback-actions-heading" className="rounded-xl border border-border bg-muted/20 p-3">
               <div className="mb-2.5">
                 <p id="feedback-actions-heading" className="text-sm font-semibold text-foreground">
@@ -430,7 +541,7 @@ export function LabAssistantPanel({ onClose, role }: LabAssistantPanelProps) {
               {feedbackState === 'sent' ? <CheckCircle2 className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}
               <div className="flex-1">
                 <p className="font-semibold">{feedbackState === 'sent' ? 'Sent to our support team.' : 'Saved, but the support task could not be created.'}</p>
-                {feedbackState === 'sent' ? <p className="mt-0.5 text-xs">Expect to hear back within {feedbackResponseWindow}.</p> : <p className="mt-0.5 text-xs">Please email <a className="underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> so the team doesn’t miss it.</p>}
+                {feedbackState === 'sent' ? <p className="mt-0.5 text-xs">Expect to hear back within {feedbackResponseWindow}. We’ll notify you here and by email whenever the stage changes.</p> : <p className="mt-0.5 text-xs">Please email <a className="underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> so the team doesn’t miss it.</p>}
                 <p className="mt-0.5 text-xs">Reference: {feedbackReference}</p>
               </div>
               <button type="button" onClick={() => setFeedbackMode(null)} className="inline-flex size-8 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/5" aria-label="Close feedback form"><X className="size-4" /></button>
