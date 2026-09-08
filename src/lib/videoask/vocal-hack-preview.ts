@@ -11,7 +11,6 @@ import {
   videoaskStepImports,
 } from "@/db/schema";
 import {
-  VIDEOASK_VOCAL_HACK_COURSES,
   VIDEOASK_VOCAL_HACK_GROUP_KEYS,
   VIDEOASK_VOCAL_HACK_GROUPS,
   isTargetVocalHackForm,
@@ -65,17 +64,7 @@ export async function buildVocalHackPlacementPreview() {
         title: courseLibraryCourses.title,
       })
       .from(courseLibraryCourses)
-      .where(
-        and(
-          inArray(courseLibraryCourses.title, [
-            VIDEOASK_VOCAL_HACK_COURSES.foundations,
-            VIDEOASK_VOCAL_HACK_COURSES.intermediate,
-            VIDEOASK_VOCAL_HACK_COURSES.advanced,
-            VIDEOASK_VOCAL_HACK_COURSES.cantonese,
-          ]),
-          isNull(courseLibraryCourses.deletedAt),
-        ),
-      ),
+      .where(isNull(courseLibraryCourses.deletedAt)),
   ]);
 
   const courseIds = courseRows.map((course) => course.id);
@@ -108,6 +97,11 @@ export async function buildVocalHackPlacementPreview() {
             title: courseLibraryLessons.title,
             lessonType: courseLibraryLessons.lessonType,
             sortOrder: courseLibraryLessons.sortOrder,
+            vocalHackSentenceCount: sql<number>`case
+              when jsonb_typeof(${courseLibraryLessons.content} -> 'sentences') = 'array'
+                then jsonb_array_length(${courseLibraryLessons.content} -> 'sentences')
+              else 0
+            end`,
           })
           .from(courseLibraryLessons)
           .where(
@@ -130,6 +124,7 @@ export async function buildVocalHackPlacementPreview() {
           title: lesson.title,
           lessonType: lesson.lessonType,
           sortOrder: lesson.sortOrder,
+          vocalHackSentenceCount: Number(lesson.vocalHackSentenceCount),
         })),
     })),
   };
@@ -137,7 +132,7 @@ export async function buildVocalHackPlacementPreview() {
   const groupOrder = new Map(
     VIDEOASK_VOCAL_HACK_GROUPS.map((group, index) => [group.key, index]),
   );
-  const forms = sourceRows
+  const candidateForms = sourceRows
     .filter((row) =>
       isTargetVocalHackForm(row.sourceFolderKey),
     )
@@ -150,6 +145,12 @@ export async function buildVocalHackPlacementPreview() {
       if (!placement) return null;
       const stepCount = Number(row.stepCount);
       const mediaReady = Number(row.mediaReady);
+      if (
+        placement.sourceGroup.label.startsWith("Customized") &&
+        stepCount === 0
+      ) {
+        return null;
+      }
       return {
         formImportId: row.formImportId,
         sourceFormId: row.sourceFormId,
@@ -175,7 +176,28 @@ export async function buildVocalHackPlacementPreview() {
         reason: placement.reason,
       };
     })
-    .filter((form): form is NonNullable<typeof form> => Boolean(form))
+    .filter((form): form is NonNullable<typeof form> => Boolean(form));
+  const customizedTargetCounts = new Map<string, number>();
+  for (const form of candidateForms) {
+    if (
+      form.sourceGroup.startsWith("Customized") &&
+      form.targetLesson?.id
+    ) {
+      customizedTargetCounts.set(
+        form.targetLesson.id,
+        (customizedTargetCounts.get(form.targetLesson.id) ?? 0) + 1,
+      );
+    }
+  }
+  const forms = candidateForms
+    // Never guess between duplicate Customized sources for the same lesson.
+    // Those remain in the archive for an administrator to resolve manually.
+    .filter(
+      (form) =>
+        !form.sourceGroup.startsWith("Customized") ||
+        !form.targetLesson?.id ||
+        customizedTargetCounts.get(form.targetLesson.id) === 1,
+    )
     .sort((a, b) => {
       const groupDelta =
         (groupOrder.get(a.sourceFolderKey) ?? 99) -

@@ -48,6 +48,22 @@ export const VIDEOASK_VOCAL_HACK_GROUPS: VideoAskVocalHackGroup[] = [
     label: "Customized",
     language: "mandarin",
   },
+  {
+    // Reusable topic-specific forms used by the custom Course Library. This
+    // folder also contains unrelated forms, so membership alone never makes a
+    // form publishable; the unique empty-placeholder matcher below is required.
+    key: "68ead05f-9ceb-4813-9595-3edce8939d94",
+    label: "Customized courses",
+    language: "mandarin",
+  },
+  {
+    // A small number of reusable custom-course forms were saved outside a
+    // VideoAsk folder. They still have to pass the same unique, exact
+    // placeholder match as forms in Customized before they enter staging.
+    key: "__root__",
+    label: "Customized (unfiled)",
+    language: "mandarin",
+  },
 ];
 
 export const VIDEOASK_VOCAL_HACK_GROUP_KEYS =
@@ -63,6 +79,7 @@ export type PlacementLesson = {
   title: string;
   lessonType: string;
   sortOrder: number;
+  vocalHackSentenceCount?: number;
 };
 
 export type PlacementModule = {
@@ -152,15 +169,65 @@ export function placementTitleScore(source: string, target: string) {
 }
 
 export function isTargetVocalHackForm(sourceFolderKey: string) {
-  const group = VIDEOASK_VOCAL_HACK_GROUPS.find(
+  return VIDEOASK_VOCAL_HACK_GROUPS.some(
     (candidate) => candidate.key === sourceFolderKey,
   );
-  if (!group) return false;
-  // The three "Vocal Hack" records in Customized were audited as personalized
-  // onboarding / research artifacts, not reusable course lessons. They remain
-  // in the source inventory and Blob archive but must not be published into a
-  // shared course. The same folder also contains unrelated hiring forms.
-  return group.label !== "Customized";
+}
+
+function isCustomizedGroup(group: VideoAskVocalHackGroup) {
+  return group.label.startsWith("Customized");
+}
+
+function customizedPlaceholderPlacement(
+  group: VideoAskVocalHackGroup,
+  catalog: PlacementCatalog,
+  sourceTitle: string,
+): VideoAskVocalHackPlacement | null {
+  if (/^\s*vocal\s+(?:messaging\s+)?hacks?\s*\d+\s*$/i.test(sourceTitle)) {
+    return null;
+  }
+  // Parenthetical suffixes in Customized are often course labels, for example
+  // "(Parenting)". Try the literal title first, then the title without one
+  // trailing label. A destination is accepted only when exactly one empty,
+  // native Vocal Hack placeholder is an exact normalized match.
+  const sourceTitles = [
+    sourceTitle,
+    sourceTitle.replace(/\s*\([^()]+\)\s*$/u, "").trim(),
+  ];
+  const candidates = catalog.modules.flatMap((targetModule) =>
+    targetModule.lessons.flatMap((lesson) => {
+      if (
+        !["vocal_hack", "vocal_hack_canto"].includes(lesson.lessonType) ||
+        (lesson.vocalHackSentenceCount ?? 0) > 0 ||
+        !sourceTitles.some(
+          (candidate) => placementTitleScore(candidate, lesson.title) === 1,
+        )
+      ) {
+        return [];
+      }
+      const targetCourse = catalog.courses.find(
+        (course) => course.id === targetModule.courseId,
+      );
+      return targetCourse
+        ? [{ targetCourse, targetModule, lesson }]
+        : [];
+    }),
+  );
+  if (candidates.length !== 1) return null;
+  const [{ targetCourse, targetModule, lesson }] = candidates;
+  return {
+    sourceGroup: group,
+    language: lesson.lessonType === "vocal_hack_canto" ? "cantonese" : "mandarin",
+    targetCourse,
+    targetModule,
+    targetLesson: lesson,
+    targetLessonTitle: lesson.title,
+    action: "replace_placeholder",
+    confidence: "exact",
+    score: 1,
+    reason:
+      "Matched a Customized source to one unique, empty Vocal Hack placeholder with the same title.",
+  };
 }
 
 function findCourse(catalog: PlacementCatalog, title: string) {
@@ -318,6 +385,10 @@ export function recommendVocalHackPlacement(
   );
   if (!group || !isTargetVocalHackForm(sourceFolderKey)) {
     return null;
+  }
+
+  if (isCustomizedGroup(group)) {
+    return customizedPlaceholderPlacement(group, catalog, sourceTitle);
   }
 
   const numberedMatch = sourceTitle.match(

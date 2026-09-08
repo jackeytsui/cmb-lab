@@ -22,6 +22,7 @@ const catalog: PlacementCatalog = {
     { id: "intermediate", title: VIDEOASK_VOCAL_HACK_COURSES.intermediate },
     { id: "advanced", title: VIDEOASK_VOCAL_HACK_COURSES.advanced },
     { id: "canto", title: VIDEOASK_VOCAL_HACK_COURSES.cantonese },
+    { id: "parenting", title: "Mandarin for Parenting" },
   ],
   modules: [
     {
@@ -136,6 +137,21 @@ const catalog: PlacementCatalog = {
         },
       ],
     },
+    {
+      id: "parenting-module",
+      courseId: "parenting",
+      title: "Parenting",
+      sortOrder: 1,
+      lessons: [
+        {
+          id: "parenting-school-pickup",
+          title: "Picking Up My Child From School (Vocal Hack)",
+          lessonType: "vocal_hack",
+          sortOrder: 2,
+          vocalHackSentenceCount: 0,
+        },
+      ],
+    },
   ],
 };
 
@@ -195,10 +211,99 @@ describe("VideoAsk Vocal Hack placement", () => {
     });
   });
 
-  it("excludes audited Customized and hiring artifacts from course migration", () => {
+  it("maps a Customized course source only to its unique empty placeholder", () => {
+    const key = groupKey("Customized courses");
+    expect(isTargetVocalHackForm(key)).toBe(true);
+    expect(
+      recommendVocalHackPlacement(
+        key,
+        "Picking Up My Child From School (Parenting)",
+        catalog,
+      ),
+    ).toMatchObject({
+      confidence: "exact",
+      action: "replace_placeholder",
+      targetCourse: { id: "parenting" },
+      targetLesson: { id: "parenting-school-pickup" },
+    });
+  });
+
+  it("allows an unfiled source through the same exact-placeholder guard", () => {
+    expect(
+      recommendVocalHackPlacement(
+        groupKey("Customized (unfiled)"),
+        "Picking Up My Child From School",
+        catalog,
+      ),
+    ).toMatchObject({
+      targetLesson: { id: "parenting-school-pickup" },
+      confidence: "exact",
+    });
+  });
+
+  it("refuses a Customized source when two empty placeholders share its title", () => {
+    const ambiguousCatalog: PlacementCatalog = {
+      ...catalog,
+      courses: [...catalog.courses, { id: "duplicate", title: "Duplicate" }],
+      modules: [
+        ...catalog.modules,
+        {
+          id: "duplicate-module",
+          courseId: "duplicate",
+          title: "Duplicate",
+          sortOrder: 1,
+          lessons: [
+            {
+              id: "duplicate-school-pickup",
+              title: "Picking Up My Child From School (Vocal Hack)",
+              lessonType: "vocal_hack",
+              sortOrder: 1,
+              vocalHackSentenceCount: 0,
+            },
+          ],
+        },
+      ],
+    };
+    expect(
+      recommendVocalHackPlacement(
+        groupKey("Customized courses"),
+        "Picking Up My Child From School (Parenting)",
+        ambiguousCatalog,
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps generic Customized and hiring artifacts out of shared courses", () => {
     const key = groupKey("Customized");
-    expect(isTargetVocalHackForm(key)).toBe(false);
     expect(recommendVocalHackPlacement(key, "VOCAL HACK 1", catalog)).toBeNull();
+    expect(
+      recommendVocalHackPlacement(key, "Customer Service Hiring Interview", catalog),
+    ).toBeNull();
+  });
+
+  it("does not overwrite an already populated custom Vocal Hack", () => {
+    const key = groupKey("Customized");
+    const populatedCatalog: PlacementCatalog = {
+      ...catalog,
+      modules: catalog.modules.map((module) =>
+        module.id === "parenting-module"
+          ? {
+              ...module,
+              lessons: module.lessons.map((lesson) => ({
+                ...lesson,
+                vocalHackSentenceCount: 7,
+              })),
+            }
+          : module,
+      ),
+    };
+    expect(
+      recommendVocalHackPlacement(
+        key,
+        "Picking Up My Child From School (Parenting)",
+        populatedCatalog,
+      ),
+    ).toBeNull();
   });
 
   it("maps Basic Introduction to the Personal Introduction placeholder", () => {
