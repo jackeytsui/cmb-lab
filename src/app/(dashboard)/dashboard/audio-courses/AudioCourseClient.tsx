@@ -60,11 +60,19 @@ type AudioCourse = {
 function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; courseTitle: string }) {
   const [feedUrl, setFeedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [feedStatus, setFeedStatus] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
 
   const generateFeed = async () => {
     setLoading(true);
+    setFeedError(null);
+    setFeedStatus(null);
     try {
       const res = await fetch("/api/audio-courses/podcast-token", {
         method: "POST",
@@ -75,11 +83,59 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
         const { token } = await res.json();
         setFeedUrl(`${window.location.origin}/api/podcast/private/${token}/feed`);
         setExpanded(true);
+      } else {
+        const data = await res.json().catch(() => null);
+        setFeedError(
+          data?.error || "We couldn't load your private podcast feed. Please try again.",
+        );
       }
     } catch {
-      // ignore
+      setFeedError("We couldn't reach the podcast service. Please try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const testFeed = async () => {
+    if (!feedUrl) return;
+    setTesting(true);
+    setFeedError(null);
+    setFeedStatus(null);
+    try {
+      const response = await fetch(feedUrl, { cache: "no-store" });
+      if (!response.ok) throw new Error("feed_unavailable");
+
+      const xml = new DOMParser().parseFromString(
+        await response.text(),
+        "application/xml",
+      );
+      if (xml.querySelector("parsererror")) throw new Error("invalid_feed");
+
+      const episodes = xml.querySelectorAll("item");
+      const firstAudioUrl = xml.querySelector("item enclosure")?.getAttribute("url");
+      if (episodes.length === 0 || !firstAudioUrl) {
+        throw new Error("no_episodes");
+      }
+
+      const audioResponse = await fetch(firstAudioUrl, {
+        cache: "no-store",
+        headers: { Range: "bytes=0-0" },
+      });
+      if (!audioResponse.ok) throw new Error("audio_unavailable");
+      await audioResponse.body?.cancel();
+
+      setFeedStatus({
+        ok: true,
+        message: `Feed is working — ${episodes.length} ${episodes.length === 1 ? "episode" : "episodes"} available.`,
+      });
+    } catch {
+      setFeedStatus({
+        ok: false,
+        message:
+          "We couldn't verify this feed. Try again, then report a bug if it still isn't working.",
+      });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -105,7 +161,7 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
           ) : (
             <Wifi className="w-4 h-4" />
           )}
-          {loading ? "Generating your feed..." : "Listen offline via podcast app"}
+          {loading ? "Loading your feed..." : "Listen offline via podcast app"}
         </button>
       ) : (
         <div className="space-y-3">
@@ -116,7 +172,7 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
             </span>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               readOnly
               value={feedUrl ?? ""}
@@ -130,7 +186,29 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
             >
               {copied ? "Copied!" : "Copy"}
             </button>
+            <button
+              type="button"
+              onClick={() => void testFeed()}
+              disabled={testing}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+            >
+              {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {testing ? "Testing..." : "Test feed"}
+            </button>
           </div>
+
+          {feedStatus ? (
+            <p
+              role="status"
+              className={
+                feedStatus.ok
+                  ? "text-xs text-emerald-600 dark:text-emerald-400"
+                  : "text-xs text-red-600 dark:text-red-400"
+              }
+            >
+              {feedStatus.message}
+            </p>
+          ) : null}
 
           <p className="text-[11px] text-muted-foreground">
             This is your personal feed URL. Use the <strong>same link</strong> for any podcast app — just copy and paste it.
@@ -182,7 +260,7 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
               <ul className="list-disc list-inside space-y-0.5">
                 <li>This URL is <strong>personal to you</strong> — do not share it with others</li>
                 <li>It gives access to your &ldquo;{courseTitle}&rdquo; audio lessons</li>
-                <li>If your link stops working, generate a new one here</li>
+                <li>If playback stops working, use “Test feed” above before reporting a bug</li>
               </ul>
             </div>
           </div>
@@ -196,6 +274,11 @@ function OfflinePodcastSection({ courseId, courseTitle }: { courseId: string; co
           </button>
         </div>
       )}
+      {feedError ? (
+        <p role="alert" className="mt-2 text-xs text-red-600 dark:text-red-400">
+          {feedError}
+        </p>
+      ) : null}
     </div>
   );
 }

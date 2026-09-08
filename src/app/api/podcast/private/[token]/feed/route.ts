@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { courses, lessons, modules, podcastTokens, users } from "@/db/schema";
 import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
+import { logPodcastDeliveryFailure } from "@/lib/podcast-delivery-log";
 
 /**
  * GET /api/podcast/private/[token]/feed
@@ -35,6 +36,11 @@ export async function GET(
 ) {
   const { token } = await params;
   if (!/^[a-f0-9]{64}$/i.test(token)) {
+    logPodcastDeliveryFailure({
+      route: "feed",
+      reason: "invalid_token_format",
+      token,
+    });
     return new NextResponse("Invalid or expired feed token", { status: 403 });
   }
 
@@ -44,6 +50,11 @@ export async function GET(
   });
 
   if (!tokenRow) {
+    logPodcastDeliveryFailure({
+      route: "feed",
+      reason: "token_not_found",
+      token,
+    });
     return new NextResponse("Invalid or expired feed token", { status: 403 });
   }
 
@@ -53,6 +64,12 @@ export async function GET(
     columns: { id: true, name: true, role: true, deletedAt: true },
   });
   if (!user || user.deletedAt) {
+    logPodcastDeliveryFailure({
+      route: "feed",
+      reason: "user_inactive",
+      token,
+      seriesId: tokenRow.seriesId,
+    });
     return new NextResponse("Invalid or expired feed token", { status: 403 });
   }
 
@@ -69,6 +86,12 @@ export async function GET(
     );
 
   if (!course || !(await userCanAccessAudioCourse(user, course))) {
+    logPodcastDeliveryFailure({
+      route: "feed",
+      reason: "course_or_access_unavailable",
+      token,
+      seriesId: tokenRow.seriesId,
+    });
     return new NextResponse("Course not found or unpublished", { status: 404 });
   }
 

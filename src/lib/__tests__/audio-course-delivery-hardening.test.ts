@@ -92,4 +92,29 @@ describe("audio course delivery hardening", () => {
       expect(contents, route).not.toMatch(/^\s+audioUrl,\s*$/m);
     }
   });
+
+  it("surfaces private feed errors and provides an end-to-end feed check", () => {
+    const client = source(
+      "src/app/(dashboard)/dashboard/audio-courses/AudioCourseClient.tsx",
+    );
+
+    expect(client).toContain('headers: { Range: "bytes=0-0" }');
+    expect(client).toContain('"Test feed"');
+    expect(client).toContain("Feed is working");
+    expect(client).toContain('role="alert"');
+    expect(client).not.toContain("If your link stops working, generate a new one here");
+  });
+
+  it("logs podcast failures with a token fingerprint instead of the private token", () => {
+    const logger = source("src/lib/podcast-delivery-log.ts");
+    const feedRoute = source("src/app/api/podcast/private/[token]/feed/route.ts");
+    const audioRoute = source(
+      "src/app/api/podcast/private/[token]/audio/[lessonId]/route.ts",
+    );
+
+    expect(logger).toContain("tokenFingerprint: podcastTokenFingerprint(token)");
+    expect(logger).not.toContain("...details,\n      token,");
+    expect(feedRoute).toContain("course_or_access_unavailable");
+    expect(audioRoute).toContain("audio_unavailable");
+  });
 });

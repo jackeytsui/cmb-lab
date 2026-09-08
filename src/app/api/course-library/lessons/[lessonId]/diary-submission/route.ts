@@ -33,7 +33,7 @@ const sentenceSchema = z.object({
 
 const submitSchema = z.object({
   sentences: z.array(sentenceSchema).min(1).max(100),
-  audioUrl: z.string().url().max(2000),
+  audioUrl: z.string().url().max(2000).optional(),
 });
 
 /** Recordings must live in our private blob store (uploaded via the recorder). */
@@ -149,7 +149,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       { status: 400 },
     );
   }
-  if (!isOwnBlobUrl(parsed.data.audioUrl)) {
+  if (parsed.data.audioUrl && !isOwnBlobUrl(parsed.data.audioUrl)) {
     return NextResponse.json(
       { error: "Recording must be uploaded through the recorder." },
       { status: 400 },
@@ -171,6 +171,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(
       { error: "This submission is being reviewed and can no longer be edited." },
       { status: 409 },
+    );
+  }
+
+  // A resubmission may keep the recording already attached to this student's
+  // submission. New URLs are validated above; the existing URL is trusted
+  // because it was previously persisted on this same authorized record.
+  const audioUrl = parsed.data.audioUrl ?? existing?.studentAudioUrl ?? null;
+  if (!audioUrl) {
+    return NextResponse.json(
+      { error: "Please record yourself reading your diary before submitting." },
+      { status: 400 },
     );
   }
 
@@ -196,7 +207,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         submittedAt: now,
         moduleId: lesson.moduleId,
         courseId: lesson.courseId,
-        studentAudioUrl: parsed.data.audioUrl,
+        studentAudioUrl: audioUrl,
       })
       .where(eq(assignmentSubmissions.id, existing.id));
     await db
@@ -215,7 +226,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         feedbackRequested,
         assignedReviewerId,
         submittedAt: now,
-        studentAudioUrl: parsed.data.audioUrl,
+        studentAudioUrl: audioUrl,
       })
       .returning({ id: assignmentSubmissions.id });
     submissionId = created.id;

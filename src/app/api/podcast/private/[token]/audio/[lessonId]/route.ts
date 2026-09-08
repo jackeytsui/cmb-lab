@@ -5,6 +5,7 @@ import { courses, lessons, modules, podcastTokens, users } from "@/db/schema";
 import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+import { logPodcastDeliveryFailure } from "@/lib/podcast-delivery-log";
 
 export const maxDuration = 60;
 
@@ -18,6 +19,12 @@ export async function GET(
 ) {
   const { token, lessonId } = await params;
   if (!/^[a-f0-9]{64}$/i.test(token)) {
+    logPodcastDeliveryFailure({
+      route: "audio",
+      reason: "invalid_token_format",
+      token,
+      lessonId,
+    });
     return new NextResponse("Unauthorized", { status: 403 });
   }
 
@@ -49,8 +56,17 @@ export async function GET(
     )
     .limit(1);
 
+  if (!record) {
+    logPodcastDeliveryFailure({
+      route: "audio",
+      reason: "lesson_or_subscription_not_found",
+      token,
+      lessonId,
+    });
+    return new NextResponse("Lesson not found", { status: 404 });
+  }
+
   if (
-    !record ||
     !(await userCanAccessAudioCourse(
       { id: record.userId, role: record.userRole },
       {
@@ -60,6 +76,13 @@ export async function GET(
       },
     ))
   ) {
+    logPodcastDeliveryFailure({
+      route: "audio",
+      reason: "course_access_unavailable",
+      token,
+      seriesId: record.courseId,
+      lessonId,
+    });
     return new NextResponse("Lesson not found", { status: 404 });
   }
 
@@ -73,6 +96,13 @@ export async function GET(
   }
 
   if (!isPrivateVercelBlobUrl(audioUrl)) {
+    logPodcastDeliveryFailure({
+      route: "audio",
+      reason: "audio_unavailable",
+      token,
+      seriesId: record.courseId,
+      lessonId,
+    });
     return new NextResponse("No audio available", { status: 404 });
   }
 

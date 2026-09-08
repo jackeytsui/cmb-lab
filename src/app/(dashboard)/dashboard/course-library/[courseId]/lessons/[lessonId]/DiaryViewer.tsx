@@ -3,10 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Lock, Pencil, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  Lock,
+  Pencil,
+  Sparkles,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AudioRecorder } from "@/components/assignments/AudioRecorder";
-import { AnnotatedSentence } from "@/components/assignments/AnnotatedSentence";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import { generateAnnotation } from "@/lib/mandarin-generation";
 
@@ -70,10 +76,10 @@ export function DiaryViewer({
       : null,
   );
   const [draft, setDraft] = useState(
-    initialSubmission?.lines.map((l) => l.chineseText).join("") ?? "",
+    initialSubmission?.lines.map((l) => l.chineseText).join("\n") ?? "",
   );
   const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
+  const [annotationNotice, setAnnotationNotice] = useState<string | null>(null);
   // Uploaded recording blob URL (for submit), and the URL to play back.
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -89,30 +95,52 @@ export function DiaryViewer({
     const parts = splitIntoSentences(draft);
     if (parts.length === 0) return;
     setGenerating(true);
-    setGenError(null);
-    try {
-      const annotations = await Promise.all(
-        parts.map((p) => generateAnnotation(p, lang)),
+    setAnnotationNotice(null);
+
+    // Romanisation is local and English is best-effort. One failed AI request
+    // must never discard the student's Chinese or prevent submission.
+    const annotations = await Promise.allSettled(
+      parts.map((part) =>
+        generateAnnotation(part, lang, { requireEnglish: false }),
+      ),
+    );
+    const nextLines = parts.map((part, index) => {
+      const annotation = annotations[index];
+      return {
+        chineseText: part,
+        pinyin: annotation.status === "fulfilled" ? annotation.value.pinyin : "",
+        english: annotation.status === "fulfilled" ? annotation.value.english : "",
+      };
+    });
+
+    setLines(nextLines);
+    if (nextLines.some((line) => !line.pinyin.trim() || !line.english.trim())) {
+      setAnnotationNotice(
+        "We couldn't fill every optional annotation automatically. You can edit them below, or submit your Chinese entry as it is.",
       );
-      setLines(
-        parts.map((p, i) => ({
-          chineseText: p,
-          pinyin: annotations[i].pinyin,
-          english: annotations[i].english,
-        })),
-      );
-    } catch {
-      setGenError(
-        "Could not generate pinyin and translation. Press Enter to try again.",
-      );
-    } finally {
-      setGenerating(false);
     }
+    setGenerating(false);
   };
 
   const handleEdit = () => {
     if (locked) return;
+    if (lines) {
+      setDraft(lines.map((line) => line.chineseText).join("\n"));
+    }
     setLines(null);
+    setAnnotationNotice(null);
+  };
+
+  const updateAnnotation = (
+    index: number,
+    field: "pinyin" | "english",
+    value: string,
+  ) => {
+    setLines((current) =>
+      current?.map((line, lineIndex) =>
+        lineIndex === index ? { ...line, [field]: value } : line,
+      ) ?? null,
+    );
   };
 
   const canSubmit =
@@ -128,7 +156,7 @@ export function DiaryViewer({
 
   const handleSubmit = async () => {
     if (lines === null || lines.length === 0) {
-      setError("Write your diary entry and press Enter to generate it first.");
+      setError("Write your Chinese diary entry and prepare it first.");
       return;
     }
     if (!recordingUrl && !existingPlayback) {
@@ -236,30 +264,52 @@ export function DiaryViewer({
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-3">
                   {lines.map((line, i) => (
-                    <div key={i} className="space-y-0.5">
-                      {lang === "cantonese" ? (
-                        <ModelAnnotatedSentence
-                          chinese={line.chineseText}
-                          pinyin={line.pinyin}
-                          fontSize={DIARY_CHAR_SIZE}
-                          className="text-foreground"
-                          lang="cantonese"
-                        />
-                      ) : (
-                        <AnnotatedSentence
-                          text={line.chineseText}
-                          fontSize={DIARY_CHAR_SIZE}
-                          className="text-foreground"
-                        />
-                      )}
-                      {line.english && (
+                    <div key={`${line.chineseText}-${i}`} className="space-y-2">
+                      <ModelAnnotatedSentence
+                        chinese={line.chineseText}
+                        pinyin={line.pinyin}
+                        fontSize={DIARY_CHAR_SIZE}
+                        className="text-foreground"
+                        lang={lang}
+                      />
+                      {locked && line.english ? (
                         <p
                           className="text-muted-foreground italic"
                           style={{ fontSize: `${DIARY_ENGLISH_SIZE}px` }}
                         >
                           {line.english}
                         </p>
-                      )}
+                      ) : null}
+                      {!locked ? (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="text-[11px] font-medium text-muted-foreground">
+                              {lang === "cantonese" ? "Jyutping" : "Pinyin"} (optional)
+                            </span>
+                            <input
+                              type="text"
+                              value={line.pinyin}
+                              onChange={(event) =>
+                                updateAnnotation(i, "pinyin", event.target.value)
+                              }
+                              className="mt-0.5 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-[11px] font-medium text-muted-foreground">
+                              English translation (optional)
+                            </span>
+                            <input
+                              type="text"
+                              value={line.english}
+                              onChange={(event) =>
+                                updateAnnotation(i, "english", event.target.value)
+                              }
+                              className="mt-0.5 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+                            />
+                          </label>
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -270,7 +320,7 @@ export function DiaryViewer({
                     className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-accent"
                   >
                     <Pencil className="w-3 h-3" />
-                    Edit
+                    Edit Chinese
                   </button>
                 )}
               </div>
@@ -286,7 +336,7 @@ export function DiaryViewer({
                     void handleGenerate();
                   }
                 }}
-                placeholder="Write your diary entry in Chinese here. Use punctuation (。！？) between sentences, then press Enter to generate pinyin + English."
+                placeholder="Write your diary entry in Chinese here. Use punctuation (。！？) between sentences. You can edit the optional pinyin/Jyutping and English in the next step."
                 disabled={submitting || generating}
                 rows={10}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground placeholder:text-muted-foreground/60 resize-y disabled:opacity-60"
@@ -298,7 +348,7 @@ export function DiaryViewer({
                   <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground">
                     Enter
                   </kbd>{" "}
-                  to generate (Shift+Enter for a new line).
+                  to prepare your entry (Shift+Enter for a new line).
                 </p>
                 <button
                   type="button"
@@ -309,13 +359,18 @@ export function DiaryViewer({
                   {generating ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    "Generate"
+                    "Prepare entry"
                   )}
                 </button>
               </div>
-              {genError && <p className="text-sm text-red-500">{genError}</p>}
             </div>
           )}
+          {annotationNotice ? (
+            <p className="flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              {annotationNotice}
+            </p>
+          ) : null}
         </div>
 
         {/* Right: recording */}
@@ -371,7 +426,7 @@ export function DiaryViewer({
           </button>
           {!canSubmit && !submitting && (
             <p className="text-xs text-muted-foreground">
-              Generate your written entry and record yourself reading it before
+              Prepare your written entry and record yourself reading it before
               submitting.
             </p>
           )}

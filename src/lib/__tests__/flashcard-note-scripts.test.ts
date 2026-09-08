@@ -11,6 +11,15 @@ describe("starred note flashcard scripts", () => {
     });
   });
 
+  it("converts the student's reported washroom card in simplified mode", async () => {
+    await expect(
+      normalizeNoteFlashcardScripts("請問洗手間在哪裡？", "mandarin"),
+    ).resolves.toEqual({
+      chinese: "請問洗手間在哪裡？",
+      simplified: "请问洗手间在哪里？",
+    });
+  });
+
   it("derives both scripts from a simplified Mandarin notepad note", async () => {
     await expect(
       normalizeNoteFlashcardScripts("我和我的团队开会", "mandarin"),
