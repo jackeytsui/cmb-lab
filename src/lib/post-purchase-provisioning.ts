@@ -6,6 +6,7 @@ import { and, eq, ilike, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   activeStudents,
+  courseLibraryCourses,
   ghlContacts,
   ghlLocations,
   studentTags,
@@ -24,11 +25,13 @@ import {
   derivePostPurchaseTags,
   planPostPurchaseTagReconciliation,
   POST_PURCHASE_CONTROLLED_TAGS,
+  shouldGrantInitialBlueprintAccess,
   shouldReconcilePostPurchaseStudent,
   type PostPurchaseControlledTag,
   type PostPurchaseEntitlementInput,
 } from "@/lib/post-purchase-entitlements";
 import { resolvePostPurchaseTagsWithStaffOverrides } from "@/lib/staff-tag-overrides";
+import { BLUEPRINT_COURSE_TITLES } from "@/lib/ghl/course-progress-plan";
 
 export type PostPurchaseProvisioningInput = PostPurchaseEntitlementInput & {
   email: string;
@@ -264,6 +267,46 @@ async function applyCmbTags(params: {
     });
   }
   return plan;
+}
+
+async function ensureInitialBlueprintAccess(userId: string) {
+  const userGrant = JSON.stringify([userId]);
+  const foundationsWhere = and(
+    eq(
+      courseLibraryCourses.title,
+      BLUEPRINT_COURSE_TITLES.Foundations
+    ),
+    isNull(courseLibraryCourses.deletedAt)
+  );
+  const updated = await db
+    .update(courseLibraryCourses)
+    .set({
+      // Append atomically so simultaneous onboardings cannot overwrite one
+      // another. The predicate keeps replays idempotent.
+      systemAccessUserIds: sql`
+        ${courseLibraryCourses.systemAccessUserIds} || ${userGrant}::jsonb
+      `,
+    })
+    .where(
+      and(
+        foundationsWhere,
+        sql`NOT (${courseLibraryCourses.systemAccessUserIds} @> ${userGrant}::jsonb)`
+      )
+    )
+    .returning({ id: courseLibraryCourses.id });
+
+  if (updated.length > 0) return;
+
+  // No update can also mean the grant already exists. Distinguish that safe,
+  // idempotent case from a broken catalogue configuration.
+  const [foundations] = await db
+    .select({ id: courseLibraryCourses.id })
+    .from(courseLibraryCourses)
+    .where(foundationsWhere)
+    .limit(1);
+  if (!foundations) {
+    throw new Error("Published Foundations course is unavailable");
+  }
 }
 
 async function syncControlledTagsToContact(params: {
@@ -570,6 +613,10 @@ export async function provisionPostPurchaseEntitlements(
       expectedTags: finalExpectedTags,
     });
     await updateControlledInviteTags(ensured.clerkUserId, finalExpectedTags);
+  }
+
+  if (shouldGrantInitialBlueprintAccess(finalExpectedTags)) {
+    await ensureInitialBlueprintAccess(ensured.dbUserId);
   }
 
   return {

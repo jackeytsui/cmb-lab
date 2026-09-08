@@ -5,6 +5,7 @@ import {
   canReassignAuthoritativeGhlContact,
   derivePostPurchaseTags,
   planPostPurchaseTagReconciliation,
+  shouldGrantInitialBlueprintAccess,
   shouldReconcilePostPurchaseStudent,
   shouldApplyInboundPostPurchaseTagChange,
 } from "@/lib/post-purchase-entitlements";
@@ -204,6 +205,23 @@ describe("derivePostPurchaseTags", () => {
         oneOnOneCoachAssigned: false,
       })
     ).toEqual(["ic_student"]);
+  });
+});
+
+describe("shouldGrantInitialBlueprintAccess", () => {
+  it("starts CMBP students in Foundations immediately", () => {
+    expect(
+      shouldGrantInitialBlueprintAccess(["cmb_student", "icgc_student"])
+    ).toBe(true);
+  });
+
+  it("does not grant Blueprint access to non-CMB packages", () => {
+    expect(
+      shouldGrantInitialBlueprintAccess([
+        "ic_student",
+        "custom_course_student",
+      ])
+    ).toBe(false);
   });
 });
 

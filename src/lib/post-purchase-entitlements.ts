@@ -133,6 +133,17 @@ export function derivePostPurchaseTags(
   return POST_PURCHASE_CONTROLLED_TAGS.filter((tag) => expected.has(tag));
 }
 
+/**
+ * CMBP enrollment starts in Foundations even when GHL has no progress fields
+ * yet. This is intentionally based on the final, staff-overridable entitlement
+ * set so an explicit force-off is respected.
+ */
+export function shouldGrantInitialBlueprintAccess(
+  expectedTags: Iterable<PostPurchaseControlledTag>
+) {
+  return new Set(expectedTags).has("cmb_student");
+}
+
 export function planPostPurchaseTagReconciliation(params: {
   currentTags: Iterable<string>;
   expectedTags: Iterable<PostPurchaseControlledTag>;
