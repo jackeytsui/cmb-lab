@@ -78,4 +78,26 @@ describe("ReaderTextArea Cantonese romanisation", () => {
     expect(simplifiedHtml).toContain("zek3");
     expect(simplifiedHtml).not.toContain("zi2");
   });
+
+  it("supports a larger coaching-specific romanisation size", () => {
+    const html = renderToStaticMarkup(
+      <ReaderTextArea
+        segments={splitBankSegments}
+        showPinyin={false}
+        showJyutping
+        showEnglish={false}
+        translationMode="proper"
+        fontSize={18}
+        language="zh-HK"
+        onSpeakSentence={() => {}}
+        isSpeaking={false}
+        speakingText={null}
+        translationCache={new Map()}
+        onTranslationFetched={() => {}}
+        typographySizes={{ romanizationSize: 22, englishSize: 20 }}
+      />,
+    );
+
+    expect(html).toContain("font-size:22px");
+  });
 });

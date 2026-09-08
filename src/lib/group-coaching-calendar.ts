@@ -13,6 +13,36 @@ export type CalendarDay = CalendarDate & {
   isToday: boolean;
 };
 
+export type StartTimeGroup<T> = {
+  key: string;
+  startsAt: string;
+  events: T[];
+};
+
+/**
+ * Keep simultaneous coaching options in one visual time slot. Event order is
+ * preserved so the API remains the source of truth for which option appears
+ * first.
+ */
+export function groupEventsByStartTime<T extends { id: string; startsAt: string }>(
+  events: T[],
+): StartTimeGroup<T>[] {
+  const groups = new Map<string, StartTimeGroup<T>>();
+
+  for (const event of events) {
+    const timestamp = new Date(event.startsAt).getTime();
+    const key = Number.isNaN(timestamp) ? `invalid:${event.id}` : String(timestamp);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.events.push(event);
+      continue;
+    }
+    groups.set(key, { key, startsAt: event.startsAt, events: [event] });
+  }
+
+  return [...groups.values()];
+}
+
 function datePartsInTimeZone(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,

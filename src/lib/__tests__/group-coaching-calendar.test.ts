@@ -5,6 +5,7 @@ import {
   calendarDateInTimeZone,
   calendarDateKey,
   calendarMonthInTimeZone,
+  groupEventsByStartTime,
   shiftCalendarDate,
   shiftCalendarMonth,
 } from "@/lib/group-coaching-calendar";
@@ -83,5 +84,26 @@ describe("group coaching calendar", () => {
       "2026-09-05",
     ]);
     expect(days.find((day) => day.isToday)?.day).toBe(31);
+  });
+
+  it("groups simultaneous sessions into one time slot while preserving choices", () => {
+    const events = [
+      { id: "foundation", startsAt: "2026-09-14T20:30:00.000Z" },
+      { id: "intermediate", startsAt: "2026-09-14T20:30:00.000Z" },
+      { id: "friday", startsAt: "2026-09-18T18:00:00.000Z" },
+    ];
+
+    expect(groupEventsByStartTime(events)).toEqual([
+      {
+        key: String(new Date(events[0].startsAt).getTime()),
+        startsAt: events[0].startsAt,
+        events: [events[0], events[1]],
+      },
+      {
+        key: String(new Date(events[2].startsAt).getTime()),
+        startsAt: events[2].startsAt,
+        events: [events[2]],
+      },
+    ]);
   });
 });

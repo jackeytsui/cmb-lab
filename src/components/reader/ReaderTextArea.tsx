@@ -9,7 +9,10 @@ import { SentenceControls } from "./SentenceControls";
 import { cn } from "@/lib/utils";
 import { annotateFromModelAnswer } from "@/lib/mandarin-annotate";
 import { smartRomanise } from "@/lib/romanise";
-import { readerTypographySizes } from "@/lib/reader-typography";
+import {
+  readerTypographySizes,
+  type ReaderTypographySizes,
+} from "@/lib/reader-typography";
 
 /** Standard glosses for grammatical particles — used as fallback for common words */
 const PARTICLE_GLOSSES: Record<string, string> = {
@@ -80,6 +83,8 @@ export interface ReaderTextAreaProps {
    * rendered text when the reader is displaying a Simplified conversion.
    */
   romanizationSourceText?: string | null;
+  /** Optional context-specific sizes; the general reader ratios remain the default. */
+  typographySizes?: ReaderTypographySizes;
 }
 
 function findWordElement(target: EventTarget): HTMLElement | null {
@@ -116,6 +121,7 @@ export function ReaderTextArea({
   toneColorsEnabled = false,
   romanizationOverride,
   romanizationSourceText,
+  typographySizes,
 }: ReaderTextAreaProps) {
   const lastHoveredIndexRef = useRef<number | null>(null);
   const fallbackRef = useRef<HTMLDivElement>(null);
@@ -275,6 +281,7 @@ export function ReaderTextArea({
                       fontSize={fontSize}
                       toneColorsEnabled={toneColorsEnabled}
                       romanization={romanizationBySegment.get(globalIndex)}
+                      typographySizes={typographySizes}
                     />
                   );
                 })}
@@ -297,7 +304,7 @@ export function ReaderTextArea({
 
             {/* Proper mode: natural translation below sentence */}
             {showEnglish && translationMode === "proper" && properTranslation && (
-              <div className="text-muted-foreground italic ml-1 mt-0.5 opacity-0 animate-[fadeIn_200ms_ease-out_forwards]" style={{ fontSize: `${readerTypographySizes(fontSize).englishSize}px` }}>
+              <div className="text-muted-foreground italic ml-1 mt-0.5 opacity-0 animate-[fadeIn_200ms_ease-out_forwards]" style={{ fontSize: `${(typographySizes ?? readerTypographySizes(fontSize)).englishSize}px` }}>
                 {properTranslation}
               </div>
             )}

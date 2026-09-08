@@ -28,7 +28,7 @@ import {
   getToneColorStyle,
   getToneDataAttr,
 } from "@/lib/tone-colors";
-import { readerTypographySizes } from "@/lib/reader-typography";
+import { coachingTypographySizes } from "@/lib/reader-typography";
 import type { Roles } from "@/types/globals";
 import { isStaffRole } from "@/lib/platform-roles";
 import {
@@ -755,8 +755,8 @@ function NoteCard({
     setShowExplanation(false);
   }, [onSaveExplanation]);
 
-  const { romanizationSize: annotationSize, englishSize } =
-    readerTypographySizes(fontSize);
+  const typographySizes = coachingTypographySizes(fontSize);
+  const { romanizationSize: annotationSize, englishSize } = typographySizes;
 
   return (
     <div
@@ -1026,6 +1026,7 @@ function NoteCard({
                           fontSize={fontSize}
                           toneColorsEnabled={toneColorsEnabled}
                           selectableAnnotations
+                          typographySizes={typographySizes}
                         />
                       );
                     })}
@@ -1158,6 +1159,7 @@ function NoteCard({
               isTranslating={processed.isTranslating}
               toneColorsEnabled={toneColorsEnabled}
               romanizationOverride={note.romanizationOverride ?? defaultRomanization}
+              typographySizes={typographySizes}
             />
           )}
           {!isEditing && !note.translationOverride ? (
@@ -1337,6 +1339,10 @@ function CoachingPanel({
   useEffect(() => {
     localStorage.setItem("coaching-note-font-size", String(noteFontSize));
   }, [noteFontSize]);
+  const noteTypographySizes = useMemo(
+    () => coachingTypographySizes(noteFontSize),
+    [noteFontSize],
+  );
 
   // Panel collapse/resize state
   const [mandoCollapsed, setMandoCollapsed] = useState(false);
@@ -3162,6 +3168,7 @@ function CoachingPanel({
                 batchTranslations={mandarinPane.batchTranslations}
                 isTranslating={mandarinPane.isTranslating}
                 toneColorsEnabled={toneColorsEnabled}
+                typographySizes={noteTypographySizes}
               />
             </div>
           ) : (
@@ -3487,6 +3494,7 @@ function CoachingPanel({
                 batchTranslations={cantonesePane.batchTranslations}
                 isTranslating={cantonesePane.isTranslating}
                 toneColorsEnabled={toneColorsEnabled}
+                typographySizes={noteTypographySizes}
               />
             </div>
           ) : (

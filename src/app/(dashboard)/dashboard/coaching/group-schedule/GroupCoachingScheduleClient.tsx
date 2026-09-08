@@ -22,13 +22,17 @@ import {
   buildCalendarWeek,
   calendarDateInTimeZone,
   calendarDateKey,
+  groupEventsByStartTime,
   shiftCalendarDate,
   shiftCalendarMonth,
   type CalendarDate,
   type CalendarDay,
   type CalendarMonth,
 } from "@/lib/group-coaching-calendar";
-import { getCoachingSessionPresentation } from "@/lib/group-coaching-session";
+import {
+  getCoachingEventDetails,
+  getCoachingSessionPresentation,
+} from "@/lib/group-coaching-session";
 import { COACHING_TIME_ZONES } from "@/lib/coaching-time-zones";
 
 type CoachingEvent = {
@@ -49,22 +53,6 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function normalizeTimeZone(timeZone: string) {
   return timeZone === "Asia/Shanghai" ? "Asia/Hong_Kong" : timeZone;
-}
-
-function getEventDetails(description: string) {
-  const signupUrl = description.match(/https:\/\/forms\.gle\/[^\s]+/)?.[0] ?? null;
-  const repeatLabel = description.match(/Repeats every ([^(\n.]+)/)?.[1]?.trim() ?? null;
-  const summary = description
-    .split("\n")
-    .filter(
-      (line) =>
-        !line.startsWith("Sign up here:") &&
-        !line.startsWith("Repeats every") &&
-        !line.startsWith("Cancelled on "),
-    )
-    .join("\n")
-    .trim();
-  return { signupUrl, repeatLabel, summary };
 }
 
 function eventState(event: CoachingEvent) {
@@ -121,14 +109,16 @@ function CalendarEventCard({
   timeZone,
   isNext,
   expanded = false,
+  showTime = true,
 }: {
   event: CoachingEvent;
   timeZone: string;
   isNext: boolean;
   expanded?: boolean;
+  showTime?: boolean;
 }) {
   const state = eventState(event);
-  const details = getEventDetails(event.description);
+  const details = getCoachingEventDetails(event.description);
   const session = getCoachingSessionPresentation(event.title);
   const isCantonese = session.language === "cantonese";
   const cardColors = isCantonese
@@ -156,13 +146,17 @@ function CalendarEventCard({
       className={`min-w-0 rounded-lg border ${expanded ? "p-4" : "p-2.5"} ${cardColors} ${state === "live" ? "ring-2 ring-inset ring-red-500/50" : isNext ? "ring-1 ring-inset ring-primary/25" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className={`${expanded ? "text-xs" : "text-[10px]"} font-bold ${accentTextColor}`}>
-          {new Date(event.startsAt).toLocaleTimeString(undefined, {
-            timeZone,
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </span>
+        {showTime ? (
+          <span className={`${expanded ? "text-xs" : "text-[10px]"} font-bold ${accentTextColor}`}>
+            {new Date(event.startsAt).toLocaleTimeString(undefined, {
+              timeZone,
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </span>
+        ) : (
+          <span />
+        )}
         {state === "live" && (
           <span className="shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">
             Live
@@ -185,17 +179,7 @@ function CalendarEventCard({
           {details.summary}
         </p>
       )}
-      <div className={`grid grid-cols-1 gap-1.5 ${expanded ? "mt-3 sm:grid-cols-2" : "mt-2"}`}>
-        {details.signupUrl ? (
-          <a
-            href={details.signupUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-8 w-full min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-md border border-border bg-card px-2 text-[10px] font-semibold text-foreground hover:border-primary/40"
-          >
-            Sign up <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-          </a>
-        ) : null}
+      <div className={`grid grid-cols-1 gap-1.5 ${expanded ? "mt-3" : "mt-2"}`}>
         <a
           href={event.meetingUrl}
           target="_blank"
@@ -207,6 +191,250 @@ function CalendarEventCard({
         </a>
       </div>
     </article>
+  );
+}
+
+function choicePrompt(events: CoachingEvent[]) {
+  const sessions = events.map((event) => getCoachingSessionPresentation(event.title));
+  const allAreLevels = sessions.every(
+    (session) =>
+      session.language === "mandarin" &&
+      /^CMB: (?:Foundation|Intermediate|Advanced|All Levels)$/.test(session.name),
+  );
+  return allAreLevels ? "Choose your level" : "Choose your session";
+}
+
+function CalendarEventSlot({
+  events,
+  timeZone,
+  isNext,
+  expanded = false,
+}: {
+  events: CoachingEvent[];
+  timeZone: string;
+  isNext: boolean;
+  expanded?: boolean;
+}) {
+  const firstEvent = events[0];
+  if (!firstEvent) return null;
+  if (events.length === 1) {
+    return (
+      <CalendarEventCard
+        event={firstEvent}
+        timeZone={timeZone}
+        isNext={isNext}
+        expanded={expanded}
+      />
+    );
+  }
+
+  const hasLiveEvent = events.some((event) => eventState(event) === "live");
+  return (
+    <article
+      data-testid="calendar-event-group"
+      aria-label={`${events.length} sessions at ${new Date(firstEvent.startsAt).toLocaleTimeString(undefined, {
+        timeZone,
+        hour: "numeric",
+        minute: "2-digit",
+      })}`}
+      className={`rounded-xl border-2 border-primary/25 bg-primary/[0.035] ${expanded ? "p-4" : "p-2.5"} ${hasLiveEvent ? "ring-2 ring-inset ring-red-500/50" : isNext ? "ring-1 ring-inset ring-primary/30" : ""}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className={`${expanded ? "text-xs" : "text-[10px]"} font-bold text-primary`}>
+            {new Date(firstEvent.startsAt).toLocaleTimeString(undefined, {
+              timeZone,
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </p>
+          <p className={`mt-0.5 font-semibold text-foreground ${expanded ? "text-sm" : "text-[10px]"}`}>
+            {choicePrompt(events)}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold text-primary">
+          {events.length} options
+        </span>
+      </div>
+      <div className={expanded ? "mt-3 grid gap-3 sm:grid-cols-2" : "mt-2 space-y-2"}>
+        {events.map((event) => (
+          <CalendarEventCard
+            key={event.id}
+            event={event}
+            timeZone={timeZone}
+            isNext={false}
+            expanded={expanded}
+            showTime={false}
+          />
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function ListEventCard({
+  event,
+  timeZone,
+  isNext,
+  grouped = false,
+}: {
+  event: CoachingEvent;
+  timeZone: string;
+  isNext: boolean;
+  grouped?: boolean;
+}) {
+  const state = eventState(event);
+  const startsAt = new Date(event.startsAt);
+  const details = getCoachingEventDetails(event.description);
+  const session = getCoachingSessionPresentation(event.title);
+  const isCantonese = session.language === "cantonese";
+
+  return (
+    <article
+      data-language={session.language}
+      className={`relative overflow-hidden border shadow-sm transition-shadow hover:shadow-md ${grouped ? "rounded-xl p-4" : "rounded-2xl p-5 sm:p-6"} ${isCantonese ? "border-orange-300 bg-orange-50/60 dark:border-orange-800 dark:bg-orange-950/20" : "border-indigo-200 bg-indigo-50/50 dark:border-indigo-800 dark:bg-indigo-950/20"}`}
+      data-testid={grouped ? "group-coaching-event-choice" : "group-coaching-event"}
+    >
+      <div className={`absolute inset-y-0 left-0 w-1 ${isCantonese ? "bg-orange-500" : "bg-indigo-600"}`} />
+      <div className={`flex flex-col gap-4 ${grouped ? "" : "sm:flex-row sm:items-center sm:justify-between"}`}>
+        <div className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {isNext && state !== "live" && <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-primary">Next session</span>}
+            <h2 className={`${grouped ? "text-base" : "text-lg"} font-semibold text-foreground`}>
+              {session.name}
+            </h2>
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${isCantonese ? "bg-orange-200/80 text-orange-900 dark:bg-orange-900/60 dark:text-orange-100" : "bg-indigo-200/80 text-indigo-900 dark:bg-indigo-900/60 dark:text-indigo-100"}`}>
+              {session.languageLabel}
+            </span>
+            {state === "live" && (
+              <span className="rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+                Live now
+              </span>
+            )}
+          </div>
+          {details.summary && (
+            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+              {details.summary}
+            </p>
+          )}
+          {details.repeatLabel && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              <Repeat2 className="h-3.5 w-3.5" /> Every {details.repeatLabel}
+            </span>
+          )}
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+            {!grouped && (
+              <>
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays className="h-4 w-4" />
+                  {startsAt.toLocaleDateString(undefined, {
+                    timeZone,
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock3 className="h-4 w-4" />
+                  {startsAt.toLocaleTimeString(undefined, {
+                    timeZone,
+                    hour: "numeric",
+                    minute: "2-digit",
+                    timeZoneName: "short",
+                  })}{" "}
+                  · {event.durationMinutes} min
+                </span>
+              </>
+            )}
+            {grouped && (
+              <span className="inline-flex items-center gap-1.5">
+                <Clock3 className="h-4 w-4" /> {event.durationMinutes} min
+              </span>
+            )}
+            {event.hostName && (
+              <span className="inline-flex items-center gap-1.5">
+                <UserRound className="h-4 w-4" /> {event.hostName}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className={`flex shrink-0 flex-col gap-2 ${grouped ? "" : "sm:min-w-40"}`}>
+          <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors ${isCantonese ? "bg-orange-600 hover:bg-orange-700" : "bg-indigo-600 hover:bg-indigo-700"}`}>
+            <Video className="h-4 w-4" /> {state === "live" ? "Join now" : "Join session"}
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ListEventSlot({
+  events,
+  timeZone,
+  isNext,
+}: {
+  events: CoachingEvent[];
+  timeZone: string;
+  isNext: boolean;
+}) {
+  const firstEvent = events[0];
+  if (!firstEvent) return null;
+  if (events.length === 1) {
+    return <ListEventCard event={firstEvent} timeZone={timeZone} isNext={isNext} />;
+  }
+
+  const startsAt = new Date(firstEvent.startsAt);
+  return (
+    <section
+      data-testid="group-coaching-event-group"
+      className="rounded-2xl border-2 border-primary/25 bg-card p-5 shadow-sm sm:p-6"
+    >
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            {isNext && <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-primary">Next time slot</span>}
+            <h2 className="text-lg font-semibold text-foreground">{choicePrompt(events)}</h2>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <CalendarDays className="h-4 w-4" />
+              {startsAt.toLocaleDateString(undefined, {
+                timeZone,
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Clock3 className="h-4 w-4" />
+              {startsAt.toLocaleTimeString(undefined, {
+                timeZone,
+                hour: "numeric",
+                minute: "2-digit",
+                timeZoneName: "short",
+              })}
+            </span>
+          </div>
+        </div>
+        <span className="w-fit shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+          {events.length} options
+        </span>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {events.map((event) => (
+          <ListEventCard
+            key={event.id}
+            event={event}
+            timeZone={timeZone}
+            isNext={false}
+            grouped
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -263,6 +491,10 @@ export function GroupCoachingScheduleClient() {
         return state === "upcoming" || state === "live";
       }),
     [events],
+  );
+  const activeEventGroups = useMemo(
+    () => groupEventsByStartTime(activeEvents),
+    [activeEvents],
   );
   const cancelledEvents = useMemo(
     () => events.filter((event) => eventState(event) === "cancelled"),
@@ -379,7 +611,9 @@ export function GroupCoachingScheduleClient() {
             </div>
           </div>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-            Find your next live session, sign up, and join from one place. All times are shown in your timezone.
+            Find your next live session and join from one place. Sessions at the
+            same time are grouped so you can choose the right level. All times are
+            shown in your timezone.
           </p>
         </div>
         {timeZoneConfirmed && (
@@ -522,12 +756,12 @@ export function GroupCoachingScheduleClient() {
             >
               {(eventsByCalendarDay.get(selectedDateKey) ?? []).length > 0 ? (
                 <div className="grid gap-3 md:grid-cols-2">
-                  {(eventsByCalendarDay.get(selectedDateKey) ?? []).map((event) => (
-                    <CalendarEventCard
-                      key={event.id}
-                      event={event}
+                  {groupEventsByStartTime(eventsByCalendarDay.get(selectedDateKey) ?? []).map((group) => (
+                    <CalendarEventSlot
+                      key={group.key}
+                      events={group.events}
                       timeZone={timeZone}
-                      isNext={event.id === activeEvents[0]?.id}
+                      isNext={group.events.some((event) => event.id === activeEvents[0]?.id)}
                       expanded
                     />
                   ))}
@@ -598,12 +832,12 @@ export function GroupCoachingScheduleClient() {
                             </div>
                           )}
                           <div className="space-y-2">
-                            {dayEvents.map((event) => (
-                              <CalendarEventCard
-                                key={event.id}
-                                event={event}
+                            {groupEventsByStartTime(dayEvents).map((group) => (
+                              <CalendarEventSlot
+                                key={group.key}
+                                events={group.events}
                                 timeZone={timeZone}
-                                isNext={event.id === activeEvents[0]?.id}
+                                isNext={group.events.some((event) => event.id === activeEvents[0]?.id)}
                               />
                             ))}
                           </div>
@@ -621,89 +855,14 @@ export function GroupCoachingScheduleClient() {
         </section>
       ) : (
         <div className="space-y-4" data-testid="group-coaching-events">
-          {activeEvents.map((event, index) => {
-            const state = eventState(event);
-            const startsAt = new Date(event.startsAt);
-            const details = getEventDetails(event.description);
-            const session = getCoachingSessionPresentation(event.title);
-            const isCantonese = session.language === "cantonese";
-            return (
-              <article
-                key={event.id}
-                data-language={session.language}
-                className={`relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6 ${isCantonese ? "border-orange-300 bg-orange-50/60 dark:border-orange-800 dark:bg-orange-950/20" : "border-indigo-200 bg-indigo-50/50 dark:border-indigo-800 dark:bg-indigo-950/20"}`}
-                data-testid="group-coaching-event"
-              >
-                <div className={`absolute inset-y-0 left-0 w-1 ${isCantonese ? "bg-orange-500" : "bg-indigo-600"}`} />
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {index === 0 && state !== "live" && <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-primary">Next session</span>}
-                      <h2 className="text-lg font-semibold text-foreground">
-                        {session.name}
-                      </h2>
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${isCantonese ? "bg-orange-200/80 text-orange-900 dark:bg-orange-900/60 dark:text-orange-100" : "bg-indigo-200/80 text-indigo-900 dark:bg-indigo-900/60 dark:text-indigo-100"}`}>
-                        {session.languageLabel}
-                      </span>
-                      {state === "live" && (
-                        <span className="rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
-                          Live now
-                        </span>
-                      )}
-                    </div>
-                    {details.summary && (
-                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                        {details.summary}
-                      </p>
-                    )}
-                    {details.repeatLabel && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                        <Repeat2 className="h-3.5 w-3.5" /> Every {details.repeatLabel}
-                      </span>
-                    )}
-                    <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
-                      <span className="inline-flex items-center gap-1.5">
-                        <CalendarDays className="h-4 w-4" />
-                        {startsAt.toLocaleDateString(undefined, {
-                          timeZone,
-                          weekday: "long",
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <Clock3 className="h-4 w-4" />
-                        {startsAt.toLocaleTimeString(undefined, {
-                          timeZone,
-                          hour: "numeric",
-                          minute: "2-digit",
-                          timeZoneName: "short",
-                        })}{" "}
-                        · {event.durationMinutes} min
-                      </span>
-                      {event.hostName && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <UserRound className="h-4 w-4" /> {event.hostName}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col gap-2 sm:min-w-40">
-                    {details.signupUrl && (
-                      <a href={details.signupUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5">
-                        Sign up <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    )}
-                    <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors ${isCantonese ? "bg-orange-600 hover:bg-orange-700" : "bg-indigo-600 hover:bg-indigo-700"}`}>
-                      <Video className="h-4 w-4" /> {state === "live" ? "Join now" : "Join session"}
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+          {activeEventGroups.map((group, index) => (
+            <ListEventSlot
+              key={group.key}
+              events={group.events}
+              timeZone={timeZone}
+              isNext={index === 0}
+            />
+          ))}
         </div>
       )}
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { readerTypographySizes } from "@/lib/reader-typography";
+import {
+  coachingTypographySizes,
+  readerTypographySizes,
+} from "@/lib/reader-typography";
 
 describe("reader typography", () => {
   it("keeps Chinese visually primary at every supported size", () => {
@@ -8,5 +11,12 @@ describe("reader typography", () => {
       expect(sizes.romanizationSize).toBeLessThan(chineseSize);
       expect(sizes.englishSize).toBeLessThan(chineseSize);
     }
+  });
+
+  it("keeps coaching cues readable during screen sharing", () => {
+    expect(coachingTypographySizes(18)).toEqual({
+      romanizationSize: 22,
+      englishSize: 20,
+    });
   });
 });

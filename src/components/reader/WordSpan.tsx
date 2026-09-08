@@ -10,7 +10,10 @@ import {
   extractToneFromJyutping,
   getToneColorClass,
 } from "@/lib/tone-colors";
-import { readerTypographySizes } from "@/lib/reader-typography";
+import {
+  readerTypographySizes,
+  type ReaderTypographySizes,
+} from "@/lib/reader-typography";
 
 // Keep AnnotationMode export for Listening tab backward compatibility
 export type AnnotationMode = "pinyin" | "jyutping" | "plain";
@@ -42,6 +45,8 @@ export interface WordSpanProps {
    * entry as smaller word segments. Null entries represent punctuation.
    */
   romanization?: readonly (string | null)[];
+  /** Optional context-specific sizes; the general reader ratios remain the default. */
+  typographySizes?: ReaderTypographySizes;
 }
 
 function getPinyinArray(text: string): string[] {
@@ -122,6 +127,7 @@ export const WordSpan = React.memo(function WordSpan({
   toneColorsEnabled = false,
   selectableAnnotations = false,
   romanization,
+  typographySizes,
 }: WordSpanProps) {
   // Resolve props: legacy annotationMode overrides booleans
   const isLegacy = !!annotationMode;
@@ -134,7 +140,7 @@ export const WordSpan = React.memo(function WordSpan({
   const showEnglish = isLegacy ? false : ((showEnglishProp ?? false) && !!englishGloss);
 
   const { romanizationSize: annotationSize, englishSize } =
-    readerTypographySizes(fontSize);
+    typographySizes ?? readerTypographySizes(fontSize);
 
   // All hooks called unconditionally
   const legacyContent = useMemo(() => {
