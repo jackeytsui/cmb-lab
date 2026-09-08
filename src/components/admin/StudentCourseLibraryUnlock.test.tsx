@@ -160,15 +160,16 @@ describe("StudentCourseLibraryUnlock", () => {
     );
 
     expect(
-      await screen.findByText("Course access will be granted")
+      await screen.findByRole("heading", { name: "Assign a new course" })
     ).toBeTruthy();
     expect(
-      screen.getByRole("option", { name: "Advanced — not assigned" })
+      screen.getByRole("option", { name: "Advanced" })
     ).toBeTruthy();
     expect(
       screen.getByRole("button", {
-        name: "Grant course & set next lesson",
+        name: "Assign selected course",
       })
     ).toBeTruthy();
+    expect(screen.getByText("No courses assigned yet")).toBeTruthy();
   });
 });

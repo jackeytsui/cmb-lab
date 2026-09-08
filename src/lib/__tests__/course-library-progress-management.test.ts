@@ -12,13 +12,18 @@ describe("Course Library progress management", () => {
       "src/components/admin/StudentCourseLibraryUnlock.tsx",
     );
 
-    expect(component).toContain("Set the student&apos;s next lesson");
+    expect(component).toContain("Assign a new course");
+    expect(component).toContain("Unassigned course");
+    expect(component).toContain("Assign selected course");
+    expect(component).toContain("Manage progress for assigned courses");
+    expect(component).toContain("Assigned course");
     expect(component).toContain("Lesson to open next");
     expect(component).toContain('action: "set_next_lesson"');
     expect(component).toContain('action: "grant_course"');
-    expect(component).toContain("Assign course only");
     expect(component).toContain("Admin, coach &amp; consultant");
-    expect(component).toMatch(/quiz\s+answers, submissions, recordings, notes/);
+    expect(component).toMatch(
+      /quiz\s+answers,\s+submissions, recordings, notes/,
+    );
   });
 
   it("uses the narrow support scope and records an audit event", () => {

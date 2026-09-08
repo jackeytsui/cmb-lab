@@ -98,6 +98,7 @@ function selectionForCourse(course: CourseSummary | undefined) {
 
 export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
+  const [selectedGrantCourseId, setSelectedGrantCourseId] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedModuleId, setSelectedModuleId] = useState("");
   const [selectedLessonId, setSelectedLessonId] = useState("");
@@ -124,9 +125,13 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         }
 
         const nextCourses = data.courses ?? [];
-        const firstCourse = nextCourses[0];
+        const firstCourse = nextCourses.find((course) => course.hasAccess);
+        const firstUnassignedCourse = nextCourses.find(
+          (course) => !course.hasAccess,
+        );
         const selection = selectionForCourse(firstCourse);
         setCourses(nextCourses);
+        setSelectedGrantCourseId(firstUnassignedCourse?.id ?? "");
         setSelectedCourseId(firstCourse?.id ?? "");
         setSelectedModuleId(selection.moduleId);
         setSelectedLessonId(selection.lessonId);
@@ -157,6 +162,10 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
 
   const selectedCourse =
     courses.find((course) => course.id === selectedCourseId) ?? null;
+  const selectedGrantCourse =
+    courses.find((course) => course.id === selectedGrantCourseId) ?? null;
+  const assignedCourses = courses.filter((course) => course.hasAccess);
+  const unassignedCourses = courses.filter((course) => !course.hasAccess);
   const selectedModule =
     selectedCourse?.modules.find((module) => module.id === selectedModuleId) ??
     null;
@@ -180,9 +189,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
           .slice(selectedLessonIndex)
           .filter((lesson) => lesson.isComplete).length
       : 0;
-  const needsCourseAccess = selectedCourse?.hasAccess === false;
-  const hasChanges =
-    needsCourseAccess || lessonsToComplete > 0 || lessonsToReopen > 0;
+  const hasChanges = lessonsToComplete > 0 || lessonsToReopen > 0;
 
   const handleCourseChange = (courseId: string) => {
     const course = courses.find((item) => item.id === courseId);
@@ -230,11 +237,8 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
       setConfirmOpen(false);
       const completed = data.result?.lessonsCompleted ?? lessonsToComplete;
       const reopened = data.result?.lessonsReopened ?? lessonsToReopen;
-      const granted = data.result?.courseAccessGranted ?? needsCourseAccess;
       toast.success(
-        `${granted ? `${selectedCourse.title} access granted. ` : ""}${
-          selectedLesson.title
-        } is now ${studentName}'s next lesson. ${completed} prerequisite lesson${
+        `${selectedLesson.title} is now ${studentName}'s next lesson. ${completed} prerequisite lesson${
           completed === 1 ? "" : "s"
         } completed; ${reopened} lesson${reopened === 1 ? "" : "s"} reopened.`,
       );
@@ -250,7 +254,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
   };
 
   const handleGrantCourse = async () => {
-    if (!selectedCourse || !needsCourseAccess || saving) return;
+    if (!selectedGrantCourse || selectedGrantCourse.hasAccess || saving) return;
 
     setSaving(true);
     try {
@@ -261,7 +265,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "grant_course",
-            courseId: selectedCourse.id,
+            courseId: selectedGrantCourse.id,
           }),
         },
       );
@@ -270,9 +274,21 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         throw new Error(data.error || "Failed to grant course access");
       }
 
-      if (data.courses) setCourses(data.courses);
+      const nextCourses = data.courses ?? courses.map((course) =>
+        course.id === selectedGrantCourse.id
+          ? { ...course, hasAccess: true }
+          : course,
+      );
+      const progressSelection = selectionForCourse(selectedGrantCourse);
+      setCourses(nextCourses);
+      setSelectedGrantCourseId(
+        nextCourses.find((course) => !course.hasAccess)?.id ?? "",
+      );
+      setSelectedCourseId(selectedGrantCourse.id);
+      setSelectedModuleId(progressSelection.moduleId);
+      setSelectedLessonId(progressSelection.lessonId);
       setGrantConfirmOpen(false);
-      toast.success(`${selectedCourse.title} assigned to ${studentName}.`);
+      toast.success(`${selectedGrantCourse.title} assigned to ${studentName}.`);
     } catch (updateError) {
       toast.error(
         updateError instanceof Error
@@ -327,161 +343,218 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <LocateFixed className="size-5" aria-hidden="true" />
+    <div className="space-y-5">
+      <section className="rounded-xl border border-primary/30 bg-primary/5 p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <KeyRound className="size-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="font-semibold text-foreground">
+                Assign a new course
+              </h3>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                Grant access to any published course the student does not have
+                yet. Standard and custom courses both appear here automatically.
+                Existing progress and student work will not be changed.
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+            <ShieldCheck className="size-3.5" aria-hidden="true" />
+            Admin, coach &amp; consultant
           </span>
-          <div>
-            <h3 className="font-semibold text-foreground">
-              Set the student&apos;s next lesson
-            </h3>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-              Choose any published course. If it is not assigned yet, saving
-              grants only that course. Moving forward or backward adjusts only
-              completion flags; quiz answers, submissions, recordings, notes,
-              and viewing history are preserved.
-            </p>
+        </div>
+
+        {unassignedCourses.length > 0 ? (
+          <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-end">
+            <label className="flex-1 space-y-1.5 text-sm font-medium text-foreground">
+              Unassigned course
+              <select
+                value={selectedGrantCourseId}
+                onChange={(event) =>
+                  setSelectedGrantCourseId(event.target.value)
+                }
+                className="block h-11 w-full rounded-md border border-primary/40 bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+              >
+                {unassignedCourses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              type="button"
+              size="lg"
+              onClick={() => setGrantConfirmOpen(true)}
+              disabled={!selectedGrantCourse || saving}
+              className="lg:min-w-56"
+            >
+              <KeyRound aria-hidden="true" />
+              Assign selected course
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-5 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+            <CheckCircle2 className="size-4" aria-hidden="true" />
+            Student already has access to every published course.
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <LocateFixed className="size-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="font-semibold text-foreground">
+                Manage progress for assigned courses
+              </h3>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                Choose where the student should continue. Moving forward or
+                backward adjusts completion flags only; quiz answers,
+                submissions, recordings, notes, and viewing history are
+                preserved.
+              </p>
+            </div>
           </div>
         </div>
-        <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-          <ShieldCheck className="size-3.5" aria-hidden="true" />
-          Admin, coach &amp; consultant
-        </span>
-      </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-3">
-        <label className="space-y-1.5 text-sm font-medium text-foreground">
-          Course
-          <select
-            value={selectedCourseId}
-            onChange={(event) => handleCourseChange(event.target.value)}
-            className="block h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-          >
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.title}
-                {course.hasAccess ? "" : " — not assigned"}
-              </option>
-            ))}
-          </select>
-        </label>
+        {assignedCourses.length === 0 ? (
+          <div className="mt-5 rounded-lg border border-dashed border-border bg-muted/20 p-5 text-center">
+            <BookOpenCheck className="mx-auto size-7 text-muted-foreground" />
+            <p className="mt-2 text-sm font-medium text-foreground">
+              No courses assigned yet
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Assign a course above, then its progress controls will appear
+              here.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="mt-5 grid gap-4 lg:grid-cols-3">
+              <label className="space-y-1.5 text-sm font-medium text-foreground">
+                Assigned course
+                <select
+                  value={selectedCourseId}
+                  onChange={(event) => handleCourseChange(event.target.value)}
+                  className="block h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+                >
+                  {assignedCourses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-        <label className="space-y-1.5 text-sm font-medium text-foreground">
-          Chapter
-          <select
-            value={selectedModuleId}
-            onChange={(event) => handleModuleChange(event.target.value)}
-            className="block h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-          >
-            {selectedCourse?.modules.map((chapter, index) => (
-              <option
-                key={chapter.id}
-                value={chapter.id}
-                disabled={chapter.lessonCount === 0}
+              <label className="space-y-1.5 text-sm font-medium text-foreground">
+                Chapter
+                <select
+                  value={selectedModuleId}
+                  onChange={(event) => handleModuleChange(event.target.value)}
+                  className="block h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+                >
+                  {selectedCourse?.modules.map((chapter, index) => (
+                    <option
+                      key={chapter.id}
+                      value={chapter.id}
+                      disabled={chapter.lessonCount === 0}
+                    >
+                      {index + 1}. {chapterLabel(chapter)}
+                      {chapter.lessonCount === 0
+                        ? " — no lessons"
+                        : chapter.isComplete
+                          ? " — complete"
+                          : chapter.isCurrent
+                            ? " — current"
+                            : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5 text-sm font-medium text-foreground">
+                Lesson to open next
+                <select
+                  value={selectedLessonId}
+                  onChange={(event) => setSelectedLessonId(event.target.value)}
+                  disabled={
+                    !selectedModule || selectedModule.lessons.length === 0
+                  }
+                  className="block h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
+                >
+                  {selectedModule?.lessons.map((lesson, index) => (
+                    <option key={lesson.id} value={lesson.id}>
+                      {index + 1}. {lesson.title}
+                      {lesson.id === selectedCourse?.currentLessonId
+                        ? " — next"
+                        : lesson.isComplete
+                          ? " — complete"
+                          : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {selectedCourse && selectedLesson ? (
+              <div className="mt-4 grid gap-3 rounded-lg bg-muted/40 px-4 py-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+                <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                  <KeyRound className="size-4" aria-hidden="true" />
+                  Student has course access
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-foreground">
+                  <CheckCircle2
+                    className="size-4 text-emerald-500"
+                    aria-hidden="true"
+                  />
+                  {selectedCourse.completedLessons} / {selectedCourse.totalLessons}{" "}
+                  lessons complete
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                  <CircleDot
+                    className="size-4 text-primary"
+                    aria-hidden="true"
+                  />
+                  {lessonsToComplete} earlier lesson
+                  {lessonsToComplete === 1 ? "" : "s"} will be completed
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                  <CircleDot
+                    className="size-4 text-amber-500"
+                    aria-hidden="true"
+                  />
+                  {lessonsToReopen} completed lesson
+                  {lessonsToReopen === 1 ? "" : "s"} will be reopened
+                </span>
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                onClick={() => setConfirmOpen(true)}
+                disabled={!selectedLesson || !hasChanges}
               >
-                {index + 1}. {chapterLabel(chapter)}
-                {chapter.lessonCount === 0
-                  ? " — no lessons"
-                  : chapter.isComplete
-                    ? " — complete"
-                    : chapter.isCurrent
-                      ? " — current"
-                      : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-1.5 text-sm font-medium text-foreground">
-          Lesson to open next
-          <select
-            value={selectedLessonId}
-            onChange={(event) => setSelectedLessonId(event.target.value)}
-            disabled={!selectedModule || selectedModule.lessons.length === 0}
-            className="block h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
-          >
-            {selectedModule?.lessons.map((lesson, index) => (
-              <option key={lesson.id} value={lesson.id}>
-                {index + 1}. {lesson.title}
-                {lesson.id === selectedCourse?.currentLessonId
-                  ? " — next"
-                  : lesson.isComplete
-                    ? " — complete"
-                    : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {selectedCourse && selectedLesson ? (
-        <div className="mt-4 grid gap-3 rounded-lg bg-muted/40 px-4 py-3 text-sm md:grid-cols-2 xl:grid-cols-4">
-          <span
-            className={`inline-flex items-center gap-1.5 ${
-              needsCourseAccess
-                ? "text-amber-700 dark:text-amber-300"
-                : "text-emerald-700 dark:text-emerald-300"
-            }`}
-          >
-            <KeyRound className="size-4" aria-hidden="true" />
-            {needsCourseAccess
-              ? "Course access will be granted"
-              : "Student has course access"}
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-foreground">
-            <CheckCircle2
-              className="size-4 text-emerald-500"
-              aria-hidden="true"
-            />
-            {selectedCourse.completedLessons} / {selectedCourse.totalLessons}{" "}
-            lessons complete
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <CircleDot className="size-4 text-primary" aria-hidden="true" />
-            {lessonsToComplete} earlier lesson
-            {lessonsToComplete === 1 ? "" : "s"} will be completed
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <CircleDot className="size-4 text-amber-500" aria-hidden="true" />
-            {lessonsToReopen} completed lesson{lessonsToReopen === 1 ? "" : "s"}{" "}
-            will be reopened
-          </span>
-        </div>
-      ) : null}
-
-      <div className="mt-5 flex flex-wrap justify-end gap-2">
-        {needsCourseAccess ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setGrantConfirmOpen(true)}
-            disabled={saving}
-          >
-            <KeyRound aria-hidden="true" />
-            Assign course only
-          </Button>
-        ) : null}
-        <Button
-          type="button"
-          onClick={() => setConfirmOpen(true)}
-          disabled={!selectedLesson || !hasChanges}
-        >
-          <LocateFixed aria-hidden="true" />
-          {needsCourseAccess
-            ? "Grant course & set next lesson"
-            : hasChanges
-              ? "Set as next lesson"
-              : "Already the next lesson"}
-        </Button>
-      </div>
+                <LocateFixed aria-hidden="true" />
+                {hasChanges ? "Set as next lesson" : "Already the next lesson"}
+              </Button>
+            </div>
+          </>
+        )}
+      </section>
 
       <AlertDialog open={grantConfirmOpen} onOpenChange={setGrantConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Assign {selectedCourse?.title ?? "this course"}?
+              Assign {selectedGrantCourse?.title ?? "this course"}?
             </AlertDialogTitle>
             <AlertDialogDescription className="leading-6">
               This gives {studentName} access to the selected course without
@@ -509,17 +582,9 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {needsCourseAccess
-                ? `Grant ${selectedCourse?.title ?? "course"} and set `
-                : "Set "}
-              {selectedLesson?.title ?? "this lesson"} as next?
+              Set {selectedLesson?.title ?? "this lesson"} as next?
             </AlertDialogTitle>
             <AlertDialogDescription className="leading-6">
-              {needsCourseAccess
-                ? `This grants ${studentName} access only to ${
-                    selectedCourse?.title ?? "the selected course"
-                  }. `
-                : ""}
               This will complete {lessonsToComplete} unfinished prerequisite
               lesson{lessonsToComplete === 1 ? "" : "s"} and reopen{" "}
               {lessonsToReopen} completed lesson
@@ -538,11 +603,7 @@ export function StudentCourseLibraryUnlock({ studentId, studentName }: Props) {
               }}
             >
               {saving ? <Loader2 className="animate-spin" /> : <LocateFixed />}
-              {saving
-                ? "Updating…"
-                : needsCourseAccess
-                  ? "Grant access & confirm"
-                  : "Confirm next lesson"}
+              {saving ? "Updating…" : "Confirm next lesson"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
