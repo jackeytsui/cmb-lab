@@ -261,8 +261,20 @@ export function DiaryViewer({
           </h3>
           {lines !== null ? (
             <div className="rounded-md border border-border bg-card p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-3">
+              <div className="space-y-3">
+                {!locked ? (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleEdit}
+                      className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-accent"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Edit Chinese
+                    </button>
+                  </div>
+                ) : null}
+                <div className="space-y-4">
                   {lines.map((line, i) => (
                     <div key={`${line.chineseText}-${i}`} className="space-y-2">
                       <ModelAnnotatedSentence
@@ -313,16 +325,6 @@ export function DiaryViewer({
                     </div>
                   ))}
                 </div>
-                {!locked && (
-                  <button
-                    type="button"
-                    onClick={handleEdit}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-accent"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    Edit Chinese
-                  </button>
-                )}
               </div>
             </div>
           ) : (
