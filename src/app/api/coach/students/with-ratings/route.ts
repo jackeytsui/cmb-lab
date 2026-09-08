@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
   }
 
   const viewedUser = (await getCurrentUser()) ?? realUser;
+  const supportMode = viewedUser.role === "consultant";
 
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") || "";
@@ -41,8 +42,10 @@ export async function GET(request: NextRequest) {
   const conditions = [
     eq(users.role, "student"),
     isNull(users.deletedAt),
-    excludeWhitelistedUsersSql(users.id),
   ];
+  if (!supportMode) {
+    conditions.push(excludeWhitelistedUsersSql(users.id));
+  }
 
   if (search) {
     conditions.push(
@@ -53,14 +56,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const targetCoachId = resolveCoachStudentScope({
-    realUserId: realUser.id,
-    realRole: realUser.role,
-    viewedUserId: viewedUser.id,
-    viewedRole: viewedUser.role,
-    myStudents,
-    requestedCoachId: coachIdFilter,
-  });
+  const targetCoachId = supportMode
+    ? null
+    : resolveCoachStudentScope({
+        realUserId: realUser.id,
+        realRole: realUser.role,
+        viewedUserId: viewedUser.id,
+        viewedRole: viewedUser.role,
+        myStudents,
+        requestedCoachId: coachIdFilter,
+      });
   if (targetCoachId) {
     conditions.push(studentAssignedToCoach(targetCoachId));
   }
@@ -85,7 +90,7 @@ export async function GET(request: NextRequest) {
 
   // Fetch average ratings for each student (1:1 and inner circle separately)
   // We need ratings where the student is the rater, grouped by session type
-  const ratingRows = studentRows.length > 0
+  const ratingRows = !supportMode && studentRows.length > 0
     ? await db
         .select({
           studentId: coachingSessionRatings.userId,
@@ -158,5 +163,5 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return NextResponse.json({ students });
+  return NextResponse.json({ students, supportMode });
 }

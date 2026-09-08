@@ -15,7 +15,7 @@ describe("shared coach surface coverage", () => {
     let checked = 0;
     for (const file of files(path.join(process.cwd(), "src"))) {
       const source = readFileSync(file, "utf8");
-      for (const call of source.matchAll(/(?:canStaffAccessStudent|canAccessCoachingStudent)\(\{([\s\S]*?)\},?\s*\)/g)) {
+      for (const call of source.matchAll(/(?:canStaffAccessStudent|canAccessCoachingStudent|canAccessStudentSupportTools)\(\{([\s\S]*?)\},?\s*\)/g)) {
         expect(call[1], file).toContain("additionalCoachIds");
         checked++;
       }

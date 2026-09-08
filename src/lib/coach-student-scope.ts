@@ -64,6 +64,18 @@ export function canStaffAccessStudent({
 }
 
 /**
+ * Student-support tools have a deliberately narrower data surface than
+ * coaching records. Consultants may troubleshoot access for any student,
+ * while coaches remain limited to their assigned roster and administrators
+ * retain their existing global access.
+ */
+export function canAccessStudentSupportTools(
+  input: StaffStudentAccessInput,
+): boolean {
+  return input.actorRole === "consultant" || canStaffAccessStudent(input);
+}
+
+/**
  * Student-facing coaching reads allow learners to see only themselves, while
  * staff follow the same assigned-coach boundary as the coach workspace.
  */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canAccessCoachingStudent,
+  canAccessStudentSupportTools,
   canStaffAccessStudent,
   resolveCoachStudentScope,
 } from "@/lib/coach-student-scope";
@@ -124,6 +125,39 @@ describe("coach student data scope", () => {
         }),
       ).toBe(false);
     }
+  });
+
+  it("opens global access troubleshooting only to consultants", () => {
+    const unrelatedStudent = {
+      actorUserId: "staff-a",
+      assignedCoachId: "coach-b",
+      additionalCoachIds: ["coach-c"],
+    };
+
+    expect(
+      canAccessStudentSupportTools({
+        ...unrelatedStudent,
+        actorRole: "consultant",
+      }),
+    ).toBe(true);
+    expect(
+      canAccessStudentSupportTools({
+        ...unrelatedStudent,
+        actorRole: "coach",
+      }),
+    ).toBe(false);
+    expect(
+      canAccessStudentSupportTools({
+        ...unrelatedStudent,
+        actorRole: "operations",
+      }),
+    ).toBe(false);
+    expect(
+      canAccessStudentSupportTools({
+        ...unrelatedStudent,
+        actorRole: "admin",
+      }),
+    ).toBe(true);
   });
 
   it("limits coaching learner data to self, assigned staff, or administrators", () => {

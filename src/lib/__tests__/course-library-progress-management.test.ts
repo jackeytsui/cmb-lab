@@ -21,12 +21,12 @@ describe("Course Library progress management", () => {
     expect(component).toMatch(/quiz\s+answers, submissions, recordings, notes/);
   });
 
-  it("keeps the existing coach scope and records an audit event", () => {
+  it("uses the narrow support scope and records an audit event", () => {
     const route = source(
       "src/app/api/admin/students/[studentId]/course-library-unlock/route.ts",
     );
 
-    expect(route).toContain("canStaffAccessStudent");
+    expect(route).toContain("canAccessStudentSupportTools");
     expect(route).toContain("canProvideStudentSupport(actor.role)");
     expect(route).toContain("planManualLessonPosition");
     expect(route).toContain("course_progress.staff_reposition");

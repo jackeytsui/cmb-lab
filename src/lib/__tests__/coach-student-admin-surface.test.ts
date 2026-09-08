@@ -44,7 +44,7 @@ describe("coach student administration boundary", () => {
     expect(roles.match(/hasMinimumRole\("admin"\)/g)).toHaveLength(3);
     expect(roles).not.toContain('hasMinimumRole("coach")');
     expect(studentTags).toContain("getStaffStudentAccessContext");
-    expect(studentTags).toContain("canStaffAccessStudent");
+    expect(studentTags).toContain("canAccessStudentSupportTools");
     expect(studentTags).toContain("setStaffTagOverride");
     expect(studentTags).not.toContain('hasMinimumRole("admin")');
   });

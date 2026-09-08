@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, getNeonSql } from "@/db";
 import { users } from "@/db/schema";
 import { getCurrentUser, getRealUser } from "@/lib/auth";
-import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { canAccessStudentSupportTools } from "@/lib/coach-student-scope";
 import {
   planManualChapterUnlock,
   planManualLessonPosition,
@@ -140,7 +140,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   if (
     !student ||
     student.role !== "student" ||
-    !canStaffAccessStudent({
+    !canAccessStudentSupportTools({
       actorUserId: authorization.actor.id,
       actorRole: authorization.actor.role,
       assignedCoachId: student.assignedCoachId,
@@ -188,7 +188,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (
     !student ||
     student.role !== "student" ||
-    !canStaffAccessStudent({
+    !canAccessStudentSupportTools({
       actorUserId: authorization.actor.id,
       actorRole: authorization.actor.role,
       assignedCoachId: student.assignedCoachId,

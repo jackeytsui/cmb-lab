@@ -30,6 +30,7 @@ export default async function CoachStudentsPage() {
   }
 
   const isAdmin = currentDbUser.role === "admin";
+  const supportMode = currentDbUser.role === "consultant";
 
   // Fetch coaches list for the filter/assign dropdown
   let coaches: { id: string; name: string | null; email: string }[] = [];
@@ -54,6 +55,7 @@ export default async function CoachStudentsPage() {
     <div className="container mx-auto px-4 py-8">
       <CoachStudentsClient
         isAdmin={isAdmin}
+        supportMode={supportMode}
         canAddStudents={canProvideStudentSupport(currentDbUser.role)}
         coaches={coaches}
       />

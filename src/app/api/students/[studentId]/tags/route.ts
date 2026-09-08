@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { canStaffAccessStudent } from "@/lib/coach-student-scope";
+import { canAccessStudentSupportTools } from "@/lib/coach-student-scope";
 import { getStaffStudentAccessContext } from "@/lib/staff-student-access";
 import { getStudentTags } from "@/lib/tags";
 import { syncTagToGhl } from "@/lib/ghl/tag-sync";
@@ -36,7 +36,7 @@ async function authorizeStudentTagAccess(studentId: string) {
   });
   if (
     !student ||
-    !canStaffAccessStudent({
+    !canAccessStudentSupportTools({
       actorUserId: access.actor.id,
       actorRole: access.actor.role,
       assignedCoachId: student.assignedCoachId,
@@ -57,7 +57,7 @@ async function authorizeStudentTagAccess(studentId: string) {
 /**
  * GET /api/students/[studentId]/tags
  * List all tags for a student.
- * Requires coach or administrator role.
+ * Requires student-support staff access.
  */
 export async function GET(
   _request: NextRequest,
@@ -82,7 +82,7 @@ export async function GET(
  * POST /api/students/[studentId]/tags
  * Assign a tag to a student.
  * Body: { tagId: string }
- * Requires coach or administrator role. Staff choices are durable overrides
+ * Requires student-support staff access. Staff choices are durable overrides
  * and are not reverted by automated purchase reconciliation.
  */
 export async function POST(
@@ -130,7 +130,7 @@ export async function POST(
  * DELETE /api/students/[studentId]/tags
  * Remove a tag from a student.
  * Body: { tagId: string }
- * Requires coach or administrator role. Removal is also a durable override.
+ * Requires student-support staff access. Removal is also a durable override.
  */
 export async function DELETE(
   request: NextRequest,

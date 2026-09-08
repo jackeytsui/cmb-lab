@@ -41,6 +41,7 @@ interface Coach {
 
 interface Props {
   isAdmin: boolean;
+  supportMode: boolean;
   canAddStudents: boolean;
   coaches: Coach[];
 }
@@ -97,6 +98,7 @@ function SortButton({
 
 export function CoachStudentsClient({
   isAdmin,
+  supportMode,
   canAddStudents,
   coaches,
 }: Props) {
@@ -105,7 +107,7 @@ export function CoachStudentsClient({
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [coachFilter, setCoachFilter] = useState<string>(
-    isAdmin ? "all" : "mine",
+    isAdmin || supportMode ? "all" : "mine",
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCoachId, setBulkCoachId] = useState<string>("");
@@ -246,6 +248,8 @@ export function CoachStudentsClient({
           <p className="text-muted-foreground text-sm">
             {isAdmin
               ? "View all students, manage coach assignments, unlock roadmap chapters, and track coaching ratings."
+              : supportMode
+                ? "Find any student and troubleshoot course access, lesson progress, and tags. Private coaching records remain restricted."
               : "View your assigned students, manage learning access, and review coaching ratings."}
           </p>
         </div>
@@ -386,6 +390,7 @@ export function CoachStudentsClient({
           sortKey={sortKey}
           sortDir={sortDir}
           onToggleSort={handleToggleSort}
+          supportMode={supportMode}
         />
       )}
     </div>
@@ -401,6 +406,7 @@ function StudentTable({
   sortKey,
   sortDir,
   onToggleSort,
+  supportMode,
 }: {
   students: StudentRow[];
   showCoach: boolean;
@@ -410,6 +416,7 @@ function StudentTable({
   sortKey: SortKey;
   sortDir: SortDir;
   onToggleSort: (key: SortKey) => void;
+  supportMode: boolean;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -433,37 +440,45 @@ function StudentTable({
                   Coach
                 </th>
               )}
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                <span className="inline-flex items-center">
-                  1:1 Rating
-                  <SortButton
-                    active={sortKey === "rating1on1"}
-                    direction={sortDir}
-                    onClick={() => onToggleSort("rating1on1")}
-                  />
-                </span>
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                <span className="inline-flex items-center">
-                  Inner Circle Rating
-                  <SortButton
-                    active={sortKey === "ratingInnerCircle"}
-                    direction={sortDir}
-                    onClick={() => onToggleSort("ratingInnerCircle")}
-                  />
-                </span>
-              </th>
+              {!supportMode ? (
+                <>
+                  <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <span className="inline-flex items-center">
+                      1:1 Rating
+                      <SortButton
+                        active={sortKey === "rating1on1"}
+                        direction={sortDir}
+                        onClick={() => onToggleSort("rating1on1")}
+                      />
+                    </span>
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <span className="inline-flex items-center">
+                      Inner Circle Rating
+                      <SortButton
+                        active={sortKey === "ratingInnerCircle"}
+                        direction={sortDir}
+                        onClick={() => onToggleSort("ratingInnerCircle")}
+                      />
+                    </span>
+                  </th>
+                </>
+              ) : null}
               <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Actions
               </th>
             </tr>
           </thead>
           <tbody>
-            {students.map((student) => (
-              <tr
-                key={student.id}
-                className="border-b border-border/60 hover:bg-muted/30 transition-colors"
-              >
+            {students.map((student) => {
+              const supportHref = supportMode
+                ? `/coach/students/${student.id}`
+                : `/admin/students/${student.id}`;
+              return (
+                <tr
+                  key={student.id}
+                  className="border-b border-border/60 hover:bg-muted/30 transition-colors"
+                >
                 {showBulk && (
                   <td className="w-10 px-3 py-3">
                     <input
@@ -476,7 +491,7 @@ function StudentTable({
                 )}
                 <td className="px-4 py-3 text-sm text-foreground font-medium">
                   <Link
-                    href={`/admin/students/${student.id}`}
+                    href={supportHref}
                     className="hover:text-primary transition-colors"
                   >
                     {student.name || student.email.split("@")[0]}
@@ -500,38 +515,45 @@ function StudentTable({
                     ))}
                   </td>
                 )}
-                <td className="px-4 py-3 text-center">
-                  <StarRating
-                    value={student.avgRating1on1}
-                    count={student.ratingCount1on1}
-                  />
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <StarRating
-                    value={student.avgRatingInnerCircle}
-                    count={student.ratingCountInnerCircle}
-                  />
-                </td>
+                {!supportMode ? (
+                  <>
+                    <td className="px-4 py-3 text-center">
+                      <StarRating
+                        value={student.avgRating1on1}
+                        count={student.ratingCount1on1}
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <StarRating
+                        value={student.avgRatingInnerCircle}
+                        count={student.ratingCountInnerCircle}
+                      />
+                    </td>
+                  </>
+                ) : null}
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">
                     <Link
-                      href={`/admin/students/${student.id}#course-library-progress`}
+                      href={`${supportHref}#course-library-progress`}
                       className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
                     >
                       <BookOpenCheck className="size-3.5" />
                       Progress &amp; unlock
                     </Link>
-                    <Link
-                      href={`/coaching/one-on-one?student=${encodeURIComponent(student.email)}`}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:border-primary/40 hover:text-primary transition-colors"
-                    >
-                      <FileText className="size-3.5" />
-                      1:1 Notes
-                    </Link>
+                    {!supportMode ? (
+                      <Link
+                        href={`/coaching/one-on-one?student=${encodeURIComponent(student.email)}`}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:border-primary/40 hover:text-primary transition-colors"
+                      >
+                        <FileText className="size-3.5" />
+                        1:1 Notes
+                      </Link>
+                    ) : null}
                   </div>
                 </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
