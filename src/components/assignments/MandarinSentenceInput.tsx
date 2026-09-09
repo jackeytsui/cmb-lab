@@ -291,8 +291,9 @@ export function MandarinSentenceInput({
           <div className="space-y-2 border-t border-amber-500/20 pt-2">
             <p className="flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              Automatic English translation is temporarily unavailable. Add
-              your English translation below to continue.
+              Automatic English translation is temporarily unavailable. Your
+              Chinese and pinyin are still here—add the English meaning below
+              to submit now, or retry the automatic translation.
             </p>
             <label className="block">
               <span className="text-[11px] font-medium text-muted-foreground">

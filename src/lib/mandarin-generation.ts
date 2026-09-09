@@ -39,7 +39,8 @@ export async function fetchProperTranslations(
         const translations = data.translations ?? null;
         if (
           Array.isArray(translations) &&
-          translations.some((t) => typeof t === "string" && t.trim())
+          translations.length === cleanTexts.length &&
+          translations.every((t) => typeof t === "string" && t.trim())
         ) {
           return translations;
         }

@@ -54,4 +54,17 @@ describe("Cantonese-to-English routing", () => {
     await expect(fetchProperTranslations(["你好"], "zh-CN")).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("rejects a partial batch instead of misaligning translations", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ translations: ["Hello", ""] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchProperTranslations(["你好", "朋友"], "zh-CN"),
+    ).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

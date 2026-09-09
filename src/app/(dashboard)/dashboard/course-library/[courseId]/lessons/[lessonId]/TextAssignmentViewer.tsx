@@ -229,7 +229,8 @@ export function TextAssignmentViewer({
           {!allReady && (
             <p className="text-xs text-muted-foreground">
               Complete every sentence box (press Enter to generate pinyin and
-              English) before submitting.
+              English) before submitting. If automatic translation is
+              unavailable, type the English meaning in the required field.
             </p>
           )}
         </div>

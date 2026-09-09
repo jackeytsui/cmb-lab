@@ -11,7 +11,12 @@ vi.mock("@clerk/nextjs/server", () => ({
 vi.mock("ai", () => ({
   generateText: mocks.generateText,
   Output: {
-    array: vi.fn(({ element }) => ({ type: "array", element })),
+    object: vi.fn(({ name, description, schema }) => ({
+      type: "object",
+      name,
+      description,
+      schema,
+    })),
   },
 }));
 vi.mock("@ai-sdk/openai", () => ({
@@ -80,7 +85,7 @@ describe("batch translation resilience", () => {
   });
 
   it("still returns a normal translation when the provider succeeds", async () => {
-    mocks.generateText.mockResolvedValue({ output: ["What do you want?"] });
+    mocks.generateText.mockResolvedValue({ text: "What do you want?" });
 
     const { POST } = await import("./route");
     const response = await POST(translationRequest());
@@ -92,13 +97,15 @@ describe("batch translation resilience", () => {
     });
     expect(mocks.generateText).toHaveBeenCalledWith(
       expect.objectContaining({
-        output: expect.objectContaining({ type: "array" }),
+        system: expect.stringContaining("Return ONLY the English translation"),
+        prompt: "你想要什么",
       }),
     );
+    expect(mocks.generateText.mock.calls[0]?.[0]).not.toHaveProperty("output");
   });
 
-  it("uses schema-backed output for a single short phrase", async () => {
-    mocks.generateText.mockResolvedValue({ output: ["although"] });
+  it("uses plain text output for a single short phrase", async () => {
+    mocks.generateText.mockResolvedValue({ text: "although" });
 
     const { POST } = await import("./route");
     const response = await POST(
@@ -115,6 +122,54 @@ describe("batch translation resilience", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       translations: ["although"],
+    });
+  });
+
+  it("requires an exact source-aligned schema for a real batch", async () => {
+    mocks.generateText.mockResolvedValue({
+      output: { translations: ["Hello", "Friend"] },
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new NextRequest("https://example.com/api/reader/translate-batch", {
+        method: "POST",
+        body: JSON.stringify({
+          texts: ["你好", "朋友"],
+          mode: "proper",
+          language: "zh-CN",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      translations: ["Hello", "Friend"],
+    });
+    const output = mocks.generateText.mock.calls[0]?.[0]?.output;
+    expect(output).toMatchObject({
+      type: "object",
+      name: "sentence_translations",
+      description: "Exactly 2 English translations in source order",
+    });
+    expect(
+      output.schema.safeParse({ translations: ["Hello"] }).success,
+    ).toBe(false);
+    expect(
+      output.schema.safeParse({ translations: ["Hello", "Friend"] }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an empty single-sentence response as retryable", async () => {
+    mocks.generateText.mockResolvedValue({ text: "   " });
+
+    const { POST } = await import("./route");
+    const response = await POST(translationRequest());
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "translation_unavailable",
+      retryable: true,
     });
   });
 

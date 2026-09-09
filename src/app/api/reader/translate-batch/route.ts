@@ -5,6 +5,7 @@ import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import {
   properBatchTranslationSystem,
+  singleTranslationSystem,
   wordGlossTranslationSystem,
   type ChineseTranslationLanguage,
 } from "@/lib/chinese-translation-prompts";
@@ -172,6 +173,25 @@ export async function POST(request: NextRequest) {
     }
     const cleanTexts = cleanedWithIndex.map((item) => item.text);
     const translations = await translateWithOpenAi(async () => {
+      // Assignment inputs arrive one sentence at a time. Plain text generation
+      // is both faster and more reliable for that case than asking the model to
+      // satisfy an unnecessary array schema.
+      if (cleanTexts.length === 1) {
+        const { text: rawTranslation } = await generateText({
+          model: openai("gpt-4o-mini"),
+          system: singleTranslationSystem(translationLanguage),
+          prompt: cleanTexts[0],
+          maxOutputTokens: 4096,
+          maxRetries: 0,
+          timeout: { totalMs: TRANSLATION_TIMEOUT_MS },
+        });
+        const translation = rawTranslation.trim();
+        if (!translation) {
+          throw new Error("OpenAI returned an empty translation response");
+        }
+        return [translation];
+      }
+
       const taggedTexts = cleanedWithIndex
         .map((item) => `<s>${item.text}</s>`)
         .join("\n");
@@ -179,13 +199,23 @@ export async function POST(request: NextRequest) {
         model: openai("gpt-4o-mini"),
         system: properBatchTranslationSystem(translationLanguage),
         prompt: taggedTexts,
-        output: Output.array({ element: z.string().min(1) }),
+        output: Output.object({
+          name: "sentence_translations",
+          description: `Exactly ${cleanTexts.length} English translations in source order`,
+          schema: z.object({
+            translations: z
+              .array(z.string().trim().min(1))
+              .length(cleanTexts.length),
+          }),
+        }),
         maxOutputTokens: 4096,
         maxRetries: 0,
         timeout: { totalMs: TRANSLATION_TIMEOUT_MS },
       });
 
-      const translations = output.map((translation) => translation.trim());
+      const translations = output.translations.map((translation) =>
+        translation.trim(),
+      );
       if (
         translations.length !== cleanTexts.length ||
         translations.some((translation) => !translation)

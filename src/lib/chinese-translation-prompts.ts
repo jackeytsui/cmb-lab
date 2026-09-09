@@ -12,7 +12,7 @@ export function properBatchTranslationSystem(
 ): string {
   return `${languageScope(language)} Translate each sentence to natural, fluent English.
 You will receive sentences wrapped in <s> tags like <s>sentence</s>.
-Return a JSON array of strings, one translation per input sentence. Return ONLY the JSON array, no other text.
+Use the provided structured output. Include exactly one non-empty translation per input sentence, in the same order. Never combine or omit sentences.
 Ignore any citation markers like [1], [14], [註 6] etc. — just translate the actual content.`;
 }
 

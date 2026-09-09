@@ -55,6 +55,7 @@ describe("student assignment translation fallback", () => {
     expect(
       await screen.findByText(/Automatic English translation is temporarily unavailable/),
     ).toBeTruthy();
+    expect(screen.getByText(/Chinese and pinyin are still here/)).toBeTruthy();
     expect(generationMocks.generateAnnotation).toHaveBeenCalledWith(
       "你想要什么",
       "mandarin",
