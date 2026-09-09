@@ -6,12 +6,24 @@ import {
 
 const isDev = process.env.NODE_ENV === "development";
 const clerkFrontendApi = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API;
-const clerkOrigin = clerkFrontendApi
-  ? `https://${clerkFrontendApi}`
-  : isDev
-    ? "https://*.clerk.accounts.dev"
-    : "";
-const clerkCspSource = clerkOrigin ? ` ${clerkOrigin}` : "";
+const configuredClerkOrigin = clerkFrontendApi
+  ? `https://${clerkFrontendApi
+      .trim()
+      .replace(/^https?:\/\//, "")
+      .replace(/\/+$/, "")}`
+  : null;
+const clerkCspSources = Array.from(
+  new Set(
+    [
+      // Clerk's production Frontend API custom domain. Keep this explicit so
+      // a missing build-time hint cannot make the sign-in bundle fail CSP.
+      "https://clerk.thecmblueprint.com",
+      configuredClerkOrigin,
+      isDev ? "https://*.clerk.accounts.dev" : null,
+    ].filter((origin): origin is string => Boolean(origin)),
+  ),
+).join(" ");
+const clerkCspSource = ` ${clerkCspSources}`;
 
 const cspHeader = `
   default-src 'self';
