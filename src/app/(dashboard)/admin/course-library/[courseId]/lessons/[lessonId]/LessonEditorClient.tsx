@@ -1958,6 +1958,10 @@ function ListeningPracticeLessonForm({
   const [translatingId, setTranslatingId] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadPct, setUploadPct] = useState(0);
+  const [uploadError, setUploadError] = useState<{
+    sentenceId: string;
+    message: string;
+  } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Student results panel.
@@ -2043,6 +2047,7 @@ function ListeningPracticeLessonForm({
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError(null);
     setUploadingId(id);
     setUploadPct(0);
     const controller = new AbortController();
@@ -2055,8 +2060,18 @@ function ListeningPracticeLessonForm({
         setUploadPct,
       );
       updateSentence(id, { audioUrl: result.url });
-    } catch {
-      // ignore — admin can retry
+    } catch (uploadFailure) {
+      if (
+        !(uploadFailure instanceof Error && /abort/i.test(uploadFailure.message))
+      ) {
+        setUploadError({
+          sentenceId: id,
+          message:
+            uploadFailure instanceof Error
+              ? uploadFailure.message
+              : "Audio upload failed. Please try again.",
+        });
+      }
     } finally {
       setUploadingId(null);
       setUploadPct(0);
@@ -2143,9 +2158,9 @@ function ListeningPracticeLessonForm({
               Sentences ({sentences.length})
             </h3>
             <p className="text-xs text-muted-foreground">
-              Type the Chinese — audio is auto-generated and the pinyin model
-              answer is filled in for you (editable). Optionally upload your own
-              recording to replace the generated audio.
+              Type the Chinese and the model answer is generated for you. Each
+              sentence has its own audio: keep the generated voice or upload a
+              recording for that sentence.
             </p>
           </div>
           <button
@@ -2156,6 +2171,18 @@ function ListeningPracticeLessonForm({
             <Plus className="w-3.5 h-3.5" />
             Add sentence
           </button>
+        </div>
+
+        <div className="rounded-md border border-indigo-500/25 bg-indigo-500/5 px-4 py-3">
+          <p className="text-xs font-semibold text-foreground">
+            How sentence audio works
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Students play these sentences one at a time. Use the clearly marked
+            audio control inside each sentence to upload or replace its MP3,
+            M4A, WAV, OGG, AAC, FLAC, or WEBM recording. Then save the listening
+            practice to publish your changes.
+          </p>
         </div>
 
         <div className="space-y-3">
@@ -2316,46 +2343,105 @@ function ListeningPracticeLessonForm({
                   </p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">
-                    Audio
-                  </label>
-                  {sentence.audioUrl ? (
-                    <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
-                      <Music className="w-4 h-4 text-purple-500" />
-                      <span className="flex-1 truncate text-xs text-muted-foreground">
-                        Custom recording uploaded
-                      </span>
+                <div className="rounded-md border border-border bg-card p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">
+                        Sentence audio
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {sentence.audioUrl
+                          ? "Students will hear your uploaded recording."
+                          : "Students will hear the generated voice until you upload a recording."}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
+                        sentence.audioUrl
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+                      )}
+                    >
+                      {sentence.audioUrl ? (
+                        <Music className="size-3" aria-hidden="true" />
+                      ) : (
+                        <Sparkles className="size-3" aria-hidden="true" />
+                      )}
+                      {sentence.audioUrl ? "Custom audio" : "Generated voice"}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <label
+                      className={cn(
+                        "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10",
+                        uploadingId !== null &&
+                          "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      <Upload className="size-3.5" aria-hidden="true" />
+                      <input
+                        type="file"
+                        accept="audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/x-m4a,audio/wav,audio/ogg,audio/aac,audio/flac,audio/webm"
+                        className="hidden"
+                        aria-label={`${
+                          sentence.audioUrl ? "Replace" : "Upload"
+                        } audio file for sentence ${idx + 1}`}
+                        onChange={(e) => handleUploadOverride(sentence.id, e)}
+                        disabled={uploadingId !== null}
+                      />
+                      {sentence.audioUrl
+                        ? "Replace audio file"
+                        : "Upload audio file"}
+                    </label>
+                    {sentence.audioUrl ? (
                       <button
                         type="button"
                         onClick={() =>
                           updateSentence(sentence.id, { audioUrl: null })
                         }
-                        className="text-xs text-red-500 hover:text-red-400"
+                        disabled={uploadingId !== null}
+                        className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-50"
                       >
-                        Remove
+                        <Trash2 className="size-3.5" aria-hidden="true" />
+                        Remove custom audio
                       </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/10 px-2 py-1 text-[11px] text-indigo-500">
-                        <Sparkles className="w-3 h-3" />
-                        Auto-generated (TTS)
-                      </span>
-                      <label className="cursor-pointer text-[11px] text-primary hover:underline">
-                        <input
-                          type="file"
-                          accept="audio/mpeg,audio/mp4,audio/m4a,audio/x-m4a,audio/wav,audio/ogg,audio/aac"
-                          className="hidden"
-                          onChange={(e) => handleUploadOverride(sentence.id, e)}
-                          disabled={uploadingId === sentence.id}
+                    ) : null}
+                  </div>
+
+                  {uploadingId === sentence.id ? (
+                    <div className="mt-3 space-y-2" aria-live="polite">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">
+                          Uploading audio… {uploadPct}%
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => abortRef.current?.abort()}
+                          className="inline-flex items-center gap-1 text-red-500 hover:text-red-600"
+                        >
+                          <XCircle className="size-3" aria-hidden="true" />
+                          Cancel
+                        </button>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full bg-primary transition-all"
+                          style={{ width: `${uploadPct}%` }}
                         />
-                        {uploadingId === sentence.id
-                          ? `Uploading… ${uploadPct}%`
-                          : "Upload your own recording"}
-                      </label>
+                      </div>
                     </div>
-                  )}
+                  ) : null}
+
+                  {uploadError?.sentenceId === sentence.id ? (
+                    <p
+                      className="mt-3 text-xs font-medium text-red-500"
+                      role="alert"
+                    >
+                      Upload failed: {uploadError.message}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             );
