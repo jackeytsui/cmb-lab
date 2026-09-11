@@ -140,10 +140,10 @@ describe("AlignedLanguageText", () => {
     const { container } = render(
       <AlignedLanguageText chinese="比较暖" pinyin="bǐ jiào nuǎn" />,
     );
-    const pinyinCells = container.querySelectorAll(
+    const pinyinCells = container.querySelectorAll<HTMLElement>(
       '[data-aligned-language-cell="pinyin"]',
     );
-    const chineseCells = container.querySelectorAll(
+    const chineseCells = container.querySelectorAll<HTMLElement>(
       '[data-aligned-language-cell="chinese"]',
     );
     dragAcrossRow(pinyinCells[0]!, pinyinCells[2]!);
