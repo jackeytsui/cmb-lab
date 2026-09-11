@@ -1883,6 +1883,8 @@ interface ListeningSentenceDraft {
   audioUrl: string | null;
 }
 
+const FULL_LESSON_AUDIO_UPLOAD_ID = "__full-lesson-audio__";
+
 function normalizeListeningSentences(raw: unknown): ListeningSentenceDraft[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -1934,6 +1936,8 @@ function ListeningPracticeLessonForm({
   lang?: "mandarin" | "cantonese";
 }) {
   const savedDescription = (content.description as string) ?? "";
+  const fullAudioUrl =
+    typeof content.audioUrl === "string" ? content.audioUrl.trim() : "";
   const savedSentences = normalizeListeningSentences(content.sentences);
   const romanLabel = lang === "cantonese" ? "Jyutping" : "Pinyin";
 
@@ -1962,6 +1966,7 @@ function ListeningPracticeLessonForm({
     sentenceId: string;
     message: string;
   } | null>(null);
+  const [removingFullAudio, setRemovingFullAudio] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // Student results panel.
@@ -2080,6 +2085,80 @@ function ListeningPracticeLessonForm({
     }
   };
 
+  const handleUploadFullAudio = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    setUploadingId(FULL_LESSON_AUDIO_UPLOAD_ID);
+    setUploadPct(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const result = await uploadWithProgress(
+        "audio",
+        file,
+        controller.signal,
+        setUploadPct,
+      );
+      const nextContent = { ...content, audioUrl: result.url };
+      const ok = await saveLessonContent(lessonId, nextContent);
+      if (!ok) {
+        throw new Error(
+          "The file uploaded, but CMB Lab could not attach it to this lesson.",
+        );
+      }
+      onUpdate(nextContent);
+      setSavedAt(new Date());
+    } catch (uploadFailure) {
+      if (
+        !(uploadFailure instanceof Error && /abort/i.test(uploadFailure.message))
+      ) {
+        setUploadError({
+          sentenceId: FULL_LESSON_AUDIO_UPLOAD_ID,
+          message:
+            uploadFailure instanceof Error
+              ? uploadFailure.message
+              : "Audio upload failed. Please try again.",
+        });
+      }
+    } finally {
+      setUploadingId(null);
+      setUploadPct(0);
+      abortRef.current = null;
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveFullAudio = async () => {
+    if (
+      !window.confirm(
+        "Remove the full lesson recording? Sentence audio and student progress will stay unchanged.",
+      )
+    ) {
+      return;
+    }
+    setUploadError(null);
+    setRemovingFullAudio(true);
+    try {
+      const nextContent = { ...content };
+      delete nextContent.audioUrl;
+      const ok = await saveLessonContent(lessonId, nextContent);
+      if (!ok) {
+        setUploadError({
+          sentenceId: FULL_LESSON_AUDIO_UPLOAD_ID,
+          message: "CMB Lab could not remove the full lesson recording.",
+        });
+        return;
+      }
+      onUpdate(nextContent);
+      setSavedAt(new Date());
+    } finally {
+      setRemovingFullAudio(false);
+    }
+  };
+
   const handleSave = async () => {
     const cleaned = sentences.filter((s) => s.chinese.trim());
     if (cleaned.length === 0) {
@@ -2151,11 +2230,127 @@ function ListeningPracticeLessonForm({
         />
       </div>
 
+      <div className="rounded-lg border border-indigo-500/30 bg-card p-5 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2">
+              <Music className="size-4 text-indigo-500" aria-hidden="true" />
+              <h3 className="text-sm font-semibold text-foreground">
+                Full lesson audio
+              </h3>
+              <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
+                One file
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Upload the complete dialogue or lesson recording here, as in the
+              original course format. Students will see this player once above
+              the sentence practice. The individual sentence audio below stays
+              optional and is not changed.
+            </p>
+          </div>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium",
+              fullAudioUrl
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            {fullAudioUrl ? "Full recording uploaded" : "No full recording"}
+          </span>
+        </div>
+
+        {fullAudioUrl ? (
+          <audio
+            src={`/api/course-library/audio/${lessonId}`}
+            controls
+            preload="metadata"
+            controlsList="nodownload"
+            onContextMenu={(e) => e.preventDefault()}
+            className="w-full"
+            aria-label="Full lesson audio preview"
+          />
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            className={cn(
+              "inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90",
+              (uploadingId !== null || removingFullAudio) &&
+                "cursor-not-allowed opacity-50",
+            )}
+          >
+            <Upload className="size-3.5" aria-hidden="true" />
+            <input
+              type="file"
+              accept="audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/x-m4a,audio/wav,audio/ogg,audio/aac,audio/flac,audio/webm"
+              className="hidden"
+              aria-label={
+                fullAudioUrl
+                  ? "Replace full lesson audio"
+                  : "Upload full lesson audio"
+              }
+              onChange={handleUploadFullAudio}
+              disabled={uploadingId !== null || removingFullAudio}
+            />
+            {fullAudioUrl
+              ? "Replace full lesson audio"
+              : "Upload full lesson audio"}
+          </label>
+          {fullAudioUrl ? (
+            <button
+              type="button"
+              onClick={handleRemoveFullAudio}
+              disabled={uploadingId !== null || removingFullAudio}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-50"
+            >
+              {removingFullAudio ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Trash2 className="size-3.5" aria-hidden="true" />
+              )}
+              Remove full lesson audio
+            </button>
+          ) : null}
+        </div>
+
+        {uploadingId === FULL_LESSON_AUDIO_UPLOAD_ID ? (
+          <div className="space-y-2" aria-live="polite">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                Uploading full lesson audio… {uploadPct}%
+              </span>
+              <button
+                type="button"
+                onClick={() => abortRef.current?.abort()}
+                className="inline-flex items-center gap-1 text-red-500 hover:text-red-600"
+              >
+                <XCircle className="size-3" aria-hidden="true" />
+                Cancel
+              </button>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${uploadPct}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {uploadError?.sentenceId === FULL_LESSON_AUDIO_UPLOAD_ID ? (
+          <p className="text-xs font-medium text-red-500" role="alert">
+            Upload failed: {uploadError.message}
+          </p>
+        ) : null}
+      </div>
+
       <div className="rounded-lg border border-border bg-card p-5 space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-foreground">
-              Sentences ({sentences.length})
+              Sentence practice ({sentences.length})
             </h3>
             <p className="text-xs text-muted-foreground">
               Type the Chinese and the model answer is generated for you. Each

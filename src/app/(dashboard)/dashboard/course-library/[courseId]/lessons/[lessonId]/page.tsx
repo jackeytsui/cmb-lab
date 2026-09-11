@@ -865,6 +865,10 @@ export default async function CourseLibraryLessonViewerPage({ params }: PageProp
               <ListeningPracticeViewer
                 lessonId={lessonId}
                 sentences={listeningSentences}
+                hasLessonAudio={
+                  typeof content.audioUrl === "string" &&
+                  content.audioUrl.trim().length > 0
+                }
                 lang={lang}
               />
             ) : (

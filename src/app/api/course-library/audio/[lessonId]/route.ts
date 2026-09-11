@@ -5,6 +5,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 import { getCurrentUser } from "@/lib/auth";
 import { canUserAccessCourseLibraryLesson } from "@/lib/course-library-lesson-access";
+import { isListeningPracticeLesson } from "@/lib/lesson-language";
 
 // Each invocation serves at most one bounded chunk (see blob-media-proxy), so
 // 60s is ample headroom even for long-form audio.
@@ -12,7 +13,8 @@ export const maxDuration = 60;
 
 /**
  * GET /api/course-library/audio/[lessonId]
- * Authenticated chunked-range proxy for private Vercel Blob audio lessons.
+ * Authenticated chunked-range proxy for private Vercel Blob audio lessons and
+ * the optional complete recording attached to a Listening Practice lesson.
  */
 export async function GET(
   request: NextRequest,
@@ -45,12 +47,19 @@ export async function GET(
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
-  if (lesson.lessonType !== "audio") {
-    return NextResponse.json({ error: "Not an audio lesson" }, { status: 400 });
+  if (
+    lesson.lessonType !== "audio" &&
+    !isListeningPracticeLesson(lesson.lessonType)
+  ) {
+    return NextResponse.json(
+      { error: "This lesson type does not support full audio" },
+      { status: 400 },
+    );
   }
 
   const content = lesson.content as Record<string, unknown>;
-  const audioUrl = content.audioUrl as string | undefined;
+  const audioUrl =
+    typeof content.audioUrl === "string" ? content.audioUrl.trim() : "";
   if (!audioUrl) {
     return NextResponse.json(
       { error: "No audio uploaded for this lesson" },

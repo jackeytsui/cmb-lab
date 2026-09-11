@@ -544,6 +544,11 @@ export interface CourseLibraryListeningPracticeSentence {
 export interface CourseLibraryListeningPracticeContent {
   /** Instructions shown above the sentences — rich text HTML. */
   description: string;
+  /**
+   * Optional complete lesson/dialogue recording. This preserves the original
+   * audio-lesson workflow while the sentence list powers interactive drills.
+   */
+  audioUrl?: string | null;
   sentences: CourseLibraryListeningPracticeSentence[];
 }
 

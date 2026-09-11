@@ -190,4 +190,17 @@ describe("Course Library roadmap authorization", () => {
       );
     }
   });
+
+  it("streams complete audio for both audio and listening-practice lessons", () => {
+    const audioRoute = source(
+      "src/app/api/course-library/audio/[lessonId]/route.ts",
+    );
+
+    expect(audioRoute).toContain('lesson.lessonType !== "audio"');
+    expect(audioRoute).toContain(
+      "!isListeningPracticeLesson(lesson.lessonType)",
+    );
+    expect(audioRoute).toContain("canUserAccessCourseLibraryLesson");
+    expect(audioRoute).toContain("proxyBlobMedia");
+  });
 });

@@ -109,10 +109,13 @@ interface SentenceState {
 export function ListeningPracticeViewer({
   lessonId,
   sentences,
+  hasLessonAudio = false,
   lang = "mandarin",
 }: {
   lessonId: string;
   sentences: ListeningSentenceDto[];
+  /** Whether the lesson includes one complete dialogue/lesson recording. */
+  hasLessonAudio?: boolean;
   lang?: "mandarin" | "cantonese";
 }) {
   const [state, setState] = useState<Record<string, SentenceState>>(() => {
@@ -185,6 +188,34 @@ export function ListeningPracticeViewer({
 
   return (
     <div className="space-y-5">
+      {hasLessonAudio ? (
+        <section className="rounded-lg border border-indigo-500/30 bg-card p-4">
+          <div className="mb-3 flex items-start gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+              <Headphones className="size-4" aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Full lesson audio
+              </h2>
+              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                Listen to the complete recording first, then practise each
+                sentence below.
+              </p>
+            </div>
+          </div>
+          <audio
+            src={`/api/course-library/audio/${lessonId}`}
+            controls
+            preload="metadata"
+            controlsList="nodownload"
+            onContextMenu={(e) => e.preventDefault()}
+            className="w-full"
+            aria-label="Full lesson audio"
+          />
+        </section>
+      ) : null}
+
       {/* Mode picker — the choice is remembered for this lesson. */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
