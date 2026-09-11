@@ -5,8 +5,8 @@ import {
   useRef,
   useState,
   type ClipboardEvent as ReactClipboardEvent,
-  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Pause, Play, Trash2, Volume2 } from "lucide-react";
 import { toast } from "sonner";
@@ -32,7 +32,11 @@ function formatTime(seconds: number): string {
   return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
 }
 
-function selectedOffsets(container: HTMLElement) {
+type SelectedOffsets =
+  | { kind: "range"; start: number; end: number }
+  | { kind: "cross-line" };
+
+function selectedOffsets(container: HTMLElement): SelectedOffsets | null {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
     return null;
@@ -54,40 +58,62 @@ function selectedOffsets(container: HTMLElement) {
   const endCell = cellFor(range.endContainer);
   if (!startCell || !endCell) return null;
 
+  const startKind = startCell.dataset.pronunciationKind;
+  const endKind = endCell.dataset.pronunciationKind;
+  if (!startKind || startKind !== endKind) return null;
+
+  const startUnit = startCell.closest<HTMLElement>("[data-pronunciation-unit]");
+  const endUnit = endCell.closest<HTMLElement>("[data-pronunciation-unit]");
+  if (!startUnit || !endUnit) return null;
+  if (Math.abs(startUnit.offsetTop - endUnit.offsetTop) > 2) {
+    return { kind: "cross-line" };
+  }
+
   const start = Number(startCell.dataset.pronunciationOffset);
   const end = Number(endCell.dataset.pronunciationEnd);
   if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
-  return start <= end ? { start, end } : { start: end, end: start };
+  return start <= end
+    ? { kind: "range", start, end }
+    : { kind: "range", start: end, end: start };
 }
 
 function normaliseCopiedRow(
   event: ReactClipboardEvent<HTMLDivElement>,
+  chinese: string,
+  annotations: ReturnType<typeof annotateFromModelAnswer>,
 ): void {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
   const range = selection.getRangeAt(0);
-  const elementFor = (node: Node) =>
-    node.nodeType === Node.ELEMENT_NODE
+  const cellFor = (node: Node) =>
+    (node.nodeType === Node.ELEMENT_NODE
       ? (node as Element)
-      : node.parentElement;
-  const startRow = elementFor(range.startContainer)?.closest(
-    "[data-pronunciation-row]",
-  );
-  const endRow = elementFor(range.endContainer)?.closest(
-    "[data-pronunciation-row]",
-  );
-  if (!startRow || startRow !== endRow) return;
-
-  const selected = selection.toString();
-  const normalised = startRow.hasAttribute("data-chinese-row")
-    ? selected.replace(/[\r\n]+/g, "")
-    : selected
-        .replace(/\s*(?:\r\n|\r|\n)\s*/g, " ")
-        .replace(/[ \t]+/g, " ")
-        .trim();
-  if (selected === normalised) return;
+      : node.parentElement
+    )?.closest<HTMLElement>("[data-pronunciation-kind]") ?? null;
+  const startCell = cellFor(range.startContainer);
+  const endCell = cellFor(range.endContainer);
+  const kind = startCell?.dataset.pronunciationKind;
+  if (!startCell || !endCell || !kind || kind !== endCell.dataset.pronunciationKind) {
+    return;
+  }
+  const start = Number(startCell.dataset.pronunciationOffset);
+  const end = Number(endCell.dataset.pronunciationEnd);
+  if (!Number.isInteger(start) || !Number.isInteger(end)) return;
+  const first = Math.min(start, end);
+  const last = Math.max(start, end);
+  const copiedText =
+    kind === "chinese"
+      ? chinese.slice(first, last)
+      : annotations
+          .filter(
+            (annotation) =>
+              annotation.offset >= first && annotation.offset < last,
+          )
+          .map((annotation) => annotation.pinyin)
+          .filter(Boolean)
+          .join(" ");
   event.preventDefault();
-  event.clipboardData.setData("text/plain", normalised);
+  event.clipboardData.setData("text/plain", copiedText);
 }
 
 export function PronunciationMarkedSentence({
@@ -115,15 +141,10 @@ export function PronunciationMarkedSentence({
     () => annotateFromModelAnswer(chinese, romanization),
     [chinese, romanization],
   );
-  const gridStyle: CSSProperties = {
-    gridTemplateColumns: `repeat(${Math.max(annotations.length, 1)}, max-content)`,
-  };
-  const lastSyllableIndex = annotations.reduce(
-    (lastIndex, annotation, index) =>
-      annotation.pinyin ? index : lastIndex,
-    -1,
-  );
   const ignoreNextClickRef = useRef(false);
+  const [selectingKind, setSelectingKind] = useState<
+    "romanization" | "chinese" | null
+  >(null);
 
   const marksAt = (offset: number) =>
     marks.filter((mark) => offset >= mark.startOffset && offset < mark.endOffset);
@@ -145,17 +166,33 @@ export function PronunciationMarkedSentence({
     else onSelectRange?.(offset, endOffset);
   };
 
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const target = (event.target as Element).closest<HTMLElement>(
+      "[data-pronunciation-kind]",
+    );
+    const kind = target?.dataset.pronunciationKind;
+    if (kind === "romanization" || kind === "chinese") {
+      setSelectingKind(kind);
+    }
+  };
+
   return (
     <div
       className={cn(
         "min-w-0 select-text",
         (onSelectRange || onSelectMark) && "cursor-text",
       )}
-      onCopy={normaliseCopiedRow}
+      onCopy={(event) => normaliseCopiedRow(event, chinese, annotations)}
+      onPointerDownCapture={handlePointerDown}
       onMouseUp={(event) => {
         if (!onSelectRange) return;
         const offsets = selectedOffsets(event.currentTarget);
         if (!offsets) return;
+        if (offsets.kind === "cross-line") {
+          window.getSelection()?.removeAllRanges();
+          toast.error("Select pronunciation within one line.");
+          return;
+        }
         ignoreNextClickRef.current = true;
         onSelectRange(offsets.start, offsets.end);
         window.getSelection()?.removeAllRanges();
@@ -164,112 +201,90 @@ export function PronunciationMarkedSentence({
         }, 0);
       }}
     >
-      <div className="flex max-w-full items-end overflow-x-auto">
-        <div className="inline-grid min-w-max items-end" style={gridStyle}>
-          <div
-            className="contents"
-            data-pronunciation-row
-            data-romanization-row
-            aria-label={lang === "cantonese" ? "Jyutping" : "Pinyin"}
-          >
-            {annotations.map((annotation, index) => {
-              const matching = marksAt(annotation.offset);
-              const active = matching.some((mark) => mark.id === activeMarkId);
-              const rangeActive =
-                activeRange &&
-                annotation.offset >= activeRange.startOffset &&
-                annotation.offset < activeRange.endOffset;
-              const endOffset = annotation.offset + annotation.char.length;
-              return (
-                <span
-                  key={`romanization-${annotation.offset}`}
-                  data-pronunciation-offset={annotation.offset}
-                  data-pronunciation-end={endOffset}
-                  onClick={(event) =>
-                    handleCellClick(
-                      event,
-                      annotation.offset,
-                      endOffset,
-                    )
-                  }
-                  className={cn(
-                    "min-w-[1.05em] whitespace-nowrap rounded-sm px-[0.08em] text-center leading-tight text-blue-400",
-                    matching.length > 0 && markerClass,
-                    (active || rangeActive) && "bg-amber-500/15",
-                    (onSelectRange || onSelectMark) && "hover:bg-amber-500/10",
-                  )}
-                  style={{ fontSize: `${Math.round(fontSize * PINYIN_RATIO)}px` }}
-                >
-                  {annotation.pinyin || "\u00a0"}
-                  {annotation.pinyin && index < lastSyllableIndex ? (
-                    <span className="sr-only"> </span>
-                  ) : null}
-                </span>
-              );
-            })}
-          </div>
+      <div
+        className="flex max-w-full flex-wrap items-end gap-x-1 gap-y-1.5"
+        data-pronunciation-wrapped-content
+        style={{ lineHeight: 1.15 }}
+      >
+        {annotations.map((annotation) => {
+          const matching = marksAt(annotation.offset);
+          const active = matching.some((mark) => mark.id === activeMarkId);
+          const rangeActive =
+            activeRange &&
+            annotation.offset >= activeRange.startOffset &&
+            annotation.offset < activeRange.endOffset;
+          const firstMark = matching.find(
+            (mark) => mark.startOffset === annotation.offset,
+          );
+          const markNumber = firstMark
+            ? marks.findIndex((mark) => mark.id === firstMark.id) + 1
+            : 0;
+          const endOffset = annotation.offset + annotation.char.length;
+          const tone = annotation.pinyin
+            ? lang === "cantonese"
+              ? extractToneFromJyutping(annotation.pinyin)
+              : extractToneFromPinyin(annotation.pinyin)
+            : 0;
 
-          <div
-            className="contents"
-            data-pronunciation-row
-            data-chinese-row
-            aria-label="Chinese characters"
-          >
-            {annotations.map((annotation) => {
-              const matching = marksAt(annotation.offset);
-              const active = matching.some((mark) => mark.id === activeMarkId);
-              const rangeActive =
-                activeRange &&
-                annotation.offset >= activeRange.startOffset &&
-                annotation.offset < activeRange.endOffset;
-              const firstMark = matching.find(
-                (mark) => mark.startOffset === annotation.offset,
-              );
-              const markNumber = firstMark
-                ? marks.findIndex((mark) => mark.id === firstMark.id) + 1
-                : 0;
-              const endOffset = annotation.offset + annotation.char.length;
-              const tone = annotation.pinyin
-                ? lang === "cantonese"
-                  ? extractToneFromJyutping(annotation.pinyin)
-                  : extractToneFromPinyin(annotation.pinyin)
-                : 0;
-              return (
-                <span
-                  key={`chinese-${annotation.offset}`}
-                  data-pronunciation-offset={annotation.offset}
-                  data-pronunciation-end={endOffset}
-                  onClick={(event) =>
-                    handleCellClick(
-                      event,
-                      annotation.offset,
-                      endOffset,
-                    )
-                  }
-                  className={cn(
-                    "relative min-w-[1.05em] whitespace-pre rounded-sm text-center leading-tight",
-                    matching.length > 0 && markerClass,
-                    (active || rangeActive) && "bg-amber-500/15",
-                    (onSelectRange || onSelectMark) && "hover:bg-amber-500/10",
-                  )}
-                  style={{
-                    fontSize: `${fontSize}px`,
-                    ...(annotation.pinyin
-                      ? getToneColorStyle(tone, lang)
-                      : undefined),
-                  }}
-                >
-                  {annotation.char}
-                  {markNumber > 0 ? (
-                    <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 select-none items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm">
-                      {markNumber}
-                    </span>
-                  ) : null}
-                </span>
-              );
-            })}
-          </div>
-        </div>
+          return (
+            <span
+              key={annotation.offset}
+              className="inline-flex min-w-[1.05em] flex-col items-center align-top"
+              data-pronunciation-unit
+            >
+              <span
+                data-pronunciation-kind="romanization"
+                data-pronunciation-offset={annotation.offset}
+                data-pronunciation-end={endOffset}
+                onClick={(event) =>
+                  handleCellClick(event, annotation.offset, endOffset)
+                }
+                className={cn(
+                  "whitespace-nowrap rounded-sm px-[0.08em] text-center leading-tight text-blue-400",
+                  selectingKind !== null &&
+                    selectingKind !== "romanization" &&
+                    "select-none",
+                  matching.length > 0 && markerClass,
+                  (active || rangeActive) && "bg-amber-500/15",
+                  (onSelectRange || onSelectMark) && "hover:bg-amber-500/10",
+                )}
+                style={{ fontSize: `${Math.round(fontSize * PINYIN_RATIO)}px` }}
+              >
+                {annotation.pinyin || "\u00a0"}
+              </span>
+              <span
+                data-pronunciation-kind="chinese"
+                data-pronunciation-offset={annotation.offset}
+                data-pronunciation-end={endOffset}
+                onClick={(event) =>
+                  handleCellClick(event, annotation.offset, endOffset)
+                }
+                className={cn(
+                  "relative whitespace-pre rounded-sm text-center leading-tight",
+                  selectingKind !== null &&
+                    selectingKind !== "chinese" &&
+                    "select-none",
+                  matching.length > 0 && markerClass,
+                  (active || rangeActive) && "bg-amber-500/15",
+                  (onSelectRange || onSelectMark) && "hover:bg-amber-500/10",
+                )}
+                style={{
+                  fontSize: `${fontSize}px`,
+                  ...(annotation.pinyin
+                    ? getToneColorStyle(tone, lang)
+                    : undefined),
+                }}
+              >
+                {annotation.char}
+                {markNumber > 0 ? (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 select-none items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm">
+                    {markNumber}
+                  </span>
+                ) : null}
+              </span>
+            </span>
+          );
+        })}
       </div>
     </div>
   );

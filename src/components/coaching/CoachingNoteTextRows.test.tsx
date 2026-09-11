@@ -11,7 +11,7 @@ const segments = [
 ];
 
 describe("CoachingNoteTextRows", () => {
-  it("renders pinyin and Chinese as independently selectable sibling rows", () => {
+  it("renders independently selectable pinyin and Chinese in wrapping units", () => {
     const { container } = render(
       <CoachingNoteTextRows
         segments={segments}
@@ -24,20 +24,26 @@ describe("CoachingNoteTextRows", () => {
       />,
     );
 
-    const romanizationRow = container.querySelector(
-      '[data-aligned-romanization-row="pinyin"]',
+    const romanizationCells = container.querySelectorAll(
+      '[data-aligned-language-cell="pinyin"]',
     );
-    const chineseRow = container.querySelector("[data-aligned-chinese-row]");
+    const chineseCells = container.querySelectorAll(
+      '[data-aligned-language-cell="chinese"]',
+    );
 
-    expect(romanizationRow?.textContent).toBe("bǐ jiào bǎo nuǎn");
-    expect(chineseRow?.textContent).toBe("比较 保暖");
-    expect(romanizationRow?.contains(chineseRow)).toBe(false);
-    expect(chineseRow?.contains(romanizationRow)).toBe(false);
-    expect(romanizationRow?.querySelectorAll('[data-annotation="pinyin"]'))
-      .toHaveLength(5);
+    expect(
+      Array.from(romanizationCells, (cell) => cell.textContent?.trim())
+        .filter(Boolean)
+        .join(" "),
+    ).toBe("bǐ jiào bǎo nuǎn");
+    expect(Array.from(chineseCells, (cell) => cell.textContent).join(""))
+      .toBe("比较 保暖");
+    expect(romanizationCells).toHaveLength(5);
+    expect(chineseCells).toHaveLength(5);
+    expect(container.querySelector("[data-aligned-wrapped-content]")).toBeTruthy();
   });
 
-  it("uses the same separate-row layout for Cantonese jyutping", () => {
+  it("uses the same wrapping layout for Cantonese jyutping", () => {
     const { container } = render(
       <CoachingNoteTextRows
         segments={[{ text: "比較", index: 0, isWordLike: true }]}
@@ -51,10 +57,16 @@ describe("CoachingNoteTextRows", () => {
     );
 
     expect(
-      container.querySelector('[aria-label="Jyutping"]')?.textContent,
+      Array.from(
+        container.querySelectorAll('[data-aligned-language-cell="jyutping"]'),
+        (cell) => cell.textContent,
+      ).join(" "),
     ).toBe("bei2 gaau3");
     expect(
-      container.querySelector('[aria-label="Chinese characters"]')?.textContent,
+      Array.from(
+        container.querySelectorAll('[data-aligned-language-cell="chinese"]'),
+        (cell) => cell.textContent,
+      ).join(""),
     ).toBe("比較");
   });
 });

@@ -10,7 +10,7 @@ const segments = [
 ];
 
 describe("ReaderTextRows", () => {
-  it("keeps Pinyin, Jyutping, and Chinese in independently selectable rows", () => {
+  it("keeps Pinyin, Jyutping, and Chinese independently selectable while wrapping", () => {
     const { container } = render(
       <ReaderTextRows
         segments={segments}
@@ -25,21 +25,26 @@ describe("ReaderTextRows", () => {
       />,
     );
 
-    const pinyinRow = container.querySelector(
-      '[data-aligned-romanization-row="pinyin"]',
+    const pinyinCells = container.querySelectorAll(
+      '[data-aligned-language-cell="pinyin"]',
     );
-    const jyutpingRow = container.querySelector(
-      '[data-aligned-romanization-row="jyutping"]',
+    const jyutpingCells = container.querySelectorAll(
+      '[data-aligned-language-cell="jyutping"]',
     );
-    const chineseRow = container.querySelector("[data-aligned-chinese-row]");
+    const chineseCells = container.querySelectorAll(
+      '[data-aligned-language-cell="chinese"]',
+    );
 
-    expect(pinyinRow?.textContent).toBe("bǐ jiào nuǎn");
-    expect(jyutpingRow?.textContent).toBe("bei2 gaau3 nyun5");
-    expect(chineseRow?.textContent).toBe("比较暖");
-    expect(pinyinRow?.parentElement).toBe(chineseRow?.parentElement);
-    expect(jyutpingRow?.parentElement).toBe(chineseRow?.parentElement);
-    expect(pinyinRow?.contains(chineseRow)).toBe(false);
-    expect(chineseRow?.contains(pinyinRow)).toBe(false);
+    expect(Array.from(pinyinCells, (cell) => cell.textContent).join(" ")).toBe(
+      "bǐ jiào nuǎn",
+    );
+    expect(Array.from(jyutpingCells, (cell) => cell.textContent).join(" ")).toBe(
+      "bei2 gaau3 nyun5",
+    );
+    expect(Array.from(chineseCells, (cell) => cell.textContent).join("")).toBe(
+      "比较暖",
+    );
+    expect(container.querySelector("[data-aligned-wrapped-content]")).toBeTruthy();
   });
 
   it("places direct English glosses in their own row", () => {

@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import type {
   ClipboardEvent as ReactClipboardEvent,
-  CSSProperties,
+  PointerEvent as ReactPointerEvent,
   ReactNode,
 } from "react";
 import { annotateFromModelAnswer } from "@/lib/mandarin-annotate";
@@ -21,31 +22,16 @@ type CharacterWord = {
   wordIndex?: number;
 };
 
-const LANGUAGE_ROW_SELECTOR = [
-  "[data-aligned-romanization-row]",
-  "[data-aligned-chinese-row]",
-  "[data-aligned-english-row]",
-].join(",");
+type SelectableLanguage = "pinyin" | "jyutping" | "chinese";
 
-function closestLanguageRow(node: Node): Element | null {
+const LANGUAGE_CELL_SELECTOR = "[data-aligned-language-cell]";
+
+function closestLanguageCell(node: Node): HTMLElement | null {
   const element =
     node.nodeType === Node.ELEMENT_NODE
       ? (node as Element)
       : node.parentElement;
-  return element?.closest(LANGUAGE_ROW_SELECTOR) ?? null;
-}
-
-function normaliseCopiedRow(text: string, row: Element): string {
-  if (row.hasAttribute("data-aligned-chinese-row")) {
-    return text.replace(/[\r\n]+/g, "");
-  }
-  if (row.hasAttribute("data-aligned-romanization-row")) {
-    return text
-      .replace(/\s*(?:\r\n|\r|\n)\s*/g, " ")
-      .replace(/[ \t]+/g, " ")
-      .trim();
-  }
-  return text;
+  return element?.closest<HTMLElement>(LANGUAGE_CELL_SELECTOR) ?? null;
 }
 
 export type AlignedLanguageTextProps = {
@@ -89,78 +75,62 @@ function buildCharacterWords(
   );
 }
 
-function RomanizationCells({
-  chinese,
-  romanization,
+function RomanizationCell({
   kind,
-  className,
+  value,
+  index,
+  word,
   fontSize,
-  characterWords,
   toneColors,
+  selectingLanguage,
+  className,
 }: {
-  chinese: string;
-  romanization: string;
   kind: "pinyin" | "jyutping";
-  className?: string;
+  value: string;
+  index: number;
+  word: CharacterWord | undefined;
   fontSize: number;
-  characterWords: readonly CharacterWord[];
   toneColors: boolean;
+  selectingLanguage: SelectableLanguage | null;
+  className?: string;
 }) {
-  const annotations = annotateFromModelAnswer(chinese, romanization);
-  const lastSyllableIndex = annotations.reduce(
-    (lastIndex, annotation, index) =>
-      annotation.pinyin ? index : lastIndex,
-    -1,
-  );
+  const tone =
+    kind === "pinyin"
+      ? extractToneFromPinyin(value)
+      : extractToneFromJyutping(value);
+  const toneClass = toneColors
+    ? getToneColorClass(tone, kind === "pinyin" ? "mandarin" : "cantonese")
+    : "";
 
   return (
-    <div
-      className="contents"
-      data-aligned-romanization-row={kind}
-      aria-label={kind === "pinyin" ? "Pinyin" : "Jyutping"}
+    <span
+      data-aligned-language-cell={kind}
+      data-aligned-language-index={index}
+      data-annotation={kind}
+      data-word={word?.word}
+      data-index={word?.wordIndex}
+      className={cn(
+        "whitespace-nowrap px-[0.08em] text-center leading-tight",
+        kind === "pinyin" ? "text-blue-400" : "text-orange-400",
+        selectingLanguage !== null &&
+          selectingLanguage !== kind &&
+          "select-none",
+        toneClass,
+        className,
+      )}
+      style={{ fontSize: `${fontSize}px` }}
     >
-      {annotations.map((annotation, index) => {
-        const tone =
-          kind === "pinyin"
-            ? extractToneFromPinyin(annotation.pinyin)
-            : extractToneFromJyutping(annotation.pinyin);
-        const toneClass = toneColors
-          ? getToneColorClass(
-              tone,
-              kind === "pinyin" ? "mandarin" : "cantonese",
-            )
-          : "";
-
-        return (
-          <span
-            key={annotation.offset}
-            data-annotation={kind}
-            data-word={characterWords[index]?.word}
-            data-index={characterWords[index]?.wordIndex}
-            className={cn(
-              "min-w-[1.05em] whitespace-nowrap px-[0.08em] text-center leading-tight",
-              kind === "pinyin" ? "text-blue-400" : "text-orange-400",
-              toneClass,
-              className,
-            )}
-            style={{ fontSize: `${fontSize}px` }}
-          >
-            {annotation.pinyin}
-            {annotation.pinyin && index < lastSyllableIndex ? (
-              <span className="sr-only"> </span>
-            ) : null}
-          </span>
-        );
-      })}
-    </div>
+      {value || "\u00a0"}
+    </span>
   );
 }
 
 /**
  * Site-wide Chinese display primitive.
  *
- * Romanization and Hanzi are separate DOM rows for clean selection, while a
- * shared CSS grid column keeps every syllable directly above its character.
+ * Each character and its romanization form one naturally wrapping visual
+ * unit. The inactive language rows are excluded during selection, so copied
+ * Pinyin/Jyutping and Chinese remain separate and clean.
  */
 export function AlignedLanguageText({
   chinese,
@@ -193,9 +163,20 @@ export function AlignedLanguageText({
   const toneRomanization =
     toneLanguage === "cantonese" ? jyutpingValue : pinyinValue;
   const toneAnnotations = annotateFromModelAnswer(chinese, toneRomanization);
+  const pinyinAnnotations = annotateFromModelAnswer(chinese, pinyinValue);
+  const jyutpingAnnotations = annotateFromModelAnswer(chinese, jyutpingValue);
   const characterWords = buildCharacterWords(segments, segmentStartIndex);
-  const gridStyle: CSSProperties = {
-    gridTemplateColumns: `repeat(${Math.max(chars.length, 1)}, max-content)`,
+  const [selectingLanguage, setSelectingLanguage] =
+    useState<SelectableLanguage | null>(null);
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const cell = (event.target as Element).closest<HTMLElement>(
+      LANGUAGE_CELL_SELECTOR,
+    );
+    const language = cell?.dataset.alignedLanguageCell as
+      | SelectableLanguage
+      | undefined;
+    if (language) setSelectingLanguage(language);
   };
 
   const handleCopy = (event: ReactClipboardEvent<HTMLDivElement>) => {
@@ -203,99 +184,127 @@ export function AlignedLanguageText({
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
 
     const range = selection.getRangeAt(0);
-    const startRow = closestLanguageRow(range.startContainer);
-    const endRow = closestLanguageRow(range.endContainer);
-    if (!startRow || startRow !== endRow) return;
+    const startCell = closestLanguageCell(range.startContainer);
+    const endCell = closestLanguageCell(range.endContainer);
+    const language = startCell?.dataset.alignedLanguageCell as
+      | SelectableLanguage
+      | undefined;
+    if (
+      !startCell ||
+      !endCell ||
+      !language ||
+      language !== endCell.dataset.alignedLanguageCell
+    ) {
+      return;
+    }
 
-    const copiedText = selection.toString();
-    const normalisedText = normaliseCopiedRow(copiedText, startRow);
-    if (normalisedText === copiedText) return;
+    const startIndex = Number(startCell.dataset.alignedLanguageIndex);
+    const endIndex = Number(endCell.dataset.alignedLanguageIndex);
+    if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) return;
+
+    const first = Math.min(startIndex, endIndex);
+    const last = Math.max(startIndex, endIndex);
+    const copiedText =
+      language === "chinese"
+        ? chars.slice(first, last + 1).join("")
+        : (language === "pinyin" ? pinyinAnnotations : jyutpingAnnotations)
+            .slice(first, last + 1)
+            .map((annotation) => annotation.pinyin)
+            .filter(Boolean)
+            .join(" ");
 
     event.preventDefault();
-    event.clipboardData.setData("text/plain", normalisedText);
+    event.clipboardData.setData("text/plain", copiedText);
   };
 
   return (
-    <div className={cn("min-w-0 select-text", className)} onCopy={handleCopy}>
+    <div
+      className={cn("min-w-0 select-text", className)}
+      onCopy={handleCopy}
+      onPointerDownCapture={handlePointerDown}
+    >
       <div
         className={cn(
-          "flex max-w-full items-end gap-1 overflow-x-auto",
+          "flex max-w-full flex-wrap items-end gap-x-1 gap-y-1.5",
           contentClassName,
+          gridClassName,
         )}
+        data-aligned-wrapped-content
+        style={{ lineHeight: 1.15 }}
       >
-        <div
-          className={cn("inline-grid min-w-max items-end", gridClassName)}
-          style={gridStyle}
-        >
-          {showPinyin && pinyinValue ? (
-            <RomanizationCells
-              chinese={chinese}
-              romanization={pinyinValue}
-              kind="pinyin"
-              className={pinyinClassName}
-              fontSize={annotationSize}
-              characterWords={characterWords}
-              toneColors={romanizationToneColors}
-            />
-          ) : null}
-          {showJyutping && jyutpingValue ? (
-            <RomanizationCells
-              chinese={chinese}
-              romanization={jyutpingValue}
-              kind="jyutping"
-              className={jyutpingClassName}
-              fontSize={annotationSize}
-              characterWords={characterWords}
-              toneColors={romanizationToneColors}
-            />
-          ) : null}
+        {chars.map((char, index) => {
+          const syllable = toneAnnotations[index]?.pinyin ?? "";
+          const tone =
+            toneLanguage === "cantonese"
+              ? extractToneFromJyutping(syllable)
+              : extractToneFromPinyin(syllable);
+          const toneClass = toneColorsEnabled
+            ? getToneColorClass(tone, toneLanguage)
+            : "";
+          const toneStyle = toneColorsEnabled
+            ? getToneColorStyle(tone, toneLanguage)
+            : undefined;
+          const toneData = toneColorsEnabled
+            ? getToneDataAttr(tone, toneLanguage)
+            : "";
+          const word = characterWords[index];
 
-          <div
-            className="contents"
-            data-aligned-chinese-row
-            aria-label="Chinese characters"
-          >
-            {chars.map((char, index) => {
-              const syllable = toneAnnotations[index]?.pinyin ?? "";
-              const tone =
-                toneLanguage === "cantonese"
-                  ? extractToneFromJyutping(syllable)
-                  : extractToneFromPinyin(syllable);
-              const toneClass = toneColorsEnabled
-                ? getToneColorClass(tone, toneLanguage)
-                : "";
-              const toneStyle = toneColorsEnabled
-                ? getToneColorStyle(tone, toneLanguage)
-                : undefined;
-              const toneData = toneColorsEnabled
-                ? getToneDataAttr(tone, toneLanguage)
-                : "";
-              const word = characterWords[index];
-
-              return (
-                <span
-                  key={`${char}-${index}`}
-                  data-word={word?.word}
-                  data-index={word?.wordIndex}
-                  className={cn(
-                    "min-w-[1.05em] whitespace-pre text-center leading-tight",
-                    word?.word &&
-                      "cursor-pointer rounded transition-colors hover:bg-cyan-500/20",
-                    word?.word &&
-                      highlightedWords?.has(word.word) &&
-                      "rounded-sm border-b border-emerald-500/30 bg-emerald-500/10",
-                    toneClass,
-                    chineseClassName,
-                  )}
-                  style={{ fontSize: `${fontSize}px`, ...toneStyle }}
-                  {...(toneData ? { "data-tc": toneData } : {})}
-                >
-                  {char}
-                </span>
-              );
-            })}
-          </div>
-        </div>
+          return (
+            <span
+              key={`${char}-${index}`}
+              className="inline-flex min-w-[1.05em] flex-col items-center align-top"
+              data-aligned-unit
+            >
+              {showPinyin && pinyinValue ? (
+                <RomanizationCell
+                  kind="pinyin"
+                  value={pinyinAnnotations[index]?.pinyin ?? ""}
+                  index={index}
+                  word={word}
+                  fontSize={annotationSize}
+                  toneColors={romanizationToneColors}
+                  selectingLanguage={selectingLanguage}
+                  className={pinyinClassName}
+                />
+              ) : null}
+              {showJyutping && jyutpingValue ? (
+                <RomanizationCell
+                  kind="jyutping"
+                  value={jyutpingAnnotations[index]?.pinyin ?? ""}
+                  index={index}
+                  word={word}
+                  fontSize={annotationSize}
+                  toneColors={romanizationToneColors}
+                  selectingLanguage={selectingLanguage}
+                  className={jyutpingClassName}
+                />
+              ) : null}
+              <span
+                data-aligned-language-cell="chinese"
+                data-aligned-language-index={index}
+                data-word={word?.word}
+                data-index={word?.wordIndex}
+                className={cn(
+                  "whitespace-pre text-center leading-tight",
+                  selectingLanguage !== null &&
+                    selectingLanguage !== "chinese" &&
+                    "select-none",
+                  word?.word &&
+                    "cursor-pointer rounded transition-colors hover:bg-cyan-500/20",
+                  word?.word &&
+                    highlightedWords?.has(word.word) &&
+                    "rounded-sm border-b border-emerald-500/30 bg-emerald-500/10",
+                  toneClass,
+                  chineseClassName,
+                )}
+                style={{ fontSize: `${fontSize}px`, ...toneStyle }}
+                {...(toneData ? { "data-tc": toneData } : {})}
+              >
+                {char}
+              </span>
+            </span>
+          );
+        })}
         {trailingControls}
       </div>
 

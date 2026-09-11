@@ -20,6 +20,11 @@ describe("PronunciationMarkerEditor", () => {
     const warmCells = container.querySelectorAll(
       '[data-pronunciation-offset="3"]',
     );
+    const wrappedContent = container.querySelector(
+      "[data-pronunciation-wrapped-content]",
+    );
+    expect(wrappedContent?.className).toContain("flex-wrap");
+    expect(wrappedContent?.className).not.toContain("overflow-x-auto");
     expect(warmCells).toHaveLength(2);
     fireEvent.click(warmCells[0]);
 
@@ -71,5 +76,46 @@ describe("PronunciationMarkerEditor", () => {
 
     expect(onChange.mock.calls[0][0][0].audioTimestampSeconds).toBe(6);
     audio.remove();
+  });
+
+  it("ignores a drag selection that crosses a wrapped line", () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <PronunciationMarkerEditor
+        chinese="今天很暖"
+        romanization="jīn tiān hěn nuǎn"
+        marks={[]}
+        lang="mandarin"
+        onChange={onChange}
+      />,
+    );
+    const cells = container.querySelectorAll(
+      '[data-pronunciation-kind="chinese"]',
+    );
+    const units = container.querySelectorAll<HTMLElement>(
+      "[data-pronunciation-unit]",
+    );
+    Object.defineProperty(units[0], "offsetTop", { value: 0 });
+    Object.defineProperty(units[3], "offsetTop", { value: 40 });
+
+    const range = document.createRange();
+    range.setStart(cells[0]?.firstChild as Text, 0);
+    range.setEnd(cells[3]?.firstChild as Text, 1);
+    const removeAllRanges = vi.fn();
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      isCollapsed: false,
+      rangeCount: 1,
+      getRangeAt: () => range,
+      removeAllRanges,
+    } as unknown as Selection);
+
+    fireEvent.mouseUp(
+      container.querySelector("[data-pronunciation-wrapped-content]")!
+        .parentElement!,
+    );
+
+    expect(removeAllRanges).toHaveBeenCalledTimes(1);
+    expect(screen.queryByDisplayValue("jīn tiān hěn nuǎn")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

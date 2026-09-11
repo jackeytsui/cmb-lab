@@ -44,8 +44,9 @@ describe("ReaderTextArea Cantonese romanisation", () => {
     expect(html).toContain("ngan4");
     expect(html).toContain("hong4");
     expect(html).not.toContain("haang4");
-    expect(html).toContain('data-aligned-romanization-row="jyutping"');
-    expect(html).toContain("data-aligned-chinese-row");
+    expect(html).toContain('data-aligned-language-cell="jyutping"');
+    expect(html).toContain('data-aligned-language-cell="chinese"');
+    expect(html).toContain("data-aligned-wrapped-content");
   });
 
   it("shows a saved manual override immediately", () => {

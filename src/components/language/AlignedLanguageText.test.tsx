@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AlignedLanguageText } from "./AlignedLanguageText";
 
 describe("AlignedLanguageText", () => {
-  it("uses separate rows whose cells share matching grid columns", () => {
+  it("wraps character units while keeping romanization above its character", () => {
     const { container } = render(
       <AlignedLanguageText
         chinese="比较暖"
@@ -14,21 +14,32 @@ describe("AlignedLanguageText", () => {
       />,
     );
 
-    const pinyinRow = container.querySelector(
-      '[data-aligned-romanization-row="pinyin"]',
+    const content = container.querySelector("[data-aligned-wrapped-content]");
+    const units = container.querySelectorAll("[data-aligned-unit]");
+    const pinyinCells = container.querySelectorAll(
+      '[data-aligned-language-cell="pinyin"]',
     );
-    const chineseRow = container.querySelector("[data-aligned-chinese-row]");
+    const chineseCells = container.querySelectorAll(
+      '[data-aligned-language-cell="chinese"]',
+    );
     const englishRow = container.querySelector("[data-aligned-english-row]");
-    const grid = chineseRow?.parentElement;
 
-    expect(pinyinRow?.textContent).toBe("bǐ jiào nuǎn");
-    expect(chineseRow?.textContent).toBe("比较暖");
+    expect(content?.className).toContain("flex-wrap");
+    expect(content?.className).not.toContain("overflow-x-auto");
+    expect(units).toHaveLength(3);
+    expect(Array.from(pinyinCells, (cell) => cell.textContent)).toEqual([
+      "bǐ",
+      "jiào",
+      "nuǎn",
+    ]);
+    expect(Array.from(chineseCells, (cell) => cell.textContent)).toEqual([
+      "比",
+      "较",
+      "暖",
+    ]);
     expect(englishRow?.textContent).toBe("Relatively warm.");
-    expect(pinyinRow?.parentElement).toBe(grid);
-    expect(chineseRow?.parentElement).toBe(grid);
-    expect(grid?.getAttribute("style")).toContain("repeat(3, max-content)");
-    expect(pinyinRow?.children).toHaveLength(3);
-    expect(chineseRow?.children).toHaveLength(3);
+    expect(units[0]?.children[0]).toBe(pinyinCells[0]);
+    expect(units[0]?.children[1]).toBe(chineseCells[0]);
   });
 
   it("aligns romanization only to Han characters without shifting punctuation", () => {
@@ -36,12 +47,12 @@ describe("AlignedLanguageText", () => {
       <AlignedLanguageText chinese="你，好" pinyin="nǐ hǎo" />,
     );
     const cells = container.querySelectorAll(
-      '[data-aligned-romanization-row="pinyin"] > span',
+      '[data-aligned-language-cell="pinyin"]',
     );
 
     expect(cells).toHaveLength(3);
-    expect(cells[0]?.textContent).toBe("nǐ ");
-    expect(cells[1]?.textContent).toBe("");
+    expect(cells[0]?.textContent).toBe("nǐ");
+    expect(cells[1]?.textContent).toBe("\u00a0");
     expect(cells[2]?.textContent).toBe("hǎo");
   });
 
@@ -49,8 +60,9 @@ describe("AlignedLanguageText", () => {
     const { container } = render(
       <AlignedLanguageText chinese="比较暖" pinyin="bǐ jiào nuǎn" />,
     );
-    const chineseRow = container.querySelector("[data-aligned-chinese-row]");
-    const cells = chineseRow?.querySelectorAll("span");
+    const cells = container.querySelectorAll(
+      '[data-aligned-language-cell="chinese"]',
+    );
     const range = document.createRange();
     range.setStart(cells?.[0]?.firstChild as Text, 0);
     range.setEnd(cells?.[2]?.firstChild as Text, 1);
@@ -74,10 +86,9 @@ describe("AlignedLanguageText", () => {
     const { container } = render(
       <AlignedLanguageText chinese="比较暖" pinyin="bǐ jiào nuǎn" />,
     );
-    const pinyinRow = container.querySelector(
-      '[data-aligned-romanization-row="pinyin"]',
+    const cells = container.querySelectorAll(
+      '[data-aligned-language-cell="pinyin"]',
     );
-    const cells = pinyinRow?.querySelectorAll("span[data-annotation]");
     const range = document.createRange();
     range.setStart(cells?.[0]?.firstChild as Text, 0);
     range.setEnd(cells?.[2]?.firstChild as Text, 4);
@@ -95,5 +106,25 @@ describe("AlignedLanguageText", () => {
     });
 
     expect(setData).toHaveBeenCalledWith("text/plain", "bǐ jiào nuǎn");
+  });
+
+  it("keeps the other language out of the active text selection", () => {
+    const { container } = render(
+      <AlignedLanguageText chinese="比较暖" pinyin="bǐ jiào nuǎn" />,
+    );
+    const pinyinCell = container.querySelector(
+      '[data-aligned-language-cell="pinyin"]',
+    )!;
+    const chineseCell = container.querySelector(
+      '[data-aligned-language-cell="chinese"]',
+    )!;
+
+    fireEvent.pointerDown(pinyinCell);
+    expect(chineseCell.className).toContain("select-none");
+    expect(pinyinCell.className).not.toContain("select-none");
+
+    fireEvent.pointerDown(chineseCell);
+    expect(pinyinCell.className).toContain("select-none");
+    expect(chineseCell.className).not.toContain("select-none");
   });
 });
