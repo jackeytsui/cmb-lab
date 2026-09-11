@@ -117,4 +117,17 @@ describe("audio course delivery hardening", () => {
     expect(feedRoute).toContain("course_or_access_unavailable");
     expect(audioRoute).toContain("audio_unavailable");
   });
+
+  it("publishes Apple-compatible private podcast enclosures", () => {
+    const feedRoute = source("src/app/api/podcast/private/[token]/feed/route.ts");
+    const audioRoute = source(
+      "src/app/api/podcast/private/[token]/audio/[lessonId]/route.ts",
+    );
+
+    expect(feedRoute).toContain("await head(rawAudioUrl");
+    expect(feedRoute).toContain('length="${audioBytes}"');
+    expect(feedRoute).not.toContain('length="0"');
+    expect(feedRoute).toContain("podcastAudioFileExtension(audioContentType)");
+    expect(audioRoute).toContain("parsePodcastLessonPath(lessonPath)");
+  });
 });

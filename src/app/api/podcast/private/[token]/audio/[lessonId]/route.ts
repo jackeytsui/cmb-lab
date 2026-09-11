@@ -6,6 +6,7 @@ import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
 import { proxyBlobMedia } from "@/lib/blob-media-proxy";
 import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
 import { logPodcastDeliveryFailure } from "@/lib/podcast-delivery-log";
+import { parsePodcastLessonPath } from "@/lib/podcast-feed";
 
 export const maxDuration = 60;
 
@@ -17,15 +18,25 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string; lessonId: string }> },
 ) {
-  const { token, lessonId } = await params;
+  const { token, lessonId: lessonPath } = await params;
+  const lessonId = parsePodcastLessonPath(lessonPath);
   if (!/^[a-f0-9]{64}$/i.test(token)) {
     logPodcastDeliveryFailure({
       route: "audio",
       reason: "invalid_token_format",
       token,
-      lessonId,
+      lessonId: lessonPath,
     });
     return new NextResponse("Unauthorized", { status: 403 });
+  }
+  if (!lessonId) {
+    logPodcastDeliveryFailure({
+      route: "audio",
+      reason: "invalid_lesson_id",
+      token,
+      lessonId: lessonPath,
+    });
+    return new NextResponse("Lesson not found", { status: 404 });
   }
 
   // Bind the token to its user, series, and requested lesson in one query.

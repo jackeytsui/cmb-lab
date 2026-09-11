@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { head } from "@vercel/blob";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { courses, lessons, modules, podcastTokens, users } from "@/db/schema";
 import { userCanAccessAudioCourse } from "@/lib/audio-course-access";
 import { logPodcastDeliveryFailure } from "@/lib/podcast-delivery-log";
+import { podcastAudioFileExtension } from "@/lib/podcast-feed";
+import { isPrivateVercelBlobUrl } from "@/lib/videoask/media-storage";
+
+export const maxDuration = 60;
 
 /**
  * GET /api/podcast/private/[token]/feed
@@ -130,13 +135,56 @@ export async function GET(
   const imageUrl = course.thumbnailUrl || `${baseUrl}/canto-to-mando-logo.png`;
   const now = new Date().toUTCString();
 
-  const items = lessonRows
-    .map((lesson, index) => {
-      const rawAudioUrl = parseLessonAudioUrl(lesson.content);
-      if (!rawAudioUrl) return null;
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  if (!blobToken) {
+    logPodcastDeliveryFailure({
+      route: "feed",
+      reason: "audio_storage_unavailable",
+      token,
+      seriesId: tokenRow.seriesId,
+    });
+    return new NextResponse("Podcast audio is temporarily unavailable", {
+      status: 503,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
 
-      // Private audio endpoint authenticated by the same token
-      const audioUrl = `${baseUrl}/api/podcast/private/${token}/audio/${lesson.id}`;
+  const itemRows = await Promise.all(
+    lessonRows.map(async (lesson, index) => {
+      const rawAudioUrl = parseLessonAudioUrl(lesson.content);
+      if (!isPrivateVercelBlobUrl(rawAudioUrl)) return null;
+
+      let audioBytes = 0;
+      let audioContentType = "audio/mpeg";
+      try {
+        const audioMetadata = await head(rawAudioUrl, { token: blobToken });
+        audioBytes = audioMetadata.size;
+        audioContentType = audioMetadata.contentType || audioContentType;
+      } catch {
+        logPodcastDeliveryFailure({
+          route: "feed",
+          reason: "audio_metadata_unavailable",
+          token,
+          seriesId: tokenRow.seriesId,
+          lessonId: lesson.id,
+        });
+        return null;
+      }
+      if (!Number.isSafeInteger(audioBytes) || audioBytes <= 0) {
+        logPodcastDeliveryFailure({
+          route: "feed",
+          reason: "invalid_audio_size",
+          token,
+          seriesId: tokenRow.seriesId,
+          lessonId: lesson.id,
+        });
+        return null;
+      }
+
+      // Apple requires a media extension in each enclosure URL. The audio
+      // route still accepts the old extensionless form for cached feeds.
+      const audioExtension = podcastAudioFileExtension(audioContentType);
+      const audioUrl = `${baseUrl}/api/podcast/private/${token}/audio/${lesson.id}.${audioExtension}`;
       const lessonTitle = lesson.title;
       const lessonDescription = lesson.description || "";
       const durationSeconds = lesson.durationSeconds || 0;
@@ -154,7 +202,7 @@ export async function GET(
       return `    <item>
       <title>${escapeXml(lessonTitle)}</title>
       <description>${escapeXml(lessonDescription)}</description>
-      <enclosure url="${escapeXml(audioUrl)}" type="audio/mpeg" length="0" />
+      <enclosure url="${escapeXml(audioUrl)}" type="${escapeXml(audioContentType)}" length="${audioBytes}" />
       <guid isPermaLink="false">${lesson.id}-${token.slice(0, 8)}</guid>
       <pubDate>${pubDate}</pubDate>
       <itunes:episode>${index + 1}</itunes:episode>
@@ -166,7 +214,10 @@ export async function GET(
       }
       <itunes:explicit>false</itunes:explicit>
     </item>`;
-    })
+    }),
+  );
+
+  const items = itemRows
     .filter(Boolean)
     .join("\n");
 
