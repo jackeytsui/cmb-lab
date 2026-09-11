@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type {
   ClipboardEvent as ReactClipboardEvent,
   PointerEvent as ReactPointerEvent,
@@ -23,6 +23,22 @@ type CharacterWord = {
 };
 
 type SelectableLanguage = "pinyin" | "jyutping" | "chinese";
+
+type RowSelection = {
+  language: SelectableLanguage;
+  startIndex: number;
+  endIndex: number;
+};
+
+type DragSelection = {
+  language: SelectableLanguage;
+  anchorIndex: number;
+  lineTop: number;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  moved: boolean;
+};
 
 const LANGUAGE_CELL_SELECTOR = "[data-aligned-language-cell]";
 
@@ -82,7 +98,7 @@ function RomanizationCell({
   word,
   fontSize,
   toneColors,
-  selectingLanguage,
+  selected,
   className,
 }: {
   kind: "pinyin" | "jyutping";
@@ -91,7 +107,7 @@ function RomanizationCell({
   word: CharacterWord | undefined;
   fontSize: number;
   toneColors: boolean;
-  selectingLanguage: SelectableLanguage | null;
+  selected: boolean;
   className?: string;
 }) {
   const tone =
@@ -110,14 +126,13 @@ function RomanizationCell({
       data-word={word?.word}
       data-index={word?.wordIndex}
       className={cn(
-        "whitespace-nowrap px-[0.08em] text-center leading-tight",
+        "select-none whitespace-nowrap rounded-sm px-[0.08em] text-center leading-tight",
         kind === "pinyin" ? "text-blue-400" : "text-orange-400",
-        selectingLanguage !== null &&
-          selectingLanguage !== kind &&
-          "select-none selection:bg-transparent selection:text-inherit",
+        selected && "bg-sky-200/80 dark:bg-sky-700/70",
         toneClass,
         className,
       )}
+      data-aligned-selected={selected ? true : undefined}
       style={{ fontSize: `${fontSize}px` }}
     >
       {value || "\u00a0"}
@@ -129,8 +144,8 @@ function RomanizationCell({
  * Site-wide Chinese display primitive.
  *
  * Each character and its romanization form one naturally wrapping visual
- * unit. The inactive language rows are excluded during selection, so copied
- * Pinyin/Jyutping and Chinese remain separate and clean.
+ * unit. Pointer-drag selection is drawn only on the chosen language row, and
+ * copied Pinyin/Jyutping and Chinese remain separate and clean.
  */
 export function AlignedLanguageText({
   chinese,
@@ -166,20 +181,129 @@ export function AlignedLanguageText({
   const pinyinAnnotations = annotateFromModelAnswer(chinese, pinyinValue);
   const jyutpingAnnotations = annotateFromModelAnswer(chinese, jyutpingValue);
   const characterWords = buildCharacterWords(segments, segmentStartIndex);
-  const [selectingLanguage, setSelectingLanguage] =
-    useState<SelectableLanguage | null>(null);
+  const [rowSelection, setRowSelection] = useState<RowSelection | null>(null);
+  const rowSelectionRef = useRef<RowSelection | null>(null);
+  const dragSelectionRef = useRef<DragSelection | null>(null);
+  const copyBufferRef = useRef<HTMLTextAreaElement | null>(null);
+  const suppressClickRef = useRef(false);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch" || event.button !== 0) return;
     const cell = (event.target as Element).closest<HTMLElement>(
       LANGUAGE_CELL_SELECTOR,
     );
     const language = cell?.dataset.alignedLanguageCell as
       | SelectableLanguage
       | undefined;
-    if (language) setSelectingLanguage(language);
+    const index = Number(cell?.dataset.alignedLanguageIndex);
+    const unit = cell?.closest<HTMLElement>("[data-aligned-unit]");
+    if (!language || !Number.isInteger(index) || !unit) {
+      rowSelectionRef.current = null;
+      setRowSelection(null);
+      return;
+    }
+
+    event.preventDefault();
+    window.getSelection()?.removeAllRanges();
+    rowSelectionRef.current = null;
+    setRowSelection(null);
+    dragSelectionRef.current = {
+      language,
+      anchorIndex: index,
+      lineTop: unit.offsetTop,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragSelectionRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (
+      !drag.moved &&
+      Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 3
+    ) {
+      return;
+    }
+
+    drag.moved = true;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const eventTarget = event.target as Element;
+    const pointedElement =
+      eventTarget.closest(LANGUAGE_CELL_SELECTOR) ??
+      document.elementFromPoint?.(event.clientX, event.clientY);
+    const cell = pointedElement?.closest<HTMLElement>(LANGUAGE_CELL_SELECTOR);
+    const unit = cell?.closest<HTMLElement>("[data-aligned-unit]");
+    const language = cell?.dataset.alignedLanguageCell;
+    const index = Number(cell?.dataset.alignedLanguageIndex);
+    if (
+      language !== drag.language ||
+      !Number.isInteger(index) ||
+      !unit ||
+      Math.abs(unit.offsetTop - drag.lineTop) > 2
+    ) {
+      return;
+    }
+
+    const nextSelection = {
+      language: drag.language,
+      startIndex: Math.min(drag.anchorIndex, index),
+      endIndex: Math.max(drag.anchorIndex, index),
+    };
+    rowSelectionRef.current = nextSelection;
+    setRowSelection(nextSelection);
+  };
+
+  const textForSelection = (selection: RowSelection): string =>
+    selection.language === "chinese"
+      ? chars.slice(selection.startIndex, selection.endIndex + 1).join("")
+      : (selection.language === "pinyin"
+          ? pinyinAnnotations
+          : jyutpingAnnotations)
+          .slice(selection.startIndex, selection.endIndex + 1)
+          .map((annotation) => annotation.pinyin)
+          .filter(Boolean)
+          .join(" ");
+
+  const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragSelectionRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragSelectionRef.current = null;
+    if (!drag.moved || !rowSelectionRef.current) return;
+
+    event.preventDefault();
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    window.getSelection()?.removeAllRanges();
+    suppressClickRef.current = true;
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+    window.requestAnimationFrame(() => {
+      const buffer = copyBufferRef.current;
+      const selection = rowSelectionRef.current;
+      if (!buffer || !selection) return;
+      buffer.value = textForSelection(selection);
+      buffer.focus({ preventScroll: true });
+      buffer.select();
+    });
   };
 
   const handleCopy = (event: ReactClipboardEvent<HTMLDivElement>) => {
+    const activeRowSelection = rowSelectionRef.current;
+    if (activeRowSelection) {
+      event.preventDefault();
+      event.clipboardData.setData(
+        "text/plain",
+        textForSelection(activeRowSelection),
+      );
+      return;
+    }
+
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
 
@@ -189,7 +313,7 @@ export function AlignedLanguageText({
     const endpointLanguage = startCell?.dataset.alignedLanguageCell as
       | SelectableLanguage
       | undefined;
-    const language = selectingLanguage ?? endpointLanguage;
+    const language = endpointLanguage;
     if (!language) return;
 
     const selectedIndices = Array.from(
@@ -231,9 +355,20 @@ export function AlignedLanguageText({
 
   return (
     <div
-      className={cn("min-w-0 select-text", className)}
+      className={cn("min-w-0", className)}
       onCopy={handleCopy}
       onPointerDownCapture={handlePointerDown}
+      onPointerMoveCapture={handlePointerMove}
+      onPointerUpCapture={handlePointerUp}
+      onPointerCancel={() => {
+        dragSelectionRef.current = null;
+      }}
+      onClickCapture={(event) => {
+        if (!suppressClickRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+        suppressClickRef.current = false;
+      }}
     >
       <div
         className={cn(
@@ -260,6 +395,10 @@ export function AlignedLanguageText({
             ? getToneDataAttr(tone, toneLanguage)
             : "";
           const word = characterWords[index];
+          const isSelected = (language: SelectableLanguage) =>
+            rowSelection?.language === language &&
+            index >= rowSelection.startIndex &&
+            index <= rowSelection.endIndex;
 
           return (
             <span
@@ -275,7 +414,7 @@ export function AlignedLanguageText({
                   word={word}
                   fontSize={annotationSize}
                   toneColors={romanizationToneColors}
-                  selectingLanguage={selectingLanguage}
+                  selected={isSelected("pinyin")}
                   className={pinyinClassName}
                 />
               ) : null}
@@ -287,7 +426,7 @@ export function AlignedLanguageText({
                   word={word}
                   fontSize={annotationSize}
                   toneColors={romanizationToneColors}
-                  selectingLanguage={selectingLanguage}
+                  selected={isSelected("jyutping")}
                   className={jyutpingClassName}
                 />
               ) : null}
@@ -297,10 +436,9 @@ export function AlignedLanguageText({
                 data-word={word?.word}
                 data-index={word?.wordIndex}
                 className={cn(
-                  "whitespace-pre text-center leading-tight",
-                  selectingLanguage !== null &&
-                    selectingLanguage !== "chinese" &&
-                    "select-none selection:bg-transparent selection:text-inherit",
+                  "select-none whitespace-pre rounded-sm text-center leading-tight",
+                  isSelected("chinese") &&
+                    "bg-sky-200/80 dark:bg-sky-700/70",
                   word?.word &&
                     "cursor-pointer rounded transition-colors hover:bg-cyan-500/20",
                   word?.word &&
@@ -309,6 +447,9 @@ export function AlignedLanguageText({
                   toneClass,
                   chineseClassName,
                 )}
+                data-aligned-selected={
+                  isSelected("chinese") ? true : undefined
+                }
                 style={{ fontSize: `${fontSize}px`, ...toneStyle }}
                 {...(toneData ? { "data-tc": toneData } : {})}
               >
@@ -330,6 +471,17 @@ export function AlignedLanguageText({
           {english}
         </div>
       ) : null}
+      <textarea
+        ref={copyBufferRef}
+        tabIndex={-1}
+        readOnly
+        aria-label="Selected language text"
+        className="fixed -left-[9999px] top-0 h-px w-px opacity-0"
+        onBlur={() => {
+          rowSelectionRef.current = null;
+          setRowSelection(null);
+        }}
+      />
     </div>
   );
 }

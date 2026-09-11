@@ -1,8 +1,36 @@
 // @vitest-environment happy-dom
 
 import { fireEvent, render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AlignedLanguageText } from "./AlignedLanguageText";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function dragAcrossRow(from: Element, to: Element, pointerId = 1) {
+  fireEvent.pointerDown(from, {
+    pointerId,
+    pointerType: "mouse",
+    button: 0,
+    clientX: 0,
+    clientY: 0,
+  });
+  fireEvent.pointerMove(to, {
+    pointerId,
+    pointerType: "mouse",
+    buttons: 1,
+    clientX: 30,
+    clientY: 0,
+  });
+  fireEvent.pointerUp(to, {
+    pointerId,
+    pointerType: "mouse",
+    button: 0,
+    clientX: 30,
+    clientY: 0,
+  });
+}
 
 describe("AlignedLanguageText", () => {
   it("wraps character units while keeping romanization above its character", () => {
@@ -108,7 +136,7 @@ describe("AlignedLanguageText", () => {
     expect(setData).toHaveBeenCalledWith("text/plain", "bǐ jiào nuǎn");
   });
 
-  it("copies only the active language when the browser range crosses both layers", () => {
+  it("visually selects and copies only the dragged Pinyin row", () => {
     const { container } = render(
       <AlignedLanguageText chinese="比较暖" pinyin="bǐ jiào nuǎn" />,
     );
@@ -118,17 +146,15 @@ describe("AlignedLanguageText", () => {
     const chineseCells = container.querySelectorAll(
       '[data-aligned-language-cell="chinese"]',
     );
-    fireEvent.pointerDown(pinyinCells[0]!);
+    dragAcrossRow(pinyinCells[0]!, pinyinCells[2]!);
 
-    const range = document.createRange();
-    range.setStart(pinyinCells[0]?.firstChild as Text, 0);
-    range.setEnd(chineseCells[2]?.firstChild as Text, 1);
-    vi.spyOn(window, "getSelection").mockReturnValue({
-      isCollapsed: false,
-      rangeCount: 1,
-      getRangeAt: () => range,
-      toString: () => "bǐ比较jiào暖nuǎn",
-    } as unknown as Selection);
+    expect(
+      Array.from(pinyinCells, (cell) => cell.dataset.alignedSelected),
+    ).toEqual(["true", "true", "true"]);
+    expect(
+      Array.from(chineseCells, (cell) => cell.dataset.alignedSelected),
+    ).toEqual([undefined, undefined, undefined]);
+
     const setData = vi.fn();
 
     fireEvent.copy(container.firstElementChild as Element, {
@@ -138,25 +164,83 @@ describe("AlignedLanguageText", () => {
     expect(setData).toHaveBeenCalledWith("text/plain", "bǐ jiào nuǎn");
   });
 
-  it("keeps the other language out of the active text selection", () => {
+  it("visually selects and copies only the dragged Chinese row", () => {
     const { container } = render(
       <AlignedLanguageText chinese="比较暖" pinyin="bǐ jiào nuǎn" />,
     );
-    const pinyinCell = container.querySelector(
+    const pinyinCells = container.querySelectorAll<HTMLElement>(
       '[data-aligned-language-cell="pinyin"]',
-    )!;
-    const chineseCell = container.querySelector(
+    );
+    const chineseCells = container.querySelectorAll<HTMLElement>(
       '[data-aligned-language-cell="chinese"]',
-    )!;
+    );
 
-    fireEvent.pointerDown(pinyinCell);
-    expect(chineseCell.className).toContain("select-none");
-    expect(chineseCell.className).toContain("selection:bg-transparent");
-    expect(pinyinCell.className).not.toContain("select-none");
+    dragAcrossRow(chineseCells[0]!, chineseCells[2]!);
 
-    fireEvent.pointerDown(chineseCell);
-    expect(pinyinCell.className).toContain("select-none");
-    expect(pinyinCell.className).toContain("selection:bg-transparent");
-    expect(chineseCell.className).not.toContain("select-none");
+    expect(
+      Array.from(chineseCells, (cell) => cell.dataset.alignedSelected),
+    ).toEqual(["true", "true", "true"]);
+    expect(
+      Array.from(pinyinCells, (cell) => cell.dataset.alignedSelected),
+    ).toEqual([undefined, undefined, undefined]);
+
+    const setData = vi.fn();
+    fireEvent.copy(container.firstElementChild as Element, {
+      clipboardData: { setData },
+    });
+
+    expect(setData).toHaveBeenCalledWith("text/plain", "比较暖");
+  });
+
+  it("stops a row selection at the current visual line", () => {
+    const { container } = render(
+      <AlignedLanguageText chinese="比较暖" pinyin="bǐ jiào nuǎn" />,
+    );
+    const units = container.querySelectorAll<HTMLElement>(
+      "[data-aligned-unit]",
+    );
+    const pinyinCells = container.querySelectorAll<HTMLElement>(
+      '[data-aligned-language-cell="pinyin"]',
+    );
+    Object.defineProperty(units[2], "offsetTop", { value: 40 });
+
+    fireEvent.pointerDown(pinyinCells[0]!, {
+      pointerId: 2,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    });
+    fireEvent.pointerMove(pinyinCells[1]!, {
+      pointerId: 2,
+      pointerType: "mouse",
+      buttons: 1,
+      clientX: 20,
+      clientY: 0,
+    });
+    fireEvent.pointerMove(pinyinCells[2]!, {
+      pointerId: 2,
+      pointerType: "mouse",
+      buttons: 1,
+      clientX: 40,
+      clientY: 40,
+    });
+    fireEvent.pointerUp(pinyinCells[2]!, {
+      pointerId: 2,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 40,
+      clientY: 40,
+    });
+
+    expect(
+      Array.from(pinyinCells, (cell) => cell.dataset.alignedSelected),
+    ).toEqual(["true", "true", undefined]);
+
+    const setData = vi.fn();
+    fireEvent.copy(container.firstElementChild as Element, {
+      clipboardData: { setData },
+    });
+    expect(setData).toHaveBeenCalledWith("text/plain", "bǐ jiào");
   });
 });
