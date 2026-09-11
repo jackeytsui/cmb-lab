@@ -53,7 +53,6 @@ describe("View As learning-surface fidelity", () => {
     const sessionMutation = sessions.split("export async function POST")[1];
     const selectedUserReads = [
       "src/app/api/coaching/sessions/[sessionId]/rating/route.ts",
-      "src/app/api/coaching/rating-prompt/route.ts",
       "src/app/api/coaching/notes/[noteId]/star/route.ts",
     ];
 
@@ -72,6 +71,10 @@ describe("View As learning-surface fidelity", () => {
     for (const file of selectedUserReads) {
       expect(source(file), file).toContain("getCurrentUser");
     }
+
+    const ratingPrompt = source("src/app/api/coaching/rating-prompt/route.ts");
+    expect(ratingPrompt).toContain("getRealUser");
+    expect(ratingPrompt).not.toContain("getCurrentUser");
   });
 
   it("keeps coach coaching-data reads inside assigned-student scope", () => {

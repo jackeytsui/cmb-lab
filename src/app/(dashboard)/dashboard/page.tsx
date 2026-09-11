@@ -38,6 +38,7 @@ import { XPOverview } from "@/components/xp/XPOverview";
 import { resolvePermissions } from "@/lib/permissions";
 import { StudyTodayCard } from "@/components/dashboard/StudyTodayCard";
 import { DashboardLearningSection } from "@/components/dashboard/DashboardLearningSection";
+import { SessionFeedbackPrompt } from "@/components/coaching/SessionFeedbackPrompt";
 import { ensureDefaultStudentRoleAssignment } from "@/lib/student-role";
 import {
   applyFeatureTagOverrides,
@@ -231,6 +232,8 @@ function DashboardContent({
           )}
         </div>
       </header>
+
+      <SessionFeedbackPrompt />
 
       {showCourseLibrary ? (
         <DashboardLearningSection courses={learningCourses} />

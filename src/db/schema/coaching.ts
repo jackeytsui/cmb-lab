@@ -144,9 +144,62 @@ export const coachingSessionRatingsRelations = relations(
   }),
 );
 
+/**
+ * Durable delivery state for the gentle dashboard feedback prompt.
+ *
+ * This is deliberately separate from coachingSessionRatings: seeing or
+ * declining a prompt is not a rating and must never affect coaching analytics.
+ */
+export const coachingFeedbackPromptStates = pgTable(
+  "coaching_feedback_prompt_states",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => coachingSessions.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    promptCount: integer("prompt_count").notNull().default(0),
+    lastPromptedAt: timestamp("last_prompted_at"),
+    skippedAt: timestamp("skipped_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("coaching_feedback_prompt_session_user_idx").on(
+      table.sessionId,
+      table.userId,
+    ),
+    index("coaching_feedback_prompt_user_last_idx").on(
+      table.userId,
+      table.lastPromptedAt,
+    ),
+  ],
+);
+
+export const coachingFeedbackPromptStatesRelations = relations(
+  coachingFeedbackPromptStates,
+  ({ one }) => ({
+    session: one(coachingSessions, {
+      fields: [coachingFeedbackPromptStates.sessionId],
+      references: [coachingSessions.id],
+    }),
+    user: one(users, {
+      fields: [coachingFeedbackPromptStates.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
 export type CoachingSession = typeof coachingSessions.$inferSelect;
 export type NewCoachingSession = typeof coachingSessions.$inferInsert;
 export type CoachingNote = typeof coachingNotes.$inferSelect;
 export type NewCoachingNote = typeof coachingNotes.$inferInsert;
 export type CoachingSessionRating = typeof coachingSessionRatings.$inferSelect;
 export type NewCoachingSessionRating = typeof coachingSessionRatings.$inferInsert;
+export type CoachingFeedbackPromptState =
+  typeof coachingFeedbackPromptStates.$inferSelect;
