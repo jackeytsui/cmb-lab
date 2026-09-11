@@ -2,6 +2,7 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { CorrectedSentence } from "./CorrectedSentence";
 import { PronunciationMarkerEditor } from "./PronunciationMarker";
 
 describe("PronunciationMarkerEditor", () => {
@@ -78,6 +79,26 @@ describe("PronunciationMarkerEditor", () => {
     audio.remove();
   });
 
+  it("opens the editor from a contextual Diary selection without duplicating the sentence", () => {
+    const { container } = render(
+      <PronunciationMarkerEditor
+        chinese="今天很暖"
+        romanization="jīn tiān hěn nuǎn"
+        marks={[]}
+        lang="mandarin"
+        showSentence={false}
+        initialSelection={{ startOffset: 2, endOffset: 4 }}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      container.querySelector("[data-pronunciation-wrapped-content]"),
+    ).toBeNull();
+    expect(screen.getByDisplayValue("hěn nuǎn")).toBeTruthy();
+    expect(screen.getByText(/很暖/)).toBeTruthy();
+  });
+
   it("ignores a drag selection that crosses a wrapped line", () => {
     const onChange = vi.fn();
     const { container } = render(
@@ -117,5 +138,29 @@ describe("PronunciationMarkerEditor", () => {
     expect(removeAllRanges).toHaveBeenCalledTimes(1);
     expect(screen.queryByDisplayValue("jīn tiān hěn nuǎn")).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("Diary contextual pronunciation selection", () => {
+  it("opens pronunciation directly when the reviewer clicks romanization", () => {
+    const onSelectPronunciationRange = vi.fn();
+    const { container } = render(
+      <CorrectedSentence
+        text="比較暖"
+        pinyin="bei2 gaau3 nyun5"
+        lang="cantonese"
+        corrections={[]}
+        pronunciationMarks={[]}
+        onSelectPronunciationRange={onSelectPronunciationRange}
+      />,
+    );
+
+    fireEvent.click(
+      container.querySelectorAll(
+        '[data-pronunciation-kind="romanization"]',
+      )[1]!,
+    );
+
+    expect(onSelectPronunciationRange).toHaveBeenCalledWith(1, 2);
   });
 });

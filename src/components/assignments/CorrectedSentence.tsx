@@ -17,6 +17,7 @@ import {
   correctionOperation,
   type AssignmentCorrectionOperation,
 } from "@/lib/assignment-corrections";
+import type { PronunciationMarkDto } from "@/lib/assignment-pronunciation";
 
 // ---------------------------------------------------------------------------
 // Offset-based correction rendering, in the coaching-notes style.
@@ -63,6 +64,12 @@ interface CorrectedSentenceProps {
   showInsertionPoints?: boolean;
   /** Called with the exact UTF-16 position chosen by the reviewer. */
   onSelectInsertionPoint?: (offset: number) => void;
+  /** Pronunciation markers shown alongside wording corrections. */
+  pronunciationMarks?: readonly PronunciationMarkDto[];
+  /** Starts a pronunciation marker for the chosen character range. */
+  onSelectPronunciationRange?: (startOffset: number, endOffset: number) => void;
+  /** Opens an existing pronunciation marker. */
+  onSelectPronunciationMark?: (mark: PronunciationMarkDto) => void;
 }
 
 function CorrectionBubble({
@@ -189,6 +196,9 @@ export function CorrectedSentence({
   pinyin,
   showInsertionPoints = false,
   onSelectInsertionPoint,
+  pronunciationMarks = [],
+  onSelectPronunciationRange,
+  onSelectPronunciationMark,
 }: CorrectedSentenceProps) {
   // Jieba-backed per-character annotations for Mandarin (same pipeline as the
   // coaching page), with a synchronous fallback for first paint. The hook must
@@ -242,6 +252,37 @@ export function CorrectedSentence({
       ),
     [corrections],
   );
+
+  const pronunciationProps = (ann: CharAnnotation) => {
+    const mark = pronunciationMarks.find(
+      (candidate) =>
+        ann.offset >= candidate.startOffset && ann.offset < candidate.endOffset,
+    );
+    const markerNumber = mark
+      ? pronunciationMarks.findIndex((candidate) => candidate.id === mark.id) + 1
+      : 0;
+    const canSelect = Boolean(
+      onSelectPronunciationRange || (mark && onSelectPronunciationMark),
+    );
+
+    return {
+      pronunciationMarked: Boolean(mark),
+      pronunciationMarkNumber:
+        mark?.startOffset === ann.offset ? markerNumber : 0,
+      onPronunciationClick: canSelect
+        ? () => {
+            if (mark && onSelectPronunciationMark) {
+              onSelectPronunciationMark(mark);
+            } else {
+              onSelectPronunciationRange?.(
+                ann.offset,
+                ann.offset + ann.char.length,
+              );
+            }
+          }
+        : undefined,
+    };
+  };
 
   const renderBoundary = (offset: number, key: string) => {
     const insertion = insertions.get(offset);
@@ -312,6 +353,7 @@ export function CorrectedSentence({
                     struck
                     dataOffset={ann.offset}
                     lang={lang}
+                    {...pronunciationProps(ann)}
                   />
                 ))}
               </span>
@@ -331,6 +373,7 @@ export function CorrectedSentence({
                 fontSize={fontSize}
                 dataOffset={ann.offset}
                 lang={lang}
+                {...pronunciationProps(ann)}
               />
             </span>
           ))

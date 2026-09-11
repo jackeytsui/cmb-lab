@@ -32,11 +32,18 @@ function formatTime(seconds: number): string {
   return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
 }
 
-type SelectedOffsets =
-  | { kind: "range"; start: number; end: number }
-  | { kind: "cross-line" };
+export type PronunciationSelection =
+  | {
+      kind: "range";
+      language: "romanization" | "chinese";
+      start: number;
+      end: number;
+    }
+  | { kind: "cross-line"; language: "romanization" | "chinese" };
 
-function selectedOffsets(container: HTMLElement): SelectedOffsets | null {
+export function readPronunciationSelection(
+  container: HTMLElement,
+): PronunciationSelection | null {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
     return null;
@@ -60,21 +67,26 @@ function selectedOffsets(container: HTMLElement): SelectedOffsets | null {
 
   const startKind = startCell.dataset.pronunciationKind;
   const endKind = endCell.dataset.pronunciationKind;
-  if (!startKind || startKind !== endKind) return null;
+  if (
+    (startKind !== "romanization" && startKind !== "chinese") ||
+    startKind !== endKind
+  ) {
+    return null;
+  }
 
   const startUnit = startCell.closest<HTMLElement>("[data-pronunciation-unit]");
   const endUnit = endCell.closest<HTMLElement>("[data-pronunciation-unit]");
   if (!startUnit || !endUnit) return null;
   if (Math.abs(startUnit.offsetTop - endUnit.offsetTop) > 2) {
-    return { kind: "cross-line" };
+    return { kind: "cross-line", language: startKind };
   }
 
   const start = Number(startCell.dataset.pronunciationOffset);
   const end = Number(endCell.dataset.pronunciationEnd);
   if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
   return start <= end
-    ? { kind: "range", start, end }
-    : { kind: "range", start: end, end: start };
+    ? { kind: "range", language: startKind, start, end }
+    : { kind: "range", language: startKind, start: end, end: start };
 }
 
 function normaliseCopiedRow(
@@ -93,7 +105,12 @@ function normaliseCopiedRow(
   const startCell = cellFor(range.startContainer);
   const endCell = cellFor(range.endContainer);
   const kind = startCell?.dataset.pronunciationKind;
-  if (!startCell || !endCell || !kind || kind !== endCell.dataset.pronunciationKind) {
+  if (
+    !startCell ||
+    !endCell ||
+    !kind ||
+    kind !== endCell.dataset.pronunciationKind
+  ) {
     return;
   }
   const start = Number(startCell.dataset.pronunciationOffset);
@@ -186,7 +203,7 @@ export function PronunciationMarkedSentence({
       onPointerDownCapture={handlePointerDown}
       onMouseUp={(event) => {
         if (!onSelectRange) return;
-        const offsets = selectedOffsets(event.currentTarget);
+        const offsets = readPronunciationSelection(event.currentTarget);
         if (!offsets) return;
         if (offsets.kind === "cross-line") {
           window.getSelection()?.removeAllRanges();
@@ -293,33 +310,37 @@ export function PronunciationMarkedSentence({
 export function PronunciationMarkerEditor({
   chinese,
   romanization,
+  english,
   marks,
   lang,
   mediaElementId,
+  showSentence = true,
+  initialSelection,
   onChange,
 }: {
   chinese: string;
   romanization: string;
+  english?: string | null;
   marks: PronunciationMarkDto[];
   lang: "mandarin" | "cantonese";
   mediaElementId?: string;
+  showSentence?: boolean;
+  initialSelection?: {
+    startOffset: number;
+    endOffset: number;
+  } | null;
   onChange: (marks: PronunciationMarkDto[]) => void;
 }) {
   const annotations = useMemo(
     () => annotateFromModelAnswer(chinese, romanization),
     [chinese, romanization],
   );
-  const [draft, setDraft] = useState<PronunciationMarkDto | null>(null);
-
-  const startDraft = (startOffset: number, endOffset: number) => {
+  const draftForRange = (startOffset: number, endOffset: number) => {
     const existing = marks.find(
       (mark) =>
         mark.startOffset === startOffset && mark.endOffset === endOffset,
     );
-    if (existing) {
-      setDraft(existing);
-      return;
-    }
+    if (existing) return existing;
     const expectedPronunciation = annotations
       .filter(
         (annotation) =>
@@ -328,20 +349,34 @@ export function PronunciationMarkerEditor({
       .map((annotation) => annotation.pinyin)
       .filter(Boolean)
       .join(" ");
-    if (!expectedPronunciation) {
-      toast.error("Select a Chinese character or word with pronunciation.");
-      return;
-    }
-    setDraft({
+    if (!expectedPronunciation) return null;
+    return {
       id: `new-${crypto.randomUUID()}`,
       startOffset,
       endOffset,
       originalText: chinese.slice(startOffset, endOffset),
       expectedPronunciation,
-      issueType: "tone",
+      issueType: "tone" as const,
       note: "",
       audioTimestampSeconds: null,
-    });
+    };
+  };
+  const [draft, setDraft] = useState<PronunciationMarkDto | null>(() =>
+    initialSelection
+      ? draftForRange(
+          initialSelection.startOffset,
+          initialSelection.endOffset,
+        )
+      : null,
+  );
+
+  const startDraft = (startOffset: number, endOffset: number) => {
+    const nextDraft = draftForRange(startOffset, endOffset);
+    if (!nextDraft) {
+      toast.error("Select a Chinese character or word with pronunciation.");
+      return;
+    }
+    setDraft(nextDraft);
   };
 
   const saveDraft = () => {
@@ -372,29 +407,36 @@ export function PronunciationMarkerEditor({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-md bg-background/60 px-3 py-3">
-        <p className="mb-3 text-[11px] text-muted-foreground">
-          Click a {lang === "cantonese" ? "Jyutping" : "Pinyin"} syllable or
-          Chinese character, or drag across a word.
-        </p>
-        <PronunciationMarkedSentence
-          chinese={chinese}
-          romanization={romanization}
-          marks={marks}
-          lang={lang}
-          activeMarkId={draft?.id}
-          activeRange={
-            draft
-              ? {
-                  startOffset: draft.startOffset,
-                  endOffset: draft.endOffset,
-                }
-              : null
-          }
-          onSelectRange={startDraft}
-          onSelectMark={setDraft}
-        />
-      </div>
+      {showSentence ? (
+        <div className="rounded-md bg-background/60 px-3 py-3">
+          <p className="mb-3 text-[11px] text-muted-foreground">
+            Click a {lang === "cantonese" ? "Jyutping" : "Pinyin"} syllable or
+            Chinese character, or drag across a word.
+          </p>
+          <PronunciationMarkedSentence
+            chinese={chinese}
+            romanization={romanization}
+            marks={marks}
+            lang={lang}
+            activeMarkId={draft?.id}
+            activeRange={
+              draft
+                ? {
+                    startOffset: draft.startOffset,
+                    endOffset: draft.endOffset,
+                  }
+                : null
+            }
+            onSelectRange={startDraft}
+            onSelectMark={setDraft}
+          />
+          {english ? (
+            <p className="mt-2 text-lg italic text-muted-foreground">
+              {english}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {draft ? (
         <div className="space-y-3 rounded-md border border-amber-500/35 bg-amber-500/5 p-3">

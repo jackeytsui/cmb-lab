@@ -25,6 +25,9 @@ export function AnnotatedChar({
   struck = false,
   dataOffset,
   lang = "mandarin",
+  pronunciationMarked = false,
+  pronunciationMarkNumber = 0,
+  onPronunciationClick,
 }: {
   ann: CharAnnotation;
   fontSize: number;
@@ -34,6 +37,12 @@ export function AnnotatedChar({
   dataOffset?: number;
   /** Tone-colour system: mandarin (4 tones) or cantonese (6, jyutping). */
   lang?: "mandarin" | "cantonese";
+  /** Highlight this unit as an existing reviewer pronunciation marker. */
+  pronunciationMarked?: boolean;
+  /** Marker number shown beside the matching Chinese character. */
+  pronunciationMarkNumber?: number;
+  /** Enables Pinyin/Jyutping selection and opens the pronunciation editor. */
+  onPronunciationClick?: () => void;
 }) {
   const pinyinSize = Math.round(fontSize * PINYIN_RATIO);
   const tone = ann.pinyin
@@ -51,22 +60,71 @@ export function AnnotatedChar({
     <span
       className="inline-flex flex-col items-center align-top"
       style={{ minWidth: "1.05em" }}
+      data-pronunciation-unit={onPronunciationClick ? true : undefined}
     >
       <span
-        className="leading-tight text-blue-400 select-none whitespace-nowrap"
+        data-pronunciation-kind={
+          onPronunciationClick ? "romanization" : undefined
+        }
+        data-pronunciation-offset={
+          onPronunciationClick ? ann.offset : undefined
+        }
+        data-pronunciation-end={
+          onPronunciationClick ? ann.offset + ann.char.length : undefined
+        }
+        onClick={
+          onPronunciationClick
+            ? (event) => {
+                event.stopPropagation();
+                onPronunciationClick();
+              }
+            : undefined
+        }
+        className={cn(
+          "whitespace-nowrap leading-tight text-blue-400",
+          onPronunciationClick
+            ? "cursor-pointer rounded-sm hover:bg-amber-500/10"
+            : "select-none",
+          pronunciationMarked &&
+            "underline decoration-amber-500 decoration-wavy decoration-2 underline-offset-4",
+        )}
         style={{ fontSize: `${pinyinSize}px` }}
       >
         {ann.pinyin || " "}
       </span>
       <span
         data-offset={dataOffset}
+        data-pronunciation-kind={
+          onPronunciationClick ? "chinese" : undefined
+        }
+        data-pronunciation-offset={
+          onPronunciationClick ? ann.offset : undefined
+        }
+        data-pronunciation-end={
+          onPronunciationClick ? ann.offset + ann.char.length : undefined
+        }
+        onClick={
+          pronunciationMarked && onPronunciationClick
+            ? (event) => {
+                event.stopPropagation();
+                onPronunciationClick();
+              }
+            : undefined
+        }
         className={cn(
-          "leading-tight",
+          "relative leading-tight",
           struck && "line-through decoration-red-500 decoration-2",
+          pronunciationMarked &&
+            "cursor-pointer rounded-sm underline decoration-amber-500 decoration-wavy decoration-2 underline-offset-4 hover:bg-amber-500/10",
         )}
         style={charStyle}
       >
         {ann.char}
+        {pronunciationMarkNumber > 0 ? (
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 select-none items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm">
+            {pronunciationMarkNumber}
+          </span>
+        ) : null}
       </span>
     </span>
   );

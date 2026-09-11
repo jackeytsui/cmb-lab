@@ -2,39 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
-import {
-  CheckCircle2,
-  Loader2,
-  Plus,
-  Send,
-  Sparkles,
-  Trash2,
-  Volume2,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { RichTextEditor } from "@/components/ui/rich-text-editor";
-import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
-import { SentenceVideo } from "@/components/assignments/SentenceVideo";
-import { isLoomUrl, sanitizeRecordingUrl } from "@/lib/recording-embed";
-import { generateModelRomanisation } from "@/lib/generate-model-pinyin";
-import { fetchProperTranslations } from "@/lib/mandarin-generation";
-import {
-  adjustedPinyinToneCursor,
-  applyPinyinToneNumbers,
-} from "@/lib/pinyin-tone-input";
-import { ReviewerAutosaveStatus } from "@/components/assignments/ReviewerAutosaveStatus";
-import { useReviewerAutosave } from "@/hooks/useReviewerAutosave";
-import type { VocalHackReviewDraft } from "@/lib/assignment-review-draft";
 import { PronunciationMarkerEditor } from "@/components/assignments/PronunciationMarker";
+import { ReviewerAutosaveStatus } from "@/components/assignments/ReviewerAutosaveStatus";
+import { SentenceVideo } from "@/components/assignments/SentenceVideo";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
+import { useReviewerAutosave } from "@/hooks/useReviewerAutosave";
 import type { PronunciationMarkDto } from "@/lib/assignment-pronunciation";
+import type { VocalHackReviewDraft } from "@/lib/assignment-review-draft";
+import { isLoomUrl, sanitizeRecordingUrl } from "@/lib/recording-embed";
+import { cn } from "@/lib/utils";
 
-// ---------------------------------------------------------------------------
-// Vocal Hack review: listen to each recording (seekable) and, per sentence,
-// write ONE OR MORE alternative correct phrasings — each with pinyin + English
-// auto-generated from the Chinese and editable — then add an extra comment and
-// a Loom link. No score: pronunciation review is qualitative.
-// ---------------------------------------------------------------------------
+// Vocal Hack review is pronunciation-only. Historical wording corrections are
+// preserved when an old review is reopened, but are no longer editable here.
 
 export interface VocalHackCorrection {
   chinese: string;
@@ -76,21 +57,6 @@ export interface VocalHackReviewDto {
   sentences: VocalHackReviewSentenceDto[];
 }
 
-interface CorrectionEntry {
-  key: string;
-  chinese: string;
-  pinyin: string;
-  english: string;
-  generating: boolean;
-}
-
-let keyCounter = 0;
-const nextKey = () => `c${keyCounter++}`;
-
-function toEntry(c: VocalHackCorrection): CorrectionEntry {
-  return { key: nextKey(), ...c, generating: false };
-}
-
 export function VocalHackReviewClient({
   submission,
   returnHref,
@@ -99,7 +65,7 @@ export function VocalHackReviewClient({
   returnHref: string;
 }) {
   const router = useRouter();
-  const [entries, setEntries] = useState<Record<string, CorrectionEntry[]>>(
+  const preservedCorrections = useMemo<Record<string, VocalHackCorrection[]>>(
     () => {
       const draftBySentenceId = new Map(
         submission.reviewDraft?.sentences.map((sentence) => [
@@ -107,17 +73,14 @@ export function VocalHackReviewClient({
           sentence.corrections,
         ]) ?? [],
       );
-      const initial: Record<string, CorrectionEntry[]> = {};
-      for (const s of submission.sentences) {
-        initial[s.id] = (draftBySentenceId.get(s.id) ?? s.corrections).map(
-          toEntry,
-        );
-      }
-      return initial;
+      return Object.fromEntries(
+        submission.sentences.map((sentence) => [
+          sentence.id,
+          draftBySentenceId.get(sentence.id) ?? sentence.corrections,
+        ]),
+      );
     },
-  );
-  const [reviewTool, setReviewTool] = useState<"wording" | "pronunciation">(
-    "wording",
+    [submission.reviewDraft?.sentences, submission.sentences],
   );
   const [pronunciationMarks, setPronunciationMarks] = useState<
     Record<string, PronunciationMarkDto[]>
@@ -150,19 +113,15 @@ export function VocalHackReviewClient({
       kind: "vocal_hack",
       sentences: submission.sentences.map((sentence) => ({
         sentenceId: sentence.id,
-        corrections: entries[sentence.id].map((entry) => ({
-          chinese: entry.chinese,
-          pinyin: entry.pinyin,
-          english: entry.english,
-        })),
+        corrections: preservedCorrections[sentence.id],
         pronunciationMarks: pronunciationMarks[sentence.id],
       })),
       extraComment,
       recordingUrl,
     }),
     [
-      entries,
       extraComment,
+      preservedCorrections,
       pronunciationMarks,
       recordingUrl,
       submission.sentences,
@@ -174,56 +133,6 @@ export function VocalHackReviewClient({
     initialSavedAt: submission.reviewDraftSavedAt,
   });
 
-  const patchEntry = (
-    sentenceId: string,
-    key: string,
-    next: Partial<CorrectionEntry>,
-  ) =>
-    setEntries((prev) => ({
-      ...prev,
-      [sentenceId]: prev[sentenceId].map((e) =>
-        e.key === key ? { ...e, ...next } : e,
-      ),
-    }));
-
-  const addEntry = (sentenceId: string) =>
-    setEntries((prev) => ({
-      ...prev,
-      [sentenceId]: [
-        ...prev[sentenceId],
-        { key: nextKey(), chinese: "", pinyin: "", english: "", generating: false },
-      ],
-    }));
-
-  const removeEntry = (sentenceId: string, key: string) =>
-    setEntries((prev) => ({
-      ...prev,
-      [sentenceId]: prev[sentenceId].filter((e) => e.key !== key),
-    }));
-
-  const generateEntry = async (sentenceId: string, key: string) => {
-    const entry = entries[sentenceId]?.find((e) => e.key === key);
-    const chinese = entry?.chinese.trim();
-    if (!chinese) return;
-    patchEntry(sentenceId, key, { generating: true });
-    try {
-      const [pinyin, translations] = await Promise.all([
-        generateModelRomanisation(chinese, submission.lang),
-        fetchProperTranslations(
-          [chinese],
-          submission.lang === "cantonese" ? "zh-HK" : "zh-CN",
-        ),
-      ]);
-      patchEntry(sentenceId, key, {
-        pinyin,
-        english: translations?.join(" ").trim() || entry?.english || "",
-        generating: false,
-      });
-    } catch {
-      patchEntry(sentenceId, key, { generating: false });
-    }
-  };
-
   const recordingTrimmed = recordingUrl.trim();
   const recordingValid =
     recordingTrimmed === "" || Boolean(sanitizeRecordingUrl(recordingTrimmed));
@@ -231,16 +140,6 @@ export function VocalHackReviewClient({
     recordingTrimmed !== "" && recordingValid && !isLoomUrl(recordingTrimmed);
 
   const handleSubmit = async () => {
-    for (const s of submission.sentences) {
-      for (const entry of entries[s.id]) {
-        if (entry.chinese.trim() && !entry.pinyin.trim()) {
-          setError(
-            `A correction for "${s.chineseText}" has no pinyin — click Generate first.`,
-          );
-          return;
-        }
-      }
-    }
     if (!recordingValid) {
       setError("Recording link is not a valid URL.");
       return;
@@ -255,24 +154,20 @@ export function VocalHackReviewClient({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            sentences: submission.sentences.map((s) => ({
-              sentenceId: s.id,
-              corrections: entries[s.id]
-                .filter((e) => e.chinese.trim())
-                .map((e) => ({
-                  chinese: e.chinese,
-                  pinyin: e.pinyin,
-                  english: e.english,
-                })),
-              pronunciationMarks: pronunciationMarks[s.id].map((mark) => ({
-                startOffset: mark.startOffset,
-                endOffset: mark.endOffset,
-                originalText: mark.originalText,
-                expectedPronunciation: mark.expectedPronunciation,
-                issueType: mark.issueType,
-                note: mark.note,
-                audioTimestampSeconds: mark.audioTimestampSeconds,
-              })),
+            sentences: submission.sentences.map((sentence) => ({
+              sentenceId: sentence.id,
+              corrections: preservedCorrections[sentence.id],
+              pronunciationMarks: pronunciationMarks[sentence.id].map(
+                (mark) => ({
+                  startOffset: mark.startOffset,
+                  endOffset: mark.endOffset,
+                  originalText: mark.originalText,
+                  expectedPronunciation: mark.expectedPronunciation,
+                  issueType: mark.issueType,
+                  note: mark.note,
+                  audioTimestampSeconds: mark.audioTimestampSeconds,
+                }),
+              ),
             })),
             extraComment,
             recordingUrl: recordingTrimmed || undefined,
@@ -321,14 +216,14 @@ export function VocalHackReviewClient({
             Vocal Hack
           </span>
         </div>
-        {submission.assignmentDescription && (
+        {submission.assignmentDescription ? (
           <div
             className="prose prose-invert prose-sm mt-4 max-w-none border-t border-border pt-4 text-muted-foreground"
             dangerouslySetInnerHTML={{
               __html: submission.assignmentDescription,
             }}
           />
-        )}
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-4 py-3">
@@ -337,260 +232,85 @@ export function VocalHackReviewClient({
           onRetry={() => void autosave.retry()}
         />
         <p className="text-[11px] text-muted-foreground">
-          Corrections, comments, and the recording link are saved privately as
-          you work. Complete review when the feedback is ready for the student.
+          Pronunciation notes, comments, and the recording link are saved
+          privately as you work.
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3">
-        <span className="text-xs font-medium text-muted-foreground">Mark as</span>
-        <button
-          type="button"
-          onClick={() => setReviewTool("wording")}
-          className={cn(
-            "rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
-            reviewTool === "wording"
-              ? "border-foreground bg-foreground text-background"
-              : "border-border bg-background text-foreground hover:bg-accent",
-          )}
-        >
-          Wording correction
-        </button>
-        <button
-          type="button"
-          onClick={() => setReviewTool("pronunciation")}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
-            reviewTool === "pronunciation"
-              ? "border-amber-500 bg-amber-500 text-white"
-              : "border-border bg-background text-foreground hover:bg-accent",
-          )}
-        >
-          <Volume2 className="h-3.5 w-3.5" />
-          Pronunciation marker
-        </button>
-      </div>
-
       <div className="space-y-5">
-        {submission.sentences.map((sentence, idx) => {
-          const sentenceEntries = entries[sentence.id];
-          return (
-            <div
-              key={sentence.id}
-              className="rounded-lg border border-border bg-card p-5 space-y-4"
-            >
-              <p className="text-sm font-semibold text-foreground">
-                {idx + 1}. {sentence.promptLabel || `Sentence ${idx + 1}`}
-              </p>
+        {submission.sentences.map((sentence, idx) => (
+          <div
+            key={sentence.id}
+            className="space-y-4 rounded-lg border border-border bg-card p-5"
+          >
+            <p className="text-sm font-semibold text-foreground">
+              {idx + 1}. {sentence.promptLabel || `Sentence ${idx + 1}`}
+            </p>
 
-              {/* Video left, sentence + student recording right. */}
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                {sentence.hasVideo && (
-                  <div className="flex justify-center sm:block sm:shrink-0">
-                    <SentenceVideo
-                      src={`/api/course-library/vocal-hack-video/${submission.lessonId}?sentence=${encodeURIComponent(sentence.id)}#t=0.1`}
-                    />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1 space-y-3">
-                  <div className="rounded-md bg-background px-3 py-3">
-                    <ModelAnnotatedSentence
-                      chinese={sentence.chineseText}
-                      pinyin={sentence.generatedPinyin}
-                      english={sentence.generatedEnglish}
-                      lang={submission.lang}
-                    />
-                  </div>
-                  <div>
-                    <p className="mb-1 text-xs font-medium text-muted-foreground">
-                      Student&apos;s recording
-                    </p>
-                    {sentence.hasRecording ? (
-                      sentence.responseMediaType === "video" ? (
-                        <video
-                          id={`review-student-recording-${sentence.id}`}
-                          controls
-                          playsInline
-                          preload="metadata"
-                          controlsList="nodownload"
-                          src={`/api/course-library/assignment-recordings/${sentence.id}`}
-                          className="max-h-80 w-full rounded-md bg-black"
-                        />
-                      ) : (
-                        <audio
-                          id={`review-student-recording-${sentence.id}`}
-                          controls
-                          preload="metadata"
-                          controlsList="nodownload"
-                          src={`/api/course-library/assignment-recordings/${sentence.id}`}
-                          className="w-full"
-                        />
-                      )
-                    ) : (
-                      <p className="text-sm italic text-muted-foreground">
-                        No recording submitted.
-                      </p>
-                    )}
-                  </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              {sentence.hasVideo ? (
+                <div className="flex justify-center sm:block sm:shrink-0">
+                  <SentenceVideo
+                    src={`/api/course-library/vocal-hack-video/${submission.lessonId}?sentence=${encodeURIComponent(sentence.id)}#t=0.1`}
+                  />
                 </div>
-              </div>
-
-              {reviewTool === "wording" ? (
-              <div className="space-y-2 rounded-md border border-border bg-background p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Corrections (add one or more correct ways to say it)
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => addEntry(sentence.id)}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-                  >
-                    <Plus className="h-3 w-3" />
-                    Add correction
-                  </button>
-                </div>
-
-                {sentenceEntries.length === 0 ? (
-                  <p className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="h-3 w-3" />
-                    {pronunciationMarks[sentence.id].length > 0
-                      ? "No wording corrections — pronunciation notes are saved separately."
-                      : "No corrections — will be marked as well read."}
-                  </p>
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">
+                  Student&apos;s recording
+                </p>
+                {sentence.hasRecording ? (
+                  sentence.responseMediaType === "video" ? (
+                    <video
+                      id={`review-student-recording-${sentence.id}`}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      controlsList="nodownload"
+                      src={`/api/course-library/assignment-recordings/${sentence.id}`}
+                      className="max-h-80 w-full rounded-md bg-black"
+                    />
+                  ) : (
+                    <audio
+                      id={`review-student-recording-${sentence.id}`}
+                      controls
+                      preload="metadata"
+                      controlsList="nodownload"
+                      src={`/api/course-library/assignment-recordings/${sentence.id}`}
+                      className="w-full"
+                    />
+                  )
                 ) : (
-                  <div className="space-y-3">
-                    {sentenceEntries.map((entry, entryIdx) => (
-                      <div
-                        key={entry.key}
-                        className="space-y-2 rounded-md border border-border/70 bg-card p-2.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Option {entryIdx + 1}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removeEntry(sentence.id, entry.key)}
-                            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-red-500"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            Remove
-                          </button>
-                        </div>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={entry.chinese}
-                            onChange={(e) =>
-                              patchEntry(sentence.id, entry.key, {
-                                chinese: e.target.value,
-                              })
-                            }
-                            onBlur={() => {
-                              if (entry.chinese.trim() && !entry.pinyin.trim()) {
-                                generateEntry(sentence.id, entry.key);
-                              }
-                            }}
-                            placeholder="Correct sentence in Chinese"
-                            className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-base"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => generateEntry(sentence.id, entry.key)}
-                            disabled={!entry.chinese.trim() || entry.generating}
-                            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-accent disabled:opacity-40"
-                          >
-                            {entry.generating ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Sparkles className="h-3.5 w-3.5" />
-                            )}
-                            Generate
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          value={entry.pinyin}
-                          onChange={(e) => {
-                            const input = e.currentTarget;
-                            const raw = input.value;
-                            const converted =
-                              submission.lang === "mandarin"
-                                ? applyPinyinToneNumbers(raw)
-                                : raw;
-                            patchEntry(sentence.id, entry.key, {
-                              pinyin: converted,
-                            });
-                            if (converted.length !== raw.length) {
-                              const cursor = adjustedPinyinToneCursor(
-                                raw,
-                                converted,
-                                input.selectionStart ?? raw.length,
-                              );
-                              requestAnimationFrame(() =>
-                                input.setSelectionRange(cursor, cursor),
-                              );
-                            }
-                          }}
-                          placeholder="Pinyin (auto-generated, editable)"
-                          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm"
-                        />
-                        <input
-                          type="text"
-                          value={entry.english}
-                          onChange={(e) =>
-                            patchEntry(sentence.id, entry.key, {
-                              english: e.target.value,
-                            })
-                          }
-                          placeholder="English (auto-generated, editable)"
-                          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm"
-                        />
-                        {entry.chinese.trim() && entry.pinyin.trim() && (
-                          <div className="rounded-md bg-background px-3 py-2">
-                            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                              Student will see
-                            </p>
-                            <ModelAnnotatedSentence
-                              chinese={entry.chinese}
-                              pinyin={entry.pinyin}
-                              english={entry.english}
-                              fontSize={20}
-                              lang={submission.lang}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <p className="text-sm italic text-muted-foreground">
+                    No recording submitted.
+                  </p>
                 )}
               </div>
-              ) : (
-                <PronunciationMarkerEditor
-                  chinese={sentence.chineseText}
-                  romanization={sentence.generatedPinyin}
-                  marks={pronunciationMarks[sentence.id]}
-                  lang={submission.lang}
-                  mediaElementId={
-                    sentence.hasRecording
-                      ? `review-student-recording-${sentence.id}`
-                      : undefined
-                  }
-                  onChange={(marks) =>
-                    setPronunciationMarks((current) => ({
-                      ...current,
-                      [sentence.id]: marks,
-                    }))
-                  }
-                />
-              )}
             </div>
-          );
-        })}
+
+            <PronunciationMarkerEditor
+              chinese={sentence.chineseText}
+              romanization={sentence.generatedPinyin}
+              english={sentence.generatedEnglish}
+              marks={pronunciationMarks[sentence.id]}
+              lang={submission.lang}
+              mediaElementId={
+                sentence.hasRecording
+                  ? `review-student-recording-${sentence.id}`
+                  : undefined
+              }
+              onChange={(marks) =>
+                setPronunciationMarks((current) => ({
+                  ...current,
+                  [sentence.id]: marks,
+                }))
+              }
+            />
+          </div>
+        ))}
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+      <div className="space-y-3 rounded-lg border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">
           Extra Comment (optional)
         </h2>
@@ -602,36 +322,36 @@ export function VocalHackReviewClient({
         />
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-5 space-y-2">
+      <div className="space-y-2 rounded-lg border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">
           Recording Link (optional)
         </h2>
         <input
           type="url"
           value={recordingUrl}
-          onChange={(e) => setRecordingUrl(e.target.value)}
+          onChange={(event) => setRecordingUrl(event.target.value)}
           placeholder="https://www.loom.com/share/..."
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
         />
-        {!recordingValid && (
+        {!recordingValid ? (
           <p className="text-xs text-red-500">Not a valid URL.</p>
-        )}
-        {showLoomWarning && (
+        ) : null}
+        {showLoomWarning ? (
           <p className="text-xs text-amber-500">
             Warning: this does not look like a Loom link. Please double-check
             before submitting.
           </p>
-        )}
-        {recordingTrimmed !== "" && recordingValid && !showLoomWarning && (
+        ) : null}
+        {recordingTrimmed !== "" && recordingValid && !showLoomWarning ? (
           <p className="text-xs text-emerald-500">✓ Loom link detected</p>
-        )}
+        ) : null}
       </div>
 
-      {error && (
+      {error ? (
         <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-500">
           {error}
         </div>
-      )}
+      ) : null}
 
       <div className="flex items-center justify-end gap-3">
         <button

@@ -34,6 +34,7 @@ import { useReviewerAutosave } from "@/hooks/useReviewerAutosave";
 import type { TextAssignmentReviewDraft } from "@/lib/assignment-review-draft";
 import {
   PronunciationMarkerEditor,
+  readPronunciationSelection,
 } from "@/components/assignments/PronunciationMarker";
 import type { PronunciationMarkDto } from "@/lib/assignment-pronunciation";
 
@@ -93,6 +94,13 @@ interface PendingSelection {
   startOffset: number;
   endOffset: number;
   originalText: string;
+}
+
+interface PronunciationSelectionRequest {
+  id: number;
+  sentenceId: string;
+  startOffset: number;
+  endOffset: number;
 }
 
 /**
@@ -187,9 +195,8 @@ export function ReviewClient({
   );
   const [pendingSelection, setPendingSelection] =
     useState<PendingSelection | null>(null);
-  const [reviewTool, setReviewTool] = useState<"wording" | "pronunciation">(
-    "wording",
-  );
+  const [pronunciationSelection, setPronunciationSelection] =
+    useState<PronunciationSelectionRequest | null>(null);
   const [pronunciationMarks, setPronunciationMarks] = useState<
     Record<string, PronunciationMarkDto[]>
   >(() => {
@@ -227,6 +234,25 @@ export function ReviewClient({
   const [submitting, setSubmitting] = useState(false);
 
   const sentenceRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const pronunciationSelectionId = useRef(0);
+  const ignorePronunciationClick = useRef(false);
+
+  const requestPronunciationMarker = (
+    sentenceId: string,
+    startOffset: number,
+    endOffset: number,
+  ) => {
+    pronunciationSelectionId.current += 1;
+    setPronunciationSelection({
+      id: pronunciationSelectionId.current,
+      sentenceId,
+      startOffset,
+      endOffset,
+    });
+    setPendingSelection(null);
+    setCorrectionDraft(null);
+    setInsertionModeSentenceId(null);
+  };
 
   const reviewDraft = useMemo<TextAssignmentReviewDraft>(
     () => ({
@@ -309,6 +335,33 @@ export function ReviewClient({
   const handleMouseUp = (sentence: ReviewSentenceDto) => {
     const container = sentenceRefs.current[sentence.id];
     if (!container) return;
+    if (submission.assignmentType === "diary") {
+      const pronunciationRange = readPronunciationSelection(container);
+      if (
+        pronunciationRange?.kind === "cross-line" &&
+        pronunciationRange.language === "romanization"
+      ) {
+        toast.error("Select pronunciation within one line.");
+        window.getSelection()?.removeAllRanges();
+        return;
+      }
+      if (
+        pronunciationRange?.kind === "range" &&
+        pronunciationRange.language === "romanization"
+      ) {
+        ignorePronunciationClick.current = true;
+        requestPronunciationMarker(
+          sentence.id,
+          pronunciationRange.start,
+          pronunciationRange.end,
+        );
+        window.getSelection()?.removeAllRanges();
+        window.setTimeout(() => {
+          ignorePronunciationClick.current = false;
+        }, 0);
+        return;
+      }
+    }
     const offsets = getSelectionOffsets(
       container,
       sentence.chineseText.length,
@@ -705,44 +758,6 @@ export function ReviewClient({
         />
       )}
 
-      {submission.assignmentType === "diary" ? (
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3">
-        <span className="text-xs font-medium text-muted-foreground">Mark as</span>
-        <button
-          type="button"
-          onClick={() => setReviewTool("wording")}
-          className={cn(
-            "rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
-            reviewTool === "wording"
-              ? "border-foreground bg-foreground text-background"
-              : "border-border bg-background text-foreground hover:bg-accent",
-          )}
-        >
-          Wording correction
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setReviewTool("pronunciation");
-            setPendingSelection(null);
-            setInsertionModeSentenceId(null);
-          }}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
-            reviewTool === "pronunciation"
-              ? "border-amber-500 bg-amber-500 text-white"
-              : "border-border bg-background text-foreground hover:bg-accent",
-          )}
-        >
-          <Volume2 className="h-3.5 w-3.5" />
-          Pronunciation marker
-        </button>
-        <span className="text-[11px] text-muted-foreground">
-          Pronunciation notes do not change the writing score.
-        </span>
-      </div>
-      ) : null}
-
       {/* Sentences */}
       <div className="space-y-4">
         {submission.sentences.map((sentence, idx) => {
@@ -769,31 +784,34 @@ export function ReviewClient({
                     </p>
                   )}
                 </div>
-                {reviewTool === "wording" ? <select
-                  value={state.verdict}
-                  onChange={(e) =>
-                    setVerdict(sentence.id, e.target.value as Verdict)
-                  }
-                  className={cn(
-                    "rounded-md border px-2 py-1.5 text-xs font-medium",
-                    state.verdict === "correct"
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                      : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                  )}
-                >
-                  <option value="correct">Correct</option>
-                  <option value="needs_correction">Partially Correct</option>
-                </select> : (
-                  <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
-                    {pronunciationMarks[sentence.id].length} pronunciation{" "}
-                    {pronunciationMarks[sentence.id].length === 1
-                      ? "marker"
-                      : "markers"}
-                  </span>
-                )}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {submission.assignmentType === "diary" &&
+                  pronunciationMarks[sentence.id].length > 0 ? (
+                    <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                      {pronunciationMarks[sentence.id].length} pronunciation{" "}
+                      {pronunciationMarks[sentence.id].length === 1
+                        ? "marker"
+                        : "markers"}
+                    </span>
+                  ) : null}
+                  <select
+                    value={state.verdict}
+                    onChange={(e) =>
+                      setVerdict(sentence.id, e.target.value as Verdict)
+                    }
+                    className={cn(
+                      "rounded-md border px-2 py-1.5 text-xs font-medium",
+                      state.verdict === "correct"
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                    )}
+                  >
+                    <option value="correct">Correct</option>
+                    <option value="needs_correction">Partially Correct</option>
+                  </select>
+                </div>
               </div>
 
-              {reviewTool === "wording" ? <>
               <div
                 ref={(el) => {
                   sentenceRefs.current[sentence.id] = el;
@@ -813,6 +831,33 @@ export function ReviewClient({
                   onSelectInsertionPoint={(offset) =>
                     selectInsertionPoint(sentence, offset)
                   }
+                  pronunciationMarks={
+                    submission.assignmentType === "diary"
+                      ? pronunciationMarks[sentence.id]
+                      : undefined
+                  }
+                  onSelectPronunciationRange={
+                    submission.assignmentType === "diary"
+                      ? (startOffset, endOffset) => {
+                          if (ignorePronunciationClick.current) return;
+                          requestPronunciationMarker(
+                            sentence.id,
+                            startOffset,
+                            endOffset,
+                          );
+                        }
+                      : undefined
+                  }
+                  onSelectPronunciationMark={
+                    submission.assignmentType === "diary"
+                      ? (mark) =>
+                          requestPronunciationMarker(
+                            sentence.id,
+                            mark.startOffset,
+                            mark.endOffset,
+                          )
+                      : undefined
+                  }
                 />
               </div>
               <p className="text-lg text-muted-foreground italic">
@@ -830,7 +875,9 @@ export function ReviewClient({
               )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[11px] text-muted-foreground/70">
-                  Highlight text to replace or remove it.
+                  {submission.assignmentType === "diary"
+                    ? "Highlight Chinese to correct wording or mark pronunciation. Click or drag Pinyin to mark pronunciation directly."
+                    : "Highlight text to replace or remove it."}
                 </p>
                 <button
                   type="button"
@@ -888,6 +935,22 @@ export function ReviewClient({
                       <Trash2 className="h-3.5 w-3.5" />
                       Remove
                     </button>
+                    {submission.assignmentType === "diary" ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          requestPronunciationMarker(
+                            sentence.id,
+                            pendingSelection.startOffset,
+                            pendingSelection.endOffset,
+                          )
+                        }
+                        className="inline-flex items-center gap-1 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600"
+                      >
+                        <Volume2 className="h-3.5 w-3.5" />
+                        Mark pronunciation
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => setPendingSelection(null)}
@@ -953,12 +1016,19 @@ export function ReviewClient({
                   </div>
                 </div>
               )}
-              </> : (
+              {submission.assignmentType === "diary" ? (
                 <PronunciationMarkerEditor
+                  key={`${sentence.id}:${pronunciationSelection?.sentenceId === sentence.id ? pronunciationSelection.id : "idle"}`}
                   chinese={sentence.chineseText}
                   romanization={sentence.generatedPinyin}
                   marks={pronunciationMarks[sentence.id]}
                   lang={submission.lang}
+                  showSentence={false}
+                  initialSelection={
+                    pronunciationSelection?.sentenceId === sentence.id
+                      ? pronunciationSelection
+                      : null
+                  }
                   mediaElementId={
                     submission.studentAudioUrl
                       ? `review-student-recording-${submission.id}`
@@ -971,7 +1041,7 @@ export function ReviewClient({
                     }))
                   }
                 />
-              )}
+              ) : null}
             </div>
           );
         })}
