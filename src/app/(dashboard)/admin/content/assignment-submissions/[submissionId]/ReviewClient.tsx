@@ -2,7 +2,14 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Highlighter, Loader2, Plus, Replace, Trash2 } from "lucide-react";
+import {
+  Highlighter,
+  Loader2,
+  Plus,
+  Replace,
+  Trash2,
+  Volume2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
@@ -25,6 +32,10 @@ import { StudentSubmissionRecording } from "@/components/assignments/StudentSubm
 import { ReviewerAutosaveStatus } from "@/components/assignments/ReviewerAutosaveStatus";
 import { useReviewerAutosave } from "@/hooks/useReviewerAutosave";
 import type { TextAssignmentReviewDraft } from "@/lib/assignment-review-draft";
+import {
+  PronunciationMarkerEditor,
+} from "@/components/assignments/PronunciationMarker";
+import type { PronunciationMarkDto } from "@/lib/assignment-pronunciation";
 
 export interface ReviewCorrectionDto extends RenderableCorrection {
   originalText: string;
@@ -40,6 +51,7 @@ export interface ReviewSentenceDto {
   generatedEnglish: string;
   reviewVerdict: "correct" | "needs_correction" | null;
   corrections: ReviewCorrectionDto[];
+  pronunciationMarks: PronunciationMarkDto[];
 }
 
 export interface ReviewSubmissionDto {
@@ -175,6 +187,25 @@ export function ReviewClient({
   );
   const [pendingSelection, setPendingSelection] =
     useState<PendingSelection | null>(null);
+  const [reviewTool, setReviewTool] = useState<"wording" | "pronunciation">(
+    "wording",
+  );
+  const [pronunciationMarks, setPronunciationMarks] = useState<
+    Record<string, PronunciationMarkDto[]>
+  >(() => {
+    const draftBySentenceId = new Map(
+      submission.reviewDraft?.sentences.map((sentence) => [
+        sentence.sentenceId,
+        sentence.pronunciationMarks,
+      ]) ?? [],
+    );
+    return Object.fromEntries(
+      submission.sentences.map((sentence) => [
+        sentence.id,
+        draftBySentenceId.get(sentence.id) ?? sentence.pronunciationMarks,
+      ]),
+    );
+  });
   const [correctionDraft, setCorrectionDraft] =
     useState<MandarinSentenceValue | null>(null);
   const [correctionGenerating, setCorrectionGenerating] = useState(false);
@@ -216,13 +247,21 @@ export function ReviewClient({
             suggestedPinyin: correction.suggestedPinyin,
             suggestedEnglish: correction.suggestedEnglish,
           })),
+          pronunciationMarks: pronunciationMarks[sentence.id],
         };
       }),
       overrideInput,
       extraComment,
       recordingUrl,
     }),
-    [extraComment, overrideInput, recordingUrl, reviews, submission.sentences],
+    [
+      extraComment,
+      overrideInput,
+      pronunciationMarks,
+      recordingUrl,
+      reviews,
+      submission.sentences,
+    ],
   );
   const autosave = useReviewerAutosave({
     endpoint: `/api/admin/assignment-submissions/${submission.id}/review-draft`,
@@ -467,6 +506,17 @@ export function ReviewClient({
                   suggestedPinyin: c.suggestedPinyin,
                   suggestedEnglish: c.suggestedEnglish,
                 })),
+                pronunciationMarks: pronunciationMarks[sentence.id].map(
+                  (mark) => ({
+                    startOffset: mark.startOffset,
+                    endOffset: mark.endOffset,
+                    originalText: mark.originalText,
+                    expectedPronunciation: mark.expectedPronunciation,
+                    issueType: mark.issueType,
+                    note: mark.note,
+                    audioTimestampSeconds: mark.audioTimestampSeconds,
+                  }),
+                ),
               };
             }),
             overrideScore,
@@ -651,8 +701,47 @@ export function ReviewClient({
         <StudentSubmissionRecording
           src={submission.studentAudioUrl}
           sticky={submission.assignmentType === "diary"}
+          mediaElementId={`review-student-recording-${submission.id}`}
         />
       )}
+
+      {submission.assignmentType === "diary" ? (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3">
+        <span className="text-xs font-medium text-muted-foreground">Mark as</span>
+        <button
+          type="button"
+          onClick={() => setReviewTool("wording")}
+          className={cn(
+            "rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
+            reviewTool === "wording"
+              ? "border-foreground bg-foreground text-background"
+              : "border-border bg-background text-foreground hover:bg-accent",
+          )}
+        >
+          Wording correction
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setReviewTool("pronunciation");
+            setPendingSelection(null);
+            setInsertionModeSentenceId(null);
+          }}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
+            reviewTool === "pronunciation"
+              ? "border-amber-500 bg-amber-500 text-white"
+              : "border-border bg-background text-foreground hover:bg-accent",
+          )}
+        >
+          <Volume2 className="h-3.5 w-3.5" />
+          Pronunciation marker
+        </button>
+        <span className="text-[11px] text-muted-foreground">
+          Pronunciation notes do not change the writing score.
+        </span>
+      </div>
+      ) : null}
 
       {/* Sentences */}
       <div className="space-y-4">
@@ -680,7 +769,7 @@ export function ReviewClient({
                     </p>
                   )}
                 </div>
-                <select
+                {reviewTool === "wording" ? <select
                   value={state.verdict}
                   onChange={(e) =>
                     setVerdict(sentence.id, e.target.value as Verdict)
@@ -694,9 +783,17 @@ export function ReviewClient({
                 >
                   <option value="correct">Correct</option>
                   <option value="needs_correction">Partially Correct</option>
-                </select>
+                </select> : (
+                  <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                    {pronunciationMarks[sentence.id].length} pronunciation{" "}
+                    {pronunciationMarks[sentence.id].length === 1
+                      ? "marker"
+                      : "markers"}
+                  </span>
+                )}
               </div>
 
+              {reviewTool === "wording" ? <>
               <div
                 ref={(el) => {
                   sentenceRefs.current[sentence.id] = el;
@@ -855,6 +952,25 @@ export function ReviewClient({
                     </button>
                   </div>
                 </div>
+              )}
+              </> : (
+                <PronunciationMarkerEditor
+                  chinese={sentence.chineseText}
+                  romanization={sentence.generatedPinyin}
+                  marks={pronunciationMarks[sentence.id]}
+                  lang={submission.lang}
+                  mediaElementId={
+                    submission.studentAudioUrl
+                      ? `review-student-recording-${submission.id}`
+                      : undefined
+                  }
+                  onChange={(marks) =>
+                    setPronunciationMarks((current) => ({
+                      ...current,
+                      [sentence.id]: marks,
+                    }))
+                  }
+                />
               )}
             </div>
           );

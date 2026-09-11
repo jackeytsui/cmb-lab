@@ -5,6 +5,7 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   assignmentCorrections,
+  assignmentPronunciationMarks,
   assignmentSubmissions,
   assignmentSubmissionSentences,
   courseLibraryCourses,
@@ -17,6 +18,9 @@ import { CorrectedSentence } from "@/components/assignments/CorrectedSentence";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import { AssignmentReviewRecording } from "@/components/student/AssignmentReviewRecording";
 import { applyCorrectionChanges } from "@/lib/assignment-corrections";
+import {
+  PronunciationFeedback,
+} from "@/components/assignments/PronunciationMarker";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +96,15 @@ export default async function AssignmentFeedbackDetailPage({
         orderBy: [asc(assignmentCorrections.startOffset)],
       })
     : [];
+  const pronunciationMarks = sentences.length
+    ? await db.query.assignmentPronunciationMarks.findMany({
+        where: inArray(
+          assignmentPronunciationMarks.sentenceId,
+          sentences.map((sentence) => sentence.id),
+        ),
+        orderBy: [asc(assignmentPronunciationMarks.startOffset)],
+      })
+    : [];
 
   const lessonContent = (row.lessonContent ?? {}) as Record<string, unknown>;
   const description =
@@ -113,6 +126,23 @@ export default async function AssignmentFeedbackDetailPage({
           suggestedChinese: correction.suggestedChinese,
           suggestedPinyin: correction.suggestedPinyin,
           suggestedEnglish: correction.suggestedEnglish,
+        })),
+    ]),
+  );
+  const pronunciationMarksBySentence = new Map(
+    sentences.map((sentence) => [
+      sentence.id,
+      pronunciationMarks
+        .filter((mark) => mark.sentenceId === sentence.id)
+        .map((mark) => ({
+          id: mark.id,
+          startOffset: mark.startOffset,
+          endOffset: mark.endOffset,
+          originalText: mark.originalText,
+          expectedPronunciation: mark.expectedPronunciation,
+          issueType: mark.issueType,
+          note: mark.note,
+          audioTimestampSeconds: mark.audioTimestampSeconds,
         })),
     ]),
   );
@@ -195,6 +225,7 @@ export default async function AssignmentFeedbackDetailPage({
               Your recording
             </h2>
             <audio
+              id={`student-feedback-recording-${row.submission.id}`}
               controls
               preload="none"
               controlsList="nodownload"
@@ -214,12 +245,28 @@ export default async function AssignmentFeedbackDetailPage({
               <p className="text-sm font-semibold text-foreground">
                 {idx + 1}. {sentence.promptLabel || `Sentence ${idx + 1}`}
               </p>
-              <ModelAnnotatedSentence
-                chinese={sentence.chineseText}
-                pinyin={sentence.generatedPinyin}
-                english={sentence.generatedEnglish}
-                lang={lang}
-              />
+              {(pronunciationMarksBySentence.get(sentence.id)?.length ?? 0) >
+              0 ? (
+                <PronunciationFeedback
+                  chinese={sentence.chineseText}
+                  romanization={sentence.generatedPinyin}
+                  english={sentence.generatedEnglish}
+                  marks={pronunciationMarksBySentence.get(sentence.id) ?? []}
+                  lang={lang}
+                  mediaElementId={
+                    sentence.audioUrl
+                      ? `student-feedback-recording-${sentence.id}`
+                      : undefined
+                  }
+                />
+              ) : (
+                <ModelAnnotatedSentence
+                  chinese={sentence.chineseText}
+                  pinyin={sentence.generatedPinyin}
+                  english={sentence.generatedEnglish}
+                  lang={lang}
+                />
+              )}
               {sentence.audioUrl && (
                 <div>
                   <p className="mb-1 text-xs font-medium text-muted-foreground">
@@ -227,6 +274,7 @@ export default async function AssignmentFeedbackDetailPage({
                   </p>
                   {sentence.responseMediaType === "video" ? (
                     <video
+                      id={`student-feedback-recording-${sentence.id}`}
                       controls
                       playsInline
                       preload="metadata"
@@ -236,6 +284,7 @@ export default async function AssignmentFeedbackDetailPage({
                     />
                   ) : (
                     <audio
+                      id={`student-feedback-recording-${sentence.id}`}
                       controls
                       preload="none"
                       controlsList="nodownload"
@@ -260,7 +309,10 @@ export default async function AssignmentFeedbackDetailPage({
                 if (alternatives.length === 0) {
                   return (
                     <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                      ✓ Well read — no correction needed.
+                      {(pronunciationMarksBySentence.get(sentence.id)?.length ??
+                        0) > 0
+                        ? "✓ The wording is correct. Review the pronunciation note above."
+                        : "✓ Well read — no correction needed."}
                     </p>
                   );
                 }
@@ -297,15 +349,48 @@ export default async function AssignmentFeedbackDetailPage({
                   {sentence.promptDescription}
                 </p>
               )}
-              <CorrectedSentence
-                text={sentence.chineseText}
-                lang={lang}
-                pinyin={sentence.generatedPinyin}
-                corrections={correctionDtosBySentence.get(sentence.id) ?? []}
-              />
+              {(pronunciationMarksBySentence.get(sentence.id)?.length ?? 0) >
+              0 ? (
+                <PronunciationFeedback
+                  chinese={sentence.chineseText}
+                  romanization={sentence.generatedPinyin}
+                  marks={pronunciationMarksBySentence.get(sentence.id) ?? []}
+                  lang={lang}
+                  mediaElementId={
+                    row.submission.assignmentType === "diary" &&
+                    row.submission.studentAudioUrl
+                      ? `student-feedback-recording-${row.submission.id}`
+                      : undefined
+                  }
+                />
+              ) : (
+                <CorrectedSentence
+                  text={sentence.chineseText}
+                  lang={lang}
+                  pinyin={sentence.generatedPinyin}
+                  corrections={correctionDtosBySentence.get(sentence.id) ?? []}
+                />
+              )}
               <p className="text-lg text-muted-foreground italic">
                 {sentence.generatedEnglish}
               </p>
+              {(pronunciationMarksBySentence.get(sentence.id)?.length ?? 0) >
+                0 &&
+                (correctionDtosBySentence.get(sentence.id)?.length ?? 0) > 0 && (
+                  <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Wording feedback
+                    </p>
+                    <CorrectedSentence
+                      text={sentence.chineseText}
+                      lang={lang}
+                      pinyin={sentence.generatedPinyin}
+                      corrections={
+                        correctionDtosBySentence.get(sentence.id) ?? []
+                      }
+                    />
+                  </div>
+                )}
               {(correctionDtosBySentence.get(sentence.id)?.length ?? 0) > 0 && (
                 <div className="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-3 py-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">

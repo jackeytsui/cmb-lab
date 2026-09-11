@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 interface StudentSubmissionRecordingProps {
   src: string;
   sticky?: boolean;
+  mediaElementId?: string;
 }
 
 interface PinnedLayout {
@@ -29,6 +30,7 @@ function scrollableAncestors(element: HTMLElement): HTMLElement[] {
 export function StudentSubmissionRecording({
   src,
   sticky = false,
+  mediaElementId,
 }: StudentSubmissionRecordingProps) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const recordingRef = useRef<HTMLElement>(null);
@@ -143,6 +145,7 @@ export function StudentSubmissionRecording({
           )}
         </div>
         <audio
+          id={mediaElementId}
           controls
           preload="metadata"
           controlsList="nodownload"

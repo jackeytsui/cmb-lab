@@ -280,18 +280,12 @@ export function DiaryViewer({
                       <ModelAnnotatedSentence
                         chinese={line.chineseText}
                         pinyin={line.pinyin}
+                        english={locked ? line.english : null}
                         fontSize={DIARY_CHAR_SIZE}
+                        englishSize={DIARY_ENGLISH_SIZE}
                         className="text-foreground"
                         lang={lang}
                       />
-                      {locked && line.english ? (
-                        <p
-                          className="text-muted-foreground italic"
-                          style={{ fontSize: `${DIARY_ENGLISH_SIZE}px` }}
-                        >
-                          {line.english}
-                        </p>
-                      ) : null}
                       {!locked ? (
                         <div className="grid gap-2 sm:grid-cols-2">
                           <label className="block">

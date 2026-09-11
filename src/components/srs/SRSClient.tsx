@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Volume2, RotateCcw, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 import { useTTS } from "@/hooks/useTTS";
 
 type Deck = {
@@ -189,13 +190,25 @@ export function SRSClient() {
             <button
               type="button"
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 p-8 text-left"
-              onClick={() => setShowBack((prev) => !prev)}
+              onClick={() => {
+                if (window.getSelection()?.toString()) return;
+                setShowBack((prev) => !prev);
+              }}
             >
               {!showBack ? (
                 <div>
-                  <div className="text-5xl font-bold text-zinc-100">{nextCard.traditional}</div>
-                  <div className="mt-2 text-cyan-400">{nextCard.pinyin || ""}</div>
-                  <div className="text-amber-400">{nextCard.jyutping || ""}</div>
+                  <AlignedLanguageText
+                    chinese={nextCard.traditional}
+                    pinyin={nextCard.pinyin}
+                    jyutping={nextCard.jyutping}
+                    showPinyin={Boolean(nextCard.pinyin)}
+                    showJyutping={Boolean(nextCard.jyutping)}
+                    fontSize={48}
+                    annotationSize={18}
+                    chineseClassName="font-bold text-zinc-100"
+                    pinyinClassName="text-cyan-400"
+                    jyutpingClassName="text-amber-400"
+                  />
                   <div className="mt-3 text-xs text-zinc-500">Tap to flip</div>
                 </div>
               ) : (

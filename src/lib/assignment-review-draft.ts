@@ -1,4 +1,16 @@
 import { z } from "zod";
+import { PRONUNCIATION_ISSUE_TYPES } from "@/lib/assignment-pronunciation";
+
+const pronunciationMarkDraftSchema = z.object({
+  id: z.string().min(1).max(100),
+  startOffset: z.number().int().min(0),
+  endOffset: z.number().int().min(1),
+  originalText: z.string().min(1).max(2000),
+  expectedPronunciation: z.string().min(1).max(4000),
+  issueType: z.enum(PRONUNCIATION_ISSUE_TYPES),
+  note: z.string().max(4000),
+  audioTimestampSeconds: z.number().int().min(0).max(86400).nullable(),
+});
 
 const correctionDraftSchema = z.object({
   id: z.string().min(1).max(100),
@@ -20,6 +32,10 @@ export const textAssignmentReviewDraftSchema = z.object({
         sentenceId: z.string().uuid(),
         verdict: z.enum(["correct", "needs_correction"]),
         corrections: z.array(correctionDraftSchema).max(50),
+        pronunciationMarks: z
+          .array(pronunciationMarkDraftSchema)
+          .max(50)
+          .default([]),
       }),
     )
     .min(1)
@@ -45,6 +61,10 @@ export const vocalHackReviewDraftSchema = z.object({
         sentenceId: z.string().uuid(),
         // Empty entries are intentional: they preserve text while it is typed.
         corrections: z.array(vocalHackCorrectionDraftSchema).max(20),
+        pronunciationMarks: z
+          .array(pronunciationMarkDraftSchema)
+          .max(50)
+          .default([]),
       }),
     )
     .min(1)

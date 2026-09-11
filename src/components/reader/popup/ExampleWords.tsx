@@ -1,5 +1,7 @@
 "use client";
 
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
+
 /**
  * ExampleWords — List of example words containing the selected character.
  *
@@ -36,17 +38,21 @@ export function ExampleWords({ examples }: ExampleWordsProps) {
       ) : (
         <div className="space-y-1">
           {visible.map((example, i) => (
-            <div key={i} className="flex items-baseline gap-2">
-              <span className="text-sm font-medium text-foreground">
-                {example.traditional}
-              </span>
-              <span className="text-xs text-amber-400">
-                {example.pinyinDisplay}
-              </span>
-              <span className="truncate text-xs text-muted-foreground">
-                {example.definitions.filter((d: string) => !d.startsWith("CL:")).slice(0, 2).join("; ")}
-              </span>
-            </div>
+            <AlignedLanguageText
+              key={i}
+              chinese={example.traditional}
+              pinyin={example.pinyinDisplay}
+              english={example.definitions
+                .filter((definition: string) => !definition.startsWith("CL:"))
+                .slice(0, 2)
+                .join("; ")}
+              fontSize={14}
+              annotationSize={12}
+              englishSize={12}
+              chineseClassName="font-medium text-foreground"
+              pinyinClassName="text-amber-400"
+              englishClassName="truncate"
+            />
           ))}
         </div>
       )}

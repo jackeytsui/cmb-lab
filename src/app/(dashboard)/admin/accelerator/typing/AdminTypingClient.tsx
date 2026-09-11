@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Pencil, Trash2, Plus, Upload } from "lucide-react";
 import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -275,9 +276,7 @@ export default function AdminTypingClient() {
           <thead className="bg-muted/60 text-muted-foreground text-xs uppercase tracking-wider">
             <tr>
               <th className="px-4 py-3 text-left">Language</th>
-              <th className="px-4 py-3 text-left">Chinese Text</th>
-              <th className="px-4 py-3 text-left">English Text</th>
-              <th className="px-4 py-3 text-left">Romanisation</th>
+              <th className="px-4 py-3 text-left">Preview</th>
               <th className="px-4 py-3 text-center">Order</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
@@ -285,7 +284,7 @@ export default function AdminTypingClient() {
           <tbody className="divide-y divide-zinc-800">
             {sentences.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
+                <td colSpan={4} className="px-4 py-8 text-center text-zinc-500">
                   No sentences yet. Add one or upload a JSON file.
                 </td>
               </tr>
@@ -303,11 +302,24 @@ export default function AdminTypingClient() {
                     {s.language}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-zinc-200 font-medium">
-                  {s.chineseText}
+                <td className="px-4 py-3">
+                  <AlignedLanguageText
+                    chinese={s.chineseText}
+                    pinyin={s.language === "mandarin" ? s.romanisation : undefined}
+                    jyutping={s.language === "cantonese" ? s.romanisation : undefined}
+                    english={s.englishText}
+                    showPinyin={s.language === "mandarin"}
+                    showJyutping={s.language === "cantonese"}
+                    fontSize={14}
+                    annotationSize={12}
+                    englishSize={14}
+                    toneLanguage={s.language}
+                    chineseClassName="font-medium text-zinc-200"
+                    pinyinClassName="text-zinc-400"
+                    jyutpingClassName="text-zinc-400"
+                    englishClassName="text-zinc-300"
+                  />
                 </td>
-                <td className="px-4 py-3 text-zinc-300">{s.englishText}</td>
-                <td className="px-4 py-3 text-zinc-400">{s.romanisation}</td>
                 <td className="px-4 py-3 text-center text-zinc-500">
                   {s.sortOrder}
                 </td>

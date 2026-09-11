@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { playWithGain, type PlayWithGainHandle } from "@/lib/play-with-gain";
 import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -600,24 +601,29 @@ export default function AdminScriptsClient() {
                         </div>
 
                         {/* Cantonese */}
-                        <div>
-                          <p className="text-base text-amber-200">
-                            {line.cantoneseText}
-                          </p>
-                          <p className="text-xs text-zinc-400">
-                            {line.cantoneseRomanisation}
-                          </p>
-                        </div>
+                        <AlignedLanguageText
+                          chinese={line.cantoneseText}
+                          jyutping={line.cantoneseRomanisation}
+                          showPinyin={false}
+                          showJyutping
+                          fontSize={16}
+                          annotationSize={12}
+                          toneLanguage="cantonese"
+                          chineseClassName="text-amber-200"
+                          jyutpingClassName="text-zinc-400"
+                        />
 
                         {/* Mandarin */}
-                        <div>
-                          <p className="text-base text-sky-200">
-                            {line.mandarinText}
-                          </p>
-                          <p className="text-xs text-zinc-400">
-                            {line.mandarinRomanisation}
-                          </p>
-                        </div>
+                        <AlignedLanguageText
+                          chinese={line.mandarinText}
+                          pinyin={line.mandarinRomanisation}
+                          showPinyin
+                          showJyutping={false}
+                          fontSize={16}
+                          annotationSize={12}
+                          chineseClassName="text-sky-200"
+                          pinyinClassName="text-zinc-400"
+                        />
 
                         <p className="text-xs text-zinc-500 italic">
                           {line.englishText}

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Pencil, Plus, Trash2, Upload, Check, X, FileSpreadsheet, XCircle } from "lucide-react";
 import { handlePinyinToneInputChange } from "@/lib/pinyin-tone-input";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 type Clip = {
   id: string;
@@ -163,9 +164,16 @@ function EditableClipRow({
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2 group">
-      <span className="text-sm font-medium w-16 text-center">{clip.chinese}</span>
-      <span className="text-sm text-muted-foreground">({clip.pinyin})</span>
-      <span className="text-sm text-foreground flex-1">{clip.title}</span>
+      <AlignedLanguageText
+        chinese={clip.chinese}
+        pinyin={clip.pinyin}
+        english={clip.title}
+        fontSize={14}
+        annotationSize={12}
+        englishSize={14}
+        className="min-w-0 flex-1"
+        chineseClassName="font-medium"
+      />
       <span className="text-xs text-muted-foreground/50 tabular-nums w-8 text-right">#{clip.sortOrder}</span>
 
       {/* Video status */}

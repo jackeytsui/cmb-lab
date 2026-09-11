@@ -3,7 +3,15 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Plus, Send, Sparkles, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  Plus,
+  Send,
+  Sparkles,
+  Trash2,
+  Volume2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
@@ -18,6 +26,8 @@ import {
 import { ReviewerAutosaveStatus } from "@/components/assignments/ReviewerAutosaveStatus";
 import { useReviewerAutosave } from "@/hooks/useReviewerAutosave";
 import type { VocalHackReviewDraft } from "@/lib/assignment-review-draft";
+import { PronunciationMarkerEditor } from "@/components/assignments/PronunciationMarker";
+import type { PronunciationMarkDto } from "@/lib/assignment-pronunciation";
 
 // ---------------------------------------------------------------------------
 // Vocal Hack review: listen to each recording (seekable) and, per sentence,
@@ -42,6 +52,7 @@ export interface VocalHackReviewSentenceDto {
   hasRecording: boolean;
   responseMediaType: "audio" | "video";
   corrections: VocalHackCorrection[];
+  pronunciationMarks: PronunciationMarkDto[];
 }
 
 export interface VocalHackReviewDto {
@@ -105,6 +116,25 @@ export function VocalHackReviewClient({
       return initial;
     },
   );
+  const [reviewTool, setReviewTool] = useState<"wording" | "pronunciation">(
+    "wording",
+  );
+  const [pronunciationMarks, setPronunciationMarks] = useState<
+    Record<string, PronunciationMarkDto[]>
+  >(() => {
+    const draftBySentenceId = new Map(
+      submission.reviewDraft?.sentences.map((sentence) => [
+        sentence.sentenceId,
+        sentence.pronunciationMarks,
+      ]) ?? [],
+    );
+    return Object.fromEntries(
+      submission.sentences.map((sentence) => [
+        sentence.id,
+        draftBySentenceId.get(sentence.id) ?? sentence.pronunciationMarks,
+      ]),
+    );
+  });
   const [extraComment, setExtraComment] = useState(
     submission.reviewDraft?.extraComment ?? submission.extraComment ?? "",
   );
@@ -125,11 +155,18 @@ export function VocalHackReviewClient({
           pinyin: entry.pinyin,
           english: entry.english,
         })),
+        pronunciationMarks: pronunciationMarks[sentence.id],
       })),
       extraComment,
       recordingUrl,
     }),
-    [entries, extraComment, recordingUrl, submission.sentences],
+    [
+      entries,
+      extraComment,
+      pronunciationMarks,
+      recordingUrl,
+      submission.sentences,
+    ],
   );
   const autosave = useReviewerAutosave({
     endpoint: `/api/admin/assignment-submissions/${submission.id}/review-draft`,
@@ -227,6 +264,15 @@ export function VocalHackReviewClient({
                   pinyin: e.pinyin,
                   english: e.english,
                 })),
+              pronunciationMarks: pronunciationMarks[s.id].map((mark) => ({
+                startOffset: mark.startOffset,
+                endOffset: mark.endOffset,
+                originalText: mark.originalText,
+                expectedPronunciation: mark.expectedPronunciation,
+                issueType: mark.issueType,
+                note: mark.note,
+                audioTimestampSeconds: mark.audioTimestampSeconds,
+              })),
             })),
             extraComment,
             recordingUrl: recordingTrimmed || undefined,
@@ -296,6 +342,35 @@ export function VocalHackReviewClient({
         </p>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3">
+        <span className="text-xs font-medium text-muted-foreground">Mark as</span>
+        <button
+          type="button"
+          onClick={() => setReviewTool("wording")}
+          className={cn(
+            "rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
+            reviewTool === "wording"
+              ? "border-foreground bg-foreground text-background"
+              : "border-border bg-background text-foreground hover:bg-accent",
+          )}
+        >
+          Wording correction
+        </button>
+        <button
+          type="button"
+          onClick={() => setReviewTool("pronunciation")}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors",
+            reviewTool === "pronunciation"
+              ? "border-amber-500 bg-amber-500 text-white"
+              : "border-border bg-background text-foreground hover:bg-accent",
+          )}
+        >
+          <Volume2 className="h-3.5 w-3.5" />
+          Pronunciation marker
+        </button>
+      </div>
+
       <div className="space-y-5">
         {submission.sentences.map((sentence, idx) => {
           const sentenceEntries = entries[sentence.id];
@@ -333,6 +408,7 @@ export function VocalHackReviewClient({
                     {sentence.hasRecording ? (
                       sentence.responseMediaType === "video" ? (
                         <video
+                          id={`review-student-recording-${sentence.id}`}
                           controls
                           playsInline
                           preload="metadata"
@@ -342,6 +418,7 @@ export function VocalHackReviewClient({
                         />
                       ) : (
                         <audio
+                          id={`review-student-recording-${sentence.id}`}
                           controls
                           preload="metadata"
                           controlsList="nodownload"
@@ -358,6 +435,7 @@ export function VocalHackReviewClient({
                 </div>
               </div>
 
+              {reviewTool === "wording" ? (
               <div className="space-y-2 rounded-md border border-border bg-background p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-medium text-muted-foreground">
@@ -376,7 +454,9 @@ export function VocalHackReviewClient({
                 {sentenceEntries.length === 0 ? (
                   <p className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 className="h-3 w-3" />
-                    No corrections — will be marked as well read.
+                    {pronunciationMarks[sentence.id].length > 0
+                      ? "No wording corrections — pronunciation notes are saved separately."
+                      : "No corrections — will be marked as well read."}
                   </p>
                 ) : (
                   <div className="space-y-3">
@@ -486,6 +566,25 @@ export function VocalHackReviewClient({
                   </div>
                 )}
               </div>
+              ) : (
+                <PronunciationMarkerEditor
+                  chinese={sentence.chineseText}
+                  romanization={sentence.generatedPinyin}
+                  marks={pronunciationMarks[sentence.id]}
+                  lang={submission.lang}
+                  mediaElementId={
+                    sentence.hasRecording
+                      ? `review-student-recording-${sentence.id}`
+                      : undefined
+                  }
+                  onChange={(marks) =>
+                    setPronunciationMarks((current) => ({
+                      ...current,
+                      [sentence.id]: marks,
+                    }))
+                  }
+                />
+              )}
             </div>
           );
         })}

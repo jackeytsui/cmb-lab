@@ -112,7 +112,7 @@ function CorrectionBubble({
   };
 
   return (
-    <span className="relative mt-2.5 block w-max max-w-[340px] select-none rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-left">
+    <div className="relative mt-2.5 block w-max max-w-[340px] rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-left">
       {/* Tail pointing up at the middle of the corrected part */}
       <span
         aria-hidden
@@ -133,7 +133,7 @@ function CorrectionBubble({
       <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
         {operation === "insert" ? "+ Add" : "Replace with"}
       </span>
-      <span className="flex items-start gap-1.5">
+      <div className="flex items-start gap-1.5">
         {/* Suggested correction with romanisation stacked on top of each char.
             Render from the stored/reviewer-edited pinyin whenever we have it, so
             a manual override is what's shown; fall back to live re-derivation
@@ -142,11 +142,18 @@ function CorrectionBubble({
           <ModelAnnotatedSentence
             chinese={correction.suggestedChinese}
             pinyin={correction.suggestedPinyin}
+            english={correction.suggestedEnglish}
             fontSize={20}
+            englishSize={14}
             lang={lang}
           />
         ) : (
-          <AnnotatedSentence text={correction.suggestedChinese} fontSize={20} />
+          <AnnotatedSentence
+            text={correction.suggestedChinese}
+            english={correction.suggestedEnglish}
+            fontSize={20}
+            englishSize={14}
+          />
         )}
         <button
           type="button"
@@ -162,13 +169,8 @@ function CorrectionBubble({
             <Play className="h-3 w-3" />
           )}
         </button>
-      </span>
-      {correction.suggestedEnglish && (
-        <span className="mt-0.5 block text-sm text-muted-foreground">
-          {correction.suggestedEnglish}
-        </span>
-      )}
-    </span>
+      </div>
+    </div>
   );
 }
 
@@ -245,7 +247,7 @@ export function CorrectedSentence({
     const insertion = insertions.get(offset);
     if (insertion) {
       return (
-        <span
+        <div
           key={`insertion-${insertion.id}-${key}`}
           className="mx-0.5 inline-flex flex-col items-center align-top"
         >
@@ -258,7 +260,7 @@ export function CorrectedSentence({
             onRemove={onRemoveCorrection}
             lang={lang}
           />
-        </span>
+        </div>
       );
     }
 
@@ -300,7 +302,7 @@ export function CorrectedSentence({
             key={`corrected-${group.correction.id}-${gi}`}
           >
             {renderBoundary(firstOffset, `corrected-${gi}`)}
-            <span className="mx-0.5 inline-flex flex-col items-center align-top">
+            <div className="mx-0.5 inline-flex flex-col items-center align-top">
               <span className="inline-flex items-end">
                 {group.chars.map((ann) => (
                   <AnnotatedChar
@@ -318,7 +320,7 @@ export function CorrectedSentence({
                 onRemove={onRemoveCorrection}
                 lang={lang}
               />
-            </span>
+            </div>
           </Fragment>
         ) : (
           group.chars.map((ann) => (

@@ -5,6 +5,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   assignmentCorrections,
+  assignmentPronunciationMarks,
   assignmentSubmissions,
   assignmentSubmissionSentences,
   courseLibraryCourses,
@@ -112,6 +113,15 @@ export default async function AssignmentReviewPage({
     row.submission.assignmentType,
     sentences.map((sentence) => sentence.id),
   );
+  const pronunciationMarks = sentences.length
+    ? await db.query.assignmentPronunciationMarks.findMany({
+        where: inArray(
+          assignmentPronunciationMarks.sentenceId,
+          sentences.map((sentence) => sentence.id),
+        ),
+        orderBy: [asc(assignmentPronunciationMarks.startOffset)],
+      })
+    : [];
 
   // Vocal Hack reviews use their own client (audio + corrected-sentence boxes).
   if (row.submission.assignmentType === "vocal_hack") {
@@ -169,6 +179,18 @@ export default async function AssignmentReviewPage({
                 },
               ]
             : []),
+        pronunciationMarks: pronunciationMarks
+          .filter((mark) => mark.sentenceId === sentence.id)
+          .map((mark) => ({
+            id: mark.id,
+            startOffset: mark.startOffset,
+            endOffset: mark.endOffset,
+            originalText: mark.originalText,
+            expectedPronunciation: mark.expectedPronunciation,
+            issueType: mark.issueType,
+            note: mark.note,
+            audioTimestampSeconds: mark.audioTimestampSeconds,
+          })),
       })),
     };
 
@@ -251,6 +273,18 @@ export default async function AssignmentReviewPage({
           suggestedChinese: c.suggestedChinese,
           suggestedPinyin: c.suggestedPinyin,
           suggestedEnglish: c.suggestedEnglish,
+        })),
+      pronunciationMarks: pronunciationMarks
+        .filter((mark) => mark.sentenceId === sentence.id)
+        .map((mark) => ({
+          id: mark.id,
+          startOffset: mark.startOffset,
+          endOffset: mark.endOffset,
+          originalText: mark.originalText,
+          expectedPronunciation: mark.expectedPronunciation,
+          issueType: mark.issueType,
+          note: mark.note,
+          audioTimestampSeconds: mark.audioTimestampSeconds,
         })),
     })),
   };

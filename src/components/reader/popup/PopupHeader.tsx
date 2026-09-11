@@ -10,7 +10,7 @@
 
 import { Volume2, Loader2 } from "lucide-react";
 import type { DictionaryEntry } from "@/hooks/useCharacterPopup";
-import { ToneColoredText } from "@/components/ToneColoredText";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 export interface PopupHeaderProps {
   word: string;
@@ -65,44 +65,36 @@ export function PopupHeader({
 
   return (
     <div className="px-3 py-2">
-      {/* Word + source badge */}
-      <div className="flex items-center gap-2">
-        {toneColorsEnabled ? (
-          <ToneColoredText
-            text={word}
-            lang={entry.source === "canto" ? "cantonese" : "mandarin"}
-            pinyinStr={entry.source !== "canto" ? entry.pinyin : undefined}
-            jyutping={entry.source === "canto" ? entry.jyutping : undefined}
-            className="text-3xl font-bold"
-          />
-        ) : (
-          <span className="text-3xl font-bold text-foreground">{word}</span>
-        )}
+      {/* Word, aligned pronunciation rows, definition, and source badge */}
+      <div className="flex items-start gap-2">
+        <AlignedLanguageText
+          chinese={word}
+          pinyin={pinyinDisplay}
+          jyutping={jyutping}
+          english={definitions.join(", ")}
+          showPinyin={Boolean(pinyinDisplay)}
+          showJyutping={Boolean(jyutping)}
+          fontSize={30}
+          annotationSize={12}
+          englishSize={14}
+          toneColorsEnabled={toneColorsEnabled}
+          toneLanguage={entry.source === "canto" ? "cantonese" : "mandarin"}
+          chineseClassName="font-bold text-foreground"
+          pinyinClassName="text-amber-400"
+          jyutpingClassName="text-cyan-400"
+          englishClassName="leading-snug"
+        />
         <span
-          className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${sourceBadge.className}`}
+          className={`mt-4 shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium ${sourceBadge.className}`}
         >
           {sourceBadge.label}
         </span>
       </div>
-
-      {/* Pinyin + Jyutping */}
-      <div className="mt-1 flex items-center gap-3 text-sm">
-        {pinyinDisplay && (
-          <span className="text-amber-400">{pinyinDisplay}</span>
-        )}
-        <span className="text-cyan-400">{jyutping ?? "\u2014"}</span>
-      </div>
-
-      {/* Definitions */}
-      <p className="mt-1 text-sm leading-snug text-muted-foreground">
-        {definitions.join(", ")}
-        {entry.definitions.length > 3 && (
-          <span className="text-muted-foreground">
-            {" "}
-            +{entry.definitions.length - 3} more
-          </span>
-        )}
-      </p>
+      {entry.definitions.length > 3 && (
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          +{entry.definitions.length - 3} more
+        </p>
+      )}
 
       {/* TTS buttons */}
       <div className="mt-2 flex items-center gap-2">

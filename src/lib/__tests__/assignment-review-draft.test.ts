@@ -25,11 +25,24 @@ describe("assignment review drafts", () => {
               suggestedEnglish: "very",
             },
           ],
+          pronunciationMarks: [
+            {
+              id: "new-pronunciation",
+              startOffset: 0,
+              endOffset: 1,
+              originalText: "我",
+              expectedPronunciation: "wǒ",
+              issueType: "tone",
+              note: "Let the third tone dip.",
+              audioTimestampSeconds: 6,
+            },
+          ],
         },
         {
           sentenceId: SENTENCE_TWO,
           verdict: "correct",
           corrections: [],
+          pronunciationMarks: [],
         },
       ],
       overrideInput: "95",
@@ -53,6 +66,7 @@ describe("assignment review drafts", () => {
         {
           sentenceId: SENTENCE_ONE,
           corrections: [{ chinese: "我", pinyin: "", english: "" }],
+          pronunciationMarks: [],
         },
       ],
       extraComment: "",
@@ -62,6 +76,23 @@ describe("assignment review drafts", () => {
     expect(
       parseAssignmentReviewDraft(draft, "vocal_hack", [SENTENCE_ONE]),
     ).toEqual(draft);
+  });
+
+  it("restores legacy drafts with an empty pronunciation marker list", () => {
+    const draft = {
+      version: 1,
+      kind: "vocal_hack",
+      sentences: [{ sentenceId: SENTENCE_ONE, corrections: [] }],
+      extraComment: "",
+      recordingUrl: "",
+    } as const;
+
+    expect(
+      parseAssignmentReviewDraft(draft, "vocal_hack", [SENTENCE_ONE]),
+    ).toEqual({
+      ...draft,
+      sentences: [{ ...draft.sentences[0], pronunciationMarks: [] }],
+    });
   });
 
   it("rejects a draft for the wrong review type", () => {

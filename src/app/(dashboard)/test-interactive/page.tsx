@@ -25,6 +25,7 @@ import type {
 import { LanguagePreferenceSelector } from "@/components/settings/LanguagePreferenceSelector";
 import { TextInteraction } from "@/components/interactions/TextInteraction";
 import type { GradingFeedback } from "@/lib/grading";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 // Mux demo playback ID (Big Buck Bunny)
 const DEMO_PLAYBACK_ID =
@@ -300,18 +301,19 @@ export default function TestInteractivePage() {
                 <h4 className="font-semibold text-white">Vocabulary</h4>
                 <div className="space-y-2">
                   {sampleVocabulary.map((item, i) => (
-                    <div
+                    <AlignedLanguageText
                       key={i}
-                      className="bg-white/5 rounded-lg p-3 hover:bg-white/10 transition"
-                    >
-                      <div className="text-lg text-white">{item.chinese}</div>
-                      <div className="text-sm text-yellow-400">
-                        {item.pinyin}
-                      </div>
-                      <div className="text-sm text-zinc-400">
-                        {item.english}
-                      </div>
-                    </div>
+                      chinese={item.chinese}
+                      pinyin={item.pinyin}
+                      english={item.english}
+                      fontSize={18}
+                      annotationSize={14}
+                      englishSize={14}
+                      className="rounded-lg bg-white/5 p-3 transition hover:bg-white/10"
+                      chineseClassName="text-white"
+                      pinyinClassName="text-yellow-400"
+                      englishClassName="text-zinc-400"
+                    />
                   ))}
                 </div>
               </div>

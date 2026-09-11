@@ -12,6 +12,7 @@ import {
   Video,
 } from "lucide-react";
 import { upload } from "@vercel/blob/client";
+import { makeWebmSeekable } from "@/lib/seekable-webm";
 
 // Upload a recording straight to Vercel Blob (private). Direct-to-blob avoids
 // the ~4.5MB serverless request-body cap, so long recordings (e.g. a 5-minute
@@ -128,16 +129,19 @@ export function AudioRecorder({
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         setLiveStream(null);
-        const blob = new Blob(chunksRef.current, {
+        const rawBlob = new Blob(chunksRef.current, {
           type: mr.mimeType || `${kind}/webm`,
         });
-        const localUrl = URL.createObjectURL(blob);
-        setAudioUrl(localUrl);
         setMediaType(kind);
         setState("uploading");
 
-        // Upload straight to Blob (direct-to-blob; no 4.5MB serverless cap).
         try {
+          // Finalize WebM duration and cue metadata before upload. This is a
+          // metadata-only remux, so the recorded media is not re-encoded.
+          const blob = await makeWebmSeekable(rawBlob);
+          setAudioUrl(URL.createObjectURL(blob));
+
+          // Upload straight to Blob (direct-to-blob; no 4.5MB serverless cap).
           const url = await uploadRecording(
             blob,
             kind === "video"
@@ -147,6 +151,9 @@ export function AudioRecorder({
           onUpload(url, kind);
           setState("recorded");
         } catch (err) {
+          // Keep the local recording available so the student can listen and
+          // decide whether to remove and record it again.
+          setAudioUrl(URL.createObjectURL(rawBlob));
           setError(
             err instanceof Error
               ? err.message

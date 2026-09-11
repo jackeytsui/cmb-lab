@@ -4,7 +4,7 @@ import { useRef, useCallback, useMemo } from "react";
 import { FileText } from "lucide-react";
 import type { WordSegment } from "@/lib/segmenter";
 import { detectSentences } from "@/lib/sentences";
-import { WordSpan } from "./WordSpan";
+import { ReaderTextRows } from "./ReaderTextRows";
 import { SentenceControls } from "./SentenceControls";
 import { cn } from "@/lib/utils";
 import { annotateFromModelAnswer } from "@/lib/mandarin-annotate";
@@ -13,6 +13,8 @@ import {
   readerTypographySizes,
   type ReaderTypographySizes,
 } from "@/lib/reader-typography";
+import { applyThirdToneSandhi } from "@/lib/tone-sandhi";
+import { toSimplifiedSync } from "@/lib/chinese-convert";
 
 /** Standard glosses for grammatical particles — used as fallback for common words */
 const PARTICLE_GLOSSES: Record<string, string> = {
@@ -133,27 +135,64 @@ export function ReaderTextArea({
   // renderer splits it into word spans. Calling to-jyutping on each span loses
   // surrounding context for multi-pronunciation characters. A saved manual
   // override wins for either language.
-  const romanizationBySegment = useMemo(() => {
-    const result = new Map<number, readonly (string | null)[]>();
+  const romanizationByLanguage = useMemo(() => {
     const fullText = segments.map((segment) => segment.text).join("");
     const sourceText = romanizationSourceText?.trim() || fullText;
     const saved = romanizationOverride?.trim() ?? "";
-    const contextRomanization =
-      saved || (showJyutping ? smartRomanise(sourceText, "cantonese") : "");
+    const savedLanguage = language === "zh-HK" ? "cantonese" : "mandarin";
 
-    if (!contextRomanization) return result;
+    return {
+      pinyin:
+        saved && savedLanguage === "mandarin"
+          ? saved
+          : showPinyin
+            ? segments
+                .flatMap((segment) =>
+                  segment.isWordLike
+                    ? applyThirdToneSandhi(toSimplifiedSync(segment.text))
+                    : [],
+                )
+                .join(" ")
+            : "",
+      jyutping:
+        saved && savedLanguage === "cantonese"
+          ? saved
+          : showJyutping
+            ? smartRomanise(sourceText, "cantonese")
+            : "",
+    };
+  }, [
+    language,
+    romanizationOverride,
+    romanizationSourceText,
+    segments,
+    showJyutping,
+    showPinyin,
+  ]);
 
-    const aligned = annotateFromModelAnswer(fullText, contextRomanization).map(
-      (annotation) => annotation.pinyin || null,
-    );
-    let charOffset = 0;
-    segments.forEach((segment, index) => {
-      const charCount = [...segment.text].length;
-      result.set(index, aligned.slice(charOffset, charOffset + charCount));
-      charOffset += charCount;
-    });
-    return result;
-  }, [segments, romanizationOverride, romanizationSourceText, showJyutping]);
+  const romanizationBySegment = useMemo(() => {
+    function align(romanization: string) {
+      const result = new Map<number, readonly (string | null)[]>();
+      if (!romanization) return result;
+
+      const fullText = segments.map((segment) => segment.text).join("");
+      const aligned = annotateFromModelAnswer(fullText, romanization).map(
+        (annotation) => annotation.pinyin || null,
+      );
+      let charOffset = 0;
+      segments.forEach((segment, index) => {
+        const charCount = [...segment.text].length;
+        result.set(index, aligned.slice(charOffset, charOffset + charCount));
+        charOffset += charCount;
+      });
+      return result;
+    }
+
+    return {
+      pinyin: align(romanizationByLanguage.pinyin),
+      jyutping: align(romanizationByLanguage.jyutping),
+    };
+  }, [romanizationByLanguage, segments]);
 
   const handleMouseOver = useCallback(
     (e: React.MouseEvent) => {
@@ -208,7 +247,6 @@ export function ReaderTextArea({
           },
         ];
 
-  const hasAnnotation = showPinyin || showJyutping;
   const isDirectWithEnglish = showEnglish && translationMode === "direct";
 
   return (
@@ -235,6 +273,26 @@ export function ReaderTextArea({
           !properTranslation || (isDirectWithEnglish && !hasWordGlosses)
         );
         const isHighlighted = playingSentenceIndex === sentenceIdx;
+        const sentenceSegments = segments.slice(
+          sentence.startIndex,
+          sentence.endIndex + 1,
+        );
+        const sentenceRomanization = (
+          values: Map<number, readonly (string | null)[]>,
+        ) =>
+          sentenceSegments
+            .flatMap((_, index) => values.get(sentence.startIndex + index) ?? [])
+            .filter((syllable): syllable is string => Boolean(syllable))
+            .join(" ");
+        const directGlosses = isDirectWithEnglish
+          ? sentenceSegments.map((segment) =>
+              segment.isWordLike
+                ? PARTICLE_GLOSSES[segment.text] ??
+                  wordGlossMap?.get(segment.text) ??
+                  (sentenceStillLoading ? "..." : undefined)
+                : undefined,
+            )
+          : undefined;
 
         return (
           <div
@@ -247,60 +305,37 @@ export function ReaderTextArea({
                 : "border-transparent hover:border-cyan-400/30 hover:pl-2",
             )}
           >
-            {/* Word columns flow horizontally, aligned at bottom like a table */}
-            <span
-              className={cn(
-                hasAnnotation || isDirectWithEnglish
-                  ? "inline-flex items-end flex-wrap gap-y-1"
-                  : "inline",
-              )}
-              style={hasAnnotation ? { lineHeight: "1.2" } : { lineHeight: "2" }}
-            >
-              {segments
-                .slice(sentence.startIndex, sentence.endIndex + 1)
-                .map((seg, i) => {
-                  const globalIndex = sentence.startIndex + i;
-                  // Direct mode: simple word lookup — particle overrides → GPT glosses → loading placeholder
-                  let gloss: string | undefined;
-                  if (isDirectWithEnglish && seg.isWordLike) {
-                    gloss =
-                      PARTICLE_GLOSSES[seg.text] ??
-                      wordGlossMap?.get(seg.text) ??
-                      (sentenceStillLoading ? "..." : undefined);
+            <ReaderTextRows
+              segments={sentenceSegments}
+              text={sentence.text}
+              pinyin={sentenceRomanization(romanizationBySegment.pinyin)}
+              jyutping={sentenceRomanization(romanizationBySegment.jyutping)}
+              showPinyin={showPinyin}
+              showJyutping={showJyutping}
+              fontSize={fontSize}
+              toneColorsEnabled={toneColorsEnabled}
+              toneLanguage={
+                showJyutping && !showPinyin ? "cantonese" : "mandarin"
+              }
+              startIndex={sentence.startIndex}
+              englishGlosses={directGlosses}
+              trailingControls={
+                <SentenceControls
+                  sentenceText={sentence.text}
+                  language={language}
+                  onSpeak={onSpeakSentence}
+                  onPlayClick={() => onSentencePlay?.(sentenceIdx)}
+                  playButtonTourId={
+                    sentenceIdx === 0 ? firstSentencePlayTourId : undefined
                   }
-                  return (
-                    <WordSpan
-                      key={globalIndex}
-                      text={seg.text}
-                      index={globalIndex}
-                      isWordLike={seg.isWordLike}
-                      showPinyin={showPinyin}
-                      showJyutping={showJyutping}
-                      showEnglish={isDirectWithEnglish}
-                      englishGloss={gloss}
-                      fontSize={fontSize}
-                      toneColorsEnabled={toneColorsEnabled}
-                      romanization={romanizationBySegment.get(globalIndex)}
-                      typographySizes={typographySizes}
-                    />
-                  );
-                })}
-
-              <SentenceControls
-                sentenceText={sentence.text}
-                language={language}
-                onSpeak={onSpeakSentence}
-                onPlayClick={() => onSentencePlay?.(sentenceIdx)}
-                playButtonTourId={
-                  sentenceIdx === 0 ? firstSentencePlayTourId : undefined
-                }
-                disableSentencePlayback={disableSentencePlayback}
-                isPlaying={isSpeaking && speakingText === sentence.text}
-                isLoading={false}
-                translationCache={translationCache}
-                onTranslationFetched={onTranslationFetched}
-              />
-            </span>
+                  disableSentencePlayback={disableSentencePlayback}
+                  isPlaying={isSpeaking && speakingText === sentence.text}
+                  isLoading={false}
+                  translationCache={translationCache}
+                  onTranslationFetched={onTranslationFetched}
+                />
+              }
+            />
 
             {/* Proper mode: natural translation below sentence */}
             {showEnglish && translationMode === "proper" && properTranslation && (

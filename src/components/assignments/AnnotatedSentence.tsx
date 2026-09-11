@@ -1,9 +1,12 @@
 "use client";
 
-import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 import { useSentenceAnnotations } from "@/components/assignments/useSentenceAnnotations";
-import { ASSIGNMENT_CHAR_SIZE } from "@/lib/mandarin-annotate";
-import { cn } from "@/lib/utils";
+import {
+  ASSIGNMENT_CHAR_SIZE,
+  ASSIGNMENT_ENGLISH_SIZE,
+  PINYIN_RATIO,
+} from "@/lib/mandarin-annotate";
 
 // ---------------------------------------------------------------------------
 // Read-only Mandarin sentence display in the 1:1 coaching notes style:
@@ -14,24 +17,34 @@ import { cn } from "@/lib/utils";
 
 export function AnnotatedSentence({
   text,
+  english,
   fontSize = ASSIGNMENT_CHAR_SIZE,
+  englishSize = ASSIGNMENT_ENGLISH_SIZE,
   className,
 }: {
   text: string;
+  english?: string | null;
   /** Chinese character size in px; pinyin is rendered at ~half this. */
   fontSize?: number;
+  englishSize?: number;
   className?: string;
 }) {
   const annotations = useSentenceAnnotations(text);
+  const pinyin = annotations
+    .map((annotation) => annotation.pinyin)
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <span
-      className={cn("inline-flex flex-wrap items-end gap-y-1.5", className)}
-      style={{ lineHeight: 1.15 }}
-    >
-      {annotations.map((ann) => (
-        <AnnotatedChar key={ann.offset} ann={ann} fontSize={fontSize} />
-      ))}
-    </span>
+    <AlignedLanguageText
+      chinese={text}
+      pinyin={pinyin}
+      english={english}
+      fontSize={fontSize}
+      annotationSize={Math.round(fontSize * PINYIN_RATIO)}
+      englishSize={englishSize}
+      toneColorsEnabled
+      className={className}
+    />
   );
 }

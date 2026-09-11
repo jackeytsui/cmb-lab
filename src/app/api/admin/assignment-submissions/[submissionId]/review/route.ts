@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import {
   assignmentCorrections,
+  assignmentPronunciationMarks,
   assignmentSubmissions,
   assignmentSubmissionSentences,
   courseLibraryLessons,
@@ -23,6 +24,10 @@ import {
 import { sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { createNotification } from "@/lib/notifications";
 import { shouldNotifyAssignmentReview } from "@/lib/assignment-review-notification";
+import {
+  isValidPronunciationMarkRange,
+  PRONUNCIATION_ISSUE_TYPES,
+} from "@/lib/assignment-pronunciation";
 
 interface RouteParams {
   params: Promise<{ submissionId: string }>;
@@ -38,10 +43,21 @@ const correctionSchema = z.object({
   suggestedEnglish: z.string().max(4000).default(""),
 });
 
+const pronunciationMarkSchema = z.object({
+  startOffset: z.number().int().min(0),
+  endOffset: z.number().int().min(1),
+  originalText: z.string().min(1).max(2000),
+  expectedPronunciation: z.string().min(1).max(4000),
+  issueType: z.enum(PRONUNCIATION_ISSUE_TYPES),
+  note: z.string().max(4000).default(""),
+  audioTimestampSeconds: z.number().int().min(0).max(86400).nullable(),
+});
+
 const sentenceReviewSchema = z.object({
   sentenceId: z.string().uuid(),
   verdict: z.enum(["correct", "needs_correction"]),
   corrections: z.array(correctionSchema).max(50).default([]),
+  pronunciationMarks: z.array(pronunciationMarkSchema).max(50).default([]),
 });
 
 const reviewSchema = z.object({
@@ -160,6 +176,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
     }
+    for (const mark of review.pronunciationMarks) {
+      if (!isValidPronunciationMarkRange(mark, sentence.chineseText)) {
+        return NextResponse.json(
+          { error: "A pronunciation marker has an invalid character range." },
+          { status: 400 },
+        );
+      }
+    }
   }
 
   // Recording URL: accept any valid http(s) URL (Loom is only a warning
@@ -194,6 +218,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   await db
     .delete(assignmentCorrections)
     .where(inArray(assignmentCorrections.sentenceId, sentenceIds));
+  await db
+    .delete(assignmentPronunciationMarks)
+    .where(inArray(assignmentPronunciationMarks.sentenceId, sentenceIds));
 
   for (const review of parsed.data.sentences) {
     await db
@@ -219,6 +246,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   );
   if (correctionRows.length > 0) {
     await db.insert(assignmentCorrections).values(correctionRows);
+  }
+
+  const pronunciationRows = parsed.data.sentences.flatMap((review) =>
+    review.pronunciationMarks.map((mark) => ({
+      sentenceId: review.sentenceId,
+      startOffset: mark.startOffset,
+      endOffset: mark.endOffset,
+      originalText: mark.originalText,
+      expectedPronunciation: mark.expectedPronunciation.trim(),
+      issueType: mark.issueType,
+      note: mark.note.trim(),
+      audioTimestampSeconds: mark.audioTimestampSeconds,
+      createdByReviewerId: reviewer.id,
+    })),
+  );
+  if (pronunciationRows.length > 0) {
+    await db.insert(assignmentPronunciationMarks).values(pronunciationRows);
   }
 
   const [updated] = await db

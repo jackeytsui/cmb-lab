@@ -188,6 +188,7 @@ export function MandarinSentenceInput({
             <ModelAnnotatedSentence
               chinese={value.chineseText}
               pinyin={value.pinyin}
+              english={annotationEditable ? undefined : value.english}
               fontSize={
                 compact ? ASSIGNMENT_CHAR_SIZE_COMPACT : ASSIGNMENT_CHAR_SIZE
               }
@@ -197,6 +198,7 @@ export function MandarinSentenceInput({
           ) : (
             <AnnotatedSentence
               text={value.chineseText}
+              english={value.english}
               fontSize={
                 compact ? ASSIGNMENT_CHAR_SIZE_COMPACT : ASSIGNMENT_CHAR_SIZE
               }
@@ -320,13 +322,7 @@ export function MandarinSentenceInput({
               Retry automatic translation
             </button>
           </div>
-        ) : (
-          value.english && (
-            <p className="text-lg text-muted-foreground italic">
-              {value.english}
-            </p>
-          )
-        )}
+        ) : null}
       </div>
     );
   }

@@ -3,12 +3,12 @@
 /**
  * SubtitleOverlay Component
  *
- * Renders Chinese subtitles with Ruby annotations for Pinyin (Mandarin)
- * and Jyutping (Cantonese) romanization. Supports character-by-character
- * annotation pairing for proper alignment.
+ * Renders Chinese subtitles with independently selectable Pinyin (Mandarin)
+ * and Jyutping (Cantonese) rows aligned character by character.
  */
 
 import type { SubtitleCue } from "@/types/video";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 /**
  * Props for the SubtitleOverlay component.
@@ -22,26 +22,6 @@ export interface SubtitleOverlayProps {
   showPinyin: boolean;
   /** Whether to show Jyutping annotations */
   showJyutping: boolean;
-}
-
-/**
- * Parse Chinese text and annotations into character arrays.
- * Handles cases where annotations may be space-separated syllables.
- */
-function parseAnnotations(
-  chinese: string,
-  pinyin?: string,
-  jyutping?: string
-): Array<{ char: string; pinyin?: string; jyutping?: string }> {
-  const chars = [...chinese]; // Spread to handle multi-byte characters
-  const pinyinArr = pinyin?.split(" ") ?? [];
-  const jyutpingArr = jyutping?.split(" ") ?? [];
-
-  return chars.map((char, i) => ({
-    char,
-    pinyin: pinyinArr[i],
-    jyutping: jyutpingArr[i],
-  }));
 }
 
 /**
@@ -59,10 +39,7 @@ function findActiveCue(
 }
 
 /**
- * Subtitle overlay with Ruby annotations for Chinese characters.
- *
- * Uses HTML `<ruby>` and `<rt>` elements for proper annotation rendering.
- * Pinyin is displayed in yellow, Jyutping in cyan.
+ * Subtitle overlay with selectable aligned annotation rows.
  *
  * @example
  * ```tsx
@@ -86,46 +63,22 @@ export function SubtitleOverlay({
     return null;
   }
 
-  const annotations = parseAnnotations(
-    activeCue.chinese,
-    activeCue.pinyin,
-    activeCue.jyutping
-  );
-
-  // Determine if we should show any annotations
-  const hasAnnotations = showPinyin || showJyutping;
-
   return (
     <div className="absolute bottom-16 left-0 right-0 flex justify-center pointer-events-none z-10">
-      <div className="bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg max-w-[90%]">
-        <p
-          className="text-2xl text-white text-center tracking-wide"
-          style={{ lineHeight: hasAnnotations ? "2.5" : "1.5" }}
-        >
-          {annotations.map((item, index) => (
-            <ruby key={index} className="mx-0.5">
-              {item.char}
-              {hasAnnotations && (
-                <rp>(</rp>
-              )}
-              {/* Pinyin annotation (yellow) */}
-              {showPinyin && item.pinyin && (
-                <rt className="text-sm text-yellow-400 font-normal">
-                  {item.pinyin}
-                </rt>
-              )}
-              {/* Jyutping annotation (cyan) - shows below pinyin if both enabled */}
-              {showJyutping && item.jyutping && (
-                <rt className="text-sm text-cyan-400 font-normal">
-                  {showPinyin && item.pinyin ? ` / ${item.jyutping}` : item.jyutping}
-                </rt>
-              )}
-              {hasAnnotations && (
-                <rp>)</rp>
-              )}
-            </ruby>
-          ))}
-        </p>
+      <div className="pointer-events-auto max-w-[90%] rounded-lg bg-black/70 px-4 py-2 backdrop-blur-sm">
+        <AlignedLanguageText
+          chinese={activeCue.chinese}
+          pinyin={activeCue.pinyin}
+          jyutping={activeCue.jyutping}
+          showPinyin={showPinyin}
+          showJyutping={showJyutping}
+          fontSize={24}
+          annotationSize={14}
+          contentClassName="justify-center"
+          chineseClassName="px-0.5 font-normal text-white"
+          pinyinClassName="text-yellow-400"
+          jyutpingClassName="text-cyan-400"
+        />
       </div>
     </div>
   );

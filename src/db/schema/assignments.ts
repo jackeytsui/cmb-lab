@@ -18,6 +18,7 @@ import {
   courseLibraryModules,
 } from "./course-library";
 import type { AssignmentReviewDraft } from "@/lib/assignment-review-draft";
+import type { PronunciationIssueType } from "@/lib/assignment-pronunciation";
 
 // ---------------------------------------------------------------------------
 // Assignment Submissions — structured student submissions for assignment-type
@@ -216,6 +217,44 @@ export const assignmentCorrections = pgTable(
   ],
 );
 
+// Pronunciation feedback is intentionally separate from wording corrections:
+// it highlights the spoken syllable(s) without changing the submitted text or
+// affecting the writing score.
+export const assignmentPronunciationMarks = pgTable(
+  "assignment_pronunciation_marks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sentenceId: uuid("sentence_id")
+      .notNull()
+      .references(() => assignmentSubmissionSentences.id, {
+        onDelete: "cascade",
+      }),
+    // Exact UTF-16 offsets into the submitted chineseText: [start, end).
+    startOffset: integer("start_offset").notNull(),
+    endOffset: integer("end_offset").notNull(),
+    originalText: text("original_text").notNull(),
+    expectedPronunciation: text("expected_pronunciation").notNull(),
+    issueType: text("issue_type")
+      .$type<PronunciationIssueType>()
+      .notNull()
+      .default("tone"),
+    note: text("note").notNull().default(""),
+    audioTimestampSeconds: integer("audio_timestamp_seconds"),
+    createdByReviewerId: uuid("created_by_reviewer_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("assignment_pronunciation_marks_sentence_idx").on(table.sentenceId),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
@@ -262,6 +301,7 @@ export const assignmentSubmissionSentencesRelations = relations(
       references: [assignmentSubmissions.id],
     }),
     corrections: many(assignmentCorrections),
+    pronunciationMarks: many(assignmentPronunciationMarks),
   }),
 );
 
@@ -274,6 +314,20 @@ export const assignmentCorrectionsRelations = relations(
     }),
     createdByReviewer: one(users, {
       fields: [assignmentCorrections.createdByReviewerId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const assignmentPronunciationMarksRelations = relations(
+  assignmentPronunciationMarks,
+  ({ one }) => ({
+    sentence: one(assignmentSubmissionSentences, {
+      fields: [assignmentPronunciationMarks.sentenceId],
+      references: [assignmentSubmissionSentences.id],
+    }),
+    createdByReviewer: one(users, {
+      fields: [assignmentPronunciationMarks.createdByReviewerId],
       references: [users.id],
     }),
   }),
@@ -295,6 +349,11 @@ export type NewAssignmentSubmissionSentence =
 export type AssignmentCorrection = typeof assignmentCorrections.$inferSelect;
 export type NewAssignmentCorrection =
   typeof assignmentCorrections.$inferInsert;
+
+export type AssignmentPronunciationMark =
+  typeof assignmentPronunciationMarks.$inferSelect;
+export type NewAssignmentPronunciationMark =
+  typeof assignmentPronunciationMarks.$inferInsert;
 
 export type AssignmentSubmissionStatus =
   (typeof assignmentSubmissionStatusEnum.enumValues)[number];

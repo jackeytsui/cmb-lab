@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Bookmark, Brain, Check, Search, Trash2, Volume2 } from "lucide-react";
 import { useTTS } from "@/hooks/useTTS";
 import type { SavedVocabulary } from "@/db/schema/vocabulary";
-import { ToneColoredText } from "@/components/ToneColoredText";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 // ============================================================
 // Types
@@ -169,34 +169,30 @@ export function VocabularyClient({ items: initialItems }: VocabularyClientProps)
               key={item.id}
               className="flex items-start gap-4 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 hover:border-zinc-700 transition-colors"
             >
-              {/* Left: Characters */}
-              <div className="min-w-[60px] shrink-0">
-                <ToneColoredText
-                  text={item.traditional}
-                  lang="mandarin"
-                  pinyinStr={item.pinyin}
-                  className="text-xl font-bold"
+              {/* Characters, aligned pronunciation, and definitions */}
+              <div className="min-w-0 flex-1">
+                <AlignedLanguageText
+                  chinese={item.traditional}
+                  pinyin={item.pinyin}
+                  jyutping={item.jyutping}
+                  english={item.definitions
+                    ?.filter((definition: string) => !definition.startsWith("CL:"))
+                    .join(", ")}
+                  showPinyin={Boolean(item.pinyin)}
+                  showJyutping={Boolean(item.jyutping)}
+                  fontSize={20}
+                  annotationSize={14}
+                  englishSize={14}
+                  toneColorsEnabled
+                  toneLanguage="mandarin"
+                  chineseClassName="font-bold"
+                  pinyinClassName="text-cyan-400"
+                  jyutpingClassName="text-amber-400"
+                  englishClassName="line-clamp-2 text-zinc-300"
                 />
                 {item.simplified !== item.traditional && (
                   <p className="text-xs text-zinc-500 mt-0.5">
                     ({item.simplified})
-                  </p>
-                )}
-              </div>
-
-              {/* Middle: Pronunciation + definitions */}
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm">
-                  {item.pinyin && (
-                    <span className="text-cyan-400">{item.pinyin}</span>
-                  )}
-                  {item.jyutping && (
-                    <span className="text-amber-400">{item.jyutping}</span>
-                  )}
-                </div>
-                {item.definitions && item.definitions.length > 0 && (
-                  <p className="text-sm text-zinc-300 mt-1 line-clamp-2">
-                    {item.definitions.filter((d: string) => !d.startsWith("CL:")).join(", ")}
                   </p>
                 )}
               </div>

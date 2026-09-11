@@ -37,6 +37,7 @@ import { ToneComparison } from "./popup/ToneComparison";
 import { RadicalBreakdown } from "./popup/RadicalBreakdown";
 import { StrokeAnimation } from "./popup/StrokeAnimation";
 import { ExampleWords } from "./popup/ExampleWords";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 // --- Props ---
 
@@ -198,27 +199,24 @@ export function CharacterPopup({
                     if (fb.entries.length === 0) return null;
                     const entry = fb.entries[0];
                     return (
-                      <div
+                      <AlignedLanguageText
                         key={fb.character}
-                        className="flex items-baseline gap-2 text-sm"
-                      >
-                        <span className="text-lg font-bold text-foreground shrink-0">
-                          {fb.character}
-                        </span>
-                        <div className="min-w-0">
-                          <span className="text-blue-400 text-xs mr-1.5">
-                            {entry.pinyinDisplay}
-                          </span>
-                          {entry.jyutping && (
-                            <span className="text-orange-400 text-xs mr-1.5">
-                              {entry.jyutping}
-                            </span>
-                          )}
-                          <span className="text-muted-foreground text-xs">
-                            {entry.definitions.filter((d: string) => !d.startsWith("CL:")).slice(0, 3).join("; ")}
-                          </span>
-                        </div>
-                      </div>
+                        chinese={fb.character}
+                        pinyin={entry.pinyinDisplay}
+                        jyutping={entry.jyutping}
+                        english={entry.definitions
+                          .filter((definition: string) => !definition.startsWith("CL:"))
+                          .slice(0, 3)
+                          .join("; ")}
+                        showPinyin={Boolean(entry.pinyinDisplay)}
+                        showJyutping={Boolean(entry.jyutping)}
+                        fontSize={18}
+                        annotationSize={12}
+                        englishSize={12}
+                        chineseClassName="font-bold text-foreground"
+                        pinyinClassName="text-blue-400"
+                        jyutpingClassName="text-orange-400"
+                      />
                     );
                   })}
                 </div>

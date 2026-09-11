@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Send, CheckCircle2 } from "lucide-react";
+import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import { ASSIGNMENT_TYPE_LABELS } from "@/lib/assignment-types";
 import type {
   AssignmentLessonType,
@@ -187,11 +188,16 @@ export default function SubmissionReviewPage() {
                   <div key={i} className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
                     <div>
                       <p className="text-xs text-zinc-500">Sentence {i + 1}</p>
-                      <p className="text-lg text-white">{s.chinese}</p>
-                      <p className="text-sm text-zinc-400">{s.pinyin} · <em>{s.english}</em></p>
+                      <ModelAnnotatedSentence
+                        chinese={s.chinese}
+                        pinyin={s.pinyin}
+                        english={s.english}
+                        fontSize={18}
+                        englishSize={14}
+                        className="mt-1"
+                      />
                     </div>
                     {rec ? (
-                      /* eslint-disable-next-line jsx-a11y/media-has-caption */
                       <audio
                         controls
                         src={`/api/assignments/stream-recording?submissionId=${encodeURIComponent(submissionId)}&index=${i}`}
@@ -233,7 +239,6 @@ export default function SubmissionReviewPage() {
                 </div>
               )}
               {d.audioBlobUrl && (
-                /* eslint-disable-next-line jsx-a11y/media-has-caption */
                 <audio
                   controls
                   src={`/api/assignments/stream-recording?submissionId=${encodeURIComponent(submissionId)}`}

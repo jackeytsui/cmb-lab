@@ -1,12 +1,11 @@
 "use client";
 
-import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 import {
-  annotateFromModelAnswer,
   ASSIGNMENT_CHAR_SIZE,
   ASSIGNMENT_ENGLISH_SIZE,
+  PINYIN_RATIO,
 } from "@/lib/mandarin-annotate";
-import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Mandarin sentence rendered from an EXPLICIT stored pinyin string (admin- or
@@ -21,6 +20,7 @@ export function ModelAnnotatedSentence({
   pinyin,
   english,
   fontSize = ASSIGNMENT_CHAR_SIZE,
+  englishSize = ASSIGNMENT_ENGLISH_SIZE,
   className,
   lang = "mandarin",
 }: {
@@ -29,34 +29,25 @@ export function ModelAnnotatedSentence({
   pinyin: string;
   english?: string | null;
   fontSize?: number;
+  englishSize?: number;
   className?: string;
   /** Romanisation/tone-colour system for the characters. */
   lang?: "mandarin" | "cantonese";
 }) {
-  const annotations = annotateFromModelAnswer(chinese, pinyin);
   return (
-    <div className={cn("space-y-1.5", className)}>
-      <span
-        className="inline-flex flex-wrap items-end gap-x-1 gap-y-1.5"
-        style={{ lineHeight: 1.15 }}
-      >
-        {annotations.map((ann) => (
-          <AnnotatedChar
-            key={ann.offset}
-            ann={ann}
-            fontSize={fontSize}
-            lang={lang}
-          />
-        ))}
-      </span>
-      {english ? (
-        <p
-          className="text-muted-foreground"
-          style={{ fontSize: `${ASSIGNMENT_ENGLISH_SIZE}px` }}
-        >
-          {english}
-        </p>
-      ) : null}
-    </div>
+    <AlignedLanguageText
+      chinese={chinese}
+      pinyin={lang === "mandarin" ? pinyin : undefined}
+      jyutping={lang === "cantonese" ? pinyin : undefined}
+      english={english}
+      showPinyin={lang === "mandarin"}
+      showJyutping={lang === "cantonese"}
+      fontSize={fontSize}
+      annotationSize={Math.round(fontSize * PINYIN_RATIO)}
+      englishSize={englishSize}
+      toneColorsEnabled
+      toneLanguage={lang}
+      className={className}
+    />
   );
 }

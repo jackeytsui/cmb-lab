@@ -4,8 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, Loader2, Pause, Play, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTTS } from "@/hooks/useTTS";
-import { pinyin } from "pinyin-pro";
-import { getToneColorClass } from "@/lib/tone-colors";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 type Question = {
   id: string;
@@ -42,57 +41,26 @@ function shuffleOptions(question: Question): string[] {
 function RevealSection({
   chineseText,
   englishText,
+  pinyinText,
 }: {
   chineseText: string;
   englishText: string;
+  pinyinText: string;
 }) {
-  const chars = useMemo(() => {
-    const charArray = [...chineseText];
-    const pinyinArray = pinyin(chineseText, {
-      toneType: "symbol",
-      type: "array",
-    });
-    const toneNumbers = pinyin(chineseText, {
-      pattern: "num",
-      type: "array",
-    }).map(Number);
-
-    return charArray.map((char, i) => {
-      const isChinese = /\p{Script=Han}/u.test(char);
-      const isPunctuation = /[。，？！、；：""''（）【】《》…—·\s]/.test(char);
-      const py = pinyinArray[i] ?? "";
-      const tone = toneNumbers[i] ?? 0;
-      const colorClass = isChinese ? getToneColorClass(tone, "mandarin") : "";
-      return { char, py: isChinese ? py : "", colorClass, isPunctuation };
-    });
-  }, [chineseText]);
-
   return (
-    <div className="pl-7 pt-2 space-y-2">
-      {/* Characters with pinyin above */}
-      <div className="flex flex-wrap items-end">
-        {chars.map((c, i) =>
-          c.isPunctuation ? (
-            <span key={i} className="text-lg text-muted-foreground/50 self-end leading-none mb-[1px]">
-              {c.char}
-            </span>
-          ) : (
-            <span key={i} className="inline-flex flex-col items-center px-[2px]">
-              {c.py && (
-                <span className="text-base text-foreground leading-tight mb-0.5">
-                  {c.py}
-                </span>
-              )}
-              <span className={cn("text-lg font-medium", c.colorClass)}>
-                {c.char}
-              </span>
-            </span>
-          ),
-        )}
-      </div>
-      {/* English translation */}
-      <p className="text-sm text-muted-foreground italic">{englishText}</p>
-    </div>
+    <AlignedLanguageText
+      chinese={chineseText}
+      pinyin={pinyinText}
+      english={englishText}
+      fontSize={18}
+      annotationSize={16}
+      englishSize={14}
+      toneColorsEnabled
+      className="pl-7 pt-2"
+      chineseClassName="font-medium"
+      pinyinClassName="text-foreground"
+      englishClassName="italic"
+    />
   );
 }
 
@@ -319,6 +287,7 @@ function QuestionCard({
         <RevealSection
           chineseText={question.chineseText}
           englishText={question.englishText}
+          pinyinText={question.correctPinyin}
         />
       )}
     </div>

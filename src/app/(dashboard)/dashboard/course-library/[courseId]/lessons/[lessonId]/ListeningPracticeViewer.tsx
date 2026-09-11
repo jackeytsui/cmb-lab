@@ -3,9 +3,8 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { Check, X, Loader2, Eye, BookOpen, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AnnotatedChar } from "@/components/assignments/AnnotatedChar";
+import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import {
-  annotateFromModelAnswer,
   ASSIGNMENT_CHAR_SIZE,
   ASSIGNMENT_ENGLISH_SIZE,
 } from "@/lib/mandarin-annotate";
@@ -105,34 +104,6 @@ interface SentenceState {
   revealed: string | null;
   checking: boolean;
   error: string | null;
-}
-
-/** Romanisation-on-top reveal using the admin's (possibly edited) model answer. */
-function RevealedSentence({
-  chinese,
-  pinyin,
-  lang,
-}: {
-  chinese: string;
-  pinyin: string;
-  lang: "mandarin" | "cantonese";
-}) {
-  const annotations = annotateFromModelAnswer(chinese, pinyin);
-  return (
-    <span
-      className="inline-flex flex-wrap items-end gap-y-1.5"
-      style={{ lineHeight: 1.15 }}
-    >
-      {annotations.map((ann) => (
-        <AnnotatedChar
-          key={ann.offset}
-          ann={ann}
-          fontSize={ASSIGNMENT_CHAR_SIZE}
-          lang={lang}
-        />
-      ))}
-    </span>
-  );
 }
 
 export function ListeningPracticeViewer({
@@ -343,9 +314,14 @@ export function ListeningPracticeViewer({
                 Mastery shows nothing — by ear alone until checked. */}
             <div className="rounded-md bg-background px-3 py-3">
               {showReveal ? (
-                <RevealedSentence
+                <ModelAnnotatedSentence
                   chinese={sentence.chinese}
                   pinyin={st.revealed as string}
+                  english={
+                    sentence.english && (mode === "guided" || resolved)
+                      ? sentence.english
+                      : undefined
+                  }
                   lang={lang}
                 />
               ) : mode === "mastery" ? (
@@ -361,7 +337,7 @@ export function ListeningPracticeViewer({
                   {sentence.chinese}
                 </span>
               )}
-              {sentence.english && (mode === "guided" || resolved) && (
+              {!showReveal && sentence.english && (mode === "guided" || resolved) && (
                 <p
                   className="mt-1.5 text-muted-foreground"
                   style={{ fontSize: `${ASSIGNMENT_ENGLISH_SIZE}px` }}

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Play, Check, X, Pause } from "lucide-react";
 import { useTTS } from "@/hooks/useTTS";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -155,15 +156,20 @@ function DrillSide({
         {labelText}
       </span>
 
-      {/* Romanisation */}
-      <p className="text-sm text-muted-foreground text-center leading-snug">
-        {side.romanisation}
-      </p>
-
-      {/* Chinese characters */}
-      <span className="text-2xl font-bold text-foreground">
-        {side.chineseText}
-      </span>
+      <AlignedLanguageText
+        chinese={side.chineseText}
+        pinyin={isCanto ? undefined : side.romanisation}
+        jyutping={isCanto ? side.romanisation : undefined}
+        showPinyin={!isCanto}
+        showJyutping={isCanto}
+        fontSize={24}
+        annotationSize={14}
+        toneLanguage={language}
+        contentClassName="justify-center"
+        chineseClassName="font-bold text-foreground"
+        pinyinClassName="text-muted-foreground"
+        jyutpingClassName="text-muted-foreground"
+      />
 
       {/* Play audio button */}
       <button

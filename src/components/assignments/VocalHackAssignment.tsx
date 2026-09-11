@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { AudioRecorder } from "./AudioRecorder";
 import { InteractiveVideoPlayer } from "@/components/video/InteractiveVideoPlayer";
+import { ModelAnnotatedSentence } from "@/components/assignments/ModelAnnotatedSentence";
 import type { VocalHackConfig, VocalHackSubmissionData, AssignmentReviewData } from "@/lib/assignment-types";
 
 interface VocalHackAssignmentProps {
@@ -137,11 +138,16 @@ export function VocalHackAssignment({ lessonId, config, confirmationMessage }: V
 
           {config.sentences.map((s, i) => (
             <div key={i} className="rounded-lg border border-zinc-700 bg-zinc-800/30 p-4 space-y-3">
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 <p className="text-xs text-zinc-500">Sentence {i + 1}</p>
-                <p className="text-sm text-white">{s.chinese}</p>
-                <p className="text-xs text-zinc-400">{s.pinyin}</p>
-                <p className="text-xs text-zinc-500 italic">{s.english}</p>
+                <ModelAnnotatedSentence
+                  chinese={s.chinese}
+                  pinyin={s.pinyin}
+                  english={s.english}
+                  fontSize={16}
+                  englishSize={12}
+                  className="min-w-0 text-white"
+                />
               </div>
               {recordings[i] && (
                 <audio
@@ -210,11 +216,14 @@ export function VocalHackAssignment({ lessonId, config, confirmationMessage }: V
             )}
 
             {/* Text */}
-            <div className="space-y-1 pt-1">
-              <p className="text-sm text-zinc-400">{sentence.pinyin}</p>
-              <p className="text-xl font-medium text-white">{sentence.chinese}</p>
-              <p className="text-sm text-zinc-400 italic">{sentence.english}</p>
-            </div>
+            <ModelAnnotatedSentence
+              chinese={sentence.chinese}
+              pinyin={sentence.pinyin}
+              english={sentence.english}
+              fontSize={20}
+              englishSize={14}
+              className="pt-1 text-white"
+            />
 
             {/* Recorder */}
             <AudioRecorder

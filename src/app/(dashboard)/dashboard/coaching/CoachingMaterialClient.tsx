@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { ReaderTextArea } from "@/components/reader/ReaderTextArea";
 import { TranslationFallbackNotice } from "@/components/reader/TranslationFallbackNotice";
-import { WordSpan } from "@/components/reader/WordSpan";
+import { CoachingNoteTextRows } from "@/components/coaching/CoachingNoteTextRows";
 import { segmentText, type WordSegment } from "@/lib/segmenter";
 import { detectSentences } from "@/lib/sentences";
 import { convertScript, ensureSimplifiedConverter } from "@/lib/chinese-convert";
@@ -11,8 +11,6 @@ import { useTTS } from "@/hooks/useTTS";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
 import { Pencil, Trash2, Star, Download, ExternalLink, Link as LinkIcon, Play, Pause, RotateCcw, Copy, Square, Loader2, Languages, Minus, Plus, Users, ChevronDown, PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, GripVertical, ArrowRightLeft, NotebookPen, RefreshCw } from "lucide-react";
-import { pinyin } from "pinyin-pro";
-import ToJyutping from "to-jyutping";
 import { smartRomanise } from "@/lib/romanise";
 import { fetchProperTranslations } from "@/lib/mandarin-generation";
 import { useFeatureEngagement } from "@/hooks/useFeatureEngagement";
@@ -21,13 +19,6 @@ import { sanitizeRecordingUrl } from "@/lib/recording-embed";
 import { useReaderPreferences } from "@/hooks/useReaderPreferences";
 import { FlashcardStarButton } from "@/components/flashcards/FlashcardStarButton";
 import { notifyFlashcardsChanged } from "@/lib/flashcards";
-import {
-  extractToneFromPinyin,
-  extractToneFromJyutping,
-  getToneColorClass,
-  getToneColorStyle,
-  getToneDataAttr,
-} from "@/lib/tone-colors";
 import { coachingTypographySizes } from "@/lib/reader-typography";
 import type { Roles } from "@/types/globals";
 import { isStaffRole } from "@/lib/platform-roles";
@@ -756,7 +747,7 @@ function NoteCard({
   }, [onSaveExplanation]);
 
   const typographySizes = coachingTypographySizes(fontSize);
-  const { romanizationSize: annotationSize, englishSize } = typographySizes;
+  const { englishSize } = typographySizes;
 
   return (
     <div
@@ -899,140 +890,22 @@ function NoteCard({
                 </button>
               </div>
             </div>
-          ) : note.romanizationOverride || note.translationOverride || note.textOverride || noteLanguage === "zh-HK" ? (
+          ) : note.romanizationOverride || defaultRomanization || note.translationOverride || note.textOverride || noteLanguage === "zh-HK" ? (
             <>
-              {/* Render text with per-character aligned romanization */}
-              {processed.segments.length > 0 ? (() => {
-                // Always use the full-entry Cantonese result, or a saved manual
-                // override, rather than recalculating each rendered word span.
-                const displayRomanization = note.romanizationOverride ?? defaultRomanization;
-                const hasOverrideAnnotation = displayRomanization && (showPinyin || showJyutping);
-                const overrideSyllables = hasOverrideAnnotation
-                  ? displayRomanization.split(/\s+/).filter(Boolean)
-                  : [];
-                // Build a lookup: for each Han char index in the full text, map to override syllable
-                let overrideMap: Map<number, string> | null = null;
-                if (hasOverrideAnnotation && overrideSyllables.length > 0) {
-                  overrideMap = new Map();
-                  const fullText = processed.displayText || baseText;
-                  let syllableIdx = 0;
-                  [...fullText].forEach((char, charIdx) => {
-                    if (/\p{Script=Han}/u.test(char) && syllableIdx < overrideSyllables.length) {
-                      overrideMap!.set(charIdx, overrideSyllables[syllableIdx++]);
-                    }
-                  });
-                }
-
-                // Track global char offset across segments
-                let globalCharOffset = 0;
-
-                return (
-                  <span
-                    className={cn(
-                      (showPinyin || showJyutping)
-                        ? "inline-flex items-end flex-wrap gap-y-1"
-                        : "inline",
-                    )}
-                    style={{ fontSize: `${fontSize}px`, lineHeight: (showPinyin || showJyutping) ? "1.2" : "2" }}
-                  >
-                    {processed.segments.map((seg, i) => {
-                      // If override exists, render per-char aligned override for this segment
-                      if (overrideMap && seg.isWordLike) {
-                        const segChars = [...seg.text];
-                        const startOffset = globalCharOffset;
-                        globalCharOffset += segChars.length;
-
-                        const hasAnySyllable = segChars.some((_, ci) => overrideMap!.has(startOffset + ci));
-                        if (!hasAnySyllable) {
-                          if (toneColorsEnabled) {
-                            const chars = [...seg.text];
-                            const isCantonese = note.pane === "cantonese";
-                            return (
-                              <span key={i} data-word={seg.text} data-index={i}
-                                className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20">
-                                {chars.map((c, ci) => {
-                                  if (!/\p{Script=Han}/u.test(c)) return <span key={ci}>{c}</span>;
-                                  let tone = 0;
-                                  const lang = isCantonese ? "cantonese" as const : "mandarin" as const;
-                                  if (isCantonese) {
-                                    const jp = ToJyutping.getJyutpingList(c);
-                                    const syl = jp?.[0]?.[1];
-                                    if (syl) tone = extractToneFromJyutping(syl);
-                                  } else {
-                                    const py = pinyin(c, { toneType: "num", type: "array" })[0];
-                                    if (py) tone = extractToneFromPinyin(py);
-                                  }
-                                  const tc = getToneDataAttr(tone, lang);
-                                  return <span key={ci} className={getToneColorClass(tone, lang) || undefined} style={getToneColorStyle(tone, lang)} {...(tc ? { "data-tc": tc } : {})}>{c}</span>;
-                                })}
-                              </span>
-                            );
-                          }
-                          return (
-                            <span key={i} data-word={seg.text} data-index={i}
-                              className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20">
-                              {seg.text}
-                            </span>
-                          );
-                        }
-
-                        const annotationColor = showJyutping ? "text-orange-400" : "text-blue-400";
-                        return (
-                          <span key={i} data-word={seg.text} data-index={i}
-                            className="cursor-pointer rounded px-0.5 transition-colors hover:bg-cyan-500/20 inline-flex flex-col items-center">
-                            <span className="inline-flex items-end gap-x-[0.15em]">
-                              {segChars.map((char, ci) => {
-                                const syllable = overrideMap!.get(startOffset + ci);
-                                if (syllable) {
-                                  const isCantoNote = note.pane === "cantonese";
-                                  const lang = isCantoNote ? "cantonese" as const : "mandarin" as const;
-                                  const tone = isCantoNote
-                                    ? extractToneFromJyutping(syllable)
-                                    : extractToneFromPinyin(syllable);
-                                  const toneColorClass = toneColorsEnabled ? getToneColorClass(tone, lang) : "";
-                                  const toneStyle = toneColorsEnabled ? getToneColorStyle(tone, lang) : undefined;
-                                  const toneTc = toneColorsEnabled ? getToneDataAttr(tone, lang) : "";
-                                  return (
-                                    <span key={ci} className="inline-flex flex-col items-center" style={{ minWidth: "1.1em" }}>
-                                      <span
-                                        data-annotation={isCantoNote ? "jyutping" : "pinyin"}
-                                        className={cn("text-center leading-tight whitespace-nowrap", annotationColor)}
-                                        style={{ fontSize: `${annotationSize}px` }}
-                                      >
-                                        {syllable}
-                                      </span>
-                                      <span className={toneColorClass || undefined} style={toneStyle} {...(toneTc ? { "data-tc": toneTc } : {})}>{char}</span>
-                                    </span>
-                                  );
-                                }
-                                return <span key={ci}>{char}</span>;
-                              })}
-                            </span>
-                          </span>
-                        );
-                      }
-
-                      // No override — use WordSpan for runtime-derived annotations
-                      globalCharOffset += [...seg.text].length;
-                      return (
-                        <WordSpan
-                          key={i}
-                          text={seg.text}
-                          index={i}
-                          isWordLike={seg.isWordLike}
-                          showPinyin={!displayRomanization && showPinyin}
-                          showJyutping={!displayRomanization && showJyutping}
-                          showEnglish={false}
-                          fontSize={fontSize}
-                          toneColorsEnabled={toneColorsEnabled}
-                          selectableAnnotations
-                          typographySizes={typographySizes}
-                        />
-                      );
-                    })}
-                  </span>
-                );
-              })() : (
+              {/* Separate sibling rows keep romanization and Hanzi independently selectable. */}
+              {processed.segments.length > 0 ? (
+                <CoachingNoteTextRows
+                  segments={processed.segments}
+                  text={processed.displayText || baseText}
+                  romanization={note.romanizationOverride ?? defaultRomanization}
+                  language={noteLanguage === "zh-HK" ? "cantonese" : "mandarin"}
+                  showRomanization={
+                    noteLanguage === "zh-HK" ? showJyutping : showPinyin
+                  }
+                  fontSize={fontSize}
+                  toneColorsEnabled={toneColorsEnabled}
+                />
+              ) : (
                 <div style={{ fontSize: `${fontSize}px` }} className="text-foreground">
                   {processed.displayText || baseText}
                 </div>

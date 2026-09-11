@@ -12,9 +12,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { useTTS, type TTSOptions } from "@/hooks/useTTS";
+import { useTTS } from "@/hooks/useTTS";
 import { smartRomanise } from "@/lib/romanise";
 import { playWithGain, type PlayWithGainHandle } from "@/lib/play-with-gain";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,14 +57,13 @@ interface ScriptPracticeClientProps {
 }
 
 // ---------------------------------------------------------------------------
-// Ruby renderer: align stored romanization syllables over each CJK character.
+// Aligned renderer: place stored romanization syllables over each CJK character.
 // Non-CJK characters (punctuation, English, spaces) pass through without ruby.
 // Respects coach-edited romanisation text. Splits syllables by runs of
 // letter+mark+digit chars so punctuation stuck to a syllable (e.g. `，qǐng`
 // or `jian ma？`) still parses cleanly. As a fallback for jyutping stored
 // without spaces (e.g. `cing2man6nei1dou6`), splits after each tone digit.
-// If syllable count still doesn't match CJK character count, falls back to
-// showing the full romanisation line above the text.
+// If the syllable count still doesn't match, alignment is best-effort.
 // ---------------------------------------------------------------------------
 
 const CJK_REGEX = /[\u3400-\u9fff]/;
@@ -87,10 +87,16 @@ function splitJyutpingByTone(romanisation: string): string[] {
   return out;
 }
 
-function RubyLine({ text, romanisation }: { text: string; romanisation: string }) {
-  const rendered = useMemo(() => {
-    if (!text) return null;
-
+function RubyLine({
+  text,
+  romanisation,
+  language,
+}: {
+  text: string;
+  romanisation: string;
+  language: "mandarin" | "cantonese";
+}) {
+  const alignedRomanisation = useMemo(() => {
     const cjkCharCount = Array.from(text).filter((c) => CJK_REGEX.test(c)).length;
 
     let syllables = extractSyllables(romanisation);
@@ -99,60 +105,28 @@ function RubyLine({ text, romanisation }: { text: string; romanisation: string }
       const toneSplit = splitJyutpingByTone(romanisation);
       if (toneSplit.length === cjkCharCount) syllables = toneSplit;
     }
-
-    // Fallback: syllable count doesn't align with CJK characters — show as one
-    // line of ruby above the whole sentence instead of per-character.
-    const canAlign = cjkCharCount > 0 && syllables.length === cjkCharCount;
-
-    if (!canAlign) {
-      return (
-        <div className="space-y-1">
-          {romanisation && (
-            <p className="text-base font-medium tracking-wide text-muted-foreground">
-              {romanisation}
-            </p>
-          )}
-          <p className="text-2xl font-medium text-foreground leading-relaxed">
-            {text}
-          </p>
-        </div>
-      );
-    }
-
-    let syllableIdx = 0;
-    const nodes: React.ReactNode[] = [];
-    Array.from(text).forEach((char, i) => {
-      if (CJK_REGEX.test(char)) {
-        nodes.push(
-          <ruby key={i} className="ruby-aligned">
-            {char}
-            <rp>(</rp>
-            <rt className="text-sm font-medium tracking-wide text-muted-foreground">
-              {syllables[syllableIdx++]}
-            </rt>
-            <rp>)</rp>
-          </ruby>
-        );
-      } else {
-        // Non-CJK (punctuation, English) — still wrap in ruby with empty rt so
-        // baseline stays consistent across the line.
-        nodes.push(
-          <ruby key={i} className="ruby-aligned">
-            {char}
-            <rt className="text-sm">&nbsp;</rt>
-          </ruby>
-        );
-      }
-    });
-
-    return (
-      <p className="text-2xl font-medium text-foreground leading-[2.4]">
-        {nodes}
-      </p>
-    );
+    return cjkCharCount > 0 && syllables.length === cjkCharCount
+      ? syllables.join(" ")
+      : romanisation;
   }, [text, romanisation]);
 
-  return rendered;
+  if (!text) return null;
+
+  return (
+    <AlignedLanguageText
+      chinese={text}
+      pinyin={language === "mandarin" ? alignedRomanisation : undefined}
+      jyutping={language === "cantonese" ? alignedRomanisation : undefined}
+      showPinyin={language === "mandarin"}
+      showJyutping={language === "cantonese"}
+      fontSize={24}
+      annotationSize={14}
+      toneLanguage={language}
+      chineseClassName="font-medium text-foreground"
+      pinyinClassName="font-medium tracking-wide text-muted-foreground"
+      jyutpingClassName="font-medium tracking-wide text-muted-foreground"
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +162,11 @@ function LangBubble({
       <span className={cn("text-[10px] uppercase tracking-wider font-bold", labelColor)}>
         {label}
       </span>
-      <RubyLine text={text} romanisation={displayRomanisation} />
+      <RubyLine
+        text={text}
+        romanisation={displayRomanisation}
+        language={label === "Cantonese" ? "cantonese" : "mandarin"}
+      />
       <button
         type="button"
         onClick={onPlay}

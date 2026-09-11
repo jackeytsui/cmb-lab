@@ -3,17 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useTTS, type TTSOptions } from "@/hooks/useTTS";
-import { ToneColoredText } from "@/components/ToneColoredText";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 import { pinyin } from "pinyin-pro";
-import { extractToneFromPinyin, getToneColorClass } from "@/lib/tone-colors";
 import { convertScript } from "@/lib/chinese-convert";
 import { FLASHCARDS_CHANGED_EVENT } from "@/lib/flashcards";
-
-/** Get Pleco-style tone color from pinyin syllable */
-function pinyinToneColor(syllable: string): string {
-  const tone = extractToneFromPinyin(syllable);
-  return tone > 0 ? getToneColorClass(tone, "mandarin") : "text-foreground";
-}
 
 type FlashcardItem = {
   id: string;
@@ -116,25 +109,18 @@ export function FlashCard({
 
   // Generate diacritical pinyin from the Chinese text (more reliable than stored number-tone)
   const pinyinDiacritical = useMemo(() => {
-    if (card.pane === "cantonese" || hasJyutping) return null;
-    return pinyin(displayChinese, { type: "array", toneType: "symbol" });
+    if (card.pane === "cantonese" || hasJyutping) return "";
+    return pinyin(displayChinese, { type: "array", toneType: "symbol" }).join(" ");
   }, [displayChinese, card.pane, hasJyutping]);
-
-  // Split stored jyutping into per-syllable array aligned to Han characters
-  const jyutpingSyllables = useMemo(() => {
-    if (!card.jyutping) return null;
-    return card.jyutping.split(/\s+/).filter(Boolean);
-  }, [card.jyutping]);
-
-  // Split Chinese into characters for per-char alignment
-  const chars = useMemo(() => [...displayChinese], [displayChinese]);
-  const hanRegex = /\p{Script=Han}/u;
 
   return (
     <div className="group relative">
       <button
         type="button"
-        onClick={onFlip}
+        onClick={() => {
+          if (window.getSelection()?.toString()) return;
+          onFlip();
+        }}
         className="w-full cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         style={{ perspective: "800px" }}
       >
@@ -150,49 +136,21 @@ export function FlashCard({
             className="col-start-1 row-start-1 flex min-h-[240px] flex-col items-center justify-center gap-2 rounded-xl p-5"
             style={{ backfaceVisibility: "hidden" }}
           >
-            {jyutpingSyllables ? (
-              <div className="flex items-end justify-center flex-wrap gap-y-1">
-                {(() => {
-                  let jyIdx = 0;
-                  return chars.map((char, i) => {
-                    if (hanRegex.test(char) && jyIdx < jyutpingSyllables.length) {
-                      const jy = jyutpingSyllables[jyIdx++];
-                      return (
-                        <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.6em" }}>
-                          <span className="text-base font-medium whitespace-nowrap text-muted-foreground">
-                            {jy}
-                          </span>
-                          <span className="text-4xl font-bold text-foreground">{char}</span>
-                        </span>
-                      );
-                    }
-                    return <span key={i} className="text-4xl font-bold text-foreground">{char}</span>;
-                  });
-                })()}
-              </div>
-            ) : pinyinDiacritical ? (
-              <div className="flex items-end justify-center flex-wrap gap-y-1">
-                {(() => {
-                  let pyIdx = 0;
-                  return chars.map((char, i) => {
-                    if (hanRegex.test(char) && pyIdx < pinyinDiacritical.length) {
-                      const py = pinyinDiacritical[pyIdx++];
-                      return (
-                        <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.6em" }}>
-                          <span className={cn("text-base font-medium whitespace-nowrap", pinyinToneColor(py))}>
-                            {py}
-                          </span>
-                          <span className="text-4xl font-bold text-foreground">{char}</span>
-                        </span>
-                      );
-                    }
-                    return <span key={i} className="text-4xl font-bold text-foreground">{char}</span>;
-                  });
-                })()}
-              </div>
-            ) : (
-              <span className="text-4xl font-bold text-foreground">{displayChinese}</span>
-            )}
+            <AlignedLanguageText
+              chinese={displayChinese}
+              pinyin={pinyinDiacritical}
+              jyutping={card.jyutping}
+              showPinyin={!hasJyutping && Boolean(pinyinDiacritical)}
+              showJyutping={hasJyutping}
+              fontSize={36}
+              annotationSize={16}
+              toneLanguage={hasJyutping ? "cantonese" : "mandarin"}
+              romanizationToneColors={!hasJyutping}
+              contentClassName="justify-center"
+              chineseClassName="font-bold text-foreground"
+              pinyinClassName="font-medium"
+              jyutpingClassName="font-medium text-muted-foreground"
+            />
             <span className="rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground">
               {sourceBadge}
             </span>
@@ -204,54 +162,24 @@ export function FlashCard({
             className="col-start-1 row-start-1 flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-xl p-5 pb-16 [transform:rotateY(180deg)]"
             style={{ backfaceVisibility: "hidden" }}
           >
-            {card.english && (
-              <span className="text-center text-xl font-bold text-foreground">
-                {card.english}
-              </span>
-            )}
-            {jyutpingSyllables ? (
-              <div className="flex items-end justify-center flex-wrap gap-y-1">
-                {(() => {
-                  let jyIdx = 0;
-                  return chars.map((char, i) => {
-                    if (hanRegex.test(char) && jyIdx < jyutpingSyllables.length) {
-                      const jy = jyutpingSyllables[jyIdx++];
-                      return (
-                        <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.2em" }}>
-                          <span className="text-xs font-medium whitespace-nowrap text-muted-foreground">
-                            {jy}
-                          </span>
-                          <span className="text-xl font-bold text-foreground/70">{char}</span>
-                        </span>
-                      );
-                    }
-                    return <span key={i} className="text-xl font-bold text-foreground/70">{char}</span>;
-                  });
-                })()}
-              </div>
-            ) : pinyinDiacritical ? (
-              <div className="flex items-end justify-center flex-wrap gap-y-1">
-                {(() => {
-                  let pyIdx = 0;
-                  return chars.map((char, i) => {
-                    if (hanRegex.test(char) && pyIdx < pinyinDiacritical.length) {
-                      const py = pinyinDiacritical[pyIdx++];
-                      return (
-                        <span key={i} className="inline-flex flex-col items-center" style={{ minWidth: "1.2em" }}>
-                          <span className={cn("text-xs font-medium whitespace-nowrap", pinyinToneColor(py))}>
-                            {py}
-                          </span>
-                          <span className="text-xl font-bold text-foreground/70">{char}</span>
-                        </span>
-                      );
-                    }
-                    return <span key={i} className="text-xl font-bold text-foreground/70">{char}</span>;
-                  });
-                })()}
-              </div>
-            ) : (
-              <span className="text-xl font-bold text-foreground/70">{displayChinese}</span>
-            )}
+            <AlignedLanguageText
+              chinese={displayChinese}
+              pinyin={pinyinDiacritical}
+              jyutping={card.jyutping}
+              english={card.english}
+              showPinyin={!hasJyutping && Boolean(pinyinDiacritical)}
+              showJyutping={hasJyutping}
+              fontSize={20}
+              annotationSize={12}
+              englishSize={20}
+              toneLanguage={hasJyutping ? "cantonese" : "mandarin"}
+              romanizationToneColors={!hasJyutping}
+              contentClassName="justify-center"
+              chineseClassName="font-bold text-foreground/70"
+              pinyinClassName="font-medium"
+              jyutpingClassName="font-medium text-muted-foreground"
+              englishClassName="text-center font-bold text-foreground"
+            />
             <span className="rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground">
               {sourceBadge}
             </span>
@@ -549,7 +477,10 @@ export function FlashcardsClient() {
 
         <button
           type="button"
-          onClick={() => setStudyFlipped((f) => !f)}
+          onClick={() => {
+            if (window.getSelection()?.toString()) return;
+            setStudyFlipped((flipped) => !flipped);
+          }}
           className="group w-full max-w-lg cursor-pointer"
           style={{ perspective: "1000px" }}
         >
@@ -565,15 +496,20 @@ export function FlashcardsClient() {
               className="col-start-1 row-start-1 flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-xl p-6"
               style={{ backfaceVisibility: "hidden" }}
             >
-              {studyRoman && (
-                <span className="text-lg font-medium text-muted-foreground">{studyRoman}</span>
-              )}
-              <ToneColoredText
-                text={studyDisplayChinese}
-                lang={studyCard.pane === "cantonese" ? "cantonese" : "mandarin"}
-                jyutping={studyCard.pane === "cantonese" ? studyCard.jyutping : undefined}
-                pinyinStr={studyCard.pane !== "cantonese" ? studyCard.pinyin : undefined}
-                className="text-4xl font-bold"
+              <AlignedLanguageText
+                chinese={studyDisplayChinese}
+                pinyin={studyCard.pane !== "cantonese" ? studyRoman : undefined}
+                jyutping={studyCard.pane === "cantonese" ? studyRoman : undefined}
+                showPinyin={studyCard.pane !== "cantonese" && Boolean(studyRoman)}
+                showJyutping={studyCard.pane === "cantonese" && Boolean(studyRoman)}
+                fontSize={36}
+                annotationSize={18}
+                toneLanguage={studyCard.pane === "cantonese" ? "cantonese" : "mandarin"}
+                romanizationToneColors={studyCard.pane !== "cantonese"}
+                contentClassName="justify-center"
+                chineseClassName="font-bold"
+                pinyinClassName="font-medium text-muted-foreground"
+                jyutpingClassName="font-medium text-muted-foreground"
               />
               <span className="mt-4 text-xs text-muted-foreground">
                 Click or press Space to flip
@@ -585,17 +521,23 @@ export function FlashcardsClient() {
               className="col-start-1 row-start-1 flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-xl p-6 [transform:rotateY(180deg)]"
               style={{ backfaceVisibility: "hidden" }}
             >
-              {studyCard.english && (
-                <span className="text-center text-2xl font-bold text-foreground">
-                  {studyCard.english}
-                </span>
-              )}
-              <ToneColoredText
-                text={studyDisplayChinese}
-                lang={studyCard.pane === "cantonese" ? "cantonese" : "mandarin"}
-                jyutping={studyCard.pane === "cantonese" ? studyCard.jyutping : undefined}
-                pinyinStr={studyCard.pane !== "cantonese" ? studyCard.pinyin : undefined}
-                className="mt-2 text-lg opacity-60"
+              <AlignedLanguageText
+                chinese={studyDisplayChinese}
+                pinyin={studyCard.pane !== "cantonese" ? studyRoman : undefined}
+                jyutping={studyCard.pane === "cantonese" ? studyRoman : undefined}
+                english={studyCard.english}
+                showPinyin={studyCard.pane !== "cantonese" && Boolean(studyRoman)}
+                showJyutping={studyCard.pane === "cantonese" && Boolean(studyRoman)}
+                fontSize={18}
+                annotationSize={13}
+                englishSize={24}
+                toneLanguage={studyCard.pane === "cantonese" ? "cantonese" : "mandarin"}
+                romanizationToneColors={studyCard.pane !== "cantonese"}
+                contentClassName="justify-center"
+                chineseClassName="font-bold opacity-60"
+                pinyinClassName="font-medium text-muted-foreground"
+                jyutpingClassName="font-medium text-muted-foreground"
+                englishClassName="text-center font-bold text-foreground"
               />
             </div>
           </div>

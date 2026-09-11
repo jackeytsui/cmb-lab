@@ -3,9 +3,12 @@
 import { useMemo } from "react";
 import { Volume2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { WordSpan, type AnnotationMode } from "@/components/reader/WordSpan";
+import type { AnnotationMode } from "@/components/reader/WordSpan";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 import { segmentText } from "@/lib/segmenter";
-import { annotateFromModelAnswer } from "@/lib/mandarin-annotate";
+import { applyThirdToneSandhi } from "@/lib/tone-sandhi";
+import { toSimplifiedSync } from "@/lib/chinese-convert";
+import { smartRomanise } from "@/lib/romanise";
 
 interface TranscriptLineProps {
   ref?: React.Ref<HTMLDivElement>;
@@ -70,26 +73,31 @@ export function TranscriptLine({
   ttsButtonTourId,
 }: TranscriptLineProps) {
   const segments = useMemo(
-    () => preSegments ?? segmentText(text),
+    () => {
+      if (!preSegments) return segmentText(text);
+      let index = 0;
+      return preSegments.map((segment) => {
+        const indexedSegment = { ...segment, index };
+        index += segment.text.length;
+        return indexedSegment;
+      });
+    },
     [preSegments, text]
   );
-  const romanizationBySegment = useMemo(() => {
-    if (!romanization?.trim()) return new Map<number, readonly (string | null)[]>();
-    const aligned = annotateFromModelAnswer(text, romanization).map(
-      (annotation) => annotation.pinyin || null,
-    );
-    const result = new Map<number, readonly (string | null)[]>();
-    let characterOffset = 0;
-    segments.forEach((segment, index) => {
-      const characterCount = [...segment.text].length;
-      result.set(
-        index,
-        aligned.slice(characterOffset, characterOffset + characterCount),
-      );
-      characterOffset += characterCount;
-    });
-    return result;
-  }, [romanization, segments, text]);
+  const displayRomanization = useMemo(() => {
+    if (annotationMode === "plain") return "";
+    if (romanization?.trim()) return romanization.trim();
+    if (annotationMode === "jyutping") {
+      return smartRomanise(text, "cantonese");
+    }
+    return segments
+      .flatMap((segment) =>
+        segment.isWordLike
+          ? applyThirdToneSandhi(toSimplifiedSync(segment.text))
+          : [],
+      )
+      .join(" ");
+  }, [annotationMode, romanization, segments, text]);
 
   return (
     <div
@@ -98,6 +106,7 @@ export function TranscriptLine({
       role="button"
       tabIndex={0}
       onClick={(e) => {
+        if (window.getSelection()?.toString()) return;
         // If user clicked on a word (has data-word attr), let the word popup
         // handle it via TranscriptPanel's event delegation — don't seek.
         const target = e.target as HTMLElement;
@@ -118,7 +127,6 @@ export function TranscriptLine({
           : isInLoopRange
             ? "bg-amber-900/20 border-l-2 border-amber-400/50 text-foreground/90"
             : "text-muted-foreground border-l-2 border-transparent",
-        annotationMode !== "plain" && "leading-[3]"
       )}
     >
       {/* Loop start/end badges */}
@@ -136,33 +144,22 @@ export function TranscriptLine({
       <span className="text-xs text-muted-foreground/70 mr-2 tabular-nums">
         {formatTimestamp(startMs)}
       </span>
-      <span className="flex-1">
-        <span className="block">
-          {segments.map((seg, i) => (
-            <span
-              key={i}
-              className={cn(
-                seg.isWordLike &&
-                  savedVocabSet?.has(seg.text) &&
-                  "bg-emerald-500/10 border-b border-emerald-500/30 rounded-sm"
-              )}
-            >
-              <WordSpan
-                text={seg.text}
-                index={i}
-                isWordLike={seg.isWordLike}
-                annotationMode={annotationMode}
-                romanization={romanizationBySegment.get(i)}
-              />
-            </span>
-          ))}
-        </span>
-        {englishText && (
-          <span className="block text-sm text-muted-foreground mt-0.5 leading-snug">
-            {englishText}
-          </span>
-        )}
-      </span>
+      <AlignedLanguageText
+        chinese={text}
+        pinyin={annotationMode === "pinyin" ? displayRomanization : undefined}
+        jyutping={annotationMode === "jyutping" ? displayRomanization : undefined}
+        english={englishText}
+        showPinyin={annotationMode === "pinyin"}
+        showJyutping={annotationMode === "jyutping"}
+        fontSize={14}
+        annotationSize={11}
+        englishSize={14}
+        toneLanguage={annotationMode === "jyutping" ? "cantonese" : "mandarin"}
+        segments={segments}
+        highlightedWords={savedVocabSet}
+        className="min-w-0 flex-1"
+        englishClassName="leading-snug"
+      />
 
       {/* TTS play button -- right side of line */}
       {onTtsPlay && (

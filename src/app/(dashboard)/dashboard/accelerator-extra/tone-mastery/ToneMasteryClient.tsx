@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle, Loader2, Play, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { pinyin } from "pinyin-pro";
-import { getToneColorClass } from "@/lib/tone-colors";
+import { AlignedLanguageText } from "@/components/language/AlignedLanguageText";
 
 type Clip = {
   id: string;
@@ -34,33 +33,29 @@ function toYouTubeEmbed(url: string): string | null {
   }
 }
 
-/** Render Chinese characters with tone-colored styling and pinyin above */
-function ToneColoredChars({ chinese }: { chinese: string }) {
-  const chars = [...chinese];
-  const pinyinArray = pinyin(chinese, { toneType: "symbol", type: "array" });
-  const toneNumbers = pinyin(chinese, { pattern: "num", type: "array" }).map(Number);
-
+/** Render the three language layers as separately selectable aligned rows. */
+function ToneColoredChars({
+  chinese,
+  pinyinText,
+  english,
+}: {
+  chinese: string;
+  pinyinText: string;
+  english: string;
+}) {
   return (
-    <span className="inline-flex items-end gap-[1px]">
-      {chars.map((char, i) => {
-        const isChinese = /\p{Script=Han}/u.test(char);
-        const tone = toneNumbers[i] ?? 0;
-        const colorClass = isChinese ? getToneColorClass(tone, "mandarin") : "";
-        const py = isChinese ? pinyinArray[i] : "";
-        return (
-          <span key={i} className="inline-flex flex-col items-center">
-            {py && (
-              <span className="text-[10px] text-muted-foreground leading-tight">
-                {py}
-              </span>
-            )}
-            <span className={cn("text-base font-medium", colorClass)}>
-              {char}
-            </span>
-          </span>
-        );
-      })}
-    </span>
+    <AlignedLanguageText
+      chinese={chinese}
+      pinyin={pinyinText}
+      english={english}
+      fontSize={16}
+      annotationSize={10}
+      englishSize={12}
+      toneColorsEnabled
+      contentClassName="justify-center"
+      chineseClassName="font-medium"
+      englishClassName="text-center italic"
+    />
   );
 }
 
@@ -253,10 +248,11 @@ export function ToneMasteryClient() {
                 {/* Tone-colored Chinese + pinyin + English + rating */}
                 <div className="p-3 space-y-2">
                   <div className="flex flex-col items-center gap-1">
-                    <ToneColoredChars chinese={clip.chinese} />
-                    <span className="text-xs text-muted-foreground italic">
-                      {clip.title}
-                    </span>
+                    <ToneColoredChars
+                      chinese={clip.chinese}
+                      pinyinText={clip.pinyin}
+                      english={clip.title}
+                    />
                   </div>
 
                   {/* Self-rating */}
