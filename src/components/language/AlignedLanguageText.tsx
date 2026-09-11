@@ -114,7 +114,7 @@ function RomanizationCell({
         kind === "pinyin" ? "text-blue-400" : "text-orange-400",
         selectingLanguage !== null &&
           selectingLanguage !== kind &&
-          "select-none",
+          "select-none selection:bg-transparent selection:text-inherit",
         toneClass,
         className,
       )}
@@ -186,24 +186,36 @@ export function AlignedLanguageText({
     const range = selection.getRangeAt(0);
     const startCell = closestLanguageCell(range.startContainer);
     const endCell = closestLanguageCell(range.endContainer);
-    const language = startCell?.dataset.alignedLanguageCell as
+    const endpointLanguage = startCell?.dataset.alignedLanguageCell as
       | SelectableLanguage
       | undefined;
-    if (
-      !startCell ||
-      !endCell ||
-      !language ||
-      language !== endCell.dataset.alignedLanguageCell
-    ) {
-      return;
+    const language = selectingLanguage ?? endpointLanguage;
+    if (!language) return;
+
+    const selectedIndices = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        `[data-aligned-language-cell="${language}"]`,
+      ),
+    )
+      .filter((cell) => range.intersectsNode(cell))
+      .map((cell) => Number(cell.dataset.alignedLanguageIndex))
+      .filter(Number.isInteger);
+    if (selectedIndices.length === 0) {
+      if (
+        !startCell ||
+        !endCell ||
+        endpointLanguage !== endCell.dataset.alignedLanguageCell
+      ) {
+        return;
+      }
+      selectedIndices.push(
+        Number(startCell.dataset.alignedLanguageIndex),
+        Number(endCell.dataset.alignedLanguageIndex),
+      );
     }
 
-    const startIndex = Number(startCell.dataset.alignedLanguageIndex);
-    const endIndex = Number(endCell.dataset.alignedLanguageIndex);
-    if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) return;
-
-    const first = Math.min(startIndex, endIndex);
-    const last = Math.max(startIndex, endIndex);
+    const first = Math.min(...selectedIndices);
+    const last = Math.max(...selectedIndices);
     const copiedText =
       language === "chinese"
         ? chars.slice(first, last + 1).join("")
@@ -288,7 +300,7 @@ export function AlignedLanguageText({
                   "whitespace-pre text-center leading-tight",
                   selectingLanguage !== null &&
                     selectingLanguage !== "chinese" &&
-                    "select-none",
+                    "select-none selection:bg-transparent selection:text-inherit",
                   word?.word &&
                     "cursor-pointer rounded transition-colors hover:bg-cyan-500/20",
                   word?.word &&

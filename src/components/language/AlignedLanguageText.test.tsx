@@ -108,6 +108,36 @@ describe("AlignedLanguageText", () => {
     expect(setData).toHaveBeenCalledWith("text/plain", "bǐ jiào nuǎn");
   });
 
+  it("copies only the active language when the browser range crosses both layers", () => {
+    const { container } = render(
+      <AlignedLanguageText chinese="比较暖" pinyin="bǐ jiào nuǎn" />,
+    );
+    const pinyinCells = container.querySelectorAll(
+      '[data-aligned-language-cell="pinyin"]',
+    );
+    const chineseCells = container.querySelectorAll(
+      '[data-aligned-language-cell="chinese"]',
+    );
+    fireEvent.pointerDown(pinyinCells[0]!);
+
+    const range = document.createRange();
+    range.setStart(pinyinCells[0]?.firstChild as Text, 0);
+    range.setEnd(chineseCells[2]?.firstChild as Text, 1);
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      isCollapsed: false,
+      rangeCount: 1,
+      getRangeAt: () => range,
+      toString: () => "bǐ比较jiào暖nuǎn",
+    } as unknown as Selection);
+    const setData = vi.fn();
+
+    fireEvent.copy(container.firstElementChild as Element, {
+      clipboardData: { setData },
+    });
+
+    expect(setData).toHaveBeenCalledWith("text/plain", "bǐ jiào nuǎn");
+  });
+
   it("keeps the other language out of the active text selection", () => {
     const { container } = render(
       <AlignedLanguageText chinese="比较暖" pinyin="bǐ jiào nuǎn" />,
@@ -121,10 +151,12 @@ describe("AlignedLanguageText", () => {
 
     fireEvent.pointerDown(pinyinCell);
     expect(chineseCell.className).toContain("select-none");
+    expect(chineseCell.className).toContain("selection:bg-transparent");
     expect(pinyinCell.className).not.toContain("select-none");
 
     fireEvent.pointerDown(chineseCell);
     expect(pinyinCell.className).toContain("select-none");
+    expect(pinyinCell.className).toContain("selection:bg-transparent");
     expect(chineseCell.className).not.toContain("select-none");
   });
 });
